@@ -1,0 +1,155 @@
+"use server"
+
+import { createServerClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache"
+
+export async function getProducts(category?: string) {
+  const supabase = await createServerClient()
+
+  let query = supabase
+    .from("products")
+    .select(
+      `
+      *,
+      stores (
+        id,
+        name,
+        category
+      )
+    `,
+    )
+    .order("created_at", { ascending: false })
+
+  if (category) {
+    query = query.eq("category", category)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error("[v0] Error fetching products:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export async function getProduct(id: string) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      stores (
+        id,
+        name,
+        category,
+        phone,
+        address
+      )
+    `,
+    )
+    .eq("id", id)
+    .single()
+
+  if (error) {
+    console.error("[v0] Error fetching product:", error)
+    return null
+  }
+
+  return data
+}
+
+export async function createProduct(formData: {
+  name: string
+  description: string
+  price: number
+  category: string
+  stock: number
+  image_url?: string
+  store_id: string
+}) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase.from("products").insert(formData).select().single()
+
+  if (error) {
+    console.error("[v0] Error creating product:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/seller/products")
+  return { success: true, data }
+}
+
+export async function updateProduct(
+  id: string,
+  formData: Partial<{
+    name: string
+    description: string
+    price: number
+    category: string
+    stock: number
+    image_url: string
+  }>,
+) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase
+    .from("products")
+    .update({ ...formData, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error("[v0] Error updating product:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/seller/products")
+  revalidatePath(`/product/${id}`)
+  return { success: true, data }
+}
+
+export async function deleteProduct(id: string) {
+  const supabase = await createServerClient()
+
+  const { error } = await supabase.from("products").delete().eq("id", id)
+
+  if (error) {
+    console.error("[v0] Error deleting product:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/seller/products")
+  return { success: true }
+}
+
+export async function searchProducts(query: string) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      stores (
+        id,
+        name,
+        category
+      )
+    `,
+    )
+    .ilike("name", `%${query}%`)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error searching products:", error)
+    return []
+  }
+
+  return data || []
+}
