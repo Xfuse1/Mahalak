@@ -39,7 +39,7 @@ This error typically occurs due to:
 #### Option 3: Use SQL to Confirm User Manually
 
 Run this in Supabase SQL Editor:
-```sql
+\`\`\`sql
 -- Find your user
 SELECT id, email, email_confirmed_at FROM auth.users;
 
@@ -47,7 +47,7 @@ SELECT id, email, email_confirmed_at FROM auth.users;
 UPDATE auth.users 
 SET email_confirmed_at = NOW() 
 WHERE email = 'your-email@example.com';
-```
+\`\`\`
 
 ### Database Setup
 
