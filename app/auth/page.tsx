@@ -22,7 +22,6 @@ export default function AuthPage() {
   const { t } = useLanguage()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [successMessage, setSuccessMessage] = useState("")
 
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
@@ -75,7 +74,6 @@ export default function AuthPage() {
     e.preventDefault()
     setIsLoading(true)
     setError("")
-    setSuccessMessage("")
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get("name") as string
@@ -109,15 +107,7 @@ export default function AuthPage() {
       const success = await register(email, password, name, role, sellerData)
 
       if (success) {
-        // Show success message
-        setSuccessMessage(
-          t(
-            "تم إنشاء الحساب بنجاح! يرجى التحقق من بريدك الإلكتروني لتأكيد حسابك.",
-            "Account created successfully! Please check your email to confirm your account."
-          )
-        )
-        // Don't redirect immediately - user needs to confirm email first
-        // router.push(role === "seller" ? "/seller/dashboard" : "/")
+        router.push(role === "seller" ? "/seller/dashboard" : "/")
       }
     } catch (error: any) {
       if (error.message?.includes("already registered")) {
@@ -187,12 +177,6 @@ export default function AuthPage() {
 
                 {error && (
                   <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg mb-6 text-sm">{error}</div>
-                )}
-
-                {successMessage && (
-                  <div className="bg-green-50 text-green-700 border border-green-200 px-4 py-3 rounded-lg mb-6 text-sm">
-                    {successMessage}
-                  </div>
                 )}
 
                 <TabsContent value="login">

@@ -1,8 +1,8 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useRef, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import type { User as SupabaseUser, Session, AuthChangeEvent } from "@supabase/supabase-js"
+import type { User as SupabaseUser } from "@supabase/supabase-js"
 
 interface User {
   id: string
@@ -35,45 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const loadingProfile = useRef(false)
 
-  const supabase = useMemo(
-    () =>
-      createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      ),
-    [],
-  )
-
-  type ProfileRow = {
-    id: string
-    email: string | null
-    full_name: string | null
-    role: "customer" | "seller"
-    phone: string | null
+  const supabaseRef = useRef<ReturnType<typeof createBrowserClient> | null>(null)
+  if (!supabaseRef.current) {
+    supabaseRef.current = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
   }
-
-  const upsertProfile = async (profileData: ProfileRow) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .upsert(profileData, { onConflict: "id" })
-      .select("*")
-      .maybeSingle<ProfileRow>()
-
-    if (error) {
-      console.error("[v0] Error creating user profile:", {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      })
-      return null
-    }
-
-    return data ?? null
-  }
+  const supabase = supabaseRef.current
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         loadUserProfile(session.user.id)
@@ -84,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         if (!loadingProfile.current) {
@@ -106,62 +78,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadingProfile.current = true
 
     try {
-      const { data: profileData, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle<ProfileRow>()
-
-      if (error) {
-        console.error("[v0] Error loading user profile:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        })
-      }
-
-      let profile = profileData
-
-      if (!profile) {
-        const { data: userResult } = await supabase.auth.getUser()
-        const currentUser = userResult?.user
-
-        if (currentUser) {
-          const metadataRole = currentUser.user_metadata?.role
-          const fallbackRole = metadataRole === "seller" ? "seller" : "customer"
-          const fallbackProfile = await upsertProfile({
-            id: currentUser.id,
-            email: currentUser.email ?? null,
-            full_name:
-              (typeof currentUser.user_metadata?.full_name === "string"
-                ? (currentUser.user_metadata.full_name as string)
-                : currentUser.email?.split("@")[0]) ?? "",
-            role: fallbackRole,
-            phone: (typeof currentUser.user_metadata?.phone === "string"
-              ? (currentUser.user_metadata.phone as string)
-              : null),
-          })
-
-          profile = fallbackProfile ?? null
-        }
-      }
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
       if (profile) {
-        const profileEmail = profile.email ?? supabaseUser?.email ?? ""
-        const resolvedRole = profile.role === "seller" ? "seller" : "customer"
-
         setUser({
           id: profile.id,
-          email: profileEmail,
-          name: profile.full_name || profileEmail.split("@")[0] || "",
-          role: resolvedRole,
-          phone: profile.phone ?? undefined,
+          email: profile.email,
+          name: profile.full_name || profile.email.split("@")[0],
+          role: profile.role,
+          phone: profile.phone,
         })
-      } else {
-        setUser(null)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("[v0] Error loading user profile:", error)
     } finally {
       setIsLoading(false)
@@ -177,27 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (error) {
-        console.error("[v0] Login error:", error)
-        // Handle specific error cases
-        if (error.message.includes("Email not confirmed")) {
-          throw new Error("Email not confirmed")
-        }
-        if (error.message.includes("Invalid login credentials")) {
-          throw new Error("Invalid login credentials")
-        }
         throw new Error(error.message)
       }
 
       if (data.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .maybeSingle()
-
-        if (profileError) {
-          console.error("[v0] Error fetching profile:", profileError)
-        }
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
 
         if (profile?.role !== role) {
           await supabase.auth.signOut()
@@ -230,77 +142,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role,
             phone: sellerData?.phone,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
-      if (error) {
-        console.error("[v0] Registration error:", error)
-        throw error
+      if (error) throw error
+
+      if (role === "seller" && data.user && sellerData?.storeName) {
+        await supabase.from("stores").insert({
+          seller_id: data.user.id,
+          name: sellerData.storeName,
+          address: sellerData.address,
+          phone: sellerData.phone,
+          category: sellerData.storeType || "خدمات أخرى",
+        })
       }
 
-      const userId = data.user?.id ?? null
-      
-      // If email confirmation is required, user won't have a session
-      if (!data.session && data.user) {
-        // Return true to indicate successful registration
-        // The user will need to check their email
-        return true
-      }
-
-      // If we have a session, email confirmation is disabled
-      const profilePayload = userId
-        ? {
-            id: userId,
-            email,
-            full_name: name,
-            role,
-            phone: sellerData?.phone ?? null,
-          }
-        : null
-
-      let profileRecord = profilePayload ? await upsertProfile(profilePayload) : null
-      let hasSession = !!data.session
-
-      if (!hasSession && data.user) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      if (data.user) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
 
         if (signInError) {
-          console.error("[v0] Auto sign-in after registration failed:", signInError.message)
-        } else {
-          hasSession = !!signInData.session
-        }
-      }
-
-      if (!profileRecord && hasSession && profilePayload) {
-        profileRecord = await upsertProfile(profilePayload)
-      }
-
-      if (role === "seller" && userId && hasSession && sellerData?.storeName) {
-        const { error: storeError } = await supabase.from("stores").insert({
-          seller_id: userId,
-          name: sellerData.storeName,
-          address: sellerData.address,
-          phone: sellerData.phone,
-          category: sellerData.storeType || "other",
-        })
-
-        if (storeError) {
-          console.error("[v0] Error creating store record:", {
-            message: storeError.message,
-            details: storeError.details,
-            hint: storeError.hint,
-            code: storeError.code,
-          })
+          console.log("[v0] Auto sign-in after registration failed:", signInError.message)
         }
       }
 
       return true
     } catch (error: any) {
-      console.error("[v0] Registration failed:", error)
       throw error
     }
   }
