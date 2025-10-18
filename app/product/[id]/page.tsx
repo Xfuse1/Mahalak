@@ -1,12 +1,10 @@
 "use client"
-
-import { useState } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { BackButton } from "@/components/back-button"
 import { mockProducts } from "@/lib/mock-data"
-import { Star, ShoppingCart, Minus, Plus, MessageCircle, Phone } from "lucide-react"
+import { Star, MessageCircle, Phone } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
@@ -16,7 +14,6 @@ import { useLanguage } from "@/lib/language-context"
 export default function ProductPage({ params }: { params: { id: string } }) {
   const { id } = params
   const product = mockProducts.find((p) => p.id === id)
-  const [quantity, setQuantity] = useState(1)
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
@@ -27,19 +24,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
   const relatedProducts = mockProducts.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4)
 
-  const handleAddToCart = () => {
-    alert(t(`تمت إضافة ${quantity} من ${product.name} إلى السلة`, `Added ${quantity} of ${product.name} to cart`))
-  }
-
   const handleWhatsApp = () => {
     if (!user) {
       router.push("/auth")
       return
     }
-    window.open(
-      `https://wa.me/201055161600?text=${t(`مرحباً، أريد الاستفسار عن ${product.name}`, `Hello, I want to inquire about ${product.name}`)}`,
-      "_blank",
-    )
+    const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
+    const enMessage = `Hello, I want to inquire about ${product.name}`
+    const message = t(arMessage, enMessage)
+    window.open(`https://wa.me/201055161600?text=${encodeURIComponent(message)}`, "_blank")
   }
 
   const handleCall = () => {
@@ -80,9 +73,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                   <span className="font-bold text-lg">{product.rating}</span>
                 </div>
-                <span className="text-gray-500">
-                  ({product.reviewCount} {t("تقييم", "reviews")})
-                </span>
               </div>
 
               <p className="text-4xl font-bold text-[#1F478B]">
@@ -92,47 +82,38 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               <p className="text-gray-700 leading-relaxed">{product.description}</p>
 
               <div>
-                <p className="text-sm text-gray-600 mb-3">
-                  {t("الكمية المتاحة:", "Available quantity:")} {product.stock}
-                </p>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center border rounded-lg">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="px-6 font-medium">{quantity}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                      disabled={quantity >= product.stock}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="flex-1 bg-[#1F478B] hover:bg-[#1a3a70]"
-                    onClick={handleAddToCart}
-                    disabled={product.stock === 0}
+                <div className="mb-4">
+                  <span
+                    className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
+                      product.stock > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}
                   >
-                    <ShoppingCart className="ml-2 h-5 w-5" />
-                    {product.stock > 0 ? t("أضف إلى السلة", "Add to Cart") : t("غير متوفر", "Out of Stock")}
-                  </Button>
+                    {product.stock > 0 ? t("🟢 متوفر", "🟢 Available") : t("🔴 غير متوفر", "🔴 Out of Stock")}
+                  </span>
+                </div>
+
+                <div className="text-center mb-4">
+                  <p className="text-sm text-gray-600 font-medium">
+                    {t("لطلب المنتج، تواصل مع البائع", "To order, contact the seller")}
+                  </p>
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700">
+                <Button
+                  onClick={handleWhatsApp}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  disabled={product.stock === 0}
+                >
                   <MessageCircle className="ml-2 h-5 w-5" />
                   {t("تواصل واتساب", "WhatsApp")}
                 </Button>
-                <Button onClick={handleCall} variant="outline" className="flex-1 bg-transparent">
+                <Button
+                  onClick={handleCall}
+                  variant="outline"
+                  className="flex-1 bg-transparent"
+                  disabled={product.stock === 0}
+                >
                   <Phone className="ml-2 h-5 w-5" />
                   {t("اتصال", "Call")}
                 </Button>
@@ -164,6 +145,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       </div>
                       <h3 className="font-semibold mb-1 line-clamp-2 text-balance">{relatedProduct.name}</h3>
                       <p className="text-sm text-gray-600 mb-2">{relatedProduct.storeName}</p>
+                      <div className="flex items-center gap-1 mb-2">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <span className="font-medium text-sm">{relatedProduct.rating}</span>
+                      </div>
                       <p className="font-bold text-[#1F478B]">
                         {relatedProduct.price} {t("جنيه", "EGP")}
                       </p>

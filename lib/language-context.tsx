@@ -14,19 +14,27 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>("ar")
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    const savedLanguage = localStorage.getItem("language") as Language | null
-    if (savedLanguage) {
-      setLanguage(savedLanguage)
+    setMounted(true)
+    // Only access localStorage after component mounts (client-side only)
+    if (typeof window !== "undefined") {
+      const savedLanguage = localStorage.getItem("language") as Language | null
+      if (savedLanguage) {
+        setLanguage(savedLanguage)
+      }
     }
   }, [])
 
   useEffect(() => {
-    document.documentElement.lang = language
-    document.documentElement.dir = language === "ar" ? "rtl" : "ltr"
-    localStorage.setItem("language", language)
-  }, [language])
+    // Only update DOM and localStorage after component is mounted
+    if (mounted && typeof window !== "undefined") {
+      document.documentElement.lang = language
+      document.documentElement.dir = language === "ar" ? "rtl" : "ltr"
+      localStorage.setItem("language", language)
+    }
+  }, [language, mounted])
 
   const toggleLanguage = () => {
     setLanguage((prev) => (prev === "ar" ? "en" : "ar"))
@@ -34,6 +42,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const t = (ar: string, en: string) => {
     return language === "ar" ? ar : en
+  }
+
+  if (!mounted) {
+    return (
+      <LanguageContext.Provider value={{ language: "ar", toggleLanguage: () => {}, t: (ar) => ar }}>
+        {children}
+      </LanguageContext.Provider>
+    )
   }
 
   return <LanguageContext.Provider value={{ language, toggleLanguage, t }}>{children}</LanguageContext.Provider>

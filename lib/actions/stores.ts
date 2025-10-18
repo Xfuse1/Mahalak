@@ -74,7 +74,7 @@ export async function updateStore(
   }
 
   revalidatePath("/seller/settings")
-  revalidatePath(`/store/${id}`)
+  revalidatePath(/store/${id})
   return { success: true, data }
 }
 
@@ -84,7 +84,7 @@ export async function searchStores(query: string) {
   const { data, error } = await supabase
     .from("stores")
     .select("*")
-    .ilike("name", `%${query}%`)
+    .ilike("name", %${query}%)
     .order("created_at", { ascending: false })
 
   if (error) {

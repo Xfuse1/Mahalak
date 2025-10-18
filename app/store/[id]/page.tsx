@@ -29,10 +29,8 @@ export default function StorePage({ params }: { params: { id: string } }) {
       router.push("/auth")
       return
     }
-    window.open(
-      `https://wa.me/201055161600?text=${t(`مرحباً، أريد الاستفسار عن ${store.name}`, `Hello, I want to inquire about ${store.name}`)}`,
-      "_blank",
-    )
+    const message = t(`مرحباً، أريد الاستفسار عن ${store.name}`, `Hello, I want to inquire about ${store.name}`)
+    window.open(`https://wa.me/201055161600?text=${encodeURIComponent(message)}`, "_blank")
   }
 
   const handleCall = () => {

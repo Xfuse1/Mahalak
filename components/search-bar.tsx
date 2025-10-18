@@ -22,6 +22,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   const router = useRouter()
   const { t, language } = useLanguage()
 
+  const isRTL = language === "ar"
   const searchPlaceholder = placeholder || t("ابحث عن منتجات، متاجر...", "Search for products, stores...")
 
   const handleSearch = (e: React.FormEvent) => {
@@ -67,7 +68,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   }
 
   return (
-    <form onSubmit={handleSearch} className={`flex gap-2 ${className}`}>
+    <form onSubmit={handleSearch} className={`flex gap-2 ${className}`} dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex-1 relative">
         <Label htmlFor="search-input" className="sr-only">
           {searchPlaceholder}
@@ -78,13 +79,17 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           placeholder={searchPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="pr-10 border-2 border-gray-300 focus:border-[#1F478B] h-12"
+          className={`pr-10 border-3 border-[#1F478B] focus:border-[#1F478B] focus:ring-2 focus:ring-[#1F478B] focus:ring-opacity-30 hover:border-[#1a3a70] transition-all duration-200 h-12 rounded-xl shadow-sm ${
+            isRTL ? 'text-right' : 'text-left'
+          }`}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={`absolute left-2 top-1/2 -translate-y-1/2 transition-colors ${
+          className={`absolute top-1/2 -translate-y-1/2 transition-colors ${
+            isRTL ? 'left-2' : 'right-2'
+          } ${
             isListening ? "text-red-500 animate-pulse" : "text-gray-500 hover:text-[#1F478B]"
           }`}
           onClick={handleVoiceSearch}
@@ -94,8 +99,8 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           <Mic className="h-5 w-5" />
         </Button>
       </div>
-      <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70] px-6 h-12">
-        <Search className="h-4 w-4 ml-2" />
+      <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70] px-6 h-12 border-3 border-[#1F478B] hover:border-[#1a3a70] text-white font-bold transition-all duration-200 rounded-xl shadow-md">
+        <Search className={`h-4 w-4 ${isRTL ? 'mr-2' : 'ml-2'}`} />
         {t("بحث", "Search")}
       </Button>
     </form>
