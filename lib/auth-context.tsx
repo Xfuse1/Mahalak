@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { createStore } from "@/lib/actions/stores"
 
 interface User {
   id: string
@@ -21,7 +22,13 @@ interface AuthContextType {
     password: string,
     name: string,
     role: "customer" | "seller",
-    sellerData?: { phone?: string; storeName?: string; address?: string; storeType?: string },
+    sellerData?: {
+      phone?: string
+      storeName?: string
+      storeDescription?: string
+      address?: string
+      storeType?: string
+    },
   ) => Promise<boolean>
   logout: () => void
   isLoading: boolean
@@ -130,7 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     name: string,
     role: "customer" | "seller",
-    sellerData?: { phone?: string; storeName?: string; address?: string; storeType?: string },
+    sellerData?: {
+      phone?: string
+      storeName?: string
+      storeDescription?: string
+      address?: string
+      storeType?: string
+    },
   ): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -148,13 +161,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
 
       if (role === "seller" && data.user && sellerData?.storeName) {
-        await supabase.from("stores").insert({
+        console.log("[v0] Creating store for seller:", data.user.id)
+
+        const result = await createStore({
           seller_id: data.user.id,
           name: sellerData.storeName,
-          address: sellerData.address,
-          phone: sellerData.phone,
+          description: sellerData.storeDescription || "",
+          address: sellerData.address || "",
+          phone: sellerData.phone || "",
           category: sellerData.storeType || "خدمات أخرى",
         })
+
+        if (!result.success) {
+          console.error("[v0] Error creating store:", result.error)
+          throw new Error("Failed to create store: " + result.error)
+        }
+
+        console.log("[v0] Store created successfully:", result.data)
       }
 
       if (data.user) {
@@ -170,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return true
     } catch (error: any) {
+      console.error("[v0] Registration error:", error)
       throw error
     }
   }

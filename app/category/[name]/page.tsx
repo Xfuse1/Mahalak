@@ -4,15 +4,36 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ProductCard } from "@/components/product-card"
 import { BackButton } from "@/components/back-button"
-import { mockProducts } from "@/lib/mock-data"
 import { useLanguage } from "@/lib/language-context"
+import { getProducts } from "@/lib/actions/products"
+import { useEffect, useState } from "react"
 
 export default function CategoryPage({ params }: { params: { name: string } }) {
   const { name } = params
   const decodedCategory = decodeURIComponent(name)
   const { t } = useLanguage()
 
-  const categoryProducts = mockProducts.filter((p) => p.category === decodedCategory)
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true)
+      const productsData = await getProducts(decodedCategory)
+
+      // Transform products to map image_url to image for ProductCard
+      const transformedProducts = productsData.map((product: any) => ({
+        ...product,
+        image: product.image_url,
+        storeName: product.stores?.name || "",
+      }))
+
+      setProducts(transformedProducts)
+      setLoading(false)
+    }
+
+    fetchProducts()
+  }, [decodedCategory])
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -28,7 +49,11 @@ export default function CategoryPage({ params }: { params: { name: string } }) {
             {t("فئة:", "Category:")} <span className="text-[#1F478B]">{decodedCategory}</span>
           </h1>
 
-          {categoryProducts.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-16">
+              <p className="text-xl text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          ) : products.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-xl text-gray-500 mb-4">
                 {t("لا توجد منتجات في هذه الفئة حالياً", "No products in this category currently")}
@@ -39,7 +64,7 @@ export default function CategoryPage({ params }: { params: { name: string } }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {categoryProducts.map((product) => (
+              {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>

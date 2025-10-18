@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
 import { useAuth } from "@/lib/auth-context"
@@ -9,11 +9,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus } from "lucide-react"
 import Link from "next/link"
+import { getStoreByUserId } from "@/lib/actions/stores"
+import { getDashboardAnalytics, getRecentOrders } from "@/lib/actions/dashboard"
 
 export default function SellerDashboard() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+
+  const [analytics, setAnalytics] = useState({
+    totalRevenue: 0,
+    totalOrders: 0,
+    totalProducts: 0,
+    totalMessages: 0,
+    topProduct: "",
+    topProductSales: 0,
+    lowStockProducts: 0,
+    averageRating: 0,
+    totalReviews: 0,
+  })
+  const [recentOrders, setRecentOrders] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -24,28 +40,51 @@ export default function SellerDashboard() {
     }
   }, [user, isLoading, router])
 
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoading(true)
+        const store = await getStoreByUserId(user.id)
+
+        if (store) {
+          const analyticsData = await getDashboardAnalytics(store.id)
+          const ordersData = await getRecentOrders(store.id, 3)
+
+          setAnalytics(analyticsData)
+          setRecentOrders(ordersData)
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching dashboard data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (user?.id && user?.role === "seller") {
+      fetchDashboardData()
+    }
+  }, [user?.id, user?.role])
+
   if (isLoading || !user || user.role !== "seller") {
     return null
   }
 
-  // Mock analytics data
-  const analytics = {
-    totalRevenue: 45230,
-    totalOrders: 156,
-    totalProducts: 24,
-    totalMessages: 42,
-    topProduct: "هاتف ذكي سامسونج جالاكسي",
-    topProductSales: 45,
-    lowStockProducts: 3,
-    averageRating: 4.6,
-    totalReviews: 89,
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-secondary">
+        <SellerHeader />
+        <main className="flex-1 py-8">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center justify-center h-64">
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
-
-  const recentOrders = [
-    { id: "ORD-156", customer: "أحمد محمد", total: 3500, status: "processing", date: "2024-01-22" },
-    { id: "ORD-155", customer: "فاطمة علي", total: 8500, status: "shipped", date: "2024-01-21" },
-    { id: "ORD-154", customer: "محمد حسن", total: 120, status: "delivered", date: "2024-01-20" },
-  ]
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
@@ -161,7 +200,7 @@ export default function SellerDashboard() {
               <CardContent className="space-y-4">
                 <div className="border-b pb-4">
                   <p className="text-sm text-gray-600 mb-2">{t("المنتج الأكثر مبيعاً", "Top Selling Product")}</p>
-                  <p className="font-semibold text-lg mb-1">{analytics.topProduct}</p>
+                  <p className="font-semibold text-lg mb-1">{analytics.topProduct || t("لا يوجد", "None")}</p>
                   <p className="text-sm text-gray-600">
                     {analytics.topProductSales} {t("مبيعة", "sales")}
                   </p>
@@ -217,26 +256,32 @@ export default function SellerDashboard() {
               <CardDescription>{t("آخر الطلبات على متجرك", "Latest orders on your store")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {recentOrders.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between border rounded-lg p-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <p className="font-semibold">{order.id}</p>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                          {getStatusText(order.status)}
-                        </span>
+              {recentOrders.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">{t("لا توجد طلبات حتى الآن", "No orders yet")}</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentOrders.map((order) => (
+                    <div key={order.id} className="flex items-center justify-between border rounded-lg p-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className="font-semibold">{order.id}</p>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}
+                          >
+                            {getStatusText(order.status)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {order.customer} • {order.date}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {order.customer} • {order.date}
+                      <p className="text-lg font-bold text-[#1F478B]">
+                        {order.total.toLocaleString()} {t("جنيه", "EGP")}
                       </p>
                     </div>
-                    <p className="text-lg font-bold text-[#1F478B]">
-                      {order.total.toLocaleString()} {t("جنيه", "EGP")}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -8,7 +8,8 @@ import { SellerHeader } from "@/components/seller-header"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { mockProducts } from "@/lib/mock-data"
+import { getProductsByStoreId, deleteProduct } from "@/lib/actions/products"
+import { getStoreByUserId } from "@/lib/actions/stores"
 import { Edit, Trash2, Plus } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -17,7 +18,8 @@ import { useLanguage } from "@/lib/language-context"
 export default function SellerProductsPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [products, setProducts] = useState(mockProducts.filter((p) => p.storeId === "1"))
+  const [products, setProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const { t } = useLanguage()
 
   useEffect(() => {
@@ -29,14 +31,65 @@ export default function SellerProductsPage() {
     }
   }, [user, isLoading, router])
 
+  useEffect(() => {
+    async function fetchProducts() {
+      if (!user?.id) return
+
+      try {
+        setLoading(true)
+
+        const store = await getStoreByUserId(user.id)
+
+        if (!store) {
+          setProducts([])
+          return
+        }
+
+        const storeProducts = await getProductsByStoreId(store.id)
+
+        setProducts(storeProducts)
+      } catch (error) {
+        console.error("[v0] Error fetching products:", error)
+        setProducts([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (user?.id && user.role === "seller") {
+      fetchProducts()
+    }
+  }, [user?.id, user?.role])
+  // </CHANGE>
+
   if (isLoading || !user || user.role !== "seller") {
     return null
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm(t("هل أنت متأكد من حذف هذا المنتج؟", "Are you sure you want to delete this product?"))) {
-      setProducts(products.filter((p) => p.id !== id))
+      const result = await deleteProduct(id)
+      if (result.success) {
+        setProducts(products.filter((p) => p.id !== id))
+      } else {
+        alert(t("فشل حذف المنتج", "Failed to delete product"))
+      }
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-secondary">
+        <SellerHeader />
+        <main className="flex-1 py-8">
+          <div className="container mx-auto px-4">
+            <div className="text-center py-16">
+              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -62,7 +115,7 @@ export default function SellerProductsPage() {
                   <CardContent className="p-4">
                     <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden mb-4">
                       <Image
-                        src={product.image || "/placeholder.svg"}
+                        src={product.image_url || "/placeholder.svg"}
                         alt={product.name}
                         fill
                         className="object-cover"

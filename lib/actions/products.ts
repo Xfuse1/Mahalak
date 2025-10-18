@@ -128,6 +128,23 @@ export async function deleteProduct(id: string) {
   return { success: true }
 }
 
+export async function getProductsByStoreId(storeId: string) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error fetching products by store:", error)
+    return []
+  }
+
+  return data || []
+}
+
 export async function searchProducts(query: string) {
   const supabase = await createServerClient()
 
@@ -143,11 +160,46 @@ export async function searchProducts(query: string) {
       )
     `,
     )
-    .ilike("name", `%${query}%`)
+    .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
     .order("created_at", { ascending: false })
 
   if (error) {
     console.error("[v0] Error searching products:", error)
+    return []
+  }
+
+  // Also filter by store name on the client side since we can't do it in the query
+  const filtered = data?.filter(
+    (product) =>
+      product.name.toLowerCase().includes(query.toLowerCase()) ||
+      product.description.toLowerCase().includes(query.toLowerCase()) ||
+      (product.stores && product.stores.name.toLowerCase().includes(query.toLowerCase())),
+  )
+
+  return filtered || []
+}
+
+export async function getRelatedProducts(productId: string, category: string, limit = 4) {
+  const supabase = await createServerClient()
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      stores (
+        id,
+        name
+      )
+    `,
+    )
+    .eq("category", category)
+    .neq("id", productId)
+    .limit(limit)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("[v0] Error fetching related products:", error)
     return []
   }
 

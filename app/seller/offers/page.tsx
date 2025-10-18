@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
@@ -12,31 +11,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Edit, Trash2, Tag } from "lucide-react"
+import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "@/lib/actions/offers"
+import { getStoreByUserId } from "@/lib/actions/stores"
 
 interface Offer {
   id: string
   title: string
   description: string
-  discount: number
-  startDate: string
-  endDate: string
+  discount_percentage: number
+  start_date: string
+  end_date: string
+  store_id: string
+  created_at: string
 }
 
 export default function OffersPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [offers, setOffers] = useState<Offer[]>([
-    {
-      id: "1",
-      title: "خصم 20% على جميع المنتجات",
-      description: "عرض خاص لفترة محدودة",
-      discount: 20,
-      startDate: "2024-01-01",
-      endDate: "2024-01-31",
-    },
-  ])
+  const [offers, setOffers] = useState<Offer[]>([])
   const [isAdding, setIsAdding] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -47,41 +44,131 @@ export default function OffersPage() {
     }
   }, [user, isLoading, router])
 
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoading(true)
+
+        // Get seller's store
+        const store = await getStoreByUserId(user.id)
+        if (!store) {
+          console.error("[v0] No store found for seller")
+          setLoading(false)
+          return
+        }
+
+        setStoreId(store.id)
+
+        // Get offers for this store
+        const storeOffers = await getStoreOffers(store.id)
+        setOffers(storeOffers)
+      } catch (error) {
+        console.error("[v0] Error fetching data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [user?.id])
+
   if (isLoading || !user || user.role !== "seller") {
     return null
   }
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (!storeId) return
+
+    setSubmitting(true)
     const formData = new FormData(e.currentTarget)
-    const newOffer: Offer = {
-      id: editingId || Date.now().toString(),
+
+    const offerData = {
       title: formData.get("title") as string,
       description: formData.get("description") as string,
-      discount: Number(formData.get("discount")),
-      startDate: formData.get("startDate") as string,
-      endDate: formData.get("endDate") as string,
+      discount_percentage: Number(formData.get("discount")),
+      start_date: formData.get("startDate") as string,
+      end_date: formData.get("endDate") as string,
     }
 
-    if (editingId) {
-      setOffers(offers.map((o) => (o.id === editingId ? newOffer : o)))
-      setEditingId(null)
-    } else {
-      setOffers([...offers, newOffer])
+    try {
+      if (editingOffer) {
+        // Update existing offer
+        const result = await updateOffer(editingOffer.id, offerData)
+        if (result.success) {
+          // Refresh offers list
+          const updatedOffers = await getStoreOffers(storeId)
+          setOffers(updatedOffers)
+          setEditingOffer(null)
+          setIsAdding(false)
+        } else {
+          alert(`فشل تحديث العرض: ${result.error}`)
+        }
+      } else {
+        // Create new offer
+        const result = await createOffer({
+          store_id: storeId,
+          ...offerData,
+        })
+        if (result.success) {
+          // Refresh offers list
+          const updatedOffers = await getStoreOffers(storeId)
+          setOffers(updatedOffers)
+          setIsAdding(false)
+        } else {
+          alert(`فشل إضافة العرض: ${result.error}`)
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Error submitting offer:", error)
+      alert("حدث خطأ أثناء حفظ العرض")
+    } finally {
+      setSubmitting(false)
     }
-    setIsAdding(false)
-    e.currentTarget.reset()
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذا العرض؟")) {
-      setOffers(offers.filter((o) => o.id !== id))
+  const handleDelete = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا العرض؟")) return
+    if (!storeId) return
+
+    try {
+      const result = await deleteOffer(id)
+      if (result.success) {
+        // Refresh offers list
+        const updatedOffers = await getStoreOffers(storeId)
+        setOffers(updatedOffers)
+      } else {
+        alert(`فشل حذف العرض: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("[v0] Error deleting offer:", error)
+      alert("حدث خطأ أثناء حذف العرض")
     }
   }
 
   const handleEdit = (offer: Offer) => {
-    setEditingId(offer.id)
+    setEditingOffer(offer)
     setIsAdding(true)
+  }
+
+  const formatDateForInput = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toISOString().split("T")[0]
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-secondary">
+        <SellerHeader />
+        <main className="flex-1 py-8">
+          <div className="container mx-auto px-4">
+            <p className="text-center text-gray-500">جاري التحميل...</p>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -95,7 +182,13 @@ export default function OffersPage() {
               <h1 className="text-3xl font-bold">العروض الترويجية</h1>
               <p className="text-gray-600 mt-1">إدارة العروض والخصومات</p>
             </div>
-            <Button onClick={() => setIsAdding(!isAdding)} className="bg-[#1F478B] hover:bg-[#1a3a70]">
+            <Button
+              onClick={() => {
+                setEditingOffer(null)
+                setIsAdding(!isAdding)
+              }}
+              className="bg-[#1F478B] hover:bg-[#1a3a70]"
+            >
               <Plus className="ml-2 h-4 w-4" />
               إضافة عرض جديد
             </Button>
@@ -104,43 +197,77 @@ export default function OffersPage() {
           {isAdding && (
             <Card className="mb-8">
               <CardHeader>
-                <CardTitle>{editingId ? "تعديل العرض" : "إضافة عرض جديد"}</CardTitle>
+                <CardTitle>{editingOffer ? "تعديل العرض" : "إضافة عرض جديد"}</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
                     <Label htmlFor="title">عنوان العرض</Label>
-                    <Input id="title" name="title" required placeholder="خصم 20% على جميع المنتجات" />
+                    <Input
+                      id="title"
+                      name="title"
+                      required
+                      placeholder="خصم 20% على جميع المنتجات"
+                      defaultValue={editingOffer?.title}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="description">الوصف</Label>
-                    <Textarea id="description" name="description" required placeholder="عرض خاص لفترة محدودة" />
+                    <Textarea
+                      id="description"
+                      name="description"
+                      required
+                      placeholder="عرض خاص لفترة محدودة"
+                      defaultValue={editingOffer?.description}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="discount">نسبة الخصم (%)</Label>
-                    <Input id="discount" name="discount" type="number" min="0" max="100" required placeholder="20" />
+                    <Input
+                      id="discount"
+                      name="discount"
+                      type="number"
+                      min="0"
+                      max="100"
+                      required
+                      placeholder="20"
+                      defaultValue={editingOffer?.discount_percentage}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="startDate">تاريخ البداية</Label>
-                      <Input id="startDate" name="startDate" type="date" required />
+                      <Input
+                        id="startDate"
+                        name="startDate"
+                        type="date"
+                        required
+                        defaultValue={editingOffer ? formatDateForInput(editingOffer.start_date) : ""}
+                      />
                     </div>
                     <div>
                       <Label htmlFor="endDate">تاريخ النهاية</Label>
-                      <Input id="endDate" name="endDate" type="date" required />
+                      <Input
+                        id="endDate"
+                        name="endDate"
+                        type="date"
+                        required
+                        defaultValue={editingOffer ? formatDateForInput(editingOffer.end_date) : ""}
+                      />
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]">
-                      {editingId ? "حفظ التعديلات" : "إضافة العرض"}
+                    <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]" disabled={submitting}>
+                      {submitting ? "جاري الحفظ..." : editingOffer ? "حفظ التعديلات" : "إضافة العرض"}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => {
                         setIsAdding(false)
-                        setEditingId(null)
+                        setEditingOffer(null)
                       }}
+                      disabled={submitting}
                     >
                       إلغاء
                     </Button>
@@ -174,11 +301,11 @@ export default function OffersPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">الخصم:</span>
-                      <span className="text-2xl font-bold text-[#1F478B]">{offer.discount}%</span>
+                      <span className="text-2xl font-bold text-[#1F478B]">{offer.discount_percentage}%</span>
                     </div>
                     <div className="text-sm text-gray-600">
-                      <p>من: {offer.startDate}</p>
-                      <p>إلى: {offer.endDate}</p>
+                      <p>من: {formatDateForInput(offer.start_date)}</p>
+                      <p>إلى: {formatDateForInput(offer.end_date)}</p>
                     </div>
                   </div>
                 </CardContent>

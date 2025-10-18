@@ -6,7 +6,6 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ProductCard } from "@/components/product-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockProducts, mockStores } from "@/lib/mock-data"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
 import { Star } from "lucide-react"
@@ -15,32 +14,59 @@ import { FilterSort } from "@/components/filter-sort"
 import { BackButton } from "@/components/back-button"
 import { useLanguage } from "@/lib/language-context"
 import Image from "next/image"
+import { searchProducts, getProducts } from "@/lib/actions/products"
+import { searchStores, getStores } from "@/lib/actions/stores"
 
 function SearchResults() {
   const searchParams = useSearchParams()
   const query = searchParams.get("q") || ""
   const [activeTab, setActiveTab] = useState("products")
-  const [sortedProducts, setSortedProducts] = useState(mockProducts)
+  const [products, setProducts] = useState<any[]>([])
+  const [stores, setStores] = useState<any[]>([])
+  const [sortedProducts, setSortedProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const { language, t } = useLanguage()
 
   const isRTL = language === "ar"
 
-  const filteredProducts = sortedProducts.filter(
-    (product) =>
-      product.name.toLowerCase().includes(query.toLowerCase()) ||
-      product.description.toLowerCase().includes(query.toLowerCase()) ||
-      product.storeName.toLowerCase().includes(query.toLowerCase()),
-  )
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        let productsData, storesData
 
-  const filteredStores = mockStores.filter(
-    (store) =>
-      store.name.toLowerCase().includes(query.toLowerCase()) ||
-      store.description.toLowerCase().includes(query.toLowerCase()),
-  )
+        if (!query) {
+          // No query - fetch all products and stores
+          ;[productsData, storesData] = await Promise.all([getProducts(), getStores()])
+        } else {
+          // Query exists - search for matching products and stores
+          ;[productsData, storesData] = await Promise.all([searchProducts(query), searchStores(query)])
+        }
+
+        // Transform products to match the expected format
+        const transformedProducts = productsData.map((product: any) => ({
+          ...product,
+          image: product.image_url, // Map image_url to image for ProductCard component
+          storeName: product.stores?.name || "",
+          createdAt: product.created_at,
+        }))
+
+        setProducts(transformedProducts)
+        setSortedProducts(transformedProducts)
+        setStores(storesData)
+      } catch (error) {
+        console.error("[v0] Error fetching search results:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [query])
 
   const handleFilterChange = useCallback(
     (filters: { sortBy: string }) => {
-      const sorted = [...mockProducts]
+      const sorted = [...products]
 
       switch (filters.sortBy) {
         case "price-asc":
@@ -67,12 +93,8 @@ function SearchResults() {
 
       setSortedProducts(sorted)
     },
-    [isRTL],
+    [products, isRTL],
   )
-
-  useEffect(() => {
-    setSortedProducts(mockProducts)
-  }, [query])
 
   return (
     <div className="min-h-screen flex flex-col" dir={isRTL ? "rtl" : "ltr"}>
@@ -83,7 +105,10 @@ function SearchResults() {
           <BackButton />
 
           <h1 className={`text-3xl font-bold mb-6 ${isRTL ? "text-right" : "text-left"}`}>
-            {t("نتائج البحث عن:", "Search results for:")} <span className="text-[#1F478B]">{query}</span>
+            {query
+              ? `${t("نتائج البحث عن:", "Search results for:")} `
+              : t("جميع المنتجات والمتاجر", "All Products and Stores")}
+            {query && <span className="text-[#1F478B]">{query}</span>}
           </h1>
 
           <div className={`mb-6 flex gap-4 ${isRTL ? "justify-start" : "justify-start"} w-full`}>
@@ -98,84 +123,91 @@ function SearchResults() {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className={`mb-6 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2`}>
-              <TabsTrigger
-                value="products"
-                className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
-              >
-                {t("المنتجات", "Products")} ({filteredProducts.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="stores"
-                className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
-              >
-                {t("المتاجر", "Stores")} ({filteredStores.length})
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="products">
-              {filteredProducts.length > 0 ? (
-                <div
-                  className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 ${isRTL ? "text-right" : "text-left"}`}
-                  dir={isRTL ? "rtl" : "ltr"}
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F478B] mx-auto"></div>
+              <p className="mt-4 text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          ) : (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className={`mb-6 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2`}>
+                <TabsTrigger
+                  value="products"
+                  className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
                 >
-                  {filteredProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
-              ) : (
-                <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
-                  <p className="text-gray-500 text-lg">{t("لم يتم العثور على منتجات", "No products found")}</p>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="stores">
-              {filteredStores.length > 0 ? (
-                <div
-                  className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isRTL ? "text-right" : "text-left"}`}
-                  dir={isRTL ? "rtl" : "ltr"}
+                  {t("المنتجات", "Products")} ({sortedProducts.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="stores"
+                  className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
                 >
-                  {filteredStores.map((store) => (
-                    <Link key={store.id} href={`/store/${store.id}`}>
-                      <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden border-2 border-gray-200 hover:border-[#1F478B] hover:border-opacity-50">
-                        <div className="relative h-48 bg-gray-100">
-                          <Image
-                            src={store.logo || "/placeholder.svg"}
-                            alt={store.name}
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-                        <CardContent className="p-6">
-                          <h3 className="text-xl font-bold mb-2">{store.name}</h3>
-                          <p className="text-gray-600 mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
-                          <div
-                            className={`flex items-center gap-2 mb-4 ${isRTL ? "flex-row-reverse justify-end" : "justify-start"}`}
-                          >
-                            <div className={`flex items-center gap-1 ${isRTL ? "flex-row-reverse" : ""}`}>
-                              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                              <span className="font-medium">{store.rating}</span>
+                  {t("المتاجر", "Stores")} ({stores.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="products">
+                {sortedProducts.length > 0 ? (
+                  <div
+                    className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 ${isRTL ? "text-right" : "text-left"}`}
+                    dir={isRTL ? "rtl" : "ltr"}
+                  >
+                    {sortedProducts.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
+                    <p className="text-gray-500 text-lg">{t("لم يتم العثور على منتجات", "No products found")}</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="stores">
+                {stores.length > 0 ? (
+                  <div
+                    className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isRTL ? "text-right" : "text-left"}`}
+                    dir={isRTL ? "rtl" : "ltr"}
+                  >
+                    {stores.map((store) => (
+                      <Link key={store.id} href={`/store/${store.id}`}>
+                        <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden border-2 border-gray-200 hover:border-[#1F478B] hover:border-opacity-50">
+                          <div className="relative h-48 bg-gray-100">
+                            <Image
+                              src={store.image_url || "/placeholder.svg?height=200&width=400"}
+                              alt={store.name}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <CardContent className="p-6">
+                            <h3 className="text-xl font-bold mb-2">{store.name}</h3>
+                            <p className="text-gray-600 mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
+                            <div
+                              className={`flex items-center gap-2 mb-4 ${isRTL ? "flex-row-reverse justify-end" : "justify-start"}`}
+                            >
+                              <div className={`flex items-center gap-1 ${isRTL ? "flex-row-reverse" : ""}`}>
+                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                                <span className="font-medium">{store.rating || 0}</span>
+                              </div>
                             </div>
-                          </div>
-                          <div className={isRTL ? "text-right" : "text-left"}>
-                            <span className="inline-block bg-secondary px-3 py-1 rounded-full text-sm font-medium border border-gray-300">
-                              {store.category}
-                            </span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
-                  <p className="text-gray-500 text-lg">{t("لم يتم العثور على متاجر", "No stores found")}</p>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+                            <div className={isRTL ? "text-right" : "text-left"}>
+                              <span className="inline-block bg-secondary px-3 py-1 rounded-full text-sm font-medium border border-gray-300">
+                                {store.category}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
+                    <p className="text-gray-500 text-lg">{t("لم يتم العثور على متاجر", "No stores found")}</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
         </div>
       </main>
 

@@ -85,6 +85,7 @@ export default function AuthPage() {
     if (role === "seller") {
       const phone = formData.get("phone") as string
       const storeName = formData.get("storeName") as string
+      const storeDescription = formData.get("storeDescription") as string
       const address = formData.get("address") as string
       const storeType = formData.get("storeType") as string
 
@@ -94,7 +95,7 @@ export default function AuthPage() {
         return
       }
 
-      sellerData = { phone, storeName, address, storeType }
+      sellerData = { phone, storeName, storeDescription, address, storeType }
     }
 
     if (password !== confirmPassword) {
@@ -271,6 +272,18 @@ export default function AuthPage() {
                             type="text"
                             required
                             placeholder={t("متجر الإلكترونيات", "Electronics Store")}
+                            className="h-12"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="register-storeDescription" className="text-base">
+                            {t("وصف المتجر", "Store Description")}
+                          </Label>
+                          <Input
+                            id="register-storeDescription"
+                            name="storeDescription"
+                            type="text"
+                            placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
                             className="h-12"
                           />
                         </div>

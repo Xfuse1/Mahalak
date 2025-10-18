@@ -1,9 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { mockStores } from "@/lib/mock-data"
 import { Card, CardContent } from "@/components/ui/card"
 import { Star } from "lucide-react"
 import Link from "next/link"
@@ -11,20 +10,49 @@ import { SearchBar } from "@/components/search-bar"
 import { BackButton } from "@/components/back-button"
 import { useLanguage } from "@/lib/language-context"
 import Image from "next/image"
+import { getStores, searchStores } from "@/lib/actions/stores"
+
+type Store = {
+  id: string
+  name: string
+  description: string
+  rating: number
+  category: string
+  image_url: string | null
+  phone: string
+  address: string
+}
 
 export default function StoresPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [stores, setStores] = useState<Store[]>([])
+  const [loading, setLoading] = useState(true)
   const { t } = useLanguage()
 
-  const filteredStores = mockStores.filter(
-    (store) =>
-      store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      store.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      store.category.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  useEffect(() => {
+    const fetchStores = async () => {
+      setLoading(true)
+      const data = await getStores()
+      setStores(data as Store[])
+      setLoading(false)
+    }
+    fetchStores()
+  }, [])
 
-  const handleSearch = (query: string) => {
+  const handleSearch = async (query: string) => {
     setSearchQuery(query)
+    if (query.trim()) {
+      setLoading(true)
+      const data = await searchStores(query)
+      setStores(data as Store[])
+      setLoading(false)
+    } else {
+      // If search is cleared, fetch all stores again
+      setLoading(true)
+      const data = await getStores()
+      setStores(data as Store[])
+      setLoading(false)
+    }
   }
 
   return (
@@ -41,14 +69,22 @@ export default function StoresPage() {
             <SearchBar placeholder={t("ابحث عن متجر...", "Search for a store...")} onSearch={handleSearch} />
           </div>
 
-          {/* Stores Grid */}
-          {filteredStores.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          ) : stores.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredStores.map((store) => (
+              {stores.map((store) => (
                 <Link key={store.id} href={`/store/${store.id}`}>
                   <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden">
                     <div className="relative h-48 bg-gray-100">
-                      <Image src={store.logo || "/placeholder.svg"} alt={store.name} fill className="object-cover" />
+                      <Image
+                        src={store.image_url || "/placeholder.svg?height=200&width=400"}
+                        alt={store.name}
+                        fill
+                        className="object-cover"
+                      />
                     </div>
                     <CardContent className="p-6">
                       <h3 className="text-xl font-bold mb-2">{store.name}</h3>
@@ -56,11 +92,9 @@ export default function StoresPage() {
                       <div className="flex items-center gap-2 mb-4">
                         <div className="flex items-center gap-1">
                           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium">{store.rating}</span>
+                          <span className="font-medium">{store.rating.toFixed(1)}</span>
                         </div>
-                        <span className="text-sm text-gray-500">
-                          ({store.reviewCount} {t("تقييم", "reviews")})
-                        </span>
+                        <span className="text-sm text-gray-500">(0 {t("تقييم", "reviews")})</span>
                       </div>
                       <div>
                         <span className="inline-block bg-secondary px-3 py-1 rounded-full text-sm font-medium">

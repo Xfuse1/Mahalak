@@ -3,26 +3,88 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { BackButton } from "@/components/back-button"
-import { mockProducts } from "@/lib/mock-data"
 import { Star, MessageCircle, Phone } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
+import { useEffect, useState } from "react"
+import { getProduct, getRelatedProducts } from "@/lib/actions/products"
+
+type Product = {
+  id: string
+  name: string
+  description: string
+  price: number
+  category: string
+  stock: number
+  image_url: string | null
+  store_id: string
+  rating: number
+  stores?: {
+    id: string
+    name: string
+    phone?: string
+  }
+}
 
 export default function ProductPage({ params }: { params: { id: string } }) {
   const { id } = params
-  const product = mockProducts.find((p) => p.id === id)
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
 
+  const [product, setProduct] = useState<Product | null>(null)
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+
+        const productData = await getProduct(id)
+        if (!productData) {
+          notFound()
+          return
+        }
+
+        setProduct(productData as Product)
+
+        const related = await getRelatedProducts(id, productData.category, 4)
+        setRelatedProducts(related as Product[])
+
+        setLoading(false)
+      } catch (error) {
+        console.error("[v0] Error fetching product:", error)
+        setProduct(null)
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 py-8">
+          <div className="container mx-auto px-4">
+            <div className="text-center py-12">
+              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
   if (!product) {
     notFound()
   }
-
-  const relatedProducts = mockProducts.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4)
 
   const handleWhatsApp = () => {
     if (!user) {
@@ -32,7 +94,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
     const enMessage = `Hello, I want to inquire about ${product.name}`
     const message = t(arMessage, enMessage)
-    window.open(`https://wa.me/201055161600?text=${encodeURIComponent(message)}`, "_blank")
+    const phone = product.stores?.phone || "201055161600"
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank")
   }
 
   const handleCall = () => {
@@ -40,7 +103,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
       router.push("/auth")
       return
     }
-    window.location.href = "tel:01055161600"
+    const phone = product.stores?.phone || "01055161600"
+    window.location.href = `tel:${phone}`
   }
 
   return (
@@ -57,15 +121,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* Product Image */}
             <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden">
-              <Image src={product.image || "/placeholder.svg"} alt={product.name} fill className="object-cover" />
+              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill className="object-cover" />
             </div>
 
             {/* Product Info */}
             <div className="space-y-4">
               <h1 className="text-3xl font-bold text-balance">{product.name}</h1>
 
-              <Link href={`/store/${product.storeId}`} className="text-[#1F478B] hover:underline block">
-                {product.storeName}
+              <Link href={`/store/${product.store_id}`} className="text-[#1F478B] hover:underline block">
+                {product.stores?.name || t("المتجر", "Store")}
               </Link>
 
               <div className="flex items-center gap-2">
@@ -137,14 +201,16 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     <Link href={`/product/${relatedProduct.id}`}>
                       <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden mb-3">
                         <Image
-                          src={relatedProduct.image || "/placeholder.svg"}
+                          src={relatedProduct.image_url || "/placeholder.svg"}
                           alt={relatedProduct.name}
                           fill
                           className="object-cover"
                         />
                       </div>
                       <h3 className="font-semibold mb-1 line-clamp-2 text-balance">{relatedProduct.name}</h3>
-                      <p className="text-sm text-gray-600 mb-2">{relatedProduct.storeName}</p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        {relatedProduct.stores?.name || t("المتجر", "Store")}
+                      </p>
                       <div className="flex items-center gap-1 mb-2">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                         <span className="font-medium text-sm">{relatedProduct.rating}</span>
