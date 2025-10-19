@@ -94,10 +94,10 @@ importers:
         version: 1.1.6(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       '@supabase/ssr':
         specifier: latest
-        version: 0.7.0(@supabase/supabase-js@2.75.0)
+        version: 0.7.0(@supabase/supabase-js@2.75.1)
       '@supabase/supabase-js':
         specifier: latest
-        version: 2.75.0
+        version: 2.75.1
       '@vercel/analytics':
         specifier: 1.3.1
         version: 1.3.1(next@15.2.4(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)
@@ -122,6 +122,9 @@ importers:
       geist:
         specifier: ^1.3.1
         version: 1.3.1(next@15.2.4(react-dom@19.0.0(react@19.0.0))(react@19.0.0))
+      i18next:
+        specifier: latest
+        version: 25.6.0(typescript@5.0.2)
       input-otp:
         specifier: 1.4.1
         version: 1.4.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -146,6 +149,9 @@ importers:
       react-hook-form:
         specifier: ^7.60.0
         version: 7.60.0(react@19.0.0)
+      react-i18next:
+        specifier: latest
+        version: 16.1.0(i18next@25.6.0(typescript@5.0.2))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(typescript@5.0.2)
       react-resizable-panels:
         specifier: ^2.1.7
         version: 2.1.7(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -1304,32 +1310,32 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
-  '@supabase/auth-js@2.75.0':
-    resolution: {integrity: sha512-J8TkeqCOMCV4KwGKVoxmEBuDdHRwoInML2vJilthOo7awVCro2SM+tOcpljORwuBQ1vHUtV62Leit+5wlxrNtw==}
+  '@supabase/auth-js@2.75.1':
+    resolution: {integrity: sha512-zktlxtXstQuVys/egDpVsargD9hQtG20CMdtn+mMn7d2Ulkzy2tgUT5FUtpppvCJtd9CkhPHO/73rvi5W6Am5A==}
 
-  '@supabase/functions-js@2.75.0':
-    resolution: {integrity: sha512-18yk07Moj/xtQ28zkqswxDavXC3vbOwt1hDuYM3/7xPnwwpKnsmPyZ7bQ5th4uqiJzQ135t74La9tuaxBR6e7w==}
+  '@supabase/functions-js@2.75.1':
+    resolution: {integrity: sha512-xO+01SUcwVmmo67J7Htxq8FmhkYLFdWkxfR/taxBOI36wACEUNQZmroXGPl4PkpYxBO7TaDsRHYGxUpv9zTKkg==}
 
   '@supabase/node-fetch@2.6.15':
     resolution: {integrity: sha512-1ibVeYUacxWYi9i0cf5efil6adJ9WRyZBLivgjs+AUpewx1F3xPi7gLgaASI2SmIQxPoCEjAsLAzKPgMJVgOUQ==}
     engines: {node: 4.x || >=6.0.0}
 
-  '@supabase/postgrest-js@2.75.0':
-    resolution: {integrity: sha512-YfBz4W/z7eYCFyuvHhfjOTTzRrQIvsMG2bVwJAKEVVUqGdzqfvyidXssLBG0Fqlql1zJFgtsPpK1n4meHrI7tg==}
+  '@supabase/postgrest-js@2.75.1':
+    resolution: {integrity: sha512-FiYBD0MaKqGW8eo4Xqu7/100Xm3ddgh+3qHtqS18yQRoglJTFRQCJzY1xkrGS0JFHE2YnbjL6XCiOBXiG8DK4Q==}
 
-  '@supabase/realtime-js@2.75.0':
-    resolution: {integrity: sha512-B4Xxsf2NHd5cEnM6MGswOSPSsZKljkYXpvzKKmNxoUmNQOfB7D8HOa6NwHcUBSlxcjV+vIrYKcYXtavGJqeGrw==}
+  '@supabase/realtime-js@2.75.1':
+    resolution: {integrity: sha512-lBIJ855bUsBFScHA/AY+lxIFkubduUvmwbagbP1hq0wDBNAsYdg3ql80w8YmtXCDjkCwlE96SZqcFn7BGKKJKQ==}
 
   '@supabase/ssr@0.7.0':
     resolution: {integrity: sha512-G65t5EhLSJ5c8hTCcXifSL9Q/ZRXvqgXeNo+d3P56f4U1IxwTqjB64UfmfixvmMcjuxnq2yGqEWVJqUcO+AzAg==}
     peerDependencies:
       '@supabase/supabase-js': ^2.43.4
 
-  '@supabase/storage-js@2.75.0':
-    resolution: {integrity: sha512-wpJMYdfFDckDiHQaTpK+Ib14N/O2o0AAWWhguKvmmMurB6Unx17GGmYp5rrrqCTf8S1qq4IfIxTXxS4hzrUySg==}
+  '@supabase/storage-js@2.75.1':
+    resolution: {integrity: sha512-WdGEhroflt5O398Yg3dpf1uKZZ6N3CGloY9iGsdT873uWbkQKoP0wG8mtx98dh0fhj6dAlzBqOAvnlV12cJfzA==}
 
-  '@supabase/supabase-js@2.75.0':
-    resolution: {integrity: sha512-8UN/vATSgS2JFuJlMVr51L3eUDz+j1m7Ww63wlvHLKULzCDaVWYzvacCjBTLW/lX/vedI2LBI4Vg+01G9ufsJQ==}
+  '@supabase/supabase-js@2.75.1':
+    resolution: {integrity: sha512-GEPVBvjQimcMd9z5K1eTKTixTRb6oVbudoLQ9JKqTUJnR6GQdBU4OifFZean1AnHfsQwtri1fop2OWwsMv019w==}
 
   '@swc/counter@0.1.3':
     resolution: {integrity: sha512-e2BR4lsJkkRlKZ/qCHPw9ZaSxc0MVUd7gtbtaB7aMvHeJVYe8sOB8DBZkP2DtISHGSku9sCK6T6cnY0CtXrOCQ==}
@@ -1655,6 +1661,17 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
+  html-parse-stringify@3.0.1:
+    resolution: {integrity: sha512-KknJ50kTInJ7qIScF3jeaFRpMpE8/lfiTdzf/twXyPBLAGrLRTmkz3AdTnKeh40X8k9L2fdYwEp/42WGXIRGcg==}
+
+  i18next@25.6.0:
+    resolution: {integrity: sha512-tTn8fLrwBYtnclpL5aPXK/tAYBLWVvoHM1zdfXoRNLcI+RvtMsoZRV98ePlaW3khHYKuNh/Q65W/+NVFUeIwVw==}
+    peerDependencies:
+      typescript: ^5
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   input-otp@1.4.1:
     resolution: {integrity: sha512-+yvpmKYKHi9jIGngxagY9oWiiblPB7+nEO75F2l2o4vs+6vpPZZmUl4tBNYuTCvQjhvEIbdNeJu70bhfYP2nbw==}
     peerDependencies:
@@ -1838,6 +1855,22 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
+
+  react-i18next@16.1.0:
+    resolution: {integrity: sha512-10qpoODc0ntrWpZdko9CQnl2Xf4VJXUAS9sa7WOkTrQzbbfyoSSUZ3Rsnpgt8la6qCxeB61yzYjyW8U1g3hUUg==}
+    peerDependencies:
+      i18next: '>= 25.5.2'
+      react: '>= 16.8.0'
+      react-dom: '*'
+      react-native: '*'
+      typescript: ^5
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+      react-native:
+        optional: true
+      typescript:
+        optional: true
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -2030,6 +2063,10 @@ packages:
 
   victory-vendor@36.9.2:
     resolution: {integrity: sha512-PnpQQMuxlwYdocC8fIJqVXvkeViHYzotI+NJrCuav0ZYFoq912ZHBk3mCeuj+5/VpodOjPe1z0Fk2ihgzlXqjQ==}
+
+  void-elements@3.1.0:
+    resolution: {integrity: sha512-Dhxzh5HZuiHQhbvTW9AMetFfBHDMYpo23Uo9btPXgdYP+3T5S+p+jgNy7spra+veYhBP2dCSgxR/i2Y02h5/6w==}
+    engines: {node: '>=0.10.0'}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -3125,11 +3162,11 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
-  '@supabase/auth-js@2.75.0':
+  '@supabase/auth-js@2.75.1':
     dependencies:
       '@supabase/node-fetch': 2.6.15
 
-  '@supabase/functions-js@2.75.0':
+  '@supabase/functions-js@2.75.1':
     dependencies:
       '@supabase/node-fetch': 2.6.15
 
@@ -3137,11 +3174,11 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  '@supabase/postgrest-js@2.75.0':
+  '@supabase/postgrest-js@2.75.1':
     dependencies:
       '@supabase/node-fetch': 2.6.15
 
-  '@supabase/realtime-js@2.75.0':
+  '@supabase/realtime-js@2.75.1':
     dependencies:
       '@supabase/node-fetch': 2.6.15
       '@types/phoenix': 1.6.6
@@ -3151,23 +3188,23 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@supabase/ssr@0.7.0(@supabase/supabase-js@2.75.0)':
+  '@supabase/ssr@0.7.0(@supabase/supabase-js@2.75.1)':
     dependencies:
-      '@supabase/supabase-js': 2.75.0
+      '@supabase/supabase-js': 2.75.1
       cookie: 1.0.2
 
-  '@supabase/storage-js@2.75.0':
+  '@supabase/storage-js@2.75.1':
     dependencies:
       '@supabase/node-fetch': 2.6.15
 
-  '@supabase/supabase-js@2.75.0':
+  '@supabase/supabase-js@2.75.1':
     dependencies:
-      '@supabase/auth-js': 2.75.0
-      '@supabase/functions-js': 2.75.0
+      '@supabase/auth-js': 2.75.1
+      '@supabase/functions-js': 2.75.1
       '@supabase/node-fetch': 2.6.15
-      '@supabase/postgrest-js': 2.75.0
-      '@supabase/realtime-js': 2.75.0
-      '@supabase/storage-js': 2.75.0
+      '@supabase/postgrest-js': 2.75.1
+      '@supabase/realtime-js': 2.75.1
+      '@supabase/storage-js': 2.75.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3463,6 +3500,16 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  html-parse-stringify@3.0.1:
+    dependencies:
+      void-elements: 3.1.0
+
+  i18next@25.6.0(typescript@5.0.2):
+    dependencies:
+      '@babel/runtime': 7.28.4
+    optionalDependencies:
+      typescript: 5.0.2
+
   input-otp@1.4.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0):
     dependencies:
       react: 19.0.0
@@ -3617,6 +3664,16 @@ snapshots:
   react-hook-form@7.60.0(react@19.0.0):
     dependencies:
       react: 19.0.0
+
+  react-i18next@16.1.0(i18next@25.6.0(typescript@5.0.2))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(typescript@5.0.2):
+    dependencies:
+      '@babel/runtime': 7.28.4
+      html-parse-stringify: 3.0.1
+      i18next: 25.6.0(typescript@5.0.2)
+      react: 19.0.0
+    optionalDependencies:
+      react-dom: 19.0.0(react@19.0.0)
+      typescript: 5.0.2
 
   react-is@16.13.1: {}
 
@@ -3823,6 +3880,8 @@ snapshots:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+
+  void-elements@3.1.0: {}
 
   webidl-conversions@3.0.1: {}
 

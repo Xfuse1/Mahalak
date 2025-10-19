@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useEffect, useState } from "react"
 import { getProduct, getRelatedProducts } from "@/lib/actions/products"
+import { createContactInquiry } from "@/lib/actions/orders"
 
 type Product = {
   id: string
@@ -86,11 +87,25 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     notFound()
   }
 
-  const handleWhatsApp = () => {
+  const handleWhatsApp = async () => {
     if (!user) {
       router.push("/auth")
       return
     }
+
+    // Save contact inquiry to database
+    try {
+      await createContactInquiry({
+        customer_id: user.id,
+        product_id: product.id,
+        store_id: product.store_id,
+        price: product.price,
+        contact_method: "whatsapp",
+      })
+    } catch (error) {
+      console.error("[v0] Error saving WhatsApp inquiry:", error)
+    }
+
     const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
     const enMessage = `Hello, I want to inquire about ${product.name}`
     const message = t(arMessage, enMessage)
@@ -98,11 +113,25 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank")
   }
 
-  const handleCall = () => {
+  const handleCall = async () => {
     if (!user) {
       router.push("/auth")
       return
     }
+
+    // Save contact inquiry to database
+    try {
+      await createContactInquiry({
+        customer_id: user.id,
+        product_id: product.id,
+        store_id: product.store_id,
+        price: product.price,
+        contact_method: "call",
+      })
+    } catch (error) {
+      console.error("[v0] Error saving call inquiry:", error)
+    }
+
     const phone = product.stores?.phone || "01055161600"
     window.location.href = `tel:${phone}`
   }

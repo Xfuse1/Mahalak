@@ -20,7 +20,12 @@ export function ProductCard({ product }: ProductCardProps) {
       <Link href={`/product/${product.id}`}>
         <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full text-right">
           <div className="aspect-square relative bg-gray-100">
-            <Image src={product.image || "/placeholder.svg"} alt={product.name} fill className="object-cover" />
+            <Image
+              src={(product as any).image_url || product.image || "/placeholder.svg"}
+              alt={product.name}
+              fill
+              className="object-cover"
+            />
           </div>
           <CardContent className="p-4 space-y-2 text-right">
             <h3 className="font-semibold text-base mb-1 line-clamp-2 text-balance leading-snug">{product.name}</h3>
@@ -30,7 +35,7 @@ export function ProductCard({ product }: ProductCardProps) {
               <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
             </div>
             <p className="text-xl font-bold text-[#1F478B] pt-1">
-              {product.price} {t("جنيه", "EGP")}
+              {product.price} {t("egp")}
             </p>
           </CardContent>
         </Card>

@@ -39,17 +39,11 @@ export async function getCustomerOrders(customerId: string) {
 export async function getStoreOrders(storeId: string) {
   const supabase = await createServerClient()
 
-  const { data, error } = await supabase
+  const { data: orders, error } = await supabase
     .from("orders")
     .select(
       `
       *,
-      profiles (
-        id,
-        full_name,
-        email,
-        phone
-      ),
       order_items (
         *,
         products (
@@ -68,7 +62,33 @@ export async function getStoreOrders(storeId: string) {
     return []
   }
 
-  return data || []
+  if (!orders || orders.length === 0) {
+    return []
+  }
+
+  const customerIds = [...new Set(orders.map((order) => order.customer_id))]
+  console.log("[v0] Customer IDs to fetch profiles for:", customerIds)
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone")
+    .in("id", customerIds)
+
+  console.log("[v0] Fetched profiles:", profiles)
+  console.log("[v0] Profiles error:", profilesError)
+
+  if (profilesError) {
+    console.error("[v0] Error fetching profiles:", profilesError)
+  }
+
+  const ordersWithProfiles = orders.map((order) => ({
+    ...order,
+    profiles: profiles?.find((profile) => profile.id === order.customer_id) || null,
+  }))
+
+  console.log("[v0] First order with profile:", ordersWithProfiles[0])
+
+  return ordersWithProfiles
 }
 
 export async function updateOrderStatus(orderId: string, status: string) {
@@ -134,5 +154,52 @@ export async function createOrder(orderData: {
   }
 
   revalidatePath("/account")
+  return { success: true, data: order }
+}
+
+export async function createContactInquiry(inquiryData: {
+  customer_id: string
+  product_id: string
+  store_id: string
+  price: number
+  contact_method: "whatsapp" | "call"
+}) {
+  const supabase = await createServerClient()
+
+  // Create order with contact method as delivery address
+  const deliveryAddress = inquiryData.contact_method === "whatsapp" ? "Contact via WhatsApp" : "Contact via Phone"
+
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .insert({
+      customer_id: inquiryData.customer_id,
+      store_id: inquiryData.store_id,
+      total: inquiryData.price,
+      delivery_address: deliveryAddress,
+      status: "pending",
+    })
+    .select()
+    .single()
+
+  if (orderError) {
+    console.error("[v0] Error creating contact inquiry:", orderError)
+    return { success: false, error: orderError.message }
+  }
+
+  // Create order item
+  const { error: itemError } = await supabase.from("order_items").insert({
+    order_id: order.id,
+    product_id: inquiryData.product_id,
+    quantity: 1,
+    price: inquiryData.price,
+  })
+
+  if (itemError) {
+    console.error("[v0] Error creating order item:", itemError)
+    return { success: false, error: itemError.message }
+  }
+
+  revalidatePath("/account")
+  revalidatePath("/seller/orders")
   return { success: true, data: order }
 }

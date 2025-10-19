@@ -3,8 +3,9 @@ import type { Metadata } from "next"
 import { Cairo } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
-import { LanguageProvider } from "@/lib/language-context"
+import { I18nProvider } from "@/lib/i18n-provider"
 import { ScrollToTop } from "@/components/scroll-to-top"
+import { LanguageProvider } from "@/lib/language-context"
 
 const cairo = Cairo({
   subsets: ["arabic"],
@@ -15,7 +16,7 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: "محلك - منصة التجارة الإلكترونية المحلية",
   description: "اكتشف أفضل المنتجات والمتاجر المحلية",
-    generator: 'v0.app'
+  generator: "v0.app",
 }
 
 export default function RootLayout({
@@ -26,12 +27,14 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={cairo.variable}>
       <body className="antialiased">
-        <LanguageProvider>
-          <AuthProvider>
-            <ScrollToTop />
-            {children}
-          </AuthProvider>
-        </LanguageProvider>
+        <I18nProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <ScrollToTop />
+              {children}
+            </AuthProvider>
+          </LanguageProvider>
+        </I18nProvider>
       </body>
     </html>
   )

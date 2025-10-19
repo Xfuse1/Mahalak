@@ -22,7 +22,7 @@ export function StoreCard({ store }: StoreCardProps) {
         <Card className="overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] h-full">
           <div className="aspect-video relative bg-gray-100">
             <Image
-              src={store.logo || "/placeholder.svg?height=200&width=300"}
+              src={(store as any).image_url || store.logo || "/placeholder.svg?height=200&width=300"}
               alt={store.name}
               fill
               className="object-cover"
@@ -39,7 +39,7 @@ export function StoreCard({ store }: StoreCardProps) {
 
             <div className={`flex items-center gap-2 ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
               <MapPin className="h-4 w-4 flex-shrink-0" />
-              <span className="line-clamp-1">{t("القاهرة، مصر", "Cairo, Egypt")}</span>
+              <span className="line-clamp-1">{t("cairo")}</span>
             </div>
 
             {/* الوصف */}

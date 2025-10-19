@@ -1,40 +1,64 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { redirect } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { OrderStatusSelector } from "@/components/order-status-selector"
+import { getStoreByUserId } from "@/lib/actions/stores"
+import { getStoreOrders } from "@/lib/actions/orders"
+import { createServerClient } from "@/lib/supabase/server"
 
-export default function SellerOrdersPage() {
-  const { user, isLoading } = useAuth()
-  const router = useRouter()
-  const [orders, setOrders] = useState([
-    { id: "ORD-156", customer: "أحمد محمد", total: 3500, status: "processing", date: "2024-01-22", items: 2 },
-    { id: "ORD-155", customer: "فاطمة علي", total: 8500, status: "shipped", date: "2024-01-21", items: 1 },
-    { id: "ORD-154", customer: "محمد حسن", total: 120, status: "delivered", date: "2024-01-20", items: 1 },
-    { id: "ORD-153", customer: "سارة أحمد", total: 235, status: "delivered", date: "2024-01-19", items: 3 },
-    { id: "ORD-152", customer: "خالد محمود", total: 3500, status: "cancelled", date: "2024-01-18", items: 2 },
-  ])
+type OrderItem = {
+  id: string
+  quantity: number
+  price: number
+  products: {
+    id: string
+    name: string
+    image_url: string | null
+  }
+}
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/auth?role=seller")
-    }
-    if (user?.role !== "seller") {
-      router.push("/")
-    }
-  }, [user, isLoading, router])
+type Order = {
+  id: string
+  customer_id: string
+  store_id: string
+  total: number
+  status: string
+  delivery_address: string
+  created_at: string
+  updated_at: string
+  profiles: {
+    id: string
+    full_name: string | null
+    email: string
+    phone: string | null
+  }
+  order_items: OrderItem[]
+}
 
-  if (isLoading || !user || user.role !== "seller") {
-    return null
+export default async function SellerOrdersPage() {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth?role=seller")
   }
 
-  const handleStatusChange = (orderId: string, newStatus: string) => {
-    setOrders((prevOrders) =>
-      prevOrders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order)),
-    )
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+
+  if (profile?.role !== "seller") {
+    redirect("/")
+  }
+
+  let orders: Order[] = []
+  try {
+    const store = await getStoreByUserId(user.id)
+    if (store) {
+      orders = (await getStoreOrders(store.id)) as Order[]
+    }
+  } catch (error) {
+    console.error("Error fetching orders:", error)
   }
 
   const getStatusText = (status: string) => {
@@ -59,6 +83,15 @@ export default function SellerOrdersPage() {
     return colorMap[status] || "bg-gray-100 text-gray-800"
   }
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+  }
+
   return (
     <div className="flex min-h-screen bg-secondary">
       <SellerHeader />
@@ -73,45 +106,37 @@ export default function SellerOrdersPage() {
               <CardDescription>إدارة ومتابعة طلبات العملاء</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {orders.map((order) => (
-                  <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <p className="font-semibold text-lg">{order.id}</p>
-                          <p className="text-sm text-gray-600">
-                            {order.customer} • {order.items} منتج
-                          </p>
+              {orders.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">لا توجد طلبات حتى الآن</div>
+              ) : (
+                <div className="space-y-3">
+                  {orders.map((order) => (
+                    <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="font-semibold text-lg">#{order.id.slice(0, 8)}</p>
+                            <p className="text-sm text-gray-600">
+                              {order.profiles?.full_name || order.profiles?.email || "عميل غير معروف"} •{" "}
+                              {order.order_items.length} منتج
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                          {getStatusText(order.status)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+                        <div className="flex items-center gap-4">
+                          <p className="text-xl font-bold text-[#1F478B]">{order.total.toLocaleString()} جنيه</p>
+                          <OrderStatusSelector orderId={order.id} currentStatus={order.status} />
                         </div>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                        {getStatusText(order.status)}
-                      </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600">{order.date}</p>
-                      <div className="flex items-center gap-4">
-                        <p className="text-xl font-bold text-[#1F478B]">{order.total.toLocaleString()} جنيه</p>
-                        {order.status !== "delivered" && order.status !== "cancelled" && (
-                          <Select value={order.status} onValueChange={(value) => handleStatusChange(order.id, value)}>
-                            <SelectTrigger className="w-[180px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">قيد الانتظار</SelectItem>
-                              <SelectItem value="processing">قيد المعالجة</SelectItem>
-                              <SelectItem value="shipped">تم الشحن</SelectItem>
-                              <SelectItem value="delivered">تم التوصيل</SelectItem>
-                              <SelectItem value="cancelled">ملغي</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
