@@ -44,9 +44,13 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const fetchData = async () => {
       try {
         setLoading(true)
+        console.log("[v0] Fetching product with ID:", id)
 
         const productData = await getProduct(id)
+        console.log("[v0] Product data received:", productData)
+
         if (!productData) {
+          console.log("[v0] Product not found")
           notFound()
           return
         }
@@ -54,6 +58,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         setProduct(productData as Product)
 
         const related = await getRelatedProducts(id, productData.category, 4)
+        console.log("[v0] Related products:", related)
         setRelatedProducts(related as Product[])
 
         setLoading(false)
@@ -84,7 +89,26 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   }
 
   if (!product) {
-    notFound()
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 py-8">
+          <div className="container mx-auto px-4">
+            <div className="mb-6">
+              <BackButton />
+            </div>
+            <div className="text-center py-12">
+              <h1 className="text-2xl font-bold mb-4">{t("المنتج غير موجود", "Product Not Found")}</h1>
+              <p className="text-gray-600 mb-6">
+                {t("عذراً، لم نتمكن من العثور على هذا المنتج", "Sorry, we couldn't find this product")}
+              </p>
+              <Button onClick={() => router.push("/")}>{t("العودة للرئيسية", "Back to Home")}</Button>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
   }
 
   const handleWhatsApp = async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
@@ -11,13 +11,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Package, UserIcon, MapPin } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
+import { getCustomerOrders } from "@/lib/actions/orders"
+
+type Order = {
+  id: string
+  created_at: string
+  total: number
+  status: string
+  delivery_address: string
+  order_items: {
+    id: string
+    quantity: number
+    price: number
+    products: {
+      id: string
+      name: string
+      image_url: string
+    }
+  }[]
+  stores: {
+    id: string
+    name: string
+  }
+}
 
 export default function AccountPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+  const [orders, setOrders] = useState<Order[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(true)
+  const [ordersError, setOrdersError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -28,34 +54,31 @@ export default function AccountPage() {
     }
   }, [user, isLoading, router])
 
+  useEffect(() => {
+    async function fetchOrders() {
+      if (!user?.id) return
+
+      try {
+        setOrdersLoading(true)
+        setOrdersError(null)
+        console.log("[v0] Fetching orders for customer:", user.id)
+        const data = await getCustomerOrders(user.id)
+        console.log("[v0] Fetched orders:", data)
+        setOrders(data as Order[])
+      } catch (error) {
+        console.error("[v0] Error fetching orders:", error)
+        setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
+      } finally {
+        setOrdersLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [user?.id, t])
+
   if (isLoading || !user) {
     return null
   }
-
-  // Mock orders data
-  const orders = [
-    {
-      id: "ORD-001",
-      date: "2024-01-15",
-      total: 3500,
-      status: "delivered",
-      items: 2,
-    },
-    {
-      id: "ORD-002",
-      date: "2024-01-20",
-      total: 235,
-      status: "shipped",
-      items: 3,
-    },
-    {
-      id: "ORD-003",
-      date: "2024-01-22",
-      total: 120,
-      status: "processing",
-      items: 1,
-    },
-  ]
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
@@ -77,6 +100,15 @@ export default function AccountPage() {
       cancelled: "bg-red-100 text-red-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString(t("ar-EG", "en-US"), {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
   }
 
   return (
@@ -116,16 +148,28 @@ export default function AccountPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {orders.length > 0 ? (
+                  {ordersLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-[#1F478B]" />
+                      <span className="mr-2">{t("جاري التحميل...", "Loading...")}</span>
+                    </div>
+                  ) : ordersError ? (
+                    <div className="text-center py-8">
+                      <p className="text-red-600">{ordersError}</p>
+                    </div>
+                  ) : orders.length > 0 ? (
                     <div className="space-y-4">
                       {orders.map((order) => (
                         <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                           <div className="flex items-center justify-between mb-3">
                             <div>
                               <p className="font-semibold text-lg">
-                                {t("طلب رقم:", "Order #")} {order.id}
+                                {t("طلب من", "Order from")} {order.stores?.name || t("متجر غير معروف", "Unknown Store")}
                               </p>
-                              <p className="text-sm text-gray-600">{order.date}</p>
+                              <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {t("رقم الطلب:", "Order ID:")} {order.id.slice(0, 8)}
+                              </p>
                             </div>
                             <span
                               className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}
@@ -136,12 +180,17 @@ export default function AccountPage() {
                           <div className="flex items-center justify-between">
                             <div className="text-sm text-gray-600">
                               <span>
-                                {order.items} {t("منتج", "items")}
+                                {order.order_items?.length || 0} {t("منتج", "items")}
                               </span>
+                              {order.delivery_address && (
+                                <p className="text-xs mt-1">
+                                  {t("العنوان:", "Address:")} {order.delivery_address}
+                                </p>
+                              )}
                             </div>
                             <div className="text-left">
                               <p className="text-xl font-bold text-[#1F478B]">
-                                {order.total} {t("جنيه", "EGP")}
+                                {Number(order.total).toFixed(2)} {t("جنيه", "EGP")}
                               </p>
                             </div>
                           </div>

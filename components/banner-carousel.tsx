@@ -3,69 +3,48 @@
 import { useState, useEffect } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useLanguage } from "@/lib/language-context"
+import { useTranslation } from "react-i18next"
 import Image from "next/image"
-
-const slides = [
-  {
-    id: 1,
-    title: "عروض خاصة على جميع المنتجات",
-    description: "خصم يصل إلى 50% على مختارات من المنتجات",
-    image: "/banner-1.jpg",
-  },
-  {
-    id: 2,
-    title: "توصيل مجاني للطلبات فوق 500 جنيه",
-    description: "اطلب الآن واستمتع بالتوصيل المجاني",
-    image: "/banner-2.jpg",
-  },
-  {
-    id: 3,
-    title: "منتجات محلية عالية الجودة",
-    description: "ادعم المتاجر المحلية واحصل على أفضل المنتجات",
-    image: "/banner-3.jpg",
-  },
-]
 
 export function BannerCarousel() {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const { t } = useLanguage()
+  const { t } = useTranslation()
 
-  const translatedSlides = [
+  const slides = [
     {
       id: 1,
-      title: t("عروض خاصة على جميع المنتجات", "Special Offers on All Products"),
-      description: t("خصم يصل إلى 50% على مختارات من المنتجات", "Up to 50% off on selected products"),
+      title: t("banner1Title"),
+      description: t("banner1Desc"),
       image: "/banner-1.jpg",
     },
     {
       id: 2,
-      title: t("توصيل مجاني للطلبات فوق 500 جنيه", "Free Delivery for Orders Over 500 EGP"),
-      description: t("اطلب الآن واستمتع بالتوصيل المجاني", "Order now and enjoy free delivery"),
+      title: t("banner2Title"),
+      description: t("banner2Desc"),
       image: "/banner-2.jpg",
     },
     {
       id: 3,
-      title: t("منتجات محلية عالية الجودة", "High Quality Local Products"),
-      description: t("ادعم المتاجر المحلية واحصل على أفضل المنتجات", "Support local stores and get the best products"),
+      title: t("banner3Title"),
+      description: t("banner3Desc"),
       image: "/banner-3.jpg",
     },
   ]
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % translatedSlides.length)
+      setCurrentSlide((prev) => (prev + 1) % slides.length)
     }, 5000)
 
     return () => clearInterval(timer)
-  }, [translatedSlides.length])
+  }, [slides.length])
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % translatedSlides.length)
+    setCurrentSlide((prev) => (prev + 1) % slides.length)
   }
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + translatedSlides.length) % translatedSlides.length)
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)
   }
 
   return (
@@ -74,7 +53,7 @@ export function BannerCarousel() {
         className="flex transition-transform duration-500 ease-in-out"
         style={{ transform: `translateX(${currentSlide * 100}%)` }}
       >
-        {translatedSlides.map((slide) => (
+        {slides.map((slide) => (
           <div key={slide.id} className="min-w-full relative h-[300px] md:h-[400px]">
             <Image src={slide.image || "/placeholder.svg"} alt={slide.title} fill className="object-cover" priority />
             <div className="absolute inset-0 bg-gradient-to-l from-[#1F478B]/90 to-[#1F478B]/70" />
@@ -110,7 +89,7 @@ export function BannerCarousel() {
 
       {/* Dots Indicator */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-        {translatedSlides.map((_, index) => (
+        {slides.map((_, index) => (
           <button
             key={index}
             onClick={() => setCurrentSlide(index)}

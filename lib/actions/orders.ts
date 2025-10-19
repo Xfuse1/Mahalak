@@ -67,15 +67,11 @@ export async function getStoreOrders(storeId: string) {
   }
 
   const customerIds = [...new Set(orders.map((order) => order.customer_id))]
-  console.log("[v0] Customer IDs to fetch profiles for:", customerIds)
 
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select("id, full_name, email, phone")
     .in("id", customerIds)
-
-  console.log("[v0] Fetched profiles:", profiles)
-  console.log("[v0] Profiles error:", profilesError)
 
   if (profilesError) {
     console.error("[v0] Error fetching profiles:", profilesError)
@@ -85,8 +81,6 @@ export async function getStoreOrders(storeId: string) {
     ...order,
     profiles: profiles?.find((profile) => profile.id === order.customer_id) || null,
   }))
-
-  console.log("[v0] First order with profile:", ordersWithProfiles[0])
 
   return ordersWithProfiles
 }

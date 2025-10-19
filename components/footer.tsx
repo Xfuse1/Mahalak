@@ -2,10 +2,10 @@
 
 import Link from "next/link"
 import { Facebook } from "lucide-react"
-import { useLanguage } from "@/lib/language-context"
+import { useTranslation } from "react-i18next"
 
 export function Footer() {
-  const { t } = useLanguage()
+  const { t } = useTranslation()
 
   return (
     <footer className="bg-gray-900 text-white mt-16">
@@ -13,10 +13,8 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div>
-            <h3 className="text-xl font-bold mb-4">محلك</h3>
-            <p className="text-gray-400 text-sm leading-relaxed">
-              منصة التجارة الإلكترونية الرائدة للمنتجات والمتاجر المحلية
-            </p>
+            <h3 className="text-xl font-bold mb-4">{t("home")}</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">{t("footerDescription")}</p>
           </div>
 
           {/* Quick Links */}
@@ -30,7 +28,7 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/faq" className="text-gray-400 hover:text-white transition-colors">
-                  الأسئلة الشائعة
+                  {t("faqTitle")}
                 </Link>
               </li>
             </ul>
@@ -38,16 +36,16 @@ export function Footer() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold mb-4">الشروط والسياسات</h4>
+            <h4 className="font-semibold mb-4">{t("termsAndPolicies")}</h4>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors">
-                  سياسة الخصوصية
+                  {t("privacyPolicy")}
                 </Link>
               </li>
               <li>
                 <Link href="/terms" className="text-gray-400 hover:text-white transition-colors">
-                  شروط الاستخدام
+                  {t("termsOfUse")}
                 </Link>
               </li>
             </ul>
@@ -58,7 +56,7 @@ export function Footer() {
             <h4 className="font-semibold mb-4">{t("contact")}</h4>
             <ul className="space-y-2 text-sm">
               <li className="text-gray-400">
-                <span className="font-medium text-white">الهاتف:</span> 01055161600
+                <span className="font-medium text-white">{t("phone")}:</span> 01055161600
               </li>
               <li>
                 <a
