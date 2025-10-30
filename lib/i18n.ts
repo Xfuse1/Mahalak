@@ -110,8 +110,8 @@ const resources = {
       // Banner Carousel
       banner1Title: "عروض خاصة على جميع المنتجات",
       banner1Desc: "خصم يصل إلى 50% على مختارات من المنتجات",
-      banner2Title: "توصيل مجاني للطلبات فوق 500 جنيه",
-      banner2Desc: "اطلب الآن واستمتع بالتوصيل المجاني",
+      banner2Title: "اكتشف آلاف المنتجات المحلية",
+      banner2Desc: "تصفح مجموعتنا الواسعة من المنتجات",
       banner3Title: "منتجات محلية عالية الجودة",
       banner3Desc: "ادعم المتاجر المحلية واحصل على أفضل المنتجات",
     },
@@ -223,8 +223,8 @@ const resources = {
       // Banner Carousel
       banner1Title: "Special Offers on All Products",
       banner1Desc: "Up to 50% off on selected products",
-      banner2Title: "Free Delivery for Orders Over 500 EGP",
-      banner2Desc: "Order now and enjoy free delivery",
+      banner2Title: "Discover Thousands of Local Products",
+      banner2Desc: "Browse our wide range of products",
       banner3Title: "High Quality Local Products",
       banner3Desc: "Support local stores and get the best products",
     },

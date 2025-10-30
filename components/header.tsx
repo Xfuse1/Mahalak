@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Search, User, LogOut } from "lucide-react"
+import { User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -21,18 +21,6 @@ export function Header() {
           <Link href="/" className="hover:opacity-90 transition-opacity flex-shrink-0">
             <Logo className="h-10 md:h-12 w-auto" />
           </Link>
-
-          <div className="flex-1 flex justify-center">
-            <Button
-              variant="ghost"
-              size="lg"
-              className="text-white hover:bg-white/30 hover:scale-105 active:bg-white/40 active:scale-95 transition-all gap-2 font-semibold border-2 border-transparent hover:border-white/20 focus:border-white/40 focus:bg-white/30"
-              onClick={() => router.push("/search")}
-            >
-              <Search className="h-5 w-5" />
-              <span className="hidden sm:inline">{t("searchNow")}</span>
-            </Button>
-          </div>
 
           {/* Navigation */}
           <nav className="flex items-center gap-1 md:gap-2">
