@@ -11,6 +11,7 @@ interface User {
   name: string
   role: "customer" | "seller"
   phone?: string
+  address?: string
 }
 
 interface AuthContextType {
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = supabaseRef.current
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         loadUserProfile(session.user.id)
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         if (!loadingProfile.current) {
@@ -161,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
 
       if (role === "seller" && data.user && sellerData?.storeName) {
-        console.log("[v0] Creating store for seller:", data.user.id)
+        console.log("[v0] Creating store for seller:")
 
         const result = await createStore({
           seller_id: data.user.id,
@@ -177,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error("Failed to create store: " + result.error)
         }
 
-        console.log("[v0] Store created successfully:", result.data)
+        console.log("[v0] Store created successfully:")
       }
 
       if (data.user) {

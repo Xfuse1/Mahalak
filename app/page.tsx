@@ -96,7 +96,7 @@ export default function Home() {
                   href="/category/خدمات أخرى"
                   className="bg-gradient-to-br from-gray-600 to-gray-700 text-white p-6 rounded-lg text-center hover:shadow-lg transition-all transform hover:scale-105 min-w-[140px]"
                 >
-                  <p className="font-bold text-lg whitespace-nowrap">{t("خدمات أخرى", "Other Services")}</p>
+                  <p className="font-bold text-lg whitespace-nowrap">{t("أخرى", "Other Services")}</p>
                 </Link>
               </div>
             </div>

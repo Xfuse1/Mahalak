@@ -77,7 +77,7 @@ export async function createStore(storeData: {
     return { success: false, error: error.message }
   }
 
-  console.log("[v0] Store created successfully:", data)
+  console.log("[v0] Store created successfully:")
   return { success: true, data }
 }
 
@@ -96,6 +96,7 @@ export async function updateStore(
     support_email: string
     whatsapp_number: string
     return_policy: string
+    rating: number
   }>,
 ) {
   const supabase = await createServerClient()
@@ -105,11 +106,17 @@ export async function updateStore(
     .update({ ...formData, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) {
     console.error("[v0] Error updating store:", error)
     return { success: false, error: error.message }
+  }
+
+  if (!data) {
+    // No rows were updated (store not found or RLS prevented the update)
+    console.warn("[v0] Update succeeded but returned no rows for store:", id)
+    return { success: false, error: "Store not found or not permitted" }
   }
 
   revalidatePath("/seller/settings")

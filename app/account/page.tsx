@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Package, UserIcon, MapPin, Loader2 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
 import { getCustomerOrders } from "@/lib/actions/orders"
+import { updateProfile } from "@/lib/actions/profile"
 
 type Order = {
   id: string
@@ -61,9 +62,9 @@ export default function AccountPage() {
       try {
         setOrdersLoading(true)
         setOrdersError(null)
-        console.log("[v0] Fetching orders for customer:", user.id)
+        console.log("[v0] Fetching orders for customer:")
         const data = await getCustomerOrders(user.id)
-        console.log("[v0] Fetched orders:", data)
+        console.log("[v0] Fetched orders:")
         setOrders(data as Order[])
       } catch (error) {
         console.error("[v0] Error fetching orders:", error)
@@ -214,10 +215,30 @@ export default function AccountPage() {
                   <CardDescription>{t("إدارة معلوماتك الشخصية", "Manage your personal information")}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form className="space-y-4">
+                  <form className="space-y-4" onSubmit={async (e) => {
+                      e.preventDefault()
+                      const form = e.currentTarget as HTMLFormElement
+                      const fd = new FormData(form)
+                      const name = fd.get('name')?.toString() || ''
+                      const phone = fd.get('phone')?.toString() || ''
+                      const address = fd.get('address')?.toString() || ''
+
+                      try {
+                        if (!user?.id) return
+                        const res = await updateProfile(user.id, { full_name: name, phone, address })
+                        if (res && res.success) {
+                          // refresh the page so AuthProvider reloads profile and UI reflects changes
+                          router.refresh()
+                        } else {
+                          console.error('[v0] Failed to update profile:', res?.error)
+                        }
+                      } catch (err) {
+                        console.error('[v0] Error submitting profile form:', err)
+                      }
+                    }}>
                     <div>
                       <Label htmlFor="name">{t("الاسم الكامل", "Full Name")}</Label>
-                      <Input id="name" defaultValue={user.name} />
+                      <Input id="name" name="name" defaultValue={user.name} />
                     </div>
                     <div>
                       <Label htmlFor="email">{t("البريد الإلكتروني", "Email")}</Label>
@@ -225,7 +246,7 @@ export default function AccountPage() {
                     </div>
                     <div>
                       <Label htmlFor="phone">{t("رقم الهاتف", "Phone Number")}</Label>
-                      <Input id="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} />
+                      <Input id="phone" name="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} />
                     </div>
                     <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]">
                       {t("حفظ التغييرات", "Save Changes")}

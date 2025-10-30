@@ -66,7 +66,7 @@ export async function getStoreOrders(storeId: string) {
     return []
   }
 
-  const customerIds = [...new Set(orders.map((order) => order.customer_id))]
+  const customerIds = [...new Set(orders.map((order:any) => order.customer_id))]
 
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
@@ -77,10 +77,16 @@ export async function getStoreOrders(storeId: string) {
     console.error("[v0] Error fetching profiles:", profilesError)
   }
 
-  const ordersWithProfiles = orders.map((order) => ({
-    ...order,
-    profiles: profiles?.find((profile) => profile.id === order.customer_id) || null,
-  }))
+
+  const ordersWithProfiles = orders.map((order: any) => {
+    //const profile = profiles?.find((profile: any) => profile.id ==='41e20adb-7e07-47c1-bc1a-ccb913ef0dbe');
+    const profile = profiles?.find((profile: any) => profile.id === order.customer_id);
+    // Log the customer ID and profile information
+    return {
+      ...order,
+      profiles: profile || null,
+    };
+  });
 
   return ordersWithProfiles
 }

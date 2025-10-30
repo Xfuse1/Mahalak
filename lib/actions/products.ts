@@ -93,6 +93,7 @@ export async function updateProduct(
     category: string
     stock: number
     image_url: string
+    rating: number
   }>,
 ) {
   const supabase = await createServerClient()

@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
@@ -18,7 +18,11 @@ import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
-  const { id } = params
+  // Next.js 14+: params may be a Promise, unwrap with React.use()
+  const unwrappedParams = typeof params === "object" && "then" in params
+    ? React.use(params as unknown as Promise<{ id: string }>)
+    : (params as { id: string });
+  const { id } = unwrappedParams;
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)

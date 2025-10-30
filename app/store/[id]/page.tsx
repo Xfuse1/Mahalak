@@ -1,4 +1,5 @@
 "use client"
+import React from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ProductCard } from "@/components/product-card"
@@ -12,6 +13,8 @@ import Image from "next/image"
 import { useEffect, useState } from "react"
 import { getStore } from "@/lib/actions/stores"
 import { getProductsByStoreId } from "@/lib/actions/products"
+import { trackMetaEvent } from "@/lib/utils"
+import { getUserStoreReview, upsertStoreReview } from "@/lib/actions/storeReviews"
 
 type Store = {
   id: string
@@ -31,26 +34,38 @@ type Product = {
   price: number
   category: string
   stock: number
-  image_url?: string
-  image?: string
+  image: string
   store_id: string
   rating: number
+  storeName: string
+  storeId: string
+  reviewCount: number
 }
 
 export default function StorePage({ params }: { params: { id: string } }) {
+
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
 
+  // Next.js 14+: params may be a Promise, unwrap with React.use()
+  const unwrappedParams = typeof params === "object" && "then" in params
+    ? React.use(params as unknown as Promise<{ id: string }>)
+    : (params as { id: string });
+  const { id } = unwrappedParams;
+
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const [userStoreReview, setUserStoreReview] = useState<number | null>(null)
+  const [hoverRating, setHoverRating] = useState<number | null>(null)
+  const [submittingReview, setSubmittingReview] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const storeData = await getStore(params.id)
+        const storeData = await getStore(id)
 
         if (!storeData) {
           setLoading(false)
@@ -58,10 +73,13 @@ export default function StorePage({ params }: { params: { id: string } }) {
         }
 
         setStore(storeData)
-        const productsData = await getProductsByStoreId(params.id)
+        const productsData = await getProductsByStoreId(id)
         const transformedProducts = productsData.map((product: any) => ({
           ...product,
-          image: product.image_url,
+          image: typeof product.image_url === "string" && product.image_url ? product.image_url : "/placeholder.svg",
+          storeName: storeData.name,
+          storeId: storeData.id,
+          reviewCount: product.reviewCount || 0,
         }))
         setProducts(transformedProducts)
         setLoading(false)
@@ -73,7 +91,49 @@ export default function StorePage({ params }: { params: { id: string } }) {
     }
 
     fetchData()
-  }, [params.id])
+  }, [id])
+
+  // Fire Meta Pixel events when store data is available (consent required)
+  useEffect(() => {
+    if (!store) return
+    try {
+      // Generic page view (the Pixel may already fire this globally) — harmless duplicate if present
+      trackMetaEvent('PageView')
+
+      // More specific event with store metadata
+      trackMetaEvent('ViewContent', {
+        content_type: 'store',
+        storeId: store.id,
+        storeName: store.name,
+      })
+    } catch (e) {
+      // ignore tracking errors
+    }
+  }, [store])
+
+  // When store & user are available, fetch existing user review (if any)
+  useEffect(() => {
+    if (!store || !user) return
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const existing = await getUserStoreReview(store.id, user.id)
+        if (!mounted) return
+        if (existing && typeof existing.rating === "number") {
+          setUserStoreReview(existing.rating)
+        } else {
+          setUserStoreReview(null)
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching user store review:", err)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [store, user])
 
   if (loading) {
     return (
@@ -102,6 +162,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
     }
     const message = t(`مرحباً، أريد الاستفسار عن ${store.name}`, `Hello, I want to inquire about ${store.name}`)
     const phoneNumber = store.phone.replace(/\D/g, "")
+    // Track contact event via Meta Pixel
+    try {
+      trackMetaEvent("Contact", { method: "whatsapp", storeId: store?.id, storeName: store?.name })
+    } catch (e) {
+      // ignore tracking errors
+    }
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, "_blank")
   }
 
@@ -109,6 +175,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
     if (!user) {
       router.push("/auth")
       return
+    }
+    // Track contact event via Meta Pixel
+    try {
+      trackMetaEvent("Contact", { method: "call", storeId: store?.id, storeName: store?.name })
+    } catch (e) {
+      // ignore tracking errors
     }
     window.location.href = `tel:${store.phone}`
   }
@@ -143,6 +215,46 @@ export default function StorePage({ params }: { params: { id: string } }) {
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                     <span className="font-bold text-lg">{store.rating}</span>
                     <span className="text-gray-500">{t("تقييم", "rating")}</span>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm text-gray-600">{t("قيم المتجر", "Rate this store")}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const filled = (hoverRating ?? userStoreReview ?? 0) >= n
+                        return (
+                          <button
+                            key={n}
+                            aria-label={`${n} star`}
+                            type="button"
+                            disabled={submittingReview}
+                            onMouseEnter={() => setHoverRating(n)}
+                            onMouseLeave={() => setHoverRating(null)}
+                            onClick={async () => {
+                              if (!user) {
+                                router.push("/auth")
+                                return
+                              }
+
+                              try {
+                                setSubmittingReview(true)
+                                const res = await upsertStoreReview(store.id, user.id, n)
+                                if (res && res.average !== undefined && res.average !== null) {
+                                  setStore((s) => (s ? { ...s, rating: res.average } : s))
+                                  setUserStoreReview(n)
+                                }
+                              } catch (err) {
+                                console.error("[v0] Error submitting store review:", err)
+                              } finally {
+                                setSubmittingReview(false)
+                              }
+                            }}
+                            className={`p-1 ${filled ? "text-yellow-400" : "text-gray-400"}`}
+                          >
+                            <Star className={`h-5 w-5 ${filled ? "fill-yellow-400 text-yellow-400" : ""}`} />
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                   <span className="bg-secondary px-4 py-2 rounded-full font-medium">{store.category}</span>
                 </div>

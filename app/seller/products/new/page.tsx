@@ -62,7 +62,7 @@ export default function NewProductPage() {
         const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
         const filePath = `products/${store.id}/${fileName}`
 
-        console.log("[v0] Uploading image to storage:", filePath)
+        console.log("[v0] Uploading image to storage:")
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("product-images")
@@ -82,7 +82,7 @@ export default function NewProductPage() {
         } = supabase.storage.from("product-images").getPublicUrl(uploadData.path)
 
         imageUrl = publicUrl
-        console.log("[v0] Image uploaded successfully:", imageUrl)
+        console.log("[v0] Image uploaded successfully:")
       }
 
       // Create product in database
@@ -96,7 +96,7 @@ export default function NewProductPage() {
         store_id: store.id,
       }
 
-      console.log("[v0] Creating product with data:", productData)
+      console.log("[v0] Creating product with data:")
 
       const result = await createProduct(productData)
 
@@ -104,7 +104,7 @@ export default function NewProductPage() {
         throw new Error(result.error || "فشل إضافة المنتج")
       }
 
-      console.log("[v0] Product created successfully:", result.data)
+      console.log("[v0] Product created successfully:")
 
       alert("تم إضافة المنتج بنجاح!")
       router.push("/seller/products")

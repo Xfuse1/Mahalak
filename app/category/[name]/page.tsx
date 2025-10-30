@@ -1,4 +1,5 @@
 "use client"
+import React from "react"
 
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
@@ -9,8 +10,12 @@ import { getProducts } from "@/lib/actions/products"
 import { useEffect, useState } from "react"
 
 export default function CategoryPage({ params }: { params: { name: string } }) {
-  const { name } = params
-  const decodedCategory = decodeURIComponent(name)
+  // Next.js 14+: params may be a Promise, unwrap with React.use()
+  const unwrappedParams = typeof params === "object" && "then" in params
+    ? React.use(params as unknown as Promise<{ name: string }>)
+    : (params as { name: string });
+  const { name } = unwrappedParams;
+  const decodedCategory = decodeURIComponent(name);
   const { t } = useLanguage()
 
   const [products, setProducts] = useState<any[]>([])

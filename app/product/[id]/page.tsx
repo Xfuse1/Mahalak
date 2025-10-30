@@ -1,4 +1,5 @@
 "use client"
+import React from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
@@ -10,8 +11,11 @@ import { notFound, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useEffect, useState } from "react"
-import { getProduct, getRelatedProducts } from "@/lib/actions/products"
+import { getProduct, getRelatedProducts, updateProduct } from "@/lib/actions/products"
+import { getUserReview, upsertReview } from "@/lib/actions/reviews"
+import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
+import { createClient } from "@/lib/supabase/client"
 
 type Product = {
   id: string
@@ -31,12 +35,18 @@ type Product = {
 }
 
 export default function ProductPage({ params }: { params: { id: string } }) {
-  const { id } = params
+  // Next.js 14+: params may be a Promise, unwrap with React.use()
+  const unwrappedParams = typeof params === "object" && "then" in params
+    ? React.use(params as unknown as Promise<{ id: string }>)
+    : (params as { id: string });
+  const { id } = unwrappedParams;
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
 
   const [product, setProduct] = useState<Product | null>(null)
+  const [userReview, setUserReview] = useState<number | null>(null)
+  const [submittingReview, setSubmittingReview] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -44,10 +54,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const fetchData = async () => {
       try {
         setLoading(true)
-        console.log("[v0] Fetching product with ID:", id)
+        console.log("[v0] Fetching product with ID:")
 
         const productData = await getProduct(id)
-        console.log("[v0] Product data received:", productData)
+        console.log("[v0] Product data received:")
 
         if (!productData) {
           console.log("[v0] Product not found")
@@ -58,7 +68,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         setProduct(productData as Product)
 
         const related = await getRelatedProducts(id, productData.category, 4)
-        console.log("[v0] Related products:", related)
+        console.log("[v0] Related products:")
         setRelatedProducts(related as Product[])
 
         setLoading(false)
@@ -71,6 +81,30 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
     fetchData()
   }, [id])
+
+  // When product loads and user is present, fetch existing review (one per user per product)
+  useEffect(() => {
+    if (!product || !user) return
+
+    let mounted = true
+    ;(async () => {
+      try {
+        const existing = await getUserReview(product.id, user.id)
+        if (!mounted) return
+        if (existing && typeof existing.rating === 'number') {
+          setUserReview(existing.rating)
+        } else {
+          setUserReview(null)
+        }
+      } catch (err) {
+        console.error('[v0] Error fetching user review:', err)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [product, user])
 
   if (loading) {
     return (
@@ -117,6 +151,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
       return
     }
 
+    // Track contact event via Meta Pixel
+    try {
+      trackMetaEvent("Contact", {
+        method: "whatsapp",
+        productId: product.id,
+        productName: product.name,
+        storeId: product.store_id,
+        storeName: product.stores?.name,
+      })
+    } catch (e) {
+      // ignore
+    }
+
     // Save contact inquiry to database
     try {
       await createContactInquiry({
@@ -141,6 +188,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     if (!user) {
       router.push("/auth")
       return
+    }
+
+    // Track contact event via Meta Pixel
+    try {
+      trackMetaEvent("Contact", {
+        method: "call",
+        productId: product.id,
+        productName: product.name,
+        storeId: product.store_id,
+        storeName: product.stores?.name,
+      })
+    } catch (e) {
+      // ignore
     }
 
     // Save contact inquiry to database
@@ -189,6 +249,42 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 <div className="flex items-center gap-1">
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                   <span className="font-bold text-lg">{product.rating}</span>
+                </div>
+                  {/* User review (one per user per product) - interactive stars */}
+                <div className="flex items-center gap-1 mr-3">
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const filled = userReview ? n <= userReview : n <= Math.round(product.rating)
+                    return (
+                      <button
+                        key={n}
+                        aria-label={`Rate ${n} stars`}
+                        disabled={submittingReview}
+                        onClick={async (e) => {
+                          e.preventDefault()
+                          if (!user) {
+                            router.push('/auth')
+                            return
+                          }
+
+                          try {
+                            setSubmittingReview(true)
+                            const res = await upsertReview(product.id, user.id, n)
+                            if (res && res.average) {
+                              setProduct((p) => (p ? { ...p, rating: res.average } : p))
+                            }
+                            setUserReview(n)
+                          } catch (err) {
+                            console.error('[v0] Error saving review:', err)
+                          } finally {
+                            setSubmittingReview(false)
+                          }
+                        }}
+                        className={`p-1 rounded ${filled ? 'text-yellow-400' : 'text-gray-400'} hover:scale-110 transition-transform`}
+                      >
+                        <Star className="h-5 w-5" />
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
