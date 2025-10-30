@@ -36,8 +36,9 @@ function SearchResults() {
         let productsData, storesData
 
         if (!query) {
-          // No query - fetch all products and stores
-          ;[productsData, storesData] = await Promise.all([getProducts(), getStores()])
+          // No query - fetch all products only
+          productsData = await getProducts()
+          storesData = []
         } else {
           // Query exists - search for matching products and stores
           ;[productsData, storesData] = await Promise.all([searchProducts(query), searchStores(query)])
@@ -96,6 +97,22 @@ function SearchResults() {
     [products, isRTL],
   )
 
+  const renderProductsGrid = () =>
+    sortedProducts.length > 0 ? (
+      <div
+        className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 ${isRTL ? "text-right" : "text-left"}`}
+        dir={isRTL ? "rtl" : "ltr"}
+      >
+        {sortedProducts.map((product) => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+    ) : (
+      <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
+        <p className="text-gray-500 text-lg">{t("لم يتم العثور على منتجات", "No products found")}</p>
+      </div>
+    )
+
   return (
     <div className="min-h-screen flex flex-col" dir={isRTL ? "rtl" : "ltr"}>
       <Header />
@@ -107,7 +124,7 @@ function SearchResults() {
           <h1 className={`text-3xl font-bold mb-6 ${isRTL ? "text-right" : "text-left"}`}>
             {query
               ? `${t("نتائج البحث عن:", "Search results for:")} `
-              : t("جميع المنتجات والمتاجر", "All Products and Stores")}
+              : t("جميع المنتجات", "All Products")}
             {query && <span className="text-[#1F478B]">{query}</span>}
           </h1>
 
@@ -128,7 +145,7 @@ function SearchResults() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F478B] mx-auto"></div>
               <p className="mt-4 text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
             </div>
-          ) : (
+          ) : query ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className={`mb-6 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2`}>
                 <TabsTrigger
@@ -145,22 +162,7 @@ function SearchResults() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="products">
-                {sortedProducts.length > 0 ? (
-                  <div
-                    className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 ${isRTL ? "text-right" : "text-left"}`}
-                    dir={isRTL ? "rtl" : "ltr"}
-                  >
-                    {sortedProducts.map((product) => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
-                    <p className="text-gray-500 text-lg">{t("لم يتم العثور على منتجات", "No products found")}</p>
-                  </div>
-                )}
-              </TabsContent>
+              <TabsContent value="products">{renderProductsGrid()}</TabsContent>
 
               <TabsContent value="stores">
                 {stores.length > 0 ? (
@@ -207,6 +209,8 @@ function SearchResults() {
                 )}
               </TabsContent>
             </Tabs>
+          ) : (
+            renderProductsGrid()
           )}
         </div>
       </main>

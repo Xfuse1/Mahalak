@@ -39,7 +39,7 @@ export function StoreCard({ store }: StoreCardProps) {
 
             <div className={`flex items-center gap-2 ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
               <MapPin className="h-4 w-4 flex-shrink-0" />
-              <span className="line-clamp-1">{t("cairo")}</span>
+              <span className="line-clamp-1">{store.address}</span>
             </div>
 
             {/* الوصف */}

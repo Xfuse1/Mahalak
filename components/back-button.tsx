@@ -1,21 +1,22 @@
-"use client"
+'use client'
 
-import { ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useRouter } from "next/navigation"
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { useLanguage } from '@/lib/language-context'
+import { ArrowLeft } from 'lucide-react'
 
 export function BackButton() {
   const router = useRouter()
+  const { t } = useLanguage()
 
   return (
     <Button
-      variant="ghost"
-      size="sm"
-      className="mb-4 text-gray-600 hover:text-[#1F478B] hover:bg-gray-100"
+      variant="default"
       onClick={() => router.back()}
+      className="mb-4 bg-[#1F478B] hover:bg-[#1a3a70]"
     >
-      <ArrowRight className="h-4 w-4 ml-1" />
-      رجوع
+      <ArrowLeft className="mr-2 h-4 w-4" />
+      {t('رجوع', 'Back')}
     </Button>
   )
 }
