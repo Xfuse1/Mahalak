@@ -215,27 +215,29 @@ export default function AccountPage() {
                   <CardDescription>{t("إدارة معلوماتك الشخصية", "Manage your personal information")}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form className="space-y-4" onSubmit={async (e) => {
+                  <form
+                    className="space-y-4"
+                    onSubmit={async (e) => {
                       e.preventDefault()
                       const form = e.currentTarget as HTMLFormElement
                       const fd = new FormData(form)
-                      const name = fd.get('name')?.toString() || ''
-                      const phone = fd.get('phone')?.toString() || ''
-                      const address = fd.get('address')?.toString() || ''
+                      const name = fd.get("name")?.toString() || ""
+                      const phone = fd.get("phone")?.toString() || ""
 
                       try {
                         if (!user?.id) return
-                        const res = await updateProfile(user.id, { full_name: name, phone, address })
+                        const res = await updateProfile(user.id, { full_name: name, phone })
                         if (res && res.success) {
                           // refresh the page so AuthProvider reloads profile and UI reflects changes
                           router.refresh()
                         } else {
-                          console.error('[v0] Failed to update profile:', res?.error)
+                          console.error("[v0] Failed to update profile:", res?.error)
                         }
                       } catch (err) {
-                        console.error('[v0] Error submitting profile form:', err)
+                        console.error("[v0] Error submitting profile form:", err)
                       }
-                    }}>
+                    }}
+                  >
                     <div>
                       <Label htmlFor="name">{t("الاسم الكامل", "Full Name")}</Label>
                       <Input id="name" name="name" defaultValue={user.name} />
@@ -265,18 +267,41 @@ export default function AccountPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form className="space-y-4">
+                  <form
+                    className="space-y-4"
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      if (!user?.id) return
+
+                      const form = e.currentTarget as HTMLFormElement
+                      const fd = new FormData(form)
+                      const country = (fd.get("country") as string) || ""
+                      const city = (fd.get("city") as string) || ""
+                      const street = (fd.get("street") as string) || ""
+
+                      try {
+                        const res = await updateProfile(user.id, { street, city, country })
+                        if (res && res.success) {
+                          router.refresh()
+                        } else {
+                          console.error("[v0] Failed to update address:", res?.error)
+                        }
+                      } catch (err) {
+                        console.error("[v0] Error saving address:", err)
+                      }
+                    }}
+                  >
                     <div>
-                      <Label htmlFor="address">{t("العنوان", "Address")}</Label>
-                      <Input
-                        id="address"
-                        placeholder={t("الشارع، المنطقة", "Street, Area")}
-                        defaultValue={user.address || ""}
-                      />
+                      <Label htmlFor="country">{t("الدولة", "Country")}</Label>
+                      <Input id="country" name="country" placeholder={t("مصر", "Egypt")} defaultValue={user.country || ""} />
                     </div>
                     <div>
                       <Label htmlFor="city">{t("المدينة", "City")}</Label>
-                      <Input id="city" placeholder={t("القاهرة", "Cairo")} />
+                      <Input id="city" name="city" placeholder={t("القاهرة", "Cairo")} defaultValue={user.city || ""} />
+                    </div>
+                    <div>
+                      <Label htmlFor="street">{t("الشارع", "Street")}</Label>
+                      <Input id="street" name="street" placeholder={t("الشارع، المنطقة", "Street, Area")} defaultValue={user.street || ""} />
                     </div>
                     <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]">
                       {t("حفظ العنوان", "Save Address")}

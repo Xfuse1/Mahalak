@@ -1,9 +1,13 @@
 "use client"
 
+import type React from "react"
+
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { createStore } from "@/lib/actions/stores"
+import { useRouter } from "next/navigation"
+import { useTranslation } from "react-i18next"
 
 interface User {
   id: string
@@ -11,7 +15,12 @@ interface User {
   name: string
   role: "customer" | "seller"
   phone?: string
+  // optional address fields (some rows use different column names)
   address?: string
+  street?: string
+  city?: string
+  country?: string
+  state?: string
 }
 
 interface AuthContextType {
@@ -30,9 +39,13 @@ interface AuthContextType {
       address?: string
       storeType?: string
     },
+    street?: string,
+    city?: string,
+    country?: string,
   ) => Promise<boolean>
   logout: () => void
   isLoading: boolean
+  error: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -41,19 +54,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
   const loadingProfile = useRef(false)
+  const router = useRouter()
+  const { t } = useTranslation()
+  const [role, setRole] = useState<"customer" | "seller">("customer") // Declare the role variable
 
-  const supabaseRef = useRef<ReturnType<typeof createBrowserClient> | null>(null)
-  if (!supabaseRef.current) {
-    supabaseRef.current = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    )
-  }
-  const supabase = supabaseRef.current
+  const supabase = createClient()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         loadUserProfile(session.user.id)
@@ -64,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setSupabaseUser(session.user)
         if (!loadingProfile.current) {
@@ -95,6 +105,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: profile.full_name || profile.email.split("@")[0],
           role: profile.role,
           phone: profile.phone,
+          // normalize possible DB column names into the user object
+          street: profile.street ?? profile.address_street ?? profile.address ?? undefined,
+          city: profile.city ?? profile.address_city ?? undefined,
+          state: profile.state ?? profile.address_state ?? undefined,
+          country: profile.country ?? undefined,
+          address: profile.address ?? undefined,
         })
       }
     } catch (error) {
@@ -145,6 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       address?: string
       storeType?: string
     },
+    street?: string,
+    city?: string,
+    country?: string,
   ): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -155,6 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             full_name: name,
             role,
             phone: sellerData?.phone,
+            street,
+            city,
+            country,
+         
           },
         },
       })
@@ -162,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
 
       if (role === "seller" && data.user && sellerData?.storeName) {
-        console.log("[v0] Creating store for seller:")
+        console.log("[v0] Creating store for seller:", data.user.id)
 
         const result = await createStore({
           seller_id: data.user.id,
@@ -178,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error("Failed to create store: " + result.error)
         }
 
-        console.log("[v0] Store created successfully:")
+        console.log("[v0] Store created successfully:", result.data)
       }
 
       if (data.user) {
@@ -205,8 +228,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSupabaseUser(null)
   }
 
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError("")
+
+    const formData = new FormData(e.currentTarget)
+    const name = formData.get("name") as string
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const confirmPassword = formData.get("confirmPassword") as string
+    const street = formData.get("street") as string
+    const city = formData.get("city") as string
+    const country = formData.get("country") as string
+
+    let sellerData
+    if (role === "seller") {
+      const phone = formData.get("phone") as string
+      const storeName = formData.get("storeName") as string
+      const storeDescription = formData.get("storeDescription") as string
+      const address = formData.get("address") as string
+      const storeType = formData.get("storeType") as string
+
+      if (!phone || !storeName || !address || !storeType) {
+        setError(t("يرجى ملء جميع الحقول المطلوبة", "Please fill all required fields"))
+        setIsLoading(false)
+        return
+      }
+
+      sellerData = { phone, storeName, storeDescription, address, storeType }
+    }
+
+    if (password !== confirmPassword) {
+      setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      const success = await register(email, password, name, role, sellerData, street, city, country)
+
+      if (success) {
+        router.push(role === "seller" ? "/seller/dashboard" : "/")
+      }
+    } catch (error: any) {
+      if (error.message?.includes("already registered")) {
+        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
+      } else {
+        setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
+      }
+    }
+
+    setIsLoading(false)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, supabaseUser, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, supabaseUser, login, register, logout, isLoading, error }}>
       {children}
     </AuthContext.Provider>
   )

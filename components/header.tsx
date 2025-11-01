@@ -15,7 +15,7 @@ export function Header() {
   const { t } = useTranslation("common")
 
   return (
-    <header className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
+  <header suppressHydrationWarning className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 gap-3">
           <Link href="/" className="hover:opacity-90 transition-opacity flex-shrink-0">

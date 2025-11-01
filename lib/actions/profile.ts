@@ -3,7 +3,7 @@
 import { createServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-export async function updateProfile(userId: string, data: Partial<{ full_name: string; phone: string; address: string }>) {
+export async function updateProfile(userId: string, data: Partial<{ full_name: string; phone: string; street: string; city: string; country: string }>) {
   const supabase = await createServerClient()
 
   const { data: updated, error } = await supabase
@@ -11,8 +11,9 @@ export async function updateProfile(userId: string, data: Partial<{ full_name: s
     .update({
       full_name: data.full_name,
       phone: data.phone,
-      /* address may not exist on profiles table; include if provided */
-      ...(data.address ? { address: data.address } : {}),
+      street: data.street,
+      city: data.city,
+      country: data.country,
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId)

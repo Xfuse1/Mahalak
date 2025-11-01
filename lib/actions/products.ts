@@ -18,7 +18,7 @@ export async function getProducts(category?: string) {
       )
     `,
     )
-    .order("created_at", { ascending: false })
+    .order("rating", { ascending: false })
 
   if (category) {
     query = query.eq("category", category)
@@ -136,7 +136,7 @@ export async function getProductsByStoreId(storeId: string) {
     .from("products")
     .select("*")
     .eq("store_id", storeId)
-    .order("created_at", { ascending: false })
+    .order("rating", { ascending: false })
 
   if (error) {
     console.error("[v0] Error fetching products by store:", error)
@@ -162,7 +162,7 @@ export async function searchProducts(query: string) {
     `,
     )
     .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-    .order("created_at", { ascending: false })
+    .order("rating", { ascending: false })
 
   if (error) {
     console.error("[v0] Error searching products:", error)
@@ -197,7 +197,7 @@ export async function getRelatedProducts(productId: string, category: string, li
     .eq("category", category)
     .neq("id", productId)
     .limit(limit)
-    .order("created_at", { ascending: false })
+    .order("rating", { ascending: false })
 
   if (error) {
     console.error("[v0] Error fetching related products:", error)

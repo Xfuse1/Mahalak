@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 export async function getStores(category?: string) {
   const supabase = await createServerClient()
 
-  let query = supabase.from("stores").select("*").order("created_at", { ascending: false })
+  let query = supabase.from("stores").select("*").order("rating", { ascending: false })
 
   if (category) {
     query = query.eq("category", category)
@@ -131,7 +131,7 @@ export async function searchStores(query: string) {
     .from("stores")
     .select("*")
     .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-    .order("created_at", { ascending: false })
+  .order("rating", { ascending: false })
 
   if (error) {
     console.error("[v0] Error searching stores:", error)
