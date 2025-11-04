@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
+import { EyeOpenIcon, EyeOffIcon } from "@/components/ui/icons"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -24,6 +25,7 @@ export default function AuthPage() {
   const isRTL = language === "ar"
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
 
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
@@ -209,14 +211,23 @@ export default function AuthPage() {
                           {t("هل نسيت كلمة السر؟", "Forgot Password?")}
                         </Link>
                       </div>
-                      <Input
-                        id="login-password"
-                        name="password"
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        className="h-12"
-                      />
+                      <div className="relative group">
+                        <Input
+                          id="login-password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          className="h-12 pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
+                        </button>
+                      </div>
                     </div>
                     <Button
                       type="submit"
@@ -376,27 +387,45 @@ export default function AuthPage() {
                       <Label htmlFor="register-password" className="text-base">
                         {t("كلمة المرور", "Password")}
                       </Label>
-                      <Input
-                        id="register-password"
-                        name="password"
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        className="h-12"
-                      />
+                      <div className="relative group">
+                        <Input
+                          id="register-password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          className="h-12 pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-confirm" className="text-base">
                         {t("تأكيد كلمة المرور", "Confirm Password")}
                       </Label>
-                      <Input
-                        id="register-confirm"
-                        name="confirmPassword"
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        className="h-12"
-                      />
+                      <div className="relative group">
+                        <Input
+                          id="register-confirm"
+                          name="confirmPassword"
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          className="h-12 pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
+                        </button>
+                      </div>
                     </div>
                     <Button
                       type="submit"
