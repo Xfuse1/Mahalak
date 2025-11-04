@@ -165,12 +165,36 @@ export default function StorePage({ params }: { params: { id: string } }) {
       return
     }
     const message = t(`مرحباً، أريد الاستفسار عن ${store.name}`, `Hello, I want to inquire about ${store.name}`)
-    const phoneNumber = store.phone.replace(/\D/g, "")
+    const formatPhoneForWhatsApp = (raw: string) => {
+      if (!raw) return ""
+      let digits = raw.replace(/\D/g, "")
+
+      // remove international 00 prefix
+      if (digits.startsWith("00")) digits = digits.slice(2)
+
+      // If number starts with leading 0 (local format) assume Egypt (+20) as a sensible default
+      // and convert: 01012345678 -> 201012345678
+      if (digits.startsWith("0")) {
+        digits = `20${digits.slice(1)}`
+      }
+
+      // If number already starts with country code like 20, 966, etc, keep as-is
+      return digits
+    }
+
+    const phoneNumber = formatPhoneForWhatsApp(store.phone)
     try {
       trackMetaEvent("Contact", { method: "whatsapp", storeId: store?.id, storeName: store?.name })
     } catch (e) {
       // ignore tracking errors
     }
+    if (!phoneNumber || phoneNumber.length < 8) {
+      // show a simple alert when phone number looks invalid for wa.me
+      // you can replace with a nicer UI notification if desired
+      alert(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
+      return
+    }
+
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, "_blank")
   }
 
