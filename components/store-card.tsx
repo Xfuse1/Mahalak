@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Star, MapPin } from "lucide-react"
@@ -12,7 +13,7 @@ interface StoreCardProps {
   store: Store
 }
 
-export function StoreCard({ store }: StoreCardProps) {
+const StoreCardComponent = ({ store }: StoreCardProps) => {
   const { t, language } = useLanguage()
   const isRTL = language === "ar"
 
@@ -26,6 +27,8 @@ export function StoreCard({ store }: StoreCardProps) {
               alt={store.name}
               fill
               className="object-cover"
+              loading="lazy"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           </div>
           <CardContent className={`p-4 space-y-3 ${isRTL ? "text-right" : "text-left"}`}>
@@ -39,7 +42,7 @@ export function StoreCard({ store }: StoreCardProps) {
 
             <div className={`flex items-center gap-2 ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
               <MapPin className="h-4 w-4 flex-shrink-0" />
-              <span className="line-clamp-1">{store.address}</span>
+              <span className="line-clamp-1">{(store as any).address}</span>
             </div>
 
             {/* الوصف */}
@@ -58,3 +61,5 @@ export function StoreCard({ store }: StoreCardProps) {
     </div>
   )
 }
+
+export const StoreCard = memo(StoreCardComponent)

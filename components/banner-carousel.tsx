@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, memo } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 import Image from "next/image"
 
-export function BannerCarousel() {
+const BannerCarouselComponent = () => {
   const [currentSlide, setCurrentSlide] = useState(0)
   const { t } = useTranslation()
 
@@ -39,13 +39,13 @@ export function BannerCarousel() {
     return () => clearInterval(timer)
   }, [slides.length])
 
-  const nextSlide = () => {
+  const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % slides.length)
-  }
+  }, [slides.length])
 
-  const prevSlide = () => {
+  const prevSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)
-  }
+  }, [slides.length])
 
   return (
     <div className="relative overflow-hidden">
@@ -53,9 +53,18 @@ export function BannerCarousel() {
         className="flex transition-transform duration-500 ease-in-out"
         style={{ transform: `translateX(${currentSlide * 100}%)` }}
       >
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <div key={slide.id} className="min-w-full relative h-[300px] md:h-[400px]">
-            <Image src={slide.image || "/placeholder.svg"} alt={slide.title} fill className="object-cover" priority />
+            <Image 
+              src={slide.image || "/placeholder.svg"} 
+              alt={slide.title} 
+              fill 
+              className="object-cover" 
+              priority={index === 0} 
+              loading={index === 0 ? "eager" : "lazy"}
+              sizes="100vw"
+              quality={85}
+            />
             <div className="absolute inset-0 bg-gradient-to-l from-[#1F478B]/90 to-[#1F478B]/70" />
             <div className="absolute inset-0 flex items-center">
               <div className="container mx-auto px-4">
@@ -100,3 +109,5 @@ export function BannerCarousel() {
     </div>
   )
 }
+
+export const BannerCarousel = memo(BannerCarouselComponent)

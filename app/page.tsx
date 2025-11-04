@@ -10,21 +10,35 @@ import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/language-context"
 import Link from "next/link"
 import { Package, Store } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, memo } from "react"
 import { getProducts } from "@/lib/actions/products"
 import { getStores } from "@/lib/actions/stores"
+
+// Memoize heavy components to prevent unnecessary re-renders
+const MemoizedProductCard = memo(ProductCard)
+const MemoizedStoreCard = memo(StoreCard)
 
 export default function Home() {
   const { t } = useLanguage()
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([])
   const [featuredStores, setFeaturedStores] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
-      const allProducts = await getProducts()
-      const allStores = await getStores()
-      setFeaturedProducts(allProducts.slice(0, 6))
-      setFeaturedStores(allStores.slice(0, 4))
+      try {
+        // Parallel data fetching for better performance
+        const [allProducts, allStores] = await Promise.all([
+          getProducts(),
+          getStores()
+        ])
+        setFeaturedProducts(allProducts.slice(0, 6))
+        setFeaturedStores(allStores.slice(0, 4))
+      } catch (error) {
+        console.error('Error loading data:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
     loadData()
   }, [])
@@ -144,9 +158,20 @@ export default function Home() {
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {featuredStores.map((store) => (
-                <StoreCard key={store.id} store={store} />
-              ))}
+              {isLoading ? (
+                // Loading skeleton
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="bg-gray-200 h-48 rounded-lg mb-4"></div>
+                    <div className="bg-gray-200 h-4 rounded w-3/4 mb-2"></div>
+                    <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+                  </div>
+                ))
+              ) : (
+                featuredStores.map((store) => (
+                  <MemoizedStoreCard key={store.id} store={store} />
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -161,9 +186,20 @@ export default function Home() {
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {featuredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+              {isLoading ? (
+                // Loading skeleton
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="bg-gray-200 h-48 rounded-lg mb-4"></div>
+                    <div className="bg-gray-200 h-4 rounded w-3/4 mb-2"></div>
+                    <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+                  </div>
+                ))
+              ) : (
+                featuredProducts.map((product) => (
+                  <MemoizedProductCard key={product.id} product={product} />
+                ))
+              )}
             </div>
           </div>
         </section>

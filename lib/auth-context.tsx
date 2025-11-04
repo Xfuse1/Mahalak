@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { createStore } from "@/lib/actions/stores"
@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -147,9 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       throw error
     }
-  }
+  }, [supabase])
 
-  const register = async (
+  const register = useCallback(async (
     email: string,
     password: string,
     name: string,
@@ -182,7 +182,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       })
 
-      if (error) throw error
+      if (error) {
+        console.error("[v0] Supabase signUp error:", error)
+        const message = (error as any)?.message ?? String(error)
+        if (message.includes("already registered") || message.includes("User already registered")) {
+          setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
+        } else {
+          setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
+        }
+        return false
+      }
 
       if (role === "seller" && data.user && sellerData?.storeName) {
         console.log("[v0] Creating store for seller:", data.user.id)
@@ -218,15 +227,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true
     } catch (error: any) {
       console.error("[v0] Registration error:", error)
-      throw error
+      const message = error?.message ?? String(error)
+      if (message.includes("already registered") || message.includes("User already registered")) {
+        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
+      } else {
+        setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
+      }
+      return false
     }
-  }
+  }, [supabase, t])
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await supabase.auth.signOut()
     setUser(null)
     setSupabaseUser(null)
-  }
+  }, [supabase])
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -282,8 +297,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false)
   }
 
+  const contextValue = useMemo(
+    () => ({ user, supabaseUser, login, register, logout, isLoading, error }),
+    [user, supabaseUser, login, register, logout, isLoading, error]
+  )
+
   return (
-    <AuthContext.Provider value={{ user, supabaseUser, login, register, logout, isLoading, error }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )

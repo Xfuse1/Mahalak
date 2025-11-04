@@ -1,10 +1,11 @@
 "use client"
 
+import { memo } from "react"
 import Link from "next/link"
 import { Facebook, X, Instagram } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-export function Footer() {
+const FooterComponent = () => {
   const { t } = useTranslation()
 
   return (
@@ -108,3 +109,5 @@ export function Footer() {
     </footer>
   )
 }
+
+export const Footer = memo(FooterComponent)

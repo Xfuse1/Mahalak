@@ -6,12 +6,13 @@ import { Star } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Product } from "@/lib/mock-data"
 import { useLanguage } from "@/lib/language-context"
+import { memo } from "react"
 
 interface ProductCardProps {
   product: Product
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+function ProductCardComponent({ product }: ProductCardProps) {
   const { t, language } = useLanguage()
   const isRTL = language === "ar"
 
@@ -25,6 +26,8 @@ export function ProductCard({ product }: ProductCardProps) {
               alt={product.name}
               fill
               className="object-cover"
+              loading="lazy"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             />
           </div>
           <CardContent className="p-4 space-y-2 text-right">
@@ -35,7 +38,7 @@ export function ProductCard({ product }: ProductCardProps) {
               <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
             </div>
             <p className="text-xl font-bold text-[#1F478B] pt-1">
-              {product.price} {t("egp")}
+              {product.price} {t("جنيه", "EGP")}
             </p>
           </CardContent>
         </Card>
@@ -43,3 +46,6 @@ export function ProductCard({ product }: ProductCardProps) {
     </div>
   )
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const ProductCard = memo(ProductCardComponent)
