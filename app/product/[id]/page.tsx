@@ -180,7 +180,28 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
     const enMessage = `Hello, I want to inquire about ${product.name}`
     const message = t(arMessage, enMessage)
-    const phone = product.stores?.phone || "201055161600"
+
+    const formatPhoneForWhatsApp = (raw?: string) => {
+      if (!raw) return ""
+      let digits = raw.replace(/\D/g, "")
+
+      if (digits.startsWith("00")) digits = digits.slice(2)
+
+      if (digits.startsWith("0")) {
+        // default to Egypt country code if local format provided
+        digits = `20${digits.slice(1)}`
+      }
+
+      return digits
+    }
+
+    const phone = formatPhoneForWhatsApp(product.stores?.phone) || ""
+
+    if (!phone || phone.length < 8) {
+      alert(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
+      return
+    }
+
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank")
   }
 
