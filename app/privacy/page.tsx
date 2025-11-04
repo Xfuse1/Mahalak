@@ -40,12 +40,6 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   {t(
-                    "معلومات الطلبات: عناوين التوصيل، تفاصيل الدفع، سجل الطلبات",
-                    "Order information: delivery addresses, payment details, order history",
-                  )}
-                </li>
-                <li>
-                  {t(
                     "معلومات الاستخدام: كيفية تفاعلك مع المنصة، المنتجات التي تتصفحها",
                     "Usage information: how you interact with the platform, products you browse",
                   )}
@@ -90,18 +84,8 @@ export default function PrivacyPage() {
               <h2 className="text-2xl font-bold mb-4">{t("مشاركة المعلومات", "Information Sharing")}</h2>
               <p className="text-gray-700 leading-relaxed">
                 {t(
-                  "لا نقوم ببيع أو تأجير معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك مع البائعين على المنصة لتنفيذ طلباتك، ومع مزودي الخدمات الذين يساعدوننا في تشغيل المنصة (مثل خدمات الدفع والشحن).",
-                  "We do not sell or rent your personal information to third parties. We may share your information with sellers on the platform to fulfill your orders, and with service providers who help us operate the platform (such as payment and shipping services).",
-                )}
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("أمان المعلومات", "Information Security")}</h2>
-              <p className="text-gray-700 leading-relaxed">
-                {t(
-                  "نستخدم إجراءات أمنية متقدمة لحماية معلوماتك من الوصول غير المصرح به أو التعديل أو الإفصاح أو التدمير. نستخدم تقنيات التشفير SSL لحماية البيانات الحساسة أثناء النقل.",
-                  "We use advanced security measures to protect your information from unauthorized access, modification, disclosure, or destruction. We use SSL encryption technologies to protect sensitive data during transmission.",
+                  "لا نقوم ببيع أو تأجير معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك مع البائعين على المنصة لتنفيذ طلباتك، ومع مزودي الخدمات الذين يساعدوننا في تشغيل المنصة.",
+                  "We do not sell or rent your personal information to third parties. We may share your information with sellers on the platform to fulfill your orders, and with service providers who help us operate the platform.",
                 )}
               </p>
             </section>

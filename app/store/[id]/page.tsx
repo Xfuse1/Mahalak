@@ -4,9 +4,17 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ProductCard } from "@/components/product-card"
 import { BackButton } from "@/components/back-button"
-import { Star, MapPin, Phone, MessageCircle } from "lucide-react"
+import { Star, MapPin, Phone, MessageCircle, FileText } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import Image from "next/image"
@@ -25,6 +33,7 @@ type Store = {
   phone: string
   address: string
   image_url?: string
+  return_policy?: string
 }
 
 type Product = {
@@ -43,16 +52,15 @@ type Product = {
 }
 
 export default function StorePage({ params }: { params: { id: string } }) {
-
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
 
-  // Next.js 14+: params may be a Promise, unwrap with React.use()
-  const unwrappedParams = typeof params === "object" && "then" in params
-    ? React.use(params as unknown as Promise<{ id: string }>)
-    : (params as { id: string });
-  const { id } = unwrappedParams;
+  const unwrappedParams =
+    typeof params === "object" && "then" in params
+      ? React.use(params as unknown as Promise<{ id: string }>)
+      : (params as { id: string })
+  const { id } = unwrappedParams
 
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -60,6 +68,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
   const [userStoreReview, setUserStoreReview] = useState<number | null>(null)
   const [hoverRating, setHoverRating] = useState<number | null>(null)
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [isPolicySheetOpen, setIsPolicySheetOpen] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -93,16 +102,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
     fetchData()
   }, [id])
 
-  // Fire Meta Pixel events when store data is available (consent required)
   useEffect(() => {
     if (!store) return
     try {
-      // Generic page view (the Pixel may already fire this globally) — harmless duplicate if present
-      trackMetaEvent('PageView')
-
-      // More specific event with store metadata
-      trackMetaEvent('ViewContent', {
-        content_type: 'store',
+      trackMetaEvent("PageView")
+      trackMetaEvent("ViewContent", {
+        content_type: "store",
         storeId: store.id,
         storeName: store.name,
       })
@@ -111,7 +116,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
     }
   }, [store])
 
-  // When store & user are available, fetch existing user review (if any)
   useEffect(() => {
     if (!store || !user) return
     let mounted = true
@@ -162,7 +166,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
     }
     const message = t(`مرحباً، أريد الاستفسار عن ${store.name}`, `Hello, I want to inquire about ${store.name}`)
     const phoneNumber = store.phone.replace(/\D/g, "")
-    // Track contact event via Meta Pixel
     try {
       trackMetaEvent("Contact", { method: "whatsapp", storeId: store?.id, storeName: store?.name })
     } catch (e) {
@@ -176,7 +179,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
       router.push("/auth")
       return
     }
-    // Track contact event via Meta Pixel
     try {
       trackMetaEvent("Contact", { method: "call", storeId: store?.id, storeName: store?.name })
     } catch (e) {
@@ -202,11 +204,11 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   src={store.image_url || "/placeholder.svg?height=400&width=600"}
                   alt={store.name}
                   fill
+                  priority
                   className="object-cover"
                 />
               </div>
 
-              {/* Store Info */}
               <div className="space-y-4">
                 <h1 className="text-3xl md:text-4xl font-bold">{store.name}</h1>
                 <p className="text-gray-600 text-lg leading-relaxed">{store.description}</p>
@@ -259,7 +261,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   <span className="bg-secondary px-4 py-2 rounded-full font-medium">{store.category}</span>
                 </div>
 
-                {/* Address */}
                 <div className="flex items-start gap-3 p-4 bg-secondary rounded-lg">
                   <MapPin className="h-5 w-5 text-[#1F478B] mt-1 flex-shrink-0" />
                   <div>
@@ -268,7 +269,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   </div>
                 </div>
 
-                {/* Contact Buttons */}
                 <div className="flex gap-3">
                   <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700">
                     <MessageCircle className="ml-2 h-5 w-5" />
@@ -279,11 +279,30 @@ export default function StorePage({ params }: { params: { id: string } }) {
                     {t("اتصال", "Call")}
                   </Button>
                 </div>
+                <Sheet open={isPolicySheetOpen} onOpenChange={setIsPolicySheetOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" className="flex-1 bg-transparent w-full">
+                      <FileText className="ml-2 h-5 w-5" />
+                      {t("سياسات المتجر", "Store Policies")}
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent>
+                    <SheetHeader>
+                      <SheetTitle>{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
+                    </SheetHeader>
+                    <div className="py-4">
+                      {store.return_policy ? (
+                        <p className="whitespace-pre-wrap">{store.return_policy}</p>
+                      ) : (
+                        <p>{t("لم يتم تحديد سياسة الإرجاع بعد.", "Return policy not set yet.")}</p>
+                      )}
+                    </div>
+                  </SheetContent>
+                </Sheet>
               </div>
             </div>
           </div>
 
-          {/* Store Products */}
           <div>
             <h2 className="text-2xl font-bold mb-6">{t("منتجات المتجر", "Store Products")}</h2>
             {products.length > 0 ? (

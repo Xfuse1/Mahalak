@@ -25,7 +25,7 @@ export async function getStores(category?: string) {
 export async function getStore(id: string) {
   const supabase = await createServerClient()
 
-  const { data, error } = await supabase.from("stores").select("*").eq("id", id).single()
+  const { data, error } = await supabase.from("stores").select("*, return_policy").eq("id", id).single()
 
   if (error) {
     console.error("[v0] Error fetching store:", error)
