@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { User, LogOut } from "lucide-react"
+import { User, LogOut, Cuboid } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -15,7 +15,7 @@ export function Header() {
   const { t } = useTranslation("common")
 
   return (
-  <header suppressHydrationWarning className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
+    <header suppressHydrationWarning className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 gap-3">
           <Link href="/" className="hover:opacity-90 transition-opacity flex-shrink-0">
@@ -24,6 +24,16 @@ export function Header() {
 
           {/* Navigation */}
           <nav className="flex items-center gap-1 md:gap-2">
+            {/* 3D Supermarket Link */}
+            <Button
+              variant="ghost"
+              className="hidden md:flex items-center gap-2 text-white hover:bg-white/20 mr-2"
+              onClick={() => router.push("/supermarket")}
+            >
+              <Cuboid className="h-5 w-5" />
+              <span className="font-bold">3D Market</span>
+            </Button>
+
             <LanguageSwitcher />
 
             {user ? (
