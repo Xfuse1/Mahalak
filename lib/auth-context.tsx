@@ -62,36 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setSupabaseUser(session.user)
-        loadUserProfile(session.user.id)
-      } else {
-        setIsLoading(false)
-      }
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setSupabaseUser(session.user)
-        if (!loadingProfile.current) {
-          loadUserProfile(session.user.id)
-        }
-      } else {
-        setSupabaseUser(null)
-        setUser(null)
-        setIsLoading(false)
-        loadingProfile.current = false
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const loadUserProfile = async (userId: string) => {
+  const loadUserProfile = useCallback(async (userId: string) => {
     if (loadingProfile.current) return
     loadingProfile.current = true
 
@@ -119,7 +90,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       loadingProfile.current = false
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setSupabaseUser(session.user)
+        loadUserProfile(session.user.id)
+      } else {
+        setIsLoading(false)
+      }
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setSupabaseUser(session.user)
+        if (!loadingProfile.current) {
+          loadUserProfile(session.user.id)
+        }
+      } else {
+        setSupabaseUser(null)
+        setUser(null)
+        setIsLoading(false)
+        loadingProfile.current = false
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [loadUserProfile, supabase.auth])
 
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     try {
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             street,
             city,
             country,
-         
+
           },
         },
       })

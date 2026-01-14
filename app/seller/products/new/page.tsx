@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
@@ -14,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { categories } from "@/lib/mock-data"
 import { Upload } from "lucide-react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { createProduct } from "@/lib/actions/products"
 import { getStoreByUserId } from "@/lib/actions/stores"
@@ -194,9 +194,11 @@ export default function NewProductPage() {
                   <div className="mt-2">
                     {imagePreview ? (
                       <div className="relative w-full h-48 border-2 border-gray-300 rounded-lg overflow-hidden">
-                        <img
+                        <Image
                           src={imagePreview || "/placeholder.svg"}
                           alt="معاينة الصورة"
+                          width={400}
+                          height={200}
                           className="w-full h-full object-cover"
                         />
                         <button

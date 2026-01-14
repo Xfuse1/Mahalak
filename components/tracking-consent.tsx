@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Script from "next/script"
+import Image from "next/image"
 
 const STORAGE_KEY = "fb_pixel_consent"
 
@@ -36,12 +37,13 @@ export function TrackingConsent() {
             }}
           />
           <noscript>
-            <img
+            <Image
               height="1"
               width="1"
               style={{ display: "none" }}
               src={`https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1`}
               alt=""
+              unoptimized
             />
           </noscript>
         </>

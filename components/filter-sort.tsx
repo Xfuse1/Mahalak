@@ -25,7 +25,7 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
     if (onFilterChange) {
       onFilterChange({ sortBy })
     }
-  }, [sortBy])
+  }, [sortBy, onFilterChange])
 
   const handleSortChange = (value: string) => {
     setSortBy(value)
@@ -100,9 +100,8 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
             <Select value={sortBy} onValueChange={handleSortChange}>
               <SelectTrigger
                 id="sort-select"
-                className={`h-12 border-2 border-[#1F478B] border-opacity-30 focus:border-[#1F478B] focus:border-opacity-60 transition-colors duration-200 ${
-                  isRTL ? "text-right" : "text-left"
-                }`}
+                className={`h-12 border-2 border-[#1F478B] border-opacity-30 focus:border-[#1F478B] focus:border-opacity-60 transition-colors duration-200 ${isRTL ? "text-right" : "text-left"
+                  }`}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -135,9 +134,8 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
           {/* عرض الترتيب المحدد */}
           <div className="space-y-3">
             <div
-              className={`flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 ${
-                isRTL ? "text-right" : "text-left"
-              }`}
+              className={`flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 ${isRTL ? "text-right" : "text-left"
+                }`}
             >
               <span className="text-sm font-medium text-gray-700">{t("الترتيب المحدد:", "Selected Sort:")}</span>
               <span className="text-sm text-[#1F478B] font-semibold">{getSortLabel()}</span>

@@ -7,20 +7,20 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "@/components/logo"
-import { useLanguage } from "@/lib/language-context"
+import { useTranslation } from "react-i18next"
 
 export function SellerHeader() {
   const pathname = usePathname()
   const { logout } = useAuth()
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t } = useTranslation("common")
 
   const navItems = [
-    { href: "/seller/dashboard", label: t("لوحة التحكم", "Dashboard"), icon: LayoutDashboard },
-    { href: "/seller/products", label: t("المنتجات", "Products"), icon: Package },
-    { href: "/seller/orders", label: t("الطلبات", "Orders"), icon: ShoppingBag },
-    { href: "/seller/offers", label: t("العروض", "Offers"), icon: Tag },
-    { href: "/seller/settings", label: t("الإعدادات", "Settings"), icon: Settings },
+    { href: "/seller/dashboard", label: t("dashboard"), icon: LayoutDashboard },
+    { href: "/seller/products", label: t("products"), icon: Package },
+    { href: "/seller/orders", label: t("orders"), icon: ShoppingBag },
+    { href: "/seller/offers", label: t("offers"), icon: Tag },
+    { href: "/seller/settings", label: t("settings"), icon: Settings },
   ]
 
   const handleLogout = () => {
@@ -45,11 +45,10 @@ export function SellerHeader() {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all border-2 ${
-                    isActive 
-                      ? "bg-[#1F478B] text-white border-[#1F478B] shadow-md scale-[1.02]" 
-                      : "text-gray-700 hover:bg-gray-100 hover:border-gray-300 border-transparent hover:scale-[1.02] active:bg-gray-200 active:scale-100"
-                  }`}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all border-2 ${isActive
+                    ? "bg-[#1F478B] text-white border-[#1F478B] shadow-md scale-[1.02]"
+                    : "text-gray-700 hover:bg-gray-100 hover:border-gray-300 border-transparent hover:scale-[1.02] active:bg-gray-200 active:scale-100"
+                    }`}
                 >
                   <Icon className="h-5 w-5" />
                   <span className="font-medium">{item.label}</span>
@@ -67,7 +66,7 @@ export function SellerHeader() {
           onClick={() => router.push("/")}
         >
           <Home className="h-5 w-5" />
-          <span>{t("العودة للموقع", "Back to Site")}</span>
+          <span>{t("backToSite")}</span>
         </Button>
         <Button
           variant="ghost"
@@ -75,7 +74,7 @@ export function SellerHeader() {
           onClick={handleLogout}
         >
           <LogOut className="h-5 w-5" />
-          <span>{t("تسجيل الخروج", "Logout")}</span>
+          <span>{t("logout")}</span>
         </Button>
       </div>
     </aside>

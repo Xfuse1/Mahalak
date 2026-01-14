@@ -23,66 +23,49 @@ export async function getUserStoreReview(storeId: string, customerId: string) {
 
 export async function upsertStoreReview(storeId: string, customerId: string, rating: number, comment?: string) {
   const supabase = await createServerClient()
+  const r = Math.max(1, Math.min(5, Math.round(rating)))
 
   try {
-    const { data: existing, error: fetchErr } = await supabase
+    const { data: existing } = await supabase
       .from("store_reviews")
       .select("id")
       .eq("store_id", storeId)
       .eq("customer_id", customerId)
       .maybeSingle()
 
-    if (fetchErr) {
-      console.error("[v0] Error checking existing store review:", fetchErr)
-    }
-
-    if (existing && existing.id) {
+    if (existing?.id) {
       const { error: updateErr } = await supabase
         .from("store_reviews")
-        .update({ rating, comment })
+        .update({ rating: r, comment })
         .eq("id", existing.id)
 
-      if (updateErr) {
-        console.error("[v0] Error updating store review:", updateErr)
-      }
+      if (updateErr) throw updateErr
     } else {
       const { error: insertErr } = await supabase.from("store_reviews").insert({
         store_id: storeId,
         customer_id: customerId,
-        rating,
+        rating: r,
         comment,
       })
 
-      if (insertErr) {
-        console.error("[v0] Error inserting store review:", insertErr)
-      }
+      if (insertErr) throw insertErr
     }
 
-    // Recompute average rating for the store
+    // Recompute average rating for the store (Ideally this should be a DB trigger)
     const { data: rows, error: rowsErr } = await supabase
       .from("store_reviews")
       .select("rating")
       .eq("store_id", storeId)
 
-    if (rowsErr) {
-      console.error("[v0] Error fetching store reviews for average:", rowsErr)
-      return { average: null }
-    }
+    if (rowsErr) throw rowsErr
 
-    const ratings = (rows || []).map((r: any) => Number(r.rating) || 0)
-    const sum = ratings.reduce((a: number, b: number) => a + b, 0)
-    const avg = ratings.length > 0 ? Math.round((sum / ratings.length) * 10) / 10 : 0
+    const ratings = (rows || []).map((row: any) => Number(row.rating) || 0)
+    const avg = ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0
 
-    // Persist average into stores.rating
-    try {
-      await updateStore(storeId, { rating: avg })
-    } catch (e) {
-      console.error("[v0] Error updating store rating:", e)
-    }
-
+    await updateStore(storeId, { rating: avg })
     return { average: avg }
   } catch (error) {
-    console.error("[v0] Unexpected error in upsertStoreReview:", error)
+    console.error("[storeReviews] upsertStoreReview error:", error)
     return { average: null }
   }
 }

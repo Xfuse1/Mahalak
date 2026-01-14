@@ -114,6 +114,14 @@ const resources = {
       banner2Desc: "تصفح مجموعتنا الواسعة من المنتجات",
       banner3Title: "منتجات محلية عالية الجودة",
       banner3Desc: "ادعم المتاجر المحلية واحصل على أفضل المنتجات",
+
+      // Seller Dashboard
+      dashboard: "لوحة التحكم",
+      products: "المنتجات",
+      orders: "الطلبات",
+      offers: "العروض",
+      settings: "الإعدادات",
+      backToSite: "العودة للموقع",
     },
   },
   en: {
@@ -227,6 +235,14 @@ const resources = {
       banner2Desc: "Browse our wide range of products",
       banner3Title: "High Quality Local Products",
       banner3Desc: "Support local stores and get the best products",
+
+      // Seller Dashboard
+      dashboard: "Dashboard",
+      products: "Products",
+      orders: "Orders",
+      offers: "Offers",
+      settings: "Settings",
+      backToSite: "Back to Site",
     },
   },
 }
