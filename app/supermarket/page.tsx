@@ -10,17 +10,17 @@ import { ShoppingCart, Zap, PackageOpen, CheckCircle } from "lucide-react";
 // Initial Products Data
 const STORE_PRODUCTS = [
     // Shelf 1 products
-    { id: 1, name: "Organic Milk", price: 5.5, color: "#ffffff", pos: [-1, 0.95, -4] as [number, number, number] },
-    { id: 2, name: "Choco Bar", price: 2.0, color: "#8B4513", pos: [0, 0.95, -4] as [number, number, number] },
-    { id: 3, name: "Juice Box", price: 3.5, color: "#FFA500", pos: [1, 0.95, -4] as [number, number, number] },
+    { id: 1, name: "Organic Milk", price: 5.5, color: "#ffffff", position: [-1, 0.95, -4] as [number, number, number] },
+    { id: 2, name: "Choco Bar", price: 2.0, color: "#8B4513", position: [0, 0.95, -4] as [number, number, number] },
+    { id: 3, name: "Juice Box", price: 3.5, color: "#FFA500", position: [1, 0.95, -4] as [number, number, number] },
 
-    { id: 4, name: "Cereal", price: 8.0, color: "#FFD700", pos: [-1, 1.75, -4] as [number, number, number] },
-    { id: 5, name: "Oats", price: 4.2, color: "#F5DEB3", pos: [0, 1.75, -4] as [number, number, number] },
-    { id: 6, name: "Soup Can", price: 1.5, color: "#FF4500", pos: [1, 1.75, -4] as [number, number, number] },
+    { id: 4, name: "Cereal", price: 8.0, color: "#FFD700", position: [-1, 1.75, -4] as [number, number, number] },
+    { id: 5, name: "Oats", price: 4.2, color: "#F5DEB3", position: [0, 1.75, -4] as [number, number, number] },
+    { id: 6, name: "Soup Can", price: 1.5, color: "#FF4500", position: [1, 1.75, -4] as [number, number, number] },
 
     // Shelf 2 products
-    { id: 7, name: "Shampoo", price: 12.0, color: "#00BFFF", pos: [-1, 0.95, 4] as [number, number, number] },
-    { id: 8, name: "Soap", price: 1.0, color: "#FF69B4", pos: [0, 0.95, 4] as [number, number, number] },
+    { id: 7, name: "Shampoo", price: 12.0, color: "#00BFFF", position: [-1, 0.95, 4] as [number, number, number] },
+    { id: 8, name: "Soap", price: 1.0, color: "#FF69B4", position: [0, 0.95, 4] as [number, number, number] },
 ];
 
 export default function SupermarketSimulatorPage() {

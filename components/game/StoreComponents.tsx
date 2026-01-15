@@ -19,11 +19,13 @@ export function Product3D({ position, color, name, price, onAddToCart }: Product
     const [hovered, setHover] = useState(false);
 
     useFrame((state) => {
-        if (mesh.current && hovered) {
-            mesh.current.rotation.y += 0.05; // Spin when hovered
+        if (!mesh.current || !position) return;
+
+        if (hovered) {
+            mesh.current.rotation.y += 0.05;
             mesh.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 5) * 0.05;
-        } else if (mesh.current) {
-            mesh.current.position.y = position[1]; // Reset position
+        } else {
+            mesh.current.position.y = position[1];
             mesh.current.rotation.y = 0;
         }
     });
