@@ -10,10 +10,11 @@ interface ProductProps {
     color: string;
     name: string;
     price: number;
+    type?: 'box' | 'cylinder' | 'fruit';
     onAddToCart: (name: string, price: number) => void;
 }
 
-export function Product3D({ position, color, name, price, onAddToCart }: ProductProps) {
+export function Product3D({ position, color, name, price, type = 'box', onAddToCart }: ProductProps) {
     const mesh = useRef<THREE.Mesh>(null);
     const [hovered, setHover] = useState(false);
 
@@ -22,7 +23,7 @@ export function Product3D({ position, color, name, price, onAddToCart }: Product
 
         if (hovered) {
             mesh.current.rotation.y += 0.05;
-            mesh.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 5) * 0.05;
+            mesh.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 5) * 0.03;
         } else {
             mesh.current.position.y = position[1];
             mesh.current.rotation.y = 0;
@@ -38,21 +39,25 @@ export function Product3D({ position, color, name, price, onAddToCart }: Product
                 onClick={() => onAddToCart(name, price)}
                 castShadow
             >
-                <boxGeometry args={[0.3, 0.5, 0.3]} />
+                {type === 'box' && <boxGeometry args={[0.25, 0.4, 0.2]} />}
+                {type === 'cylinder' && <cylinderGeometry args={[0.08, 0.08, 0.3, 16]} />}
+                {type === 'fruit' && <sphereGeometry args={[0.12, 16, 16]} />}
+
                 <meshStandardMaterial
-                    color={hovered ? "#ffff00" : color}
-                    roughness={0.2}
-                    metalness={0.3}
-                    emissive={hovered ? "#444400" : "#000000"}
+                    color={hovered ? "#ffffff" : color}
+                    roughness={0.1}
+                    metalness={0.5}
+                    emissive={hovered ? color : "#000000"}
+                    emissiveIntensity={hovered ? 0.5 : 0}
                 />
             </mesh>
 
-            {/* Price Tag UI (Floating) */}
-            <Html position={[0, 0.6, 0]} center transform sprite zIndexRange={[100, 0]}>
-                <div className={`pointer-events-none transition-all duration-300 ${hovered ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}>
-                    <div className="bg-black/90 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur border border-white/20 whitespace-nowrap flex flex-col items-center">
-                        <span className="font-bold">{name}</span>
-                        <span className="text-green-400 font-mono">${price}</span>
+            {/* Product Label */}
+            <Html position={[0, 0.4, 0]} center transform sprite zIndexRange={[100, 0]}>
+                <div className={`pointer-events-none transition-all duration-300 ${hovered ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}>
+                    <div className="bg-white text-black text-[10px] px-2 py-1 rounded shadow-lg border-2 border-black font-black whitespace-nowrap flex flex-col items-center">
+                        <span className="uppercase tracking-tighter">{name}</span>
+                        <span className="text-indigo-600 font-mono italic">${price}</span>
                     </div>
                 </div>
             </Html>
@@ -63,50 +68,60 @@ export function Product3D({ position, color, name, price, onAddToCart }: Product
 export function Shelf({ position, rotation = [0, 0, 0], width = 3, label = "" }: { position: [number, number, number], rotation?: [number, number, number], width?: number, label?: string }) {
     return (
         <group position={position} rotation={rotation as any}>
-            {/* Label Sign on top of the shelf */}
+            {/* Main Label Sign */}
             {label && (
-                <group position={[0, 3.2, 0]}>
-                    <mesh>
-                        <boxGeometry args={[1.5, 0.5, 0.1]} />
-                        <meshStandardMaterial color="#222" emissive="#111" />
+                <group position={[0, 3.4, 0]}>
+                    <mesh castShadow>
+                        <boxGeometry args={[width * 0.6, 0.6, 0.1]} />
+                        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.2} />
                     </mesh>
                     <Text
                         position={[0, 0, 0.06]}
-                        fontSize={0.2}
-                        color="white"
+                        fontSize={0.25}
+                        color="black"
                         anchorX="center"
                         anchorY="middle"
+                        fontWeight="900"
                     >
-                        {label}
+                        {label.toUpperCase()}
                     </Text>
+                    {/* Glowing Accent */}
+                    <mesh position={[0, -0.35, 0]}>
+                        <boxGeometry args={[width * 0.6, 0.05, 0.1]} />
+                        <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={2} />
+                    </mesh>
                 </group>
             )}
 
-            {/* Base */}
-            <mesh position={[0, 0.1, 0]} receiveShadow>
-                <boxGeometry args={[width, 0.2, 1]} />
-                <meshStandardMaterial color="#2a2a2a" />
+            {/* Structural Elements */}
+            <mesh position={[0, 0.05, 0]} receiveShadow>
+                <boxGeometry args={[width, 0.1, 1.2]} />
+                <meshStandardMaterial color="#111" metalness={0.8} />
             </mesh>
-            {/* Back Panel */}
-            <mesh position={[0, 1.5, -0.45]} receiveShadow>
-                <boxGeometry args={[width, 3, 0.1]} />
-                <meshStandardMaterial color="#333" />
-            </mesh>
-            {/* Shelves */}
+
+            {/* Shelving Layers */}
             {[0.8, 1.6, 2.4].map((y, i) => (
-                <mesh key={i} position={[0, y, 0]} castShadow receiveShadow>
-                    <boxGeometry args={[width, 0.05, 1]} />
-                    <meshStandardMaterial color="#1a1a1a" />
-                </mesh>
+                <group key={i} position={[0, y, 0]}>
+                    <mesh castShadow receiveShadow>
+                        <boxGeometry args={[width - 0.1, 0.05, 1]} />
+                        <meshStandardMaterial color="#222" metalness={0.5} roughness={0.2} />
+                    </mesh>
+                    {/* Shelf price strip */}
+                    <mesh position={[0, -0.02, 0.51]}>
+                        <boxGeometry args={[width - 0.1, 0.04, 0.01]} />
+                        <meshStandardMaterial color="#444" />
+                    </mesh>
+                </group>
             ))}
-            {/* Side supports */}
-            <mesh position={[width / 2, 1.5, 0]} castShadow receiveShadow>
-                <boxGeometry args={[0.1, 3, 1]} />
-                <meshStandardMaterial color="#222" />
+
+            {/* Vertical Supports */}
+            <mesh position={[width / 2, 1.5, 0]} castShadow>
+                <boxGeometry args={[0.1, 3.2, 1]} />
+                <meshStandardMaterial color="#000" metalness={0.9} />
             </mesh>
-            <mesh position={[-width / 2, 1.5, 0]} castShadow receiveShadow>
-                <boxGeometry args={[0.1, 3, 1]} />
-                <meshStandardMaterial color="#222" />
+            <mesh position={[-width / 2, 1.5, 0]} castShadow>
+                <boxGeometry args={[0.1, 3.2, 1]} />
+                <meshStandardMaterial color="#000" metalness={0.9} />
             </mesh>
         </group>
     );
@@ -116,7 +131,7 @@ export function Wall({ position, rotation = [0, 0, 0], args = [10, 10, 0.5] }: {
     return (
         <mesh position={position} rotation={rotation as any} receiveShadow>
             <boxGeometry args={args} />
-            <meshStandardMaterial color="#0f0f0f" roughness={1} />
+            <meshStandardMaterial color="#080808" roughness={1} />
         </mesh>
     );
 }
