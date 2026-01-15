@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { Sky, Stars, BakeShadows, Loader, SoftShadows, PointerLockControls } from "@react-three/drei";
 import { PlayerController } from "@/components/game/PlayerController";
 import { Shelf, Product3D, Wall } from "@/components/game/StoreComponents";
+import * as THREE from "three";
 import { ShoppingCart, Zap, PackageOpen, CheckCircle, Info, Move, Star } from "lucide-react";
 
 // Systematic category and product mapping with a wide-spread layout
@@ -40,35 +41,37 @@ const ITEMS = [
     { name: "Bleach", price: 3.0, cat: "CLEANING" }, { name: "Detergent", price: 14.5, cat: "CLEANING" }, { name: "Sponge", price: 1.0, cat: "CLEANING" }, { name: "Brush", price: 15.0, cat: "CLEANING" },
 ];
 
-// Generate final products with spatial aware placement
-const FINAL_PRODUCTS = ITEMS.map((item, idx) => {
-    const cat = CATEGORIES.find(c => c.name === item.cat)!;
-    const layer = idx % 4; // 0, 1, 2, 3
-    const subIdx = Math.floor(idx / 4);
-
-    // Spread along the width of the shelf
-    const xOffset = (subIdx % 4) * 1 - 1.5;
-    const yPos = [1.2, 2.2, 3.2, 1.2][layer];
-
-    // Calculate final position considering shelf rotation
-    const originalPos = new THREE.Vector3(xOffset, yPos, 0);
-    const rotation = new THREE.Euler(0, cat.rot[1], 0);
-    originalPos.applyEuler(rotation);
-
-    return {
-        id: idx,
-        name: item.name,
-        price: item.price,
-        color: cat.color,
-        type: cat.type as any,
-        position: [cat.pos[0] + originalPos.x, originalPos.y, cat.pos[2] + originalPos.z] as [number, number, number]
-    };
-});
-
 export default function SupermarketSimulatorPage() {
     const [cart, setCart] = useState<{ name: string; price: number }[]>([]);
     const [showCheckout, setShowCheckout] = useState(false);
     const [xp, setXP] = useState(100);
+
+    // Generate final products inside component to avoid SSR/Build issues
+    const finalProducts = React.useMemo(() => {
+        return ITEMS.map((item, idx) => {
+            const cat = CATEGORIES.find(c => c.name === item.cat)!;
+            const layer = idx % 4; // 0, 1, 2, 3
+            const subIdx = Math.floor(idx / 4);
+
+            // Spread along the width of the shelf
+            const xOffset = (subIdx % 4) * 1 - 1.5;
+            const yPos = [1.2, 2.2, 3.2, 1.2][layer];
+
+            // Calculate final position considering shelf rotation
+            const originalPos = new THREE.Vector3(xOffset, yPos, 0);
+            const rotation = new THREE.Euler(0, cat.rot[1], 0);
+            originalPos.applyEuler(rotation);
+
+            return {
+                id: idx,
+                name: item.name,
+                price: item.price,
+                color: cat.color,
+                type: cat.type as any,
+                position: [cat.pos[0] + originalPos.x, originalPos.y, cat.pos[2] + originalPos.z] as [number, number, number]
+            };
+        });
+    }, []);
 
     const addToCart = (name: string, price: number) => {
         setCart((prev) => [...prev, { name, price }]);
@@ -121,7 +124,7 @@ export default function SupermarketSimulatorPage() {
 
                     {/* Distributed Products */}
                     <Suspense fallback={null}>
-                        {FINAL_PRODUCTS.map((prod) => (
+                        {finalProducts.map((prod) => (
                             <Product3D
                                 key={prod.id}
                                 {...prod}
