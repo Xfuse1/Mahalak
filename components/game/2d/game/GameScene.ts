@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+import * as Phaser from "phaser";
 import { eventBus } from "./EventBus";
 import { findPath } from "./pathfinder";
 import NetworkClient from "./NetworkClient";
@@ -115,7 +115,8 @@ export default class GameScene extends Phaser.Scene {
         this.itemSpawns.forEach((s) => this.createItemSprite(s));
 
         // overlap pickup: player picks up
-        this.physics.add.overlap(this.player, this.itemsGroup, (p, itemSprite) => {
+        this.physics.add.overlap(this.player, this.itemsGroup, (p, anyItem) => {
+            const itemSprite = anyItem as Phaser.Physics.Arcade.Sprite;
             const meta = itemSprite.getData("meta") as SpawnItem;
             eventBus.emit("pickup", { item: { id: meta.id + "-" + Date.now(), name: meta.name, price: meta.price } });
             eventBus.emit("log", `Player picked up ${meta.name}`);
@@ -124,9 +125,8 @@ export default class GameScene extends Phaser.Scene {
         });
 
         // cursors
-        this.cursors = this.input.keyboard.createCursorKeys();
-        // Re-check input availability for WASD
         if (this.input.keyboard) {
+            this.cursors = this.input.keyboard.createCursorKeys();
             this.input.keyboard.addKeys("W,A,S,D");
         }
 

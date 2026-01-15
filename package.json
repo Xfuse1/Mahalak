@@ -56,9 +56,9 @@
     "i18next": "latest",
     "input-otp": "^1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "canary",
+    "next": "15.1.0",
     "next-themes": "latest",
-    "phaser": "^3.90.0",
+    "phaser": "^3.60.0",
     "react": "^18.3.1",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
@@ -90,6 +90,6 @@
     "vercel": "^28.0.0"
   },
   "overrides": {
-    "next": "$next"
+    "next": "15.1.0"
   }
 }
