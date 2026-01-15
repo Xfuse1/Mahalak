@@ -6,125 +6,171 @@ import { Sky, Stars, BakeShadows, Loader, SoftShadows, PointerLockControls } fro
 import { PlayerController } from "@/components/game/PlayerController";
 import { Shelf, Product3D, Wall } from "@/components/game/StoreComponents";
 import * as THREE from "three";
-import { ShoppingCart, Zap, PackageOpen, CheckCircle, Info, Move, Star } from "lucide-react";
+import { ShoppingCart, Zap, PackageOpen, CheckCircle, Info, Move, Star, Navigation } from "lucide-react";
 
-// Systematic category and product mapping with a wide-spread layout
+// --- Realistic Supermarket Layout Configuration ---
+const STORE_LAYOUT = {
+    length: 50,
+    width: 40,
+    aisleX: [-12, -4, 4, 12], // X-positions of the 4 main aisles
+    backZ: -18,
+    frontZ: 15,
+};
+
 const CATEGORIES = [
-    { name: "DAIRY", pos: [-12, 0, -12], color: "#ffffff", type: 'box', rot: [0, Math.PI / 4, 0] },
-    { name: "SNACKS", pos: [0, 0, -14], color: "#ffcc00", type: 'box', rot: [0, 0, 0] },
-    { name: "FRUITS", pos: [12, 0, -12], color: "#ff3300", type: 'fruit', rot: [0, -Math.PI / 4, 0] },
+    // Main Aisles (Middle of store)
+    { id: "DAIRY", name: "Dairy & Eggs", pos: [STORE_LAYOUT.aisleX[0], 0, 0], rot: [0, 0, 0], width: 10 },
+    { id: "SNACKS", name: "Snacks & Candy", pos: [STORE_LAYOUT.aisleX[1], 0, 0], rot: [0, 0, 0], width: 10 },
+    { id: "DRINKS", name: "Soft Drinks", pos: [STORE_LAYOUT.aisleX[2], 0, 0], rot: [0, 0, 0], width: 10 },
+    { id: "BAKERY", name: "Fresh Bakery", pos: [STORE_LAYOUT.aisleX[3], 0, 0], rot: [0, 0, 0], width: 10 },
 
-    { name: "DRINKS", pos: [-14, 0, 0], color: "#00ccff", type: 'cylinder', rot: [0, Math.PI / 2, 0] },
-    { name: "ELECTRONICS", pos: [-5, 0, 0], color: "#444444", type: 'box', rot: [0, 0, 0] },
-    { name: "HOUSEWARE", pos: [5, 0, 0], color: "#88aacc", type: 'box', rot: [0, 0, 0] },
-    { name: "BAKERY", pos: [14, 0, 0], color: "#ddaa66", type: 'box', rot: [0, -Math.PI / 2, 0] },
+    // Back Perimeter
+    { id: "MEAT", name: "Fresh Meat", pos: [-10, 0, STORE_LAYOUT.backZ], rot: [0, 0, 0], width: 8 },
+    { id: "ELECTRONICS", name: "Electronics", pos: [0, 0, STORE_LAYOUT.backZ], rot: [0, 0, 0], width: 8 },
+    { id: "CLEANING", name: "House Cleaning", pos: [10, 0, STORE_LAYOUT.backZ], rot: [0, 0, 0], width: 8 },
 
-    { name: "MEAT", pos: [-12, 0, 12], color: "#cc4444", type: 'box', rot: [0, 3 * Math.PI / 4, 0] },
-    { name: "PERSONAL CARE", pos: [0, 0, 14], color: "#ff66aa", type: 'cylinder', rot: [0, Math.PI, 0] },
-    { name: "CLEANING", pos: [12, 0, 12], color: "#33ffcc", type: 'cylinder', rot: [0, -3 * Math.PI / 4, 0] },
-
-    { name: "VEGETABLES", pos: [-7, 0, -7], color: "#33bb33", type: 'fruit', rot: [0, Math.PI / 4, 0] },
-    { name: "PETS", pos: [7, 0, 7], color: "#996633", type: 'box', rot: [0, -3 * Math.PI / 4, 0] },
+    // Side Walls
+    { id: "PETS", name: "Pet Shop", pos: [-18, 0, 0], rot: [0, Math.PI / 2, 0], width: 15 },
+    { id: "PERSONAL", name: "Personal Care", pos: [18, 0, 0], rot: [0, -Math.PI / 2, 0], width: 15 },
 ];
 
-const ITEMS = [
-    { name: "Milk", price: 4.5, cat: "DAIRY" }, { name: "Cheese", price: 6.2, cat: "DAIRY" }, { name: "Yogurt", price: 2.1, cat: "DAIRY" }, { name: "Cream", price: 3.5, cat: "DAIRY" },
-    { name: "Chips", price: 1.5, cat: "SNACKS" }, { name: "Choco", price: 2.0, cat: "SNACKS" }, { name: "Cookies", price: 3.5, cat: "SNACKS" }, { name: "Wafers", price: 5.0, cat: "SNACKS" },
-    { name: "Apple", price: 0.8, cat: "FRUITS" }, { name: "Banana", price: 0.5, cat: "FRUITS" }, { name: "Orange", price: 1.0, cat: "FRUITS" }, { name: "Grapes", price: 3.0, cat: "FRUITS" },
-    { name: "Cola", price: 1.5, cat: "DRINKS" }, { name: "Water", price: 0.5, cat: "DRINKS" }, { name: "Juice", price: 2.5, cat: "DRINKS" }, { name: "Tea", price: 8.0, cat: "DRINKS" },
-    { name: "Bread", price: 2.5, cat: "BAKERY" }, { name: "Cake", price: 15.0, cat: "BAKERY" }, { name: "Muffin", price: 1.0, cat: "BAKERY" }, { name: "Donut", price: 1.2, cat: "BAKERY" },
-    { name: "iPhone", price: 999.0, cat: "ELECTRONICS" }, { name: "Laptop", price: 1450.0, cat: "ELECTRONICS" }, { name: "Watch", price: 150.0, cat: "ELECTRONICS" }, { name: "PlayStation", price: 499.0, cat: "ELECTRONICS" },
-    { name: "Spoon", price: 5.0, cat: "HOUSEWARE" }, { name: "Plate", price: 14.0, cat: "HOUSEWARE" }, { name: "Knife", price: 12.0, cat: "HOUSEWARE" }, { name: "Pot", price: 35.0, cat: "HOUSEWARE" },
-    { name: "Burger", price: 25.0, cat: "MEAT" }, { name: "Steak", price: 112.0, cat: "MEAT" }, { name: "Salmon", price: 18.0, cat: "MEAT" }, { name: "Chicken", price: 10.0, cat: "MEAT" },
-    { name: "Cat Food", price: 8.0, cat: "PETS" }, { name: "Dog Bone", price: 5.5, cat: "PETS" }, { name: "Collar", price: 4.0, cat: "PETS" }, { name: "Leash", price: 3.0, cat: "PETS" },
-    { name: "Shower Gel", price: 12.0, cat: "PERSONAL CARE" }, { name: "Face wash", price: 11.5, cat: "PERSONAL CARE" }, { name: "Cream", price: 8.0, cat: "PERSONAL CARE" }, { name: "Perfume", price: 55.0, cat: "PERSONAL CARE" },
-    { name: "Bleach", price: 3.0, cat: "CLEANING" }, { name: "Detergent", price: 14.5, cat: "CLEANING" }, { name: "Sponge", price: 1.0, cat: "CLEANING" }, { name: "Brush", price: 15.0, cat: "CLEANING" },
+const ITEMS_DB = [
+    { name: "Milk", price: 4.5, cat: "DAIRY", color: "#ffffff", type: "cylinder" },
+    { name: "Large Eggs", price: 5.0, cat: "DAIRY", color: "#fefae0", type: "box" },
+    { name: "Yogurt", price: 1.5, cat: "DAIRY", color: "#ffccd5", type: "cylinder" },
+    { name: "Butter", price: 3.2, cat: "DAIRY", color: "#fffeb3", type: "box" },
+
+    { name: "Potato Chips", price: 2.5, cat: "SNACKS", color: "#ffcc33", type: "box" },
+    { name: "Chocolate", price: 1.8, cat: "SNACKS", color: "#7f5539", type: "box" },
+    { name: "Cookies", price: 4.0, cat: "SNACKS", color: "#ddb892", type: "box" },
+    { name: "Fruit Gums", price: 2.0, cat: "SNACKS", color: "#ff006e", type: "box" },
+
+    { name: "Cola 1.5L", price: 1.9, cat: "DRINKS", color: "#cc0000", type: "cylinder" },
+    { name: "Still Water", price: 0.8, cat: "DRINKS", color: "#00b4d8", type: "cylinder" },
+    { name: "Orange Juice", price: 3.5, cat: "DRINKS", color: "#fb8500", type: "cylinder" },
+    { name: "Energy Drink", price: 2.5, cat: "DRINKS", color: "#aacc00", type: "cylinder" },
+
+    { name: "Sliced Bread", price: 1.5, cat: "BAKERY", color: "#ede0d4", type: "box" },
+    { name: "Donut Box", price: 6.0, cat: "BAKERY", color: "#ffafcc", type: "box" },
+    { name: "Baguette", price: 1.2, cat: "BAKERY", color: "#d4a373", type: "box" },
+    { name: "Croissant", price: 1.0, cat: "BAKERY", color: "#e6ccb2", type: "box" },
+
+    { name: "Premium Steak", price: 35.0, cat: "MEAT", color: "#9d0208", type: "box" },
+    { name: "Chicken Wing", price: 12.0, cat: "MEAT", color: "#f48c06", type: "box" },
+    { name: "Salmon Fillet", price: 28.0, cat: "MEAT", color: "#ffb4a2", type: "box" },
+
+    { name: "Smartphone", price: 799.0, cat: "ELECTRONICS", color: "#111111", type: "box" },
+    { name: "Wireless Buds", price: 150.0, cat: "ELECTRONICS", color: "#ffffff", type: "box" },
+    { name: "USB-C Cable", price: 15.0, cat: "ELECTRONICS", color: "#3a86ff", type: "cylinder" },
+
+    { name: "Dog Food", price: 45.0, cat: "PETS", color: "#8338ec", type: "box" },
+    { name: "Cat Litter", price: 18.0, cat: "PETS", color: "#fb5607", type: "box" },
+    { name: "Bird Seed", price: 12.0, cat: "PETS", color: "#ffbe0b", type: "box" },
+
+    { name: "Shampoo", price: 9.0, cat: "PERSONAL", color: "#ff006e", type: "cylinder" },
+    { name: "Toothpaste", price: 3.5, cat: "PERSONAL", color: "#3a86ff", type: "box" },
+    { name: "Hand Soap", price: 2.0, cat: "PERSONAL", color: "#fb8500", type: "cylinder" },
+
+    { name: "Bleach", price: 4.5, cat: "CLEANING", color: "#ffffff", type: "cylinder" },
+    { name: "Glass Spray", price: 6.0, cat: "CLEANING", color: "#00b4d8", type: "cylinder" },
+    { name: "Laundry Pods", price: 18.0, cat: "CLEANING", color: "#3a86ff", type: "box" },
 ];
 
 export default function SupermarketSimulatorPage() {
     const [cart, setCart] = useState<{ name: string; price: number }[]>([]);
     const [showCheckout, setShowCheckout] = useState(false);
-    const [xp, setXP] = useState(100);
+    const [xp, setXP] = useState(0);
 
-    // Generate final products inside component to avoid SSR/Build issues
-    const finalProducts = React.useMemo(() => {
-        return ITEMS.map((item, idx) => {
-            const cat = CATEGORIES.find(c => c.name === item.cat)!;
-            const layer = idx % 4; // 0, 1, 2, 3
-            const subIdx = Math.floor(idx / 4);
+    // Realistic placement calculation
+    const products = React.useMemo(() => {
+        const result: any[] = [];
+        CATEGORIES.forEach((cat) => {
+            const catItems = ITEMS_DB.filter(i => i.cat === cat.id);
+            catItems.forEach((item, idx) => {
+                const layer = idx % 4; // 4 shelves
+                const subIdx = Math.floor(idx / 4);
 
-            // Spread along the width of the shelf
-            const xOffset = (subIdx % 4) * 1 - 1.5;
-            const yPos = [1.2, 2.2, 3.2, 1.2][layer];
+                // Position relative to shelf center
+                const offsetX = (subIdx % 5) * 1.2 - 2.5;
+                const offsetY = [0.95, 1.95, 2.95, 3.95][layer];
+                const offsetZ = 0.45; // Front of shelf
 
-            // Calculate final position considering shelf rotation
-            const originalPos = new THREE.Vector3(xOffset, yPos, 0);
-            const rotation = new THREE.Euler(0, cat.rot[1], 0);
-            originalPos.applyEuler(rotation);
+                // Apply Shelf rotation
+                const posVector = new THREE.Vector3(offsetX, offsetY, offsetZ);
+                posVector.applyEuler(new THREE.Euler(0, cat.rot[1], 0));
 
-            return {
-                id: idx,
-                name: item.name,
-                price: item.price,
-                color: cat.color,
-                type: cat.type as any,
-                position: [cat.pos[0] + originalPos.x, originalPos.y, cat.pos[2] + originalPos.z] as [number, number, number]
-            };
+                result.push({
+                    id: `${cat.id}-${idx}`,
+                    name: item.name,
+                    price: item.price,
+                    color: item.color,
+                    type: item.type,
+                    position: [cat.pos[0] + posVector.x, posVector.y, cat.pos[2] + posVector.z] as [number, number, number]
+                });
+            });
         });
+        return result;
     }, []);
 
     const addToCart = (name: string, price: number) => {
         setCart((prev) => [...prev, { name, price }]);
-        setXP(p => p + 25);
+        setXP(p => p + 50);
     };
 
+    const totalPrice = cart.reduce((sum, item) => sum + item.price, 0);
+
     return (
-        <div className="h-screen w-full bg-black text-white overflow-hidden relative font-sans">
+        <div className="h-screen w-full bg-[#0a0a0c] text-white overflow-hidden relative font-sans">
 
-            {/* 3D World */}
+            {/* --- 3D ENVIRONMENT --- */}
             <div className="absolute inset-0 z-0">
-                <Canvas shadows camera={{ position: [0, 5, 25], fov: 60 }}>
-                    <SoftShadows size={15} samples={15} />
+                <Canvas shadows camera={{ position: [0, 8, 25], fov: 60 }}>
+                    <SoftShadows size={20} samples={16} />
 
-                    {/* Lighting - Deep and Atmospheric */}
-                    <Sky distance={450000} sunPosition={[0, -1, 0]} inclination={0} azimuth={0.25} turbidity={10} rayleigh={0.5} />
-                    <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1.5} />
+                    {/* Realistic Lighting System */}
+                    <Stars radius={100} depth={50} count={1000} factor={4} saturation={0} fade speed={1} />
+                    <ambientLight intensity={0.4} />
 
-                    <ambientLight intensity={0.2} />
+                    {/* Row of ceiling lights for real store effect */}
+                    {[-10, 0, 10].map((x) => (
+                        [-15, 0, 15].map((z) => (
+                            <pointLight key={`${x}-${z}`} position={[x, 10, z]} intensity={1} color="#ffffff" distance={30} castShadow shadow-mapSize={1024} />
+                        ))
+                    ))}
 
-                    {/* Main Area Flood Lights */}
-                    <pointLight position={[0, 15, 0]} intensity={4} distance={60} castShadow />
-                    <pointLight position={[-20, 10, -20]} intensity={1} color="#6366f1" />
-                    <pointLight position={[20, 10, 20]} intensity={1} color="#f43f5e" />
-
-                    {/* Floor (Infinite Grid Plate) */}
-                    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+                    {/* Floor: Polished Concrete with Grid */}
+                    <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                         <planeGeometry args={[100, 100]} />
-                        <meshStandardMaterial color="#020617" roughness={0.1} metalness={0.95} />
-                        <gridHelper args={[100, 50, 0x4f46e5, 0x0f172a]} rotation={[-Math.PI / 2, 0, 0]} />
+                        <meshStandardMaterial color="#1a1c20" roughness={0.1} metalness={0.7} />
+                        <gridHelper args={[100, 40, 0x333333, 0x151515]} rotation={[-Math.PI / 2, 0, 0]} />
                     </mesh>
 
-                    {/* Outer Boundary Walls */}
-                    <Wall position={[0, 5, -25]} args={[50, 10, 1]} />
-                    <Wall position={[0, 5, 25]} args={[50, 10, 1]} />
-                    <Wall position={[-25, 5, 0]} args={[1, 10, 50]} />
-                    <Wall position={[25, 5, 0]} args={[1, 10, 50]} />
-                    <Wall position={[0, 10, 0]} args={[50, 1, 50]} />
+                    {/* Perimeter Walls (The Building) */}
+                    <Wall position={[0, 6, -25]} args={[50, 12, 1]} /> {/* Back */}
+                    <Wall position={[0, 6, 25]} args={[50, 12, 1]} />  {/* Front */}
+                    <Wall position={[-25, 6, 0]} args={[1, 12, 50]} /> {/* Left */}
+                    <Wall position={[25, 6, 0]} args={[1, 12, 50]} />  {/* Right */}
 
-                    {/* Spatially Distributed Shelves */}
-                    {CATEGORIES.map((cat, i) => (
+                    {/* Dark Acoustic Ceiling */}
+                    <mesh position={[0, 12, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                        <planeGeometry args={[100, 100]} />
+                        <meshStandardMaterial color="#050505" />
+                    </mesh>
+
+                    {/* AISLE LAYOUT - The Streets */}
+                    {CATEGORIES.map((cat) => (
                         <Shelf
-                            key={i}
+                            key={cat.id}
                             position={cat.pos as any}
                             rotation={cat.rot as any}
                             label={cat.name}
-                            width={5}
+                            width={cat.width}
                         />
                     ))}
 
-                    {/* Distributed Products */}
+                    {/* PRODUCTS */}
                     <Suspense fallback={null}>
-                        {finalProducts.map((prod) => (
+                        {products.map((prod) => (
                             <Product3D
                                 key={prod.id}
                                 {...prod}
@@ -139,109 +185,114 @@ export default function SupermarketSimulatorPage() {
                 <Loader />
             </div>
 
-            {/* Premium UI Overlay */}
-            <div className="absolute inset-x-0 top-0 p-10 flex justify-between items-start pointer-events-none z-10 shrink-0">
+            {/* --- PREMIUM UI --- */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col p-8 z-10">
 
-                {/* Logo & Stats */}
-                <div className="flex flex-col gap-6">
-                    <div className="bg-slate-900/40 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)]">
+                {/* Header Section */}
+                <div className="flex justify-between items-start">
+                    <div className="bg-white/5 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl animate-in slide-in-from-top-4 duration-700">
                         <div className="flex items-center gap-6 mb-6">
-                            <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.5)]">
+                            <div className="w-14 h-14 bg-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-600/40">
                                 <Zap className="text-white fill-white" size={32} />
                             </div>
                             <div>
-                                <h1 className="text-4xl font-black italic tracking-tighter leading-none uppercase">
-                                    MAHALAK<span className="text-indigo-500 text-5xl">3D</span>
+                                <h1 className="text-4xl font-[1000] italic tracking-tight uppercase leading-none">
+                                    Mahalak <span className="text-indigo-500">Retail</span>
                                 </h1>
-                                <p className="text-[10px] text-slate-400 font-black tracking-[0.5em] uppercase mt-2">Next-Gen Shopping Hub</p>
+                                <p className="text-[10px] text-slate-500 font-bold tracking-[0.4em] uppercase mt-2">Simulation Engine v3.0</p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-6 pt-6 border-t border-white/5">
-                            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
-                                <Star size={18} className="text-yellow-400 fill-yellow-400 animate-pulse" />
-                                <span className="text-sm font-black tracking-tighter">{xp} POWER</span>
+                        <div className="flex items-center gap-8 pt-6 border-t border-white/5">
+                            <div className="flex items-center gap-3">
+                                <Star size={20} className="text-yellow-400 fill-yellow-400" />
+                                <span className="text-xl font-black">{xp} <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Points</span></span>
                             </div>
-                            <div className="flex items-center gap-4 text-slate-500 text-[10px] font-black tracking-widest uppercase">
-                                <span className="flex items-center gap-2"><div className="w-5 h-5 rounded-lg bg-indigo-500/10 flex items-center justify-center text-white text-[8px] border border-white/5">W</div> MOVE</span>
-                                <span className="flex items-center gap-2"><div className="w-5 h-5 rounded-lg bg-indigo-500/10 flex items-center justify-center text-white text-[8px] border border-white/5">BUY</div> CLICK</span>
+                            <div className="h-8 w-px bg-white/10" />
+                            <div className="flex gap-4">
+                                <span className="flex items-center gap-2 text-[10px] font-black tracking-widest text-indigo-400"><Move size={14} /> WASD</span>
+                                <span className="flex items-center gap-2 text-[10px] font-black tracking-widest text-indigo-400"><Navigation size={14} /> MOUSE</span>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="bg-slate-900/80 backdrop-blur-3xl p-8 rounded-[3rem] border border-white/10 shadow-2xl w-96 pointer-events-auto">
+                        <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/5">
+                            <h2 className="text-2xl font-black flex items-center gap-4 uppercase italic">
+                                <ShoppingCart size={28} className="text-indigo-500" />
+                                My Cart
+                            </h2>
+                            <div className="bg-indigo-600 text-white px-5 py-2 rounded-2xl text-sm font-black shadow-xl">
+                                ${totalPrice.toFixed(2)}
+                            </div>
+                        </div>
+
+                        <div className="max-h-[25rem] overflow-y-auto pr-2 custom-scroll space-y-3 mb-8">
+                            {cart.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 opacity-20">
+                                    <PackageOpen size={80} className="mb-4" />
+                                    <p className="text-[10px] font-black uppercase tracking-[0.5em]">Basket Is Empty</p>
+                                </div>
+                            ) : (
+                                cart.map((item, i) => (
+                                    <div key={i} className="flex justify-between items-center bg-white/5 p-5 rounded-2xl border border-white/5 hover:border-indigo-500/30 transition-all group animate-in slide-in-from-right-4">
+                                        <span className="text-sm font-black uppercase tracking-tight group-hover:text-indigo-400">{item.name}</span>
+                                        <span className="text-slate-500 font-mono text-[10px] font-black underline underline-offset-4 decoration-indigo-500/50">${item.price.toFixed(2)}</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => setShowCheckout(true)}
+                            className="w-full bg-white text-black hover:bg-indigo-50 active:scale-95 transition-all py-6 rounded-2xl font-black text-xs uppercase tracking-[0.4em] shadow-2xl shadow-indigo-600/10 disabled:grayscale disabled:opacity-30"
+                            disabled={cart.length === 0}
+                        >
+                            Finalize Order
+                        </button>
                     </div>
                 </div>
 
-                {/* Cart Control Center */}
-                <div className="bg-slate-900/60 backdrop-blur-3xl p-8 rounded-[3rem] border border-white/10 shadow-2xl w-96 pointer-events-auto">
-                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/5">
-                        <h2 className="text-2xl font-black italic flex items-center gap-4 uppercase tracking-tighter">
-                            <ShoppingCart size={28} className="text-indigo-400" />
-                            Market Basket
-                        </h2>
-                        <div className="bg-white text-black px-5 py-2 rounded-2xl text-sm font-black shadow-xl">
-                            ${cart.reduce((s, i) => s + i.price, 0).toFixed(2)}
-                        </div>
+                {/* Bottom Guide */}
+                <div className="mt-auto flex justify-center">
+                    <div className="bg-black/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 text-[10px] font-black tracking-widest uppercase text-slate-400">
+                        Click on 3D elements to interact • ESC to free mouse
                     </div>
-
-                    <div className="max-h-[30rem] overflow-y-auto pr-4 mb-8 custom-scroll space-y-4">
-                        {cart.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 opacity-10">
-                                <PackageOpen size={96} className="mb-6" />
-                                <p className="text-xs font-black uppercase tracking-[0.6em]">Scanning For Items</p>
-                            </div>
-                        ) : (
-                            cart.map((item, i) => (
-                                <div key={i} className="flex justify-between items-center bg-white/5 p-5 rounded-3xl border border-white/5 hover:border-indigo-500/30 transition-all group animate-in slide-in-from-right-8">
-                                    <span className="text-sm font-black uppercase tracking-tight group-hover:text-indigo-400">{item.name}</span>
-                                    <span className="text-slate-400 font-mono text-[10px] font-black tracking-wide">${item.price.toFixed(2)}</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    <button
-                        onClick={() => setShowCheckout(true)}
-                        className="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all py-6 rounded-3xl font-black text-xs uppercase tracking-[0.4em] shadow-2xl shadow-indigo-600/40 disabled:opacity-20 flex items-center justify-center gap-4 group"
-                        disabled={cart.length === 0}
-                    >
-                        INITIATE DELIVERY <Zap size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                    </button>
                 </div>
             </div>
 
-            {/* Checkout & Summary Overlay */}
+            {/* --- CHECKOUT OVERLAY --- */}
             {showCheckout && (
-                <div className="absolute inset-0 bg-black/95 backdrop-blur-3xl z-50 flex items-center justify-center pointer-events-auto p-10">
-                    <div className="bg-slate-900/30 border border-white/10 p-16 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl animate-in zoom-in-95 duration-500 relative">
-                        <div className="w-32 h-32 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-[0_0_60px_rgba(79,70,229,0.4)] rotate-6">
-                            <CheckCircle className="text-white w-16 h-16" />
+                <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center pointer-events-auto p-12">
+                    <div className="bg-zinc-900 border border-white/10 p-20 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl animate-in zoom-in-95">
+                        <div className="w-28 h-28 bg-green-500 rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-green-500/30 rotate-12">
+                            <CheckCircle className="text-white w-14 h-14" />
                         </div>
-                        <h2 className="text-6xl font-black mb-6 tracking-tight italic uppercase">Orders Locked!</h2>
-                        <p className="text-slate-400 mb-14 text-2xl font-medium leading-relaxed max-w-md mx-auto">
-                            Logistic protocols updated. Your {cart.length} premiums are now assigned to your profile coordinates.
+                        <h2 className="text-6xl font-[1000] mb-6 tracking-tighter italic uppercase">Payment Confirmed</h2>
+                        <p className="text-slate-400 mb-14 text-2xl font-medium leading-relaxed max-w-sm mx-auto">
+                            Logistic protocols activated. Your {cart.length} items are preparing for dispatch.
                         </p>
                         <button
                             onClick={() => {
                                 setCart([]);
                                 setShowCheckout(false);
                             }}
-                            className="bg-white text-black hover:bg-indigo-50 px-20 py-8 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.5em] transition-all shadow-2xl active:scale-95"
+                            className="bg-indigo-600 text-white hover:bg-indigo-500 px-20 py-8 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.5em] transition-all shadow-2xl active:scale-95"
                         >
-                            Resume Ops
+                            Back To Market
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Tactical Targeting UI */}
+            {/* --- CROSSHAIR --- */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0">
-                <div className="w-0.5 h-0.5 bg-indigo-500 rounded-full shadow-[0_0_20px_rgba(99,102,241,1)]" />
-                <div className="absolute inset-0 w-12 h-12 -translate-x-1/2 -translate-y-1/2 border border-white/5 rounded-full scale-150" />
+                <div className="w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_15px_white]" />
             </div>
 
             <style jsx global>{`
-                .custom-scroll::-webkit-scrollbar { width: 4px; }
-                .custom-scroll::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 4px; }
-                .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+                .custom-scroll::-webkit-scrollbar { width: 3px; }
+                .custom-scroll::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 10px; }
             `}</style>
         </div>
     );
