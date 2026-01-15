@@ -74,7 +74,6 @@ export function Shelf({ position, rotation = [0, 0, 0], width = 3, label = "" }:
                         position={[0, 0, 0.06]}
                         fontSize={0.2}
                         color="white"
-                        font="/fonts/Inter-Bold.woff" // Assuming font exists or using default
                         anchorX="center"
                         anchorY="middle"
                     >
