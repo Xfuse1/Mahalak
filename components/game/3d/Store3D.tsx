@@ -1,73 +1,78 @@
 "use client";
 
-import React, { useRef, useState, useMemo } from 'react';
-import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
+import React, { useRef, useState, useMemo, Suspense } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
     PointerLockControls,
     Sky,
     ContactShadows,
-    Environment,
     PerspectiveCamera,
     Html,
-    useTexture
+    useTexture,
+    Environment
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { ShoppingCart, Zap, Box, Package } from 'lucide-react';
+import { ShoppingCart, Zap, Package, Move, MousePointer2 } from 'lucide-react';
 
 // --- Constants ---
 const SHELF_WIDTH = 12;
 const SHELF_HEIGHT = 4.2;
 const SHELF_DEPTH = 1.0;
-const AISLE_GAP = 6.5; // Space between aisles
-const PRODUCT_COLS = 20;
+const AISLE_GAP = 7.0;
 const LEVELS = 5;
 
 // --- Real Product Data ---
 const PRODUCTS = [
-    { name: 'Nestle Cereal', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=200&h=300&fit=crop', price: 25 },
-    { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&h=300&fit=crop', price: 15 },
-    { name: 'Tuna Can', img: 'https://images.unsplash.com/photo-1625937329935-d7c003cdb87e?w=200&h=300&fit=crop', price: 30 },
-    { name: 'Fruit Juice', img: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=200&h=300&fit=crop', price: 12 },
-    { name: 'Pasta Pack', img: 'https://images.unsplash.com/photo-1551462147-fffb9036ef74?w=200&h=300&fit=crop', price: 10 },
-    { name: 'Coffee Jar', img: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=200&h=300&fit=crop', price: 45 },
-    { name: 'Dish Soap', img: 'https://images.unsplash.com/photo-1631889993959-41b4e9c6e3c5?w=200&h=300&fit=crop', price: 20 },
-    { name: 'Olive Oil', img: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=200&h=300&fit=crop', price: 60 },
-    { name: 'Tomato Sauce', img: 'https://images.unsplash.com/photo-1587411768941-4057f2c5e4d8?w=200&h=300&fit=crop', price: 18 },
-    { name: 'Chocolate', img: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=200&h=300&fit=crop', price: 35 }
+    { name: 'Nestle Cereal', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=128&h=192&fit=crop', price: 25 },
+    { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=128&h=192&fit=crop', price: 15 },
+    { name: 'Tuna Can', img: 'https://images.unsplash.com/photo-1625937329935-d7c003cdb87e?w=128&h=192&fit=crop', price: 30 },
+    { name: 'Fruit Juice', img: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=128&h=192&fit=crop', price: 12 },
+    { name: 'Pasta Pack', img: 'https://images.unsplash.com/photo-1551462147-fffb9036ef74?w=128&h=192&fit=crop', price: 10 },
+    { name: 'Coffee Jar', img: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=128&h=192&fit=crop', price: 45 },
+    { name: 'Dish Soap', img: 'https://images.unsplash.com/photo-1631889993959-41b4e9c6e3c5?w=128&h=192&fit=crop', price: 20 },
+    { name: 'Olive Oil', img: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=128&h=192&fit=crop', price: 60 },
+    { name: 'Tomato Sauce', img: 'https://images.unsplash.com/photo-1587411768941-4057f2c5e4d8?w=128&h=192&fit=crop', price: 18 },
+    { name: 'Chocolate', img: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=128&h=192&fit=crop', price: 35 }
 ];
 
 // --- Sub-components ---
 
-function CeilingLight({ position }: any) {
+function CeilingLight({ position, main = false }: any) {
     return (
         <group position={position}>
             <mesh position={[0, -0.05, 0]}>
-                <boxGeometry args={[5, 0.1, 1.5]} />
-                <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={6} />
+                <boxGeometry args={[4.5, 0.08, 1.2]} />
+                <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={8} />
             </mesh>
-            <pointLight position={[0, -0.5, 0]} intensity={12} distance={20} color="#ffffff" castShadow />
+            <pointLight
+                position={[0, -0.4, 0]}
+                intensity={main ? 15 : 8}
+                distance={25}
+                color="#ffffff"
+                castShadow={main}
+                shadow-mapSize={[512, 512]}
+            />
         </group>
     );
 }
 
-function Product({ position, data, onPick }: any) {
+function Product({ position, data, texture, onPick }: any) {
     const [hovered, setHovered] = useState(false);
-    const texture = useTexture(data.img);
 
     return (
         <group
             position={position}
-            onPointerOver={() => setHovered(true)}
+            onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
             onPointerOut={() => setHovered(false)}
             onClick={() => onPick(data)}
         >
             <mesh castShadow receiveShadow>
-                <boxGeometry args={[0.38, 0.6, 0.35]} />
-                <meshStandardMaterial map={texture as THREE.Texture} roughness={0.4} metalness={0.15} />
+                <boxGeometry args={[0.35, 0.55, 0.3]} />
+                <meshStandardMaterial map={texture} roughness={0.3} metalness={0.1} />
             </mesh>
             {hovered && (
-                <Html distanceFactor={3} position={[0, 0.5, 0]}>
-                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold animate-in zoom-in-50">
+                <Html distanceFactor={4} position={[0, 0.5, 0]} center zIndexRange={[100, 0]}>
+                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold animate-in zoom-in-50 pointer-events-none">
                         <div className="text-blue-600 mb-1">{data.name}</div>
                         <div className="text-emerald-600 text-lg font-black">${data.price}</div>
                     </div>
@@ -77,15 +82,16 @@ function Product({ position, data, onPick }: any) {
     );
 }
 
-function Shelf({ position, rotation = [0, 0, 0] }: any) {
+function Shelf({ position, rotation = [0, 0, 0], textures }: any) {
+    const levels = LEVELS;
     const productsOnShelf = useMemo(() => {
         const items = [];
-        for (let level = 0; level < LEVELS; level++) {
-            for (let x = -SHELF_WIDTH / 2 + 0.6; x <= SHELF_WIDTH / 2 - 0.6; x += 0.55) {
-                const p = PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)];
+        for (let level = 0; level < levels; level++) {
+            for (let x = -SHELF_WIDTH / 2 + 0.65; x <= SHELF_WIDTH / 2 - 0.65; x += 0.55) {
+                const productIdx = Math.floor(Math.random() * PRODUCTS.length);
                 items.push({
-                    pos: [x, level * 0.8 - 1.6, 0.32],
-                    data: p
+                    pos: [x, level * 0.8 - 1.6, 0.3],
+                    dataIdx: productIdx
                 });
             }
         }
@@ -97,41 +103,40 @@ function Shelf({ position, rotation = [0, 0, 0] }: any) {
             {/* Back Plate */}
             <mesh receiveShadow castShadow position={[0, 0, -SHELF_DEPTH / 2]}>
                 <boxGeometry args={[SHELF_WIDTH, SHELF_HEIGHT, 0.1]} />
-                <meshStandardMaterial color="#e2e8f0" roughness={0.8} />
+                <meshStandardMaterial color="#cbd5e1" />
             </mesh>
 
-            {/* Structural Frame */}
+            {/* Structural Pillars */}
             {[-SHELF_WIDTH / 2, SHELF_WIDTH / 2].map(x => (
                 <mesh key={x} position={[x, 0, 0]} castShadow>
-                    <boxGeometry args={[0.2, SHELF_HEIGHT + 0.2, SHELF_DEPTH + 0.05]} />
-                    <meshStandardMaterial color="#64748b" />
+                    <boxGeometry args={[0.22, SHELF_HEIGHT + 0.1, SHELF_DEPTH + 0.05]} />
+                    <meshStandardMaterial color="#475569" />
                 </mesh>
             ))}
 
             {/* Shelving Levels */}
-            {Array.from({ length: LEVELS }).map((_, i) => (
+            {Array.from({ length: levels }).map((_, i) => (
                 <group key={i} position={[0, i * 0.8 - 1.95, 0]}>
                     <mesh receiveShadow castShadow>
-                        <boxGeometry args={[SHELF_WIDTH, 0.06, SHELF_DEPTH]} />
-                        <meshStandardMaterial color="#ffffff" />
+                        <boxGeometry args={[SHELF_WIDTH, 0.05, SHELF_DEPTH]} />
+                        <meshStandardMaterial color="#f8fafc" />
                     </mesh>
-                    {/* Price Tag rail */}
-                    <mesh position={[0, -0.03, SHELF_DEPTH / 2 + 0.02]}>
-                        <boxGeometry args={[SHELF_WIDTH, 0.1, 0.02]} />
-                        <meshStandardMaterial color="#3b82f6" />
+                    <mesh position={[0, -0.04, SHELF_DEPTH / 2 + 0.01]}>
+                        <boxGeometry args={[SHELF_WIDTH, 0.08, 0.02]} />
+                        <meshStandardMaterial color="#2563eb" />
                     </mesh>
                 </group>
             ))}
 
             {/* Products */}
             {productsOnShelf.map((item, i) => (
-                <React.Suspense key={i} fallback={null}>
-                    <Product
-                        position={item.pos}
-                        data={item.data}
-                        onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
-                    />
-                </React.Suspense>
+                <Product
+                    key={i}
+                    position={item.pos}
+                    data={PRODUCTS[item.dataIdx]}
+                    texture={textures[item.dataIdx]}
+                    onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
+                />
             ))}
         </group>
     );
@@ -142,24 +147,24 @@ function PlayerCart() {
 
     useFrame((state) => {
         if (group.current) {
-            group.current.position.set(0.7, -0.7, -1.35);
-            group.current.rotation.set(0, -Math.PI / 5, 0);
+            group.current.position.set(0.65, -0.65, -1.3);
+            group.current.rotation.set(0, -Math.PI / 6, 0);
         }
     });
 
     return (
         <group ref={group}>
             <mesh castShadow receiveShadow>
-                <boxGeometry args={[1, 0.6, 1.2]} />
-                <meshStandardMaterial color="#ef4444" roughness={0.2} wireframe={false} />
+                <boxGeometry args={[0.8, 0.5, 1.1]} />
+                <meshStandardMaterial color="#dc2626" roughness={0.2} />
             </mesh>
             <mesh position={[0, 0.05, 0]}>
-                <boxGeometry args={[0.95, 0.55, 1.15]} />
+                <boxGeometry args={[0.75, 0.45, 1.05]} />
                 <meshStandardMaterial color="#991b1b" />
             </mesh>
-            <mesh position={[0, -0.35, 0]}>
-                <boxGeometry args={[0.9, 0.1, 1.1]} />
-                <meshStandardMaterial color="#1f2937" />
+            <mesh position={[0, 0.3, -0.5]} rotation={[0.5, 0, 0]}>
+                <boxGeometry args={[0.7, 0.04, 0.04]} />
+                <meshStandardMaterial color="#1e293b" />
             </mesh>
         </group>
     );
@@ -172,7 +177,7 @@ function Player() {
     const moveState = useRef({ forward: false, backward: false, left: false, right: false });
 
     useFrame((state, delta) => {
-        const speed = 10;
+        const speed = 7;
         direction.current.set(
             Number(moveState.current.right) - Number(moveState.current.left),
             0,
@@ -185,9 +190,8 @@ function Player() {
         camera.translateX(-velocity.current.x);
         camera.translateZ(-velocity.current.z);
 
-        // Limits & Height
         camera.position.y = 1.68;
-        camera.position.x = Math.max(-25, Math.min(25, camera.position.x));
+        camera.position.x = Math.max(-20, Math.min(20, camera.position.x));
         camera.position.z = Math.max(-25, Math.min(25, camera.position.z));
 
         velocity.current.multiplyScalar(0.85);
@@ -196,18 +200,18 @@ function Player() {
     React.useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             switch (e.code) {
-                case 'KeyW': moveState.current.forward = true; break;
-                case 'KeyS': moveState.current.backward = true; break;
-                case 'KeyA': moveState.current.left = true; break;
-                case 'KeyD': moveState.current.right = true; break;
+                case 'KeyW': case 'ArrowUp': moveState.current.forward = true; break;
+                case 'KeyS': case 'ArrowDown': moveState.current.backward = true; break;
+                case 'KeyA': case 'ArrowLeft': moveState.current.left = true; break;
+                case 'KeyD': case 'ArrowRight': moveState.current.right = true; break;
             }
         };
         const onKeyUp = (e: KeyboardEvent) => {
             switch (e.code) {
-                case 'KeyW': moveState.current.forward = false; break;
-                case 'KeyS': moveState.current.backward = false; break;
-                case 'KeyA': moveState.current.left = false; break;
-                case 'KeyD': moveState.current.right = false; break;
+                case 'KeyW': case 'ArrowUp': moveState.current.forward = false; break;
+                case 'KeyS': case 'ArrowDown': moveState.current.backward = false; break;
+                case 'KeyA': case 'ArrowLeft': moveState.current.left = false; break;
+                case 'KeyD': case 'ArrowRight': moveState.current.right = false; break;
             }
         };
         window.addEventListener('keydown', onKeyDown);
@@ -221,11 +225,12 @@ function Player() {
     return <PlayerCart />;
 }
 
-// --- Main Engine ---
-
-export default function Store3D() {
+function SceneContent() {
     const [cartCount, setCartCount] = useState(0);
-    const [money, setMoney] = useState(2500);
+    const [money, setMoney] = useState(1500);
+
+    // Load all textures once at the top level
+    const productTextures = useTexture(PRODUCTS.map(p => p.img)) as THREE.Texture[];
 
     React.useEffect(() => {
         const handler = (e: any) => {
@@ -238,116 +243,120 @@ export default function Store3D() {
     }, []);
 
     return (
-        <div className="w-full h-screen bg-slate-50 relative font-sans overflow-hidden">
-            {/* Immersive HUD */}
-            <div className="absolute top-8 left-8 z-20 pointer-events-none">
-                <div className="bg-white/95 backdrop-blur-3xl p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex flex-col gap-6">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-blue-200">
-                            <ShoppingCart size={28} className="text-white fill-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
-                                Mahalak <span className="text-blue-600">Sim High-Fi</span>
-                            </h1>
-                            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-2">Next-Gen Shopping Experience</p>
-                        </div>
-                    </div>
+        <group>
+            <Sky sunPosition={[100, 45, 100]} />
+            <ambientLight intensity={0.4} />
 
-                    <div className="flex gap-12 px-2">
-                        <div>
-                            <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Balance</div>
-                            <div className="text-4xl font-black text-emerald-500 font-mono">${money}</div>
-                        </div>
-                        <div className="w-[1px] bg-slate-100" />
-                        <div>
-                            <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Items</div>
-                            <div className="text-4xl font-black text-blue-600 font-mono">{cartCount}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {/* Distributed Lights */}
+            {[-AISLE_GAP, 0, AISLE_GAP].map((x, i) => (
+                <React.Fragment key={x}>
+                    <CeilingLight position={[x, 5.5, 8]} main={i === 1} />
+                    <CeilingLight position={[x, 5.5, 0]} main={i === 1} />
+                    <CeilingLight position={[x, 5.5, -8]} main={i === 1} />
+                </React.Fragment>
+            ))}
 
-            <div className="absolute bottom-8 right-8 z-20 pointer-events-none">
-                <div className="bg-blue-600 p-8 rounded-[2.5rem] shadow-2xl shadow-blue-500/20 text-white">
-                    <div className="text-[10px] font-black tracking-[0.3em] uppercase opacity-60 mb-4">Nav Guide</div>
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-3 text-sm font-bold">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">W</div> Walk Forward
-                        </div>
-                        <div className="flex items-center gap-3 text-sm font-bold">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">M</div> Mouse Look
-                        </div>
-                        <div className="flex items-center gap-3 text-sm font-bold text-emerald-300">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">C</div> Click Pick
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {/* Floor */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+                <planeGeometry args={[100, 100]} />
+                <TileMaterial />
+            </mesh>
 
-            {/* Target Cursor */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-ping opacity-75" />
-                <div className="absolute top-0 left-0 w-2 h-2 bg-blue-600 rounded-full" />
-            </div>
-
-            <Canvas shadows dpr={[1, 2]}>
-                <PerspectiveCamera makeDefault fov={70} position={[0, 1.68, 12]} />
-                <PointerLockControls />
-
-                <Environment preset="city" />
-                <Sky sunPosition={[100, 40, 100]} />
-                <ambientLight intensity={0.4} />
-
-                {/* Lights along aisles */}
-                {[-AISLE_GAP, 0, AISLE_GAP].map(x => (
-                    <React.Fragment key={x}>
-                        <CeilingLight position={[x, 5.5, 8]} />
-                        <CeilingLight position={[x, 5.5, 0]} />
-                        <CeilingLight position={[x, 5.5, -8]} />
-                    </React.Fragment>
-                ))}
-
-                {/* Tiled Floor */}
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
-                    <planeGeometry args={[100, 100]} />
-                    <TileMaterial />
-                </mesh>
-
-                {/* --- Dynamic Aisle Layout --- */}
-
-                {/* Central Aisle */}
+            {/* Aisles Layout */}
+            <group>
+                {/* Center Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
                     <React.Fragment key={z}>
-                        <Shelf position={[-3.25, 2.15, z]} />
-                        <Shelf position={[3.25, 2.15, z]} rotation={[0, Math.PI, 0]} />
+                        <Shelf position={[-3.2, 2.1, z]} textures={productTextures} />
+                        <Shelf position={[3.2, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
                     </React.Fragment>
                 ))}
-
                 {/* Left Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
                     <React.Fragment key={z}>
-                        <Shelf position={[-3.25 - AISLE_GAP, 2.15, z]} />
-                        <Shelf position={[3.25 - AISLE_GAP, 2.15, z]} rotation={[0, Math.PI, 0]} />
+                        <Shelf position={[-3.2 - AISLE_GAP, 2.1, z]} textures={productTextures} />
+                        <Shelf position={[3.2 - AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
                     </React.Fragment>
                 ))}
-
                 {/* Right Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
                     <React.Fragment key={z}>
-                        <Shelf position={[-3.25 + AISLE_GAP, 2.15, z]} />
-                        <Shelf position={[3.25 + AISLE_GAP, 2.15, z]} rotation={[0, Math.PI, 0]} />
+                        <Shelf position={[-3.2 + AISLE_GAP, 2.1, z]} textures={productTextures} />
+                        <Shelf position={[3.2 + AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
                     </React.Fragment>
                 ))}
+            </group>
 
-                {/* Outer boundaries / End caps */}
-                <Shelf position={[0, 2.15, -15]} rotation={[0, Math.PI / 2, 0]} />
-                <Shelf position={[AISLE_GAP, 2.15, -15]} rotation={[0, Math.PI / 2, 0]} />
-                <Shelf position={[-AISLE_GAP, 2.15, -15]} rotation={[0, Math.PI / 2, 0]} />
+            {/* End Caps */}
+            <Shelf position={[0, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
+            <Shelf position={[AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
+            <Shelf position={[-AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
 
-                <Player />
+            {/* Boundaries */}
+            <mesh position={[0, 2.5, -20]}>
+                <boxGeometry args={[60, 5, 0.5]} />
+                <meshStandardMaterial color="#f1f5f9" />
+            </mesh>
 
-                <ContactShadows position={[0, 0, 0]} opacity={0.3} scale={60} blur={2.5} far={10} />
+            <Player />
+            <ContactShadows position={[0, 0, 0]} opacity={0.3} scale={50} blur={2.5} far={10} />
+
+            {/* HUD in 3D Space (optional but we use HTML overlay usually) */}
+            <Html fullscreen className="pointer-events-none">
+                <div className="w-full h-full p-8 flex flex-col justify-between">
+                    <div>
+                        <div className="bg-white/95 backdrop-blur-3xl p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.1)] inline-flex flex-col gap-6 pointer-events-auto">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-blue-200">
+                                    <ShoppingCart size={28} className="text-white fill-white" />
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none text-left">
+                                        Mahalak <span className="text-blue-600">3D Immersive</span>
+                                    </h1>
+                                    <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-2">Premium Shopping Sim</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-12 px-2">
+                                <div className="text-left">
+                                    <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Balance</div>
+                                    <div className="text-4xl font-black text-emerald-500 font-mono">${money}</div>
+                                </div>
+                                <div className="w-[1px] bg-slate-100" />
+                                <div className="text-left">
+                                    <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Items</div>
+                                    <div className="text-4xl font-black text-blue-600 font-mono">{cartCount}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-end">
+                        <div className="bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-slate-200 text-[10px] font-black tracking-widest text-slate-500 uppercase flex gap-4 pointer-events-auto">
+                            <span className="flex items-center gap-2"><Move size={14} /> WASD الحركه</span>
+                            <span className="flex items-center gap-2"><MousePointer2 size={14} /> Click الشراء</span>
+                        </div>
+                    </div>
+                </div>
+            </Html>
+        </group>
+    );
+}
+
+export default function Store3D() {
+    return (
+        <div className="w-full h-screen bg-white relative font-sans overflow-hidden">
+            {/* Target Aim */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full ring-4 ring-blue-100 shadow-xl" />
+            </div>
+
+            <Canvas shadows dpr={[1, 1.5]}>
+                <PerspectiveCamera makeDefault fov={70} position={[0, 1.68, 12]} />
+                <PointerLockControls />
+                <Suspense fallback={null}>
+                    <SceneContent />
+                </Suspense>
             </Canvas>
         </div>
     );
@@ -355,6 +364,7 @@ export default function Store3D() {
 
 function TileMaterial() {
     const texture = useMemo(() => {
+        if (typeof document === 'undefined') return null;
         const canvas = document.createElement('canvas');
         canvas.width = 512;
         canvas.height = 512;
@@ -376,5 +386,5 @@ function TileMaterial() {
         return tex;
     }, []);
 
-    return <meshStandardMaterial map={texture} roughness={0.15} metalness={0.05} />;
+    return <meshStandardMaterial map={texture as THREE.Texture} roughness={0.15} metalness={0.05} />;
 }
