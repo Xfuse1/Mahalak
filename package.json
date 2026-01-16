@@ -1,5 +1,6 @@
 {
   "name": "my-v0-project",
+  "description": "Mahalak Premium E-commerce Platform with 2D Simulator",
   "version": "0.1.0",
   "private": true,
   "scripts": {
