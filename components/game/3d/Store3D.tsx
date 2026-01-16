@@ -14,6 +14,7 @@ import {
     Cylinder
 } from '@react-three/drei';
 import * as THREE from 'three';
+import { ShoppingCart, LogOut, Package, Zap } from 'lucide-react';
 
 // --- Constants ---
 const TILE_SIZE = 4;
@@ -40,16 +41,9 @@ function CeilingLight({ position }: any) {
             {/* Light Frame */}
             <mesh position={[0, -0.05, 0]}>
                 <boxGeometry args={[4, 0.1, 1.2]} />
-                <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
+                <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={5} />
             </mesh>
-            <rectAreaLight
-                width={4}
-                height={1.2}
-                intensity={5}
-                color="#ffffff"
-                position={[0, -0.1, 0]}
-                rotation={[-Math.PI / 2, 0, 0]}
-            />
+            <pointLight position={[0, -0.5, 0]} intensity={10} distance={15} color="#ffffff" castShadow shadow-mapSize={[512, 512]} />
         </group>
     );
 }
@@ -139,7 +133,7 @@ function Shelf({ position, rotation = [0, 0, 0] }: any) {
     );
 }
 
-function ShoppingCart() {
+function PlayerCart() {
     const group = useRef<THREE.Group>(null);
 
     // Follow camera slightly with some lag or just fixed in view
@@ -233,7 +227,7 @@ function Player() {
 
     return (
         <group>
-            <ShoppingCart />
+            <PlayerCart />
         </group>
     );
 }
@@ -313,7 +307,7 @@ export default function Store3D() {
                 {/* Floor - Clean White Tiles */}
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
                     <planeGeometry args={[100, 100]} />
-                    <meshStandardMaterial map={floorTexture} roughness={0.1} />
+                    <meshStandardMaterial map={floorTexture || undefined} roughness={0.1} />
                 </mesh>
 
                 {/* Shelves Layout - The "Aisle" Feel from the photo */}
