@@ -9,27 +9,50 @@ import {
     Environment,
     PerspectiveCamera,
     Text,
-    Html
+    Html,
+    Box,
+    Cylinder
 } from '@react-three/drei';
 import * as THREE from 'three';
 
 // --- Constants ---
 const TILE_SIZE = 4;
-const SHELF_WIDTH = 8;
-const SHELF_HEIGHT = 2.5;
-const SHELF_DEPTH = 0.8;
+const SHELF_WIDTH = 12;
+const SHELF_HEIGHT = 4;
+const SHELF_DEPTH = 1.2;
+const AISLE_WIDTH = 5;
 
-// --- Product Data ---
+// --- Product Data with Brand Colors ---
 const PRODUCTS = [
-    { name: 'Cereal Box', color: '#e74c3c', price: 15 },
-    { name: 'Milk Carton', color: '#f8fafc', price: 12 },
-    { name: 'Canned Tuna', color: '#94a3b8', price: 20 },
-    { name: 'Pasta Box', color: '#f59e0b', price: 8 },
-    { name: 'Juice Bottle', color: '#fbbf24', price: 10 },
-    { name: 'Soap Liquid', color: '#38bdf8', price: 18 },
+    { name: 'Cereal Box', color: '#ffcc00', price: 15 }, // Yellow Cereal
+    { name: 'Red Cereal', color: '#cc0000', price: 18 }, // Red Cereal
+    { name: 'Blue Pack', color: '#0066cc', price: 12 },  // Blue Pack
+    { name: 'Green Goods', color: '#009900', price: 20 }, // Green Goods
+    { name: 'Canned Food', color: '#7f8c8d', price: 5 },  // Grey Can
+    { name: 'Juice', color: '#f39c12', price: 10 },       // Orange Juice
 ];
 
 // --- Sub-components ---
+
+function CeilingLight({ position }: any) {
+    return (
+        <group position={position}>
+            {/* Light Frame */}
+            <mesh position={[0, -0.05, 0]}>
+                <boxGeometry args={[4, 0.1, 1.2]} />
+                <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
+            </mesh>
+            <rectAreaLight
+                width={4}
+                height={1.2}
+                intensity={5}
+                color="#ffffff"
+                position={[0, -0.1, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+            />
+        </group>
+    );
+}
 
 function Product({ position, data, onPick }: any) {
     const [hovered, setHovered] = useState(false);
@@ -41,15 +64,20 @@ function Product({ position, data, onPick }: any) {
             onPointerOut={() => setHovered(false)}
             onClick={() => onPick(data)}
         >
-            <mesh castShadow>
-                <boxGeometry args={[0.3, 0.4, 0.25]} />
-                <meshStandardMaterial color={data.color} />
+            <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.35, 0.5, 0.3]} />
+                <meshStandardMaterial color={data.color} roughness={0.3} metalness={0.1} />
+            </mesh>
+            {/* Mock label text on front */}
+            <mesh position={[0, 0, 0.155]}>
+                <planeGeometry args={[0.25, 0.4]} />
+                <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
             </mesh>
             {hovered && (
-                <Html distanceFactor={2} position={[0, 0.5, 0]}>
-                    <div className="bg-black/80 text-white p-2 rounded text-[10px] whitespace-nowrap border border-white/20">
-                        <div className="font-bold">{data.name}</div>
-                        <div className="text-emerald-400">${data.price}</div>
+                <Html distanceFactor={3} position={[0, 0.6, 0]}>
+                    <div className="bg-white text-black p-2 rounded shadow-xl text-[10px] whitespace-nowrap border-2 border-blue-500 font-bold">
+                        <div className="text-blue-600">{data.name}</div>
+                        <div className="text-emerald-600">${data.price}</div>
                     </div>
                 </Html>
             )}
@@ -58,13 +86,15 @@ function Product({ position, data, onPick }: any) {
 }
 
 function Shelf({ position, rotation = [0, 0, 0] }: any) {
+    // More detailed shelf structure
+    const levels = 5;
     const productsOnShelf = useMemo(() => {
         const items = [];
-        for (let level = 0; level < 4; level++) {
-            for (let x = -3.5; x <= 3.5; x += 0.6) {
+        for (let level = 0; level < levels; level++) {
+            for (let x = -SHELF_WIDTH / 2 + 0.6; x <= SHELF_WIDTH / 2 - 0.6; x += 0.5) {
                 const p = PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)];
                 items.push({
-                    pos: [x, level * 0.6 - 0.9, 0],
+                    pos: [x, level * 0.75 - 1.5, 0.3],
                     data: p
                 });
             }
@@ -74,24 +104,33 @@ function Shelf({ position, rotation = [0, 0, 0] }: any) {
 
     return (
         <group position={position} rotation={rotation}>
-            {/* Frame */}
-            <mesh receiveShadow castShadow>
-                <boxGeometry args={[SHELF_WIDTH, SHELF_HEIGHT, SHELF_DEPTH]} />
-                <meshStandardMaterial color="#334155" />
+            {/* Back board */}
+            <mesh receiveShadow castShadow position={[0, 0, -SHELF_DEPTH / 2]}>
+                <boxGeometry args={[SHELF_WIDTH, SHELF_HEIGHT, 0.1]} />
+                <meshStandardMaterial color="#e2e8f0" />
             </mesh>
-            {/* Shelf Levels (Visual) */}
-            {[0.3, -0.3, -0.9].map((y, i) => (
-                <mesh key={i} position={[0, y, 0.4]} receiveShadow>
-                    <boxGeometry args={[SHELF_WIDTH - 0.1, 0.05, 0.1]} />
-                    <meshStandardMaterial color="#1e293b" />
+
+            {/* Support Pillars */}
+            {[-SHELF_WIDTH / 2, SHELF_WIDTH / 2].map(x => (
+                <mesh key={x} position={[x, 0, 0]} castShadow>
+                    <boxGeometry args={[0.2, SHELF_HEIGHT, SHELF_DEPTH]} />
+                    <meshStandardMaterial color="#94a3b8" />
                 </mesh>
             ))}
 
-            {/* Products on front side */}
+            {/* Shelving planks */}
+            {Array.from({ length: levels }).map((_, i) => (
+                <mesh key={i} position={[0, i * 0.75 - 1.8, 0]} receiveShadow castShadow>
+                    <boxGeometry args={[SHELF_WIDTH, 0.05, SHELF_DEPTH]} />
+                    <meshStandardMaterial color="#f8fafc" />
+                </mesh>
+            ))}
+
+            {/* Products */}
             {productsOnShelf.map((item, i) => (
                 <Product
                     key={i}
-                    position={[item.pos[0], item.pos[1], 0.3]}
+                    position={item.pos}
                     data={item.data}
                     onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
                 />
@@ -101,22 +140,38 @@ function Shelf({ position, rotation = [0, 0, 0] }: any) {
 }
 
 function ShoppingCart() {
-    // Simple representation of a red cart in foreground
+    const group = useRef<THREE.Group>(null);
+
+    // Follow camera slightly with some lag or just fixed in view
+    useFrame((state) => {
+        if (group.current) {
+            // Position it nicely in the lower right of the view
+            group.current.position.set(0.6, -0.6, -1.2);
+            group.current.rotation.set(0, -Math.PI / 6, 0);
+        }
+    });
+
     return (
-        <group position={[0.4, -0.5, -1]} rotation={[0, -Math.PI / 8, 0]}>
-            {/* Basket Frame */}
-            <mesh castShadow>
-                <boxGeometry args={[0.6, 0.4, 0.8]} />
-                <meshStandardMaterial color="#ef4444" wireframe />
+        <group ref={group}>
+            {/* Red Plastic Basket */}
+            <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.8, 0.5, 1]} />
+                <meshStandardMaterial color="#cc0000" roughness={0.2} />
             </mesh>
-            <mesh position={[0, -0.2, 0]}>
-                <boxGeometry args={[0.58, 0.02, 0.78]} />
-                <meshStandardMaterial color="#ef4444" opacity={0.5} transparent />
+            {/* Inside hollow feel */}
+            <mesh position={[0, 0.05, 0]}>
+                <boxGeometry args={[0.75, 0.45, 0.95]} />
+                <meshStandardMaterial color="#880000" />
+            </mesh>
+            {/* Wheels/Base */}
+            <mesh position={[0, -0.3, 0]}>
+                <boxGeometry args={[0.7, 0.1, 0.9]} />
+                <meshStandardMaterial color="#334155" />
             </mesh>
             {/* Handle */}
-            <mesh position={[0, 0.2, -0.4]} rotation={[Math.PI / 4, 0, 0]}>
-                <cylinderGeometry args={[0.02, 0.02, 0.6]} />
-                <meshStandardMaterial color="#334155" />
+            <mesh position={[0, 0.35, -0.45]} rotation={[0.4, 0, 0]}>
+                <boxGeometry args={[0.7, 0.05, 0.05]} />
+                <meshStandardMaterial color="#475569" />
             </mesh>
         </group>
     );
@@ -129,7 +184,8 @@ function Player() {
     const moveState = useRef({ forward: false, backward: false, left: false, right: false });
 
     useFrame((state, delta) => {
-        const speed = 5;
+        const speed = 8;
+        // Movement logic
         direction.current.set(
             Number(moveState.current.right) - Number(moveState.current.left),
             0,
@@ -142,12 +198,12 @@ function Player() {
         camera.translateX(-velocity.current.x);
         camera.translateZ(-velocity.current.z);
 
-        // Bounds
-        camera.position.y = 1.7; // Fixed height
-        camera.position.x = Math.max(-14, Math.min(14, camera.position.x));
-        camera.position.z = Math.max(-14, Math.min(14, camera.position.z));
+        // Constraints
+        camera.position.y = 1.65; // Human eye level
+        camera.position.x = Math.max(-12, Math.min(12, camera.position.x));
+        camera.position.z = Math.max(-12, Math.min(12, camera.position.z));
 
-        velocity.current.multiplyScalar(0.9); // Friction
+        velocity.current.multiplyScalar(0.85); // Friction
     });
 
     React.useEffect(() => {
@@ -182,11 +238,11 @@ function Player() {
     );
 }
 
-// --- Main Scene Component ---
+// --- Main Scene ---
 
 export default function Store3D() {
     const [cart, setCart] = useState<any[]>([]);
-    const [money, setMoney] = useState(500);
+    const [money, setMoney] = useState(1000);
 
     React.useEffect(() => {
         const handler = (e: any) => {
@@ -198,110 +254,124 @@ export default function Store3D() {
         return () => window.removeEventListener('PICK_ITEM', handler);
     }, []);
 
+    const floorTexture = useMemo(() => createTileTexture(), []);
+
     return (
-        <div className="w-full h-screen bg-black relative font-sans overflow-hidden">
-            {/* UI Overlay */}
-            <div className="absolute top-8 left-8 z-10 pointer-events-none">
-                <div className="bg-black/60 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-2xl">
-                    <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-2">
-                        Mahalak <span className="text-blue-500">3D Immersive</span>
-                    </h1>
-                    <div className="flex gap-6 mt-4">
-                        <div>
-                            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Balance</div>
-                            <div className="text-2xl font-black text-emerald-400">${money}</div>
+        <div className="w-full h-screen bg-white relative font-sans overflow-hidden">
+            {/* Premium UI */}
+            <div className="absolute top-8 left-8 z-20 pointer-events-none">
+                <div className="bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.1)]">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+                            <ShoppingCart size={24} className="text-white" />
                         </div>
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic">
+                            Mahalak <span className="text-blue-600">Pro 3D</span>
+                        </h1>
+                    </div>
+                    <div className="flex gap-10">
                         <div>
-                            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Cart Items</div>
-                            <div className="text-2xl font-black text-blue-400">{cart.length}</div>
+                            <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Total Balance</div>
+                            <div className="text-3xl font-black text-emerald-500 font-mono">${money}</div>
+                        </div>
+                        <div className="w-[2px] bg-slate-100" />
+                        <div>
+                            <div className="text-[10px] uppercase font-black text-slate-400 tracking-[0.2em] mb-1">Cart Size</div>
+                            <div className="text-3xl font-black text-blue-600 font-mono">{cart.length}</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="absolute bottom-8 right-8 z-10 pointer-events-none">
-                <div className="bg-black/60 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/10 text-[10px] uppercase font-bold tracking-widest text-slate-300">
-                    WASD To Walk • Click To Pick • Mouse To Look
+            <div className="absolute bottom-8 left-8 z-20 pointer-events-none">
+                <div className="bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-slate-200 text-[10px] font-black tracking-widest text-slate-500 uppercase flex gap-4">
+                    <span>WASD الحركه</span>
+                    <span>Mouse الرؤية</span>
+                    <span className="text-blue-600 underline">Tap to Pick Items</span>
                 </div>
             </div>
 
-            {/* Crosshair */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-                <div className="w-1 h-1 bg-white rounded-full shadow-[0_0_10px_white]" />
+            {/* Aim dot */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full ring-4 ring-blue-100 shadow-xl" />
             </div>
 
-            <Canvas shadows>
-                <PerspectiveCamera makeDefault fov={75} position={[0, 1.7, 5]} />
+            <Canvas shadows onCreated={(state) => {
+                state.gl.setClearColor('#ffffff');
+                state.gl.outputColorSpace = THREE.SRGBColorSpace;
+            }}>
+                <PerspectiveCamera makeDefault fov={70} position={[0, 1.65, 8]} />
                 <PointerLockControls />
 
-                {/* Lights */}
-                <ambientLight intensity={0.5} />
-                <pointLight position={[0, 4, 0]} intensity={1} castShadow />
-                <pointLight position={[10, 4, 10]} intensity={0.5} />
-                <pointLight position={[-10, 4, -10]} intensity={0.5} />
+                {/* Lights - Bright Supermarket Style */}
+                <ambientLight intensity={0.4} />
+                <CeilingLight position={[0, 4.9, 5]} />
+                <CeilingLight position={[0, 4.9, 0]} />
+                <CeilingLight position={[0, 4.9, -5]} />
+                <CeilingLight position={[0, 4.9, -10]} />
 
-                <Environment preset="city" />
-                <Sky sunPosition={[100, 20, 100]} />
-
-                {/* Floor */}
+                {/* Floor - Clean White Tiles */}
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-                    <planeGeometry args={[50, 50]} />
-                    <meshStandardMaterial color="#f1f5f9">
-                        <canvasTexture attach="map" args={[createGridCanvas()]} />
-                    </meshStandardMaterial>
+                    <planeGeometry args={[100, 100]} />
+                    <meshStandardMaterial map={floorTexture} roughness={0.1} />
                 </mesh>
 
-                {/* Shelves - Row Left */}
-                {[-5, 0, 5].map(z => (
-                    <Shelf key={`left-${z}`} position={[-4, 1.25, z]} />
+                {/* Shelves Layout - The "Aisle" Feel from the photo */}
+                {[-10, -5, 0, 5, 10].map(z => (
+                    <Shelf key={`left-${z}`} position={[-3.5, 2.05, z]} />
+                ))}
+                {[-10, -5, 0, 5, 10].map(z => (
+                    <Shelf key={`right-${z}`} position={[3.5, 2.05, z]} rotation={[0, Math.PI, 0]} />
                 ))}
 
-                {/* Shelves - Row Right */}
-                {[-5, 0, 5].map(z => (
-                    <Shelf key={`right-${z}`} position={[4, 1.25, z]} rotation={[0, Math.PI, 0]} />
-                ))}
-
-                {/* Walls */}
+                {/* Distant wall to look like a store background */}
                 <mesh position={[0, 2.5, -15]} receiveShadow>
-                    <boxGeometry args={[30, 5, 0.5]} />
-                    <meshStandardMaterial color="#cbd5e1" />
-                </mesh>
-                <mesh position={[15, 2.5, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow>
-                    <boxGeometry args={[30, 5, 0.5]} />
-                    <meshStandardMaterial color="#cbd5e1" />
-                </mesh>
-                <mesh position={[-15, 2.5, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow>
-                    <boxGeometry args={[30, 5, 0.5]} />
-                    <meshStandardMaterial color="#cbd5e1" />
+                    <boxGeometry args={[40, 5, 0.5]} />
+                    <meshStandardMaterial color="#f1f5f9" />
                 </mesh>
 
-                {/* Ceiling */}
-                <mesh position={[0, 5, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[30, 30]} />
-                    <meshStandardMaterial color="#e2e8f0" />
-                </mesh>
+                {/* Fill the background with more "shelves" at the end of the aisle */}
+                <Shelf position={[0, 2.05, -14.5]} rotation={[0, 0, 0]} />
 
                 <Player />
 
-                <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={20} blur={2.4} far={4.5} />
+                <ContactShadows position={[0, 0.01, 0]} opacity={0.25} scale={40} blur={2} far={4.5} />
             </Canvas>
         </div>
     );
 }
 
-// Utility to create a grid texture for the floor
-function createGridCanvas() {
+// Tile Floor Texture
+function createTileTexture() {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 1024;
+    canvas.height = 1024;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        ctx.fillStyle = '#f1f5f9';
-        ctx.fillRect(0, 0, 512, 512);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 1024, 1024);
+
+        // Tiles
         ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(0, 0, 512, 512);
+        ctx.lineWidth = 1;
+        const tileSize = 64;
+        for (let x = 0; x <= 1024; x += tileSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1024); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, x); ctx.lineTo(1024, x); ctx.stroke();
+        }
+
+        // Subtle detail
+        ctx.strokeStyle = '#f1f5f9';
+        ctx.lineWidth = 2;
+        for (let x = 0; x <= 1024; x += tileSize * 4) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1024); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, x); ctx.lineTo(1024, x); ctx.stroke();
+        }
     }
-    return canvas;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(25, 25);
+    return tex;
 }
