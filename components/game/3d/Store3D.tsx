@@ -8,12 +8,12 @@ import {
     ContactShadows,
     PerspectiveCamera,
     Html,
-    useTexture,
     Environment,
-    Loader
+    Loader,
+    Text // Imported Text for simple 3D labels
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { ShoppingCart, Move, MousePointer2, Loader2 } from 'lucide-react';
+import { ShoppingCart, Move, MousePointer2, Loader2, Package } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // --- Constants ---
@@ -23,46 +23,22 @@ const SHELF_DEPTH = 1.0;
 const AISLE_GAP = 7.0;
 const LEVELS = 5;
 
-// --- Real Product Data ---
+// --- Real Product Data (Using Colors/Procedural Generation for Stability) ---
+// We removed external image URLs temporarily to prevent the "Stuck at 90%" loading issue.
 const PRODUCTS = [
-    { name: 'Cereal Box', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=128&q=80', price: 25 },
-    { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=128&q=80', price: 15 },
-    { name: 'Canned Tuna', img: 'https://images.unsplash.com/photo-1584278859964-118329668e1b?w=128&q=80', price: 30 },
-    { name: 'Orange Juice', img: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=128&q=80', price: 12 },
-    { name: 'Pasta', img: 'https://images.unsplash.com/photo-1551462147-fffb9036ef74?w=128&q=80', price: 10 },
-    { name: 'Coffee Bean', img: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=128&q=80', price: 45 },
-    { name: 'Liquid Soap', img: 'https://images.unsplash.com/photo-1585232561307-3f1d643a60a4?w=128&q=80', price: 20 },
-    { name: 'Olive Oil', img: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=128&q=80', price: 60 },
-    { name: 'Ketchup', img: 'https://images.unsplash.com/photo-1607532941433-304659e8198a?w=128&q=80', price: 18 },
-    { name: 'Chocolate', img: 'https://images.unsplash.com/photo-1621451537084-482c7304192b?w=128&q=80', price: 35 }
+    { name: 'Cereal Box', color: '#fbbf24', price: 25 },
+    { name: 'Fresh Milk', color: '#f1f5f9', price: 15 },
+    { name: 'Canned Tuna', color: '#64748b', price: 30 },
+    { name: 'Orange Juice', color: '#fb923c', price: 12 },
+    { name: 'Pasta', color: '#fcd34d', price: 10 },
+    { name: 'Coffee Bean', color: '#78350f', price: 45 },
+    { name: 'Liquid Soap', color: '#38bdf8', price: 20 },
+    { name: 'Olive Oil', color: '#a3e635', price: 60 },
+    { name: 'Ketchup', color: '#dc2626', price: 18 },
+    { name: 'Chocolate', color: '#451a03', price: 35 }
 ];
 
 // --- Utilities ---
-
-interface ErrorBoundaryProps {
-    fallback: React.ReactNode;
-    children: React.ReactNode;
-}
-
-interface ErrorBoundaryState {
-    hasError: boolean;
-}
-
-class ImageErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    constructor(props: ErrorBoundaryProps) {
-        super(props);
-        this.state = { hasError: false };
-    }
-    static getDerivedStateFromError() {
-        return { hasError: true };
-    }
-    render() {
-        if (this.state.hasError) {
-            return this.props.fallback;
-        }
-        return this.props.children;
-    }
-}
 
 function stringToColor(str: string) {
     let hash = 0;
@@ -94,26 +70,10 @@ function CeilingLight({ position, main = false }: any) {
     );
 }
 
-function ProductPlaceholder({ position, data, onPick }: any) {
-    return (
-        <group position={position} onClick={() => onPick(data)}>
-            <mesh castShadow receiveShadow>
-                <boxGeometry args={[0.35, 0.55, 0.3]} />
-                <meshStandardMaterial color={stringToColor(data.name)} roughness={0.5} />
-            </mesh>
-        </group>
-    );
-}
-
 function ProductWithTexture({ position, data, onPick }: any) {
     const [hovered, setHovered] = useState(false);
-    // useTexture can suspend. We added safe fallbacks.
-    const texture = useTexture(data.img, (texture) => {
-        if (texture instanceof THREE.Texture) {
-            texture.colorSpace = THREE.SRGBColorSpace;
-        }
-    });
 
+    // Use a simple colored box with text instead of external textures for zero-fail loading
     return (
         <group
             position={position}
@@ -123,11 +83,24 @@ function ProductWithTexture({ position, data, onPick }: any) {
         >
             <mesh castShadow receiveShadow>
                 <boxGeometry args={[0.35, 0.55, 0.3]} />
-                <meshStandardMaterial map={texture as THREE.Texture} roughness={0.3} metalness={0.1} />
+                <meshStandardMaterial color={data.color || stringToColor(data.name)} roughness={0.3} metalness={0.1} />
             </mesh>
+
+            {/* 3D Label on the product */}
+            <Text
+                position={[0, 0, 0.16]}
+                fontSize={0.08}
+                color="black"
+                anchorX="center"
+                anchorY="middle"
+                maxWidth={0.3}
+            >
+                {data.name}
+            </Text>
+
             {hovered && (
                 <Html distanceFactor={4} position={[0, 0.5, 0]} center zIndexRange={[100, 0]}>
-                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold pointer-events-none">
+                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold pointer-events-none transform transition-all scale-100">
                         <div className="text-blue-600 mb-1">{data.name}</div>
                         <div className="text-emerald-600 text-lg font-black">${data.price}</div>
                     </div>
@@ -182,20 +155,14 @@ function Shelf({ position, rotation = [0, 0, 0] }: any) {
                 </group>
             ))}
 
-            {/* Products with individual Error Handling */}
+            {/* Products */}
             {productsOnShelf.map((item, i) => (
-                <ImageErrorBoundary
+                <ProductWithTexture
                     key={i}
-                    fallback={<ProductPlaceholder position={item.pos} data={item.data} onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))} />}
-                >
-                    <Suspense fallback={<ProductPlaceholder position={item.pos} data={item.data} onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))} />}>
-                        <ProductWithTexture
-                            position={item.pos}
-                            data={item.data}
-                            onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
-                        />
-                    </Suspense>
-                </ImageErrorBoundary>
+                    position={item.pos}
+                    data={item.data}
+                    onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
+                />
             ))}
         </group>
     );
@@ -307,14 +274,8 @@ function SceneContent() {
 
     return (
         <group>
-            {/* Background Color to ensure we see something if Sky/Env fails */}
-            <color attach="background" args={['#87CEEB']} />
-
-            <Suspense fallback={null}>
-                <Sky sunPosition={[100, 45, 100]} />
-                <Environment preset="city" />
-            </Suspense>
-
+            {/* Sky and Environment */}
+            <Sky sunPosition={[100, 45, 100]} />
             <ambientLight intensity={0.4} />
 
             {/* Distributed Lights */}
@@ -418,7 +379,6 @@ function SceneContent() {
 // -------------------------------------------------------------
 // MAIN COMPONENT WRAPPER
 // -------------------------------------------------------------
-// We create a separate rendering component to use in the dynamic export below.
 
 function Store3DRenderer() {
     return (
@@ -431,13 +391,11 @@ function Store3DRenderer() {
             <Canvas shadows dpr={[1, 1.5]}>
                 <PerspectiveCamera makeDefault fov={70} position={[0, 1.68, 12]} />
                 <PointerLockControls />
-                {/* Main Suspense for the whole scene */}
-                <Suspense fallback={null}>
-                    <SceneContent />
-                </Suspense>
+                {/* Remove global suspense to prevent whitespace */}
+                <SceneContent />
             </Canvas>
 
-            {/* Visible Loader to indicate the app is working */}
+            {/* Light weight loader overlay */}
             <Loader
                 containerStyles={{ background: 'rgba(255, 255, 255, 1)' }}
                 innerStyles={{ width: '300px', background: '#f1f5f9' }}
@@ -464,7 +422,6 @@ const Store3D = dynamic(() => Promise.resolve(Store3DRenderer), {
 export default Store3D;
 
 function TileMaterial() {
-    // Generate simple procedural tile texture
     const texture = useMemo(() => {
         if (typeof document === 'undefined') return null;
         try {
