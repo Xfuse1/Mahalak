@@ -60,35 +60,61 @@ export default function SupermarketSimulator() {
         sunLight.shadow.camera.bottom = -30;
         scene.add(sunLight);
 
-        // Texture Generation (Expanded Library)
+        // Texture Generation (Realistic Brands & Variety)
         const productLibrary = [
-            // Drinks & Dairy (Aisle 1)
-            { name: 'حليب كامل', color: 0x2196f3, label: 'MILK', price: 3.99, category: 'dairy' },
-            { name: 'حليب قليل', color: 0x64b5f6, label: 'SKIM', price: 3.49, category: 'dairy' },
-            { name: 'زبادي', color: 0xffffff, label: 'YOGURT', price: 1.99, category: 'dairy' },
-            { name: 'عصير برتقال', color: 0xff9800, label: 'JUICE', price: 5.99, category: 'drinks' },
-            { name: 'عصير تفاح', color: 0x8bc34a, label: 'APPLE', price: 4.99, category: 'drinks' },
-            { name: 'كولا', color: 0xd32f2f, label: 'COLA', price: 2.99, category: 'drinks' },
-            { name: 'سبرايت', color: 0x00c853, label: 'SPRITE', price: 2.99, category: 'drinks' },
-            { name: 'مياه', color: 0x03a9f4, label: 'WATER', price: 0.99, category: 'drinks' },
+            // --- DAIRY & FRIDGE ---
+            { name: 'حليب المراعي', color: 0x1e88e5, label: 'ALMARAI', price: 6.50, category: 'dairy', pattern: 'stripe' },
+            { name: 'حليب نادك', color: 0xffffff, label: 'NADEC', price: 6.00, category: 'dairy', pattern: 'simple' },
+            { name: 'زبادي', color: 0xe3f2fd, label: 'YOGURT', price: 2.50, category: 'dairy', pattern: 'circle' },
+            { name: 'جبنة شيدر', color: 0xffc107, label: 'CHEDDAR', price: 12.00, category: 'dairy', pattern: 'block' },
+            { name: 'زبدة', color: 0xffeb3b, label: 'BUTTER', price: 8.50, category: 'dairy', pattern: 'simple' },
+            { name: 'كريمة طبخ', color: 0xf48fb1, label: 'CREAM', price: 14.00, category: 'dairy', pattern: 'curve' },
 
-            // Breakfast & Snacks (Aisle 2)
-            { name: 'كورن فليكس', color: 0xff3333, label: 'CEREAL', price: 6.99, category: 'breakfast' },
-            { name: 'شوفان', color: 0x795548, label: 'OATS', price: 5.49, category: 'breakfast' },
-            { name: 'شوكو بوبس', color: 0x5d4037, label: 'CHOCO', price: 6.49, category: 'breakfast' },
-            { name: 'شيبسي', color: 0xff5722, label: 'CHIPS', price: 3.99, category: 'snacks' },
-            { name: 'بسكويت', color: 0xffeb3b, label: 'BISCUIT', price: 2.49, category: 'snacks' },
-            { name: 'شوكولاتة', color: 0x3e2723, label: 'BAR', price: 1.99, category: 'snacks' },
-            { name: 'فوشار', color: 0xffca28, label: 'POPCORN', price: 3.49, category: 'snacks' },
+            // --- DRINKS ---
+            { name: 'كوكاكولا', color: 0xb71c1c, label: 'COLA', price: 3.00, category: 'drinks', pattern: 'curve' },
+            { name: 'بيبسي', color: 0x1565c0, label: 'PEPSI', price: 3.00, category: 'drinks', pattern: 'circle' },
+            { name: 'سفن اب', color: 0x2e7d32, label: '7UP', price: 3.00, category: 'drinks', pattern: 'simple' },
+            { name: 'عصير برتقال', color: 0xff9800, label: 'ORANGE', price: 7.00, category: 'drinks', pattern: 'fresh' },
+            { name: 'عصير تفاح', color: 0x8bc34a, label: 'APPLE', price: 6.50, category: 'drinks', pattern: 'fresh' },
+            { name: 'مياه معدنية', color: 0x81d4fa, label: 'WATER', price: 1.50, category: 'drinks', pattern: 'simple' },
+            { name: 'مشروب طاقة', color: 0x212121, label: 'POWER', price: 12.00, category: 'drinks', pattern: 'bolt' },
+            { name: 'ايس تي', color: 0x8d6e63, label: 'ICE TEA', price: 5.00, category: 'drinks', pattern: 'leaf' },
 
-            // Pantry & Grains (Aisle 3)
-            { name: 'معكرونة', color: 0xfdd835, label: 'PASTA', price: 2.99, category: 'pantry' },
-            { name: 'أرز بسمتي', color: 0xfff9c4, label: 'RICE', price: 8.99, category: 'pantry' },
-            { name: 'زيت طبخ', color: 0xffd600, label: 'OIL', price: 12.99, category: 'pantry' },
-            { name: 'صلصة طماطم', color: 0xb71c1c, label: 'SAUCE', price: 2.49, category: 'pantry' },
-            { name: 'تونة', color: 0x607d8b, label: 'TUNA', price: 4.99, category: 'pantry' },
-            { name: 'فول معلب', color: 0x8d6e63, label: 'BEANS', price: 1.49, category: 'pantry' },
-            { name: 'سكر', color: 0xe0e0e0, label: 'SUGAR', price: 3.99, category: 'pantry' },
+            // --- SNACKS & CANDY ---
+            { name: 'شيبسي ملح', color: 0xffd600, label: 'CHIPS', price: 5.00, category: 'snacks', pattern: 'circle' },
+            { name: 'شيبسي حار', color: 0xd32f2f, label: 'HOT', price: 5.00, category: 'snacks', pattern: 'fire' },
+            { name: 'دوريتوس', color: 0xbf360c, label: 'NACHO', price: 6.00, category: 'snacks', pattern: 'triangle' },
+            { name: 'بسكويت شاي', color: 0xd7ccc8, label: 'BISCUIT', price: 3.50, category: 'snacks', pattern: 'grid' },
+            { name: 'شوكولاتة', color: 0x3e2723, label: 'CHOCO', price: 4.00, category: 'snacks', pattern: 'flow' },
+            { name: 'ويفر', color: 0xffcc80, label: 'WAFER', price: 3.00, category: 'snacks', pattern: 'stripe' },
+            { name: 'فشار', color: 0xfff59d, label: 'POP', price: 4.50, category: 'snacks', pattern: 'dots' },
+
+            // --- BREAKFAST ---
+            { name: 'كورن فليكس', color: 0xff5722, label: 'CORN', price: 18.00, category: 'breakfast', pattern: 'rooster' },
+            { name: 'كوكو بوبس', color: 0x5d4037, label: 'COCO', price: 19.00, category: 'breakfast', pattern: 'coco' },
+            { name: 'شوفان', color: 0x8d6e63, label: 'OATS', price: 15.00, category: 'breakfast', pattern: 'grain' },
+            { name: 'مربى فراولة', color: 0xc2185b, label: 'JAM', price: 11.00, category: 'breakfast', pattern: 'fruit' },
+            { name: 'عسل طبيعي', color: 0xffb300, label: 'HONEY', price: 35.00, category: 'breakfast', pattern: 'hex' },
+
+            // --- PANTRY ---
+            { name: 'أرز بسمتي', color: 0xffecb3, label: 'RICE', price: 45.00, category: 'pantry', pattern: 'grain' },
+            { name: 'مكرونة', color: 0xffd54f, label: 'PASTA', price: 5.00, category: 'pantry', pattern: 'wheat' },
+            { name: 'زيت ذرة', color: 0xffeb3b, label: 'OIL', price: 28.00, category: 'pantry', pattern: 'drop' },
+            { name: 'سمن نباتي', color: 0x4caf50, label: 'GHEE', price: 32.00, category: 'pantry', pattern: 'cow' },
+            { name: 'صلصة طماطم', color: 0xb71c1c, label: 'TOMATO', price: 4.00, category: 'pantry', pattern: 'red_circle' },
+            { name: 'تونة', color: 0x90a4ae, label: 'TUNA', price: 7.50, category: 'pantry', pattern: 'fish' },
+            { name: 'فول مدمس', color: 0x795548, label: 'BEANS', price: 3.50, category: 'pantry', pattern: 'bean' },
+            { name: 'سكر', color: 0xf5f5f5, label: 'SUGAR', price: 14.00, category: 'pantry', pattern: 'sugar' },
+            { name: 'دقيق', color: 0xffffff, label: 'FLOUR', price: 12.00, category: 'pantry', pattern: 'wheat' },
+            { name: 'ملح', color: 0xe0f7fa, label: 'SALT', price: 2.00, category: 'pantry', pattern: 'crystal' },
+
+            // --- HOUSEHOLD & CLEANING ---
+            { name: 'مسحوق غسيل', color: 0x1565c0, label: 'TIDE', price: 45.00, category: 'household', pattern: 'swirl' },
+            { name: 'سائل جلي', color: 0x76ff03, label: 'FAIRY', price: 12.00, category: 'household', pattern: 'bubble' },
+            { name: 'منعم ملابس', color: 0xec407a, label: 'SOFT', price: 18.00, category: 'household', pattern: 'flower' },
+            { name: 'شامبو', color: 0x5c6bc0, label: 'SHAMPOO', price: 16.00, category: 'household', pattern: 'wave' },
+            { name: 'صابون', color: 0xffcdd2, label: 'SOAP', price: 4.00, category: 'household', pattern: 'clean' },
+            { name: 'مناديل', color: 0xffffff, label: 'TISSUE', price: 22.00, category: 'household', pattern: 'soft' }
         ];
 
         const productAssets = new Map();
@@ -107,47 +133,99 @@ export default function SupermarketSimulator() {
         }
 
         const canvas = document.createElement('canvas');
-        canvas.width = 128; // Optimized size
-        canvas.height = 128;
+        canvas.width = 256;
+        canvas.height = 256;
         const ctx = canvas.getContext('2d', { willReadFrequently: false });
 
         if (ctx) {
             productLibrary.forEach(info => {
                 const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
 
-                // Simple solid background for performance + clean look
+                // Base
                 ctx.fillStyle = baseColor;
-                ctx.fillRect(0, 0, 128, 128);
+                ctx.fillRect(0, 0, 256, 256);
 
-                // Add some "design" lines
-                ctx.fillStyle = adjustBrightness(baseColor, -20);
-                ctx.fillRect(0, 0, 128, 30);
-                ctx.fillRect(0, 98, 128, 30);
+                // --- Procedural Branding Patterns ---
+                ctx.fillStyle = adjustBrightness(baseColor, -15);
 
-                // Label Box
+                switch (info.pattern) {
+                    case 'stripe':
+                        for (let i = 0; i < 256; i += 40) ctx.fillRect(i, 0, 20, 256);
+                        break;
+                    case 'grid':
+                        for (let i = 0; i < 256; i += 30) {
+                            ctx.fillRect(i, 0, 2, 256);
+                            ctx.fillRect(0, i, 256, 2);
+                        }
+                        break;
+                    case 'circle':
+                        ctx.beginPath();
+                        ctx.arc(128, 128, 90, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'curve':
+                        ctx.beginPath();
+                        ctx.ellipse(128, 128, 140, 80, Math.PI / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'swirl':
+                        ctx.beginPath();
+                        ctx.arc(128, 128, 100, 0, Math.PI * 2);
+                        ctx.strokeStyle = adjustBrightness(baseColor, 30);
+                        ctx.lineWidth = 20;
+                        ctx.stroke();
+                        break;
+                    case 'triangle':
+                        ctx.beginPath();
+                        ctx.moveTo(128, 20);
+                        ctx.lineTo(20, 240);
+                        ctx.lineTo(236, 240);
+                        ctx.fill();
+                        break;
+                    default:
+                        // Top/Bottom bars usually look good
+                        ctx.fillRect(0, 0, 256, 50);
+                        ctx.fillRect(0, 206, 256, 50);
+                }
+
+                // Label Background
                 ctx.fillStyle = 'white';
-                ctx.fillRect(10, 40, 108, 48);
+                // Rounded rect
+                ctx.beginPath();
+                ctx.roundRect(20, 80, 216, 96, 10);
+                ctx.fill();
 
                 // Text
-                ctx.fillStyle = '#000';
-                ctx.font = 'bold 24px Arial';
+                ctx.fillStyle = '#111';
+                ctx.font = 'bold 42px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(info.label, 64, 72);
+                ctx.fillText(info.label, 128, 130);
 
-                // Price Tag
-                ctx.fillStyle = '#ffeb3b';
-                ctx.fillRect(80, 80, 40, 25);
+                // Subtext / Weight
+                ctx.fillStyle = '#666';
+                ctx.font = '20px sans-serif';
+                ctx.fillText(info.category.toUpperCase(), 128, 160);
+
+                // Price Tag (Sticker look)
+                ctx.fillStyle = '#ffecb3';
+                ctx.beginPath();
+                ctx.arc(200, 200, 45, 0, Math.PI * 2);
+                ctx.fill();
+
                 ctx.fillStyle = '#d32f2f';
-                ctx.font = 'bold 14px Arial';
-                ctx.fillText(`$${Math.floor(info.price)}`, 100, 98);
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText(`$${Math.floor(info.price)}`, 200, 195);
+                ctx.font = '16px Arial';
+                ctx.fillText(`.${(info.price % 1).toFixed(2).substring(2)}`, 200, 215);
 
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.colorSpace = THREE.SRGBColorSpace;
 
                 const materials = new THREE.MeshStandardMaterial({
                     map: texture,
-                    roughness: 0.5,
-                    metalness: 0.1
+                    roughness: 0.4,
+                    metalness: 0.1,
+                    envMapIntensity: 0.5
                 });
 
                 productAssets.set(info.label, materials);
@@ -159,10 +237,13 @@ export default function SupermarketSimulator() {
         function createProductMesh(productInfo: any) {
             const material = productAssets.get(productInfo.label);
             if (!material) return null;
-            // Use same material for all sides to reduce draw calls/complexity
+
+            // Optimization: Clone Geometry? No, reusing global geometry is better.
             const mesh = new THREE.Mesh(boxGeometry, material);
             mesh.castShadow = false;
             mesh.receiveShadow = false;
+            // Add random slight rotation to look realistic
+            mesh.rotation.y = (Math.random() - 0.5) * 0.1;
             mesh.userData = { ...productInfo, clickable: true };
             return mesh;
         }
@@ -188,7 +269,7 @@ export default function SupermarketSimulator() {
         const ceilingLightGroup = new THREE.Group();
 
         // Lights aligned with aisles
-        [-8, 0, 8].forEach(x => {
+        [-16, -5, 5, 16].forEach(x => {
             const strip = new THREE.Mesh(bulbGeometry, bulbMaterial);
             strip.position.set(x, 5.9, 0);
             ceilingLightGroup.add(strip);
@@ -213,9 +294,9 @@ export default function SupermarketSimulator() {
 
         const shelves = new THREE.Group();
         const shelfBoardGeom = new THREE.BoxGeometry(7, 0.04, 0.7);
-        for (let lvl = 0; lvl < 5; lvl++) {
+        for (let lvl = 0; lvl < 6; lvl++) {
             const b = new THREE.Mesh(shelfBoardGeom, shelfMat);
-            b.position.set(0, 0.2 + lvl * 0.6, 0);
+            b.position.set(0, 0.2 + lvl * 0.55, 0); // Tighter shelves (6 levels)
             b.castShadow = true;
             b.receiveShadow = true;
             shelves.add(b);
@@ -225,25 +306,23 @@ export default function SupermarketSimulator() {
             const shelf = new THREE.Group();
             shelf.add(backPanel.clone(), supports.clone(), shelves.clone());
 
-            // Filter products for this aisle
             const allowedProducts = productLibrary.filter(p => categories.includes(p.category));
             if (allowedProducts.length === 0) return shelf;
 
-            for (let lvl = 0; lvl < 5; lvl++) {
-                // Organize: One product type per shelf row for neatness
+            for (let lvl = 0; lvl < 6; lvl++) {
                 const rowProduct = allowedProducts[Math.floor(Math.random() * allowedProducts.length)];
-                const rowCount = 14; // HIGH DENSITY (Full Shelf)
+                // DENSE PACkING
+                const rowCount = 18;
 
                 for (let i = 0; i < rowCount; i++) {
                     const mesh = createProductMesh(rowProduct);
                     if (mesh) {
-                        // Tightly packed spacing
-                        const xPos = -3.2 + i * 0.48;
-                        // Add slight variation for realism, but mostly neat
-                        const zOffset = (Math.random() * 0.05) - 0.025;
-                        mesh.position.set(xPos, 0.2 + lvl * 0.6 + 0.26, zOffset);
-                        // Perfect alignment
-                        mesh.rotation.y = rotation;
+                        const xPos = -3.2 + i * 0.38;
+                        // Small offsets for "stock" look
+                        const zOffset = (Math.random() * 0.04) - 0.02;
+                        mesh.position.set(xPos, 0.2 + lvl * 0.55 + 0.26, zOffset);
+                        // Match shelf rotation
+                        mesh.rotation.y += rotation;
                         shelf.add(mesh);
                         clickableProducts.push(mesh);
                     }
@@ -254,37 +333,36 @@ export default function SupermarketSimulator() {
             scene.add(shelf);
         }
 
-        // Aisle Layout Configuration
+        // FULL STORE LAYOUT
         const aisleLayouts = [
-            { x: -8, categories: ['dairy', 'drinks'] },      // Aisle 1 (Left)
-            { x: 0, categories: ['breakfast', 'snacks'] },   // Aisle 2 (Center)
-            { x: 8, categories: ['pantry'] }                 // Aisle 3 (Right)
+            // Left Wall (Single Sided)
+            { x: -28, zStart: -45, zEnd: 45, type: 'wall_right', categories: ['household', 'pantry'] },
+            // Aisle 1 (Double)
+            { x: -14, zStart: -40, zEnd: 40, type: 'aisle', categories: ['dairy', 'drinks', 'breakfast'] },
+            // Aisle 2 (Double)
+            { x: 0, zStart: -40, zEnd: 40, type: 'aisle', categories: ['snacks', 'pantry'] },
+            // Aisle 3 (Double)
+            { x: 14, zStart: -40, zEnd: 40, type: 'aisle', categories: ['drinks', 'household'] },
+            // Right Wall (Single Sided)
+            { x: 28, zStart: -45, zEnd: 45, type: 'wall_left', categories: ['pantry', 'dairy'] }
         ];
 
         aisleLayouts.forEach(layout => {
-            // Create long aisles
-            for (let z = -35; z < 35; z += 8) {
-                createPopulatedShelf(layout.x, z, 0, layout.categories); // Front facing
-                createPopulatedShelf(layout.x, z, Math.PI, layout.categories); // Back facing (shared aisle wall)
+            // Continuous Shelves (Small step to avoid gaps)
+            for (let z = layout.zStart; z < layout.zEnd; z += 7.1) {
+
+                if (layout.type === 'aisle') {
+                    createPopulatedShelf(layout.x, z, 0, layout.categories);
+                    createPopulatedShelf(layout.x, z, Math.PI, layout.categories);
+                } else if (layout.type === 'wall_right') {
+                    // Wall on left, facing right (0 rotation)
+                    createPopulatedShelf(layout.x, z, 0, layout.categories);
+                } else if (layout.type === 'wall_left') {
+                    // Wall on right, facing left (PI rotation)
+                    createPopulatedShelf(layout.x, z, Math.PI, layout.categories);
+                }
             }
         });
-
-        // Walls
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5 });
-        const wall1 = new THREE.Mesh(new THREE.PlaneGeometry(80, 10), wallMat);
-        wall1.position.set(0, 5, -50);
-        wall1.receiveShadow = true;
-        scene.add(wall1);
-
-        const wall2 = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), wallMat);
-        wall2.rotation.y = Math.PI / 2;
-        wall2.position.set(-35, 5, 0);
-        scene.add(wall2);
-
-        const wall3 = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), wallMat);
-        wall3.rotation.y = -Math.PI / 2;
-        wall3.position.set(35, 5, 0);
-        scene.add(wall3);
 
         const cartGroup = new THREE.Group();
         const cartMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, metalness: 0.6, roughness: 0.4 });
