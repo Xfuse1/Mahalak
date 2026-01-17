@@ -12,7 +12,7 @@ import {
     Environment
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { ShoppingCart, Zap, Package, Move, MousePointer2 } from 'lucide-react';
+import { ShoppingCart, Move, MousePointer2 } from 'lucide-react';
 
 // --- Constants ---
 const SHELF_WIDTH = 12;
@@ -21,19 +21,55 @@ const SHELF_DEPTH = 1.0;
 const AISLE_GAP = 7.0;
 const LEVELS = 5;
 
-// --- Real Product Data ---
+// --- Real Product Data (Updated with stable IDs) ---
 const PRODUCTS = [
-    { name: 'Nestle Cereal', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=128&h=192&fit=crop', price: 25 },
-    { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=128&h=192&fit=crop', price: 15 },
-    { name: 'Tuna Can', img: 'https://images.unsplash.com/photo-1625937329935-d7c003cdb87e?w=128&h=192&fit=crop', price: 30 },
-    { name: 'Fruit Juice', img: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=128&h=192&fit=crop', price: 12 },
-    { name: 'Pasta Pack', img: 'https://images.unsplash.com/photo-1551462147-fffb9036ef74?w=128&h=192&fit=crop', price: 10 },
-    { name: 'Coffee Jar', img: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=128&h=192&fit=crop', price: 45 },
-    { name: 'Dish Soap', img: 'https://images.unsplash.com/photo-1631889993959-41b4e9c6e3c5?w=128&h=192&fit=crop', price: 20 },
-    { name: 'Olive Oil', img: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=128&h=192&fit=crop', price: 60 },
-    { name: 'Tomato Sauce', img: 'https://images.unsplash.com/photo-1587411768941-4057f2c5e4d8?w=128&h=192&fit=crop', price: 18 },
-    { name: 'Chocolate', img: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=128&h=192&fit=crop', price: 35 }
+    { name: 'Cereal Box', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=128&q=80', price: 25 },
+    { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=128&q=80', price: 15 },
+    { name: 'Canned Tuna', img: 'https://images.unsplash.com/photo-1584278859964-118329668e1b?w=128&q=80', price: 30 },
+    { name: 'Orange Juice', img: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=128&q=80', price: 12 },
+    { name: 'Pasta', img: 'https://images.unsplash.com/photo-1551462147-fffb9036ef74?w=128&q=80', price: 10 },
+    { name: 'Coffee Bean', img: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=128&q=80', price: 45 },
+    { name: 'Liquid Soap', img: 'https://images.unsplash.com/photo-1585232561307-3f1d643a60a4?w=128&q=80', price: 20 },
+    { name: 'Olive Oil', img: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=128&q=80', price: 60 },
+    { name: 'Ketchup', img: 'https://images.unsplash.com/photo-1607532941433-304659e8198a?w=128&q=80', price: 18 },
+    { name: 'Chocolate', img: 'https://images.unsplash.com/photo-1621451537084-482c7304192b?w=128&q=80', price: 35 }
 ];
+
+// --- Utilities ---
+
+interface ErrorBoundaryProps {
+    fallback: React.ReactNode;
+    children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+}
+
+class ImageErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    constructor(props: ErrorBoundaryProps) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback;
+        }
+        return this.props.children;
+    }
+}
+
+function stringToColor(str: string) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - c.length) + c;
+}
 
 // --- Sub-components ---
 
@@ -46,7 +82,7 @@ function CeilingLight({ position, main = false }: any) {
             </mesh>
             <pointLight
                 position={[0, -0.4, 0]}
-                intensity={main ? 15 : 8}
+                intensity={main ? 12 : 5}
                 distance={25}
                 color="#ffffff"
                 castShadow={main}
@@ -56,8 +92,21 @@ function CeilingLight({ position, main = false }: any) {
     );
 }
 
-function Product({ position, data, texture, onPick }: any) {
+function ProductPlaceholder({ position, data, onPick }: any) {
+    return (
+        <group position={position} onClick={() => onPick(data)}>
+            <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.35, 0.55, 0.3]} />
+                <meshStandardMaterial color={stringToColor(data.name)} roughness={0.5} />
+            </mesh>
+        </group>
+    );
+}
+
+function ProductWithTexture({ position, data, onPick }: any) {
     const [hovered, setHovered] = useState(false);
+    // useTexture can suspend or throw
+    const texture = useTexture(data.img);
 
     return (
         <group
@@ -68,11 +117,11 @@ function Product({ position, data, texture, onPick }: any) {
         >
             <mesh castShadow receiveShadow>
                 <boxGeometry args={[0.35, 0.55, 0.3]} />
-                <meshStandardMaterial map={texture} roughness={0.3} metalness={0.1} />
+                <meshStandardMaterial map={texture as THREE.Texture} roughness={0.3} metalness={0.1} />
             </mesh>
             {hovered && (
                 <Html distanceFactor={4} position={[0, 0.5, 0]} center zIndexRange={[100, 0]}>
-                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold animate-in zoom-in-50 pointer-events-none">
+                    <div className="bg-white/95 text-black p-3 rounded-2xl shadow-2xl text-[11px] whitespace-nowrap border-2 border-blue-500 font-bold pointer-events-none">
                         <div className="text-blue-600 mb-1">{data.name}</div>
                         <div className="text-emerald-600 text-lg font-black">${data.price}</div>
                     </div>
@@ -82,16 +131,15 @@ function Product({ position, data, texture, onPick }: any) {
     );
 }
 
-function Shelf({ position, rotation = [0, 0, 0], textures }: any) {
-    const levels = LEVELS;
+function Shelf({ position, rotation = [0, 0, 0] }: any) {
     const productsOnShelf = useMemo(() => {
         const items = [];
-        for (let level = 0; level < levels; level++) {
+        for (let level = 0; level < LEVELS; level++) {
             for (let x = -SHELF_WIDTH / 2 + 0.65; x <= SHELF_WIDTH / 2 - 0.65; x += 0.55) {
                 const productIdx = Math.floor(Math.random() * PRODUCTS.length);
                 items.push({
                     pos: [x, level * 0.8 - 1.6, 0.3],
-                    dataIdx: productIdx
+                    data: PRODUCTS[productIdx]
                 });
             }
         }
@@ -115,7 +163,7 @@ function Shelf({ position, rotation = [0, 0, 0], textures }: any) {
             ))}
 
             {/* Shelving Levels */}
-            {Array.from({ length: levels }).map((_, i) => (
+            {Array.from({ length: LEVELS }).map((_, i) => (
                 <group key={i} position={[0, i * 0.8 - 1.95, 0]}>
                     <mesh receiveShadow castShadow>
                         <boxGeometry args={[SHELF_WIDTH, 0.05, SHELF_DEPTH]} />
@@ -128,15 +176,20 @@ function Shelf({ position, rotation = [0, 0, 0], textures }: any) {
                 </group>
             ))}
 
-            {/* Products */}
+            {/* Products with individual Error Handling */}
             {productsOnShelf.map((item, i) => (
-                <Product
+                <ImageErrorBoundary
                     key={i}
-                    position={item.pos}
-                    data={PRODUCTS[item.dataIdx]}
-                    texture={textures[item.dataIdx]}
-                    onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
-                />
+                    fallback={<ProductPlaceholder position={item.pos} data={item.data} onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))} />}
+                >
+                    <Suspense fallback={<ProductPlaceholder position={item.pos} data={item.data} onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))} />}>
+                        <ProductWithTexture
+                            position={item.pos}
+                            data={item.data}
+                            onPick={(d: any) => window.dispatchEvent(new CustomEvent('PICK_ITEM', { detail: d }))}
+                        />
+                    </Suspense>
+                </ImageErrorBoundary>
             ))}
         </group>
     );
@@ -162,6 +215,7 @@ function PlayerCart() {
                 <boxGeometry args={[0.75, 0.45, 1.05]} />
                 <meshStandardMaterial color="#991b1b" />
             </mesh>
+            {/* Handle */}
             <mesh position={[0, 0.3, -0.5]} rotation={[0.5, 0, 0]}>
                 <boxGeometry args={[0.7, 0.04, 0.04]} />
                 <meshStandardMaterial color="#1e293b" />
@@ -190,6 +244,7 @@ function Player() {
         camera.translateX(-velocity.current.x);
         camera.translateZ(-velocity.current.z);
 
+        // Bounds
         camera.position.y = 1.68;
         camera.position.x = Math.max(-20, Math.min(20, camera.position.x));
         camera.position.z = Math.max(-25, Math.min(25, camera.position.z));
@@ -225,12 +280,11 @@ function Player() {
     return <PlayerCart />;
 }
 
+// --- Main Engine ---
+
 function SceneContent() {
     const [cartCount, setCartCount] = useState(0);
     const [money, setMoney] = useState(1500);
-
-    // Load all textures once at the top level
-    const productTextures = useTexture(PRODUCTS.map(p => p.img)) as THREE.Texture[];
 
     React.useEffect(() => {
         const handler = (e: any) => {
@@ -245,6 +299,7 @@ function SceneContent() {
     return (
         <group>
             <Sky sunPosition={[100, 45, 100]} />
+            <Environment preset="city" />
             <ambientLight intensity={0.4} />
 
             {/* Distributed Lights */}
@@ -266,31 +321,33 @@ function SceneContent() {
             <group>
                 {/* Center Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
-                    <React.Fragment key={z}>
-                        <Shelf position={[-3.2, 2.1, z]} textures={productTextures} />
-                        <Shelf position={[3.2, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
-                    </React.Fragment>
+                    <Shelf key={`center-${z}`} position={[-3.2, 2.1, z]} />
                 ))}
+                {[-10, -5, 0, 5, 10].map(z => (
+                    <Shelf key={`center-r-${z}`} position={[3.2, 2.1, z]} rotation={[0, Math.PI, 0]} />
+                ))}
+
                 {/* Left Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
-                    <React.Fragment key={z}>
-                        <Shelf position={[-3.2 - AISLE_GAP, 2.1, z]} textures={productTextures} />
-                        <Shelf position={[3.2 - AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
-                    </React.Fragment>
+                    <Shelf key={`left-${z}`} position={[-3.2 - AISLE_GAP, 2.1, z]} />
                 ))}
+                {[-10, -5, 0, 5, 10].map(z => (
+                    <Shelf key={`left-r-${z}`} position={[3.2 - AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} />
+                ))}
+
                 {/* Right Aisle */}
                 {[-10, -5, 0, 5, 10].map(z => (
-                    <React.Fragment key={z}>
-                        <Shelf position={[-3.2 + AISLE_GAP, 2.1, z]} textures={productTextures} />
-                        <Shelf position={[3.2 + AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} textures={productTextures} />
-                    </React.Fragment>
+                    <Shelf key={`right-${z}`} position={[-3.2 + AISLE_GAP, 2.1, z]} />
+                ))}
+                {[-10, -5, 0, 5, 10].map(z => (
+                    <Shelf key={`right-r-${z}`} position={[3.2 + AISLE_GAP, 2.1, z]} rotation={[0, Math.PI, 0]} />
                 ))}
             </group>
 
             {/* End Caps */}
-            <Shelf position={[0, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
-            <Shelf position={[AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
-            <Shelf position={[-AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} textures={productTextures} />
+            <Shelf position={[0, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} />
+            <Shelf position={[AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} />
+            <Shelf position={[-AISLE_GAP, 2.1, -15]} rotation={[0, Math.PI / 2, 0]} />
 
             {/* Boundaries */}
             <mesh position={[0, 2.5, -20]}>
@@ -301,7 +358,7 @@ function SceneContent() {
             <Player />
             <ContactShadows position={[0, 0, 0]} opacity={0.3} scale={50} blur={2.5} far={10} />
 
-            {/* HUD in 3D Space (optional but we use HTML overlay usually) */}
+            {/* HUD Overlay */}
             <Html fullscreen className="pointer-events-none">
                 <div className="w-full h-full p-8 flex flex-col justify-between">
                     <div>
@@ -333,8 +390,8 @@ function SceneContent() {
 
                     <div className="flex justify-between items-end">
                         <div className="bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-slate-200 text-[10px] font-black tracking-widest text-slate-500 uppercase flex gap-4 pointer-events-auto">
-                            <span className="flex items-center gap-2"><Move size={14} /> WASD الحركه</span>
-                            <span className="flex items-center gap-2"><MousePointer2 size={14} /> Click الشراء</span>
+                            <span className="flex items-center gap-2"><Move size={14} /> WASD Move</span>
+                            <span className="flex items-center gap-2"><MousePointer2 size={14} /> Click to Pick</span>
                         </div>
                     </div>
                 </div>
@@ -354,6 +411,7 @@ export default function Store3D() {
             <Canvas shadows dpr={[1, 1.5]}>
                 <PerspectiveCamera makeDefault fov={70} position={[0, 1.68, 12]} />
                 <PointerLockControls />
+                {/* We use Suspense around the entire scene as a last resort, but individual products handle their own fallbacks */}
                 <Suspense fallback={null}>
                     <SceneContent />
                 </Suspense>
@@ -363,6 +421,7 @@ export default function Store3D() {
 }
 
 function TileMaterial() {
+    // Generate simple procedural tile texture to avoid useTexture issues for floor
     const texture = useMemo(() => {
         if (typeof document === 'undefined') return null;
         const canvas = document.createElement('canvas');
