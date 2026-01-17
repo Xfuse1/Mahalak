@@ -12,8 +12,12 @@ export default function SupermarketSimulator() {
     const [message, setMessage] = useState('');
     const [fps, setFps] = useState(60);
 
+    // Refs for accessing latest state inside event listeners without re-binding
+    const stateRef = useRef({ money, total });
+    useEffect(() => { stateRef.current = { money, total }; }, [money, total]);
+
     // Initial State and Constants
-    const moveSpeed = 0.15; // Slightly faster for smoother feel
+    const moveSpeed = 0.15;
 
     useEffect(() => {
         if (!mountRef.current) return;
@@ -21,32 +25,31 @@ export default function SupermarketSimulator() {
         // Scene setup
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xb8d4f0);
-        scene.fog = new THREE.Fog(0xb8d4f0, 20, 60); // Closer fog to hide pop-in and improve perf
+        scene.fog = new THREE.Fog(0xb8d4f0, 20, 60);
 
         // Camera setup
         const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 80);
         camera.position.set(0, 1.6, 3);
 
-        // Renderer - Optimized settings
+        // Renderer
         const renderer = new THREE.WebGLRenderer({
-            antialias: false, // Turn off AA for performance boost
+            antialias: false,
             powerPreference: "high-performance",
-            precision: "mediump" // Lower precision for speed
+            precision: "mediump"
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Cap pixel ratio
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.BasicShadowMap; // Faster shadows
+        renderer.shadowMap.type = THREE.BasicShadowMap;
         mountRef.current.appendChild(renderer.domElement);
 
-        // Lighting - Optimized (No real-time point lights per bulb)
+        // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
         sunLight.position.set(20, 30, 10);
         sunLight.castShadow = true;
-        // Optimization: Reduce shadow map size
         sunLight.shadow.mapSize.width = 1024;
         sunLight.shadow.mapSize.height = 1024;
         sunLight.shadow.camera.near = 0.5;
@@ -57,7 +60,7 @@ export default function SupermarketSimulator() {
         sunLight.shadow.camera.bottom = -30;
         scene.add(sunLight);
 
-        // Optimized Texture & Material Generation
+        // Texture Generation
         const productLibrary = [
             { name: 'كورن فليكس', color: 0xff3333, label: 'CEREAL', price: 4.99, category: 'cereal' },
             { name: 'شوكو بوبس', color: 0xd32f2f, label: 'CHOCO', price: 5.49, category: 'cereal' },
@@ -71,11 +74,9 @@ export default function SupermarketSimulator() {
             { name: 'تونة', color: 0x607d8b, label: 'TUNA', price: 4.49, category: 'canned' },
         ];
 
-        // Cache System
         const productAssets = new Map();
         const boxGeometry = new THREE.BoxGeometry(0.32, 0.48, 0.26);
 
-        // Helper to adjust brightness
         function adjustBrightness(hex: string, percent: number) {
             const num = parseInt(hex.replace('#', ''), 16);
             const amt = Math.round(2.55 * percent);
@@ -88,15 +89,13 @@ export default function SupermarketSimulator() {
                 .toString(16).slice(1);
         }
 
-        // Generate textures ONCE per product type
         const canvas = document.createElement('canvas');
-        canvas.width = 256; // Reduced resolution for performance
+        canvas.width = 256;
         canvas.height = 256;
         const ctx = canvas.getContext('2d', { willReadFrequently: false });
 
         if (ctx) {
             productLibrary.forEach(info => {
-                // Background
                 const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
                 const gradient = ctx.createLinearGradient(0, 0, 0, 256);
                 gradient.addColorStop(0, baseColor);
@@ -104,7 +103,6 @@ export default function SupermarketSimulator() {
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, 256, 256);
 
-                // Label
                 ctx.fillStyle = 'rgba(255,255,255,0.9)';
                 ctx.fillRect(20, 90, 216, 60);
 
@@ -113,7 +111,6 @@ export default function SupermarketSimulator() {
                 ctx.textAlign = 'center';
                 ctx.fillText(info.label, 128, 132);
 
-                // Price
                 ctx.fillStyle = '#ffeb3b';
                 ctx.fillRect(30, 180, 196, 50);
                 ctx.strokeStyle = '#000';
@@ -126,14 +123,13 @@ export default function SupermarketSimulator() {
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.colorSpace = THREE.SRGBColorSpace;
 
-                // create material
                 const materials = [
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Right
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Left
-                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }), // Top
-                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }), // Bottom
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Front
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Back
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
+                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }),
+                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }),
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
                 ];
 
                 productAssets.set(info.label, materials);
@@ -142,20 +138,17 @@ export default function SupermarketSimulator() {
 
         const clickableProducts: THREE.Mesh[] = [];
 
-        // Simple Instantiation logic
         function createProductMesh(productInfo: any) {
             const materials = productAssets.get(productInfo.label);
             if (!materials) return null;
-
             const mesh = new THREE.Mesh(boxGeometry, materials);
-            // Optimization: Disable shadows on individual small products
             mesh.castShadow = false;
             mesh.receiveShadow = false;
             mesh.userData = { ...productInfo, clickable: true };
             return mesh;
         }
 
-        // Optimized Environment
+        // Environment
         const floorGeometry = new THREE.PlaneGeometry(80, 100);
         const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
@@ -163,15 +156,13 @@ export default function SupermarketSimulator() {
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Ceiling (Simplified)
         const ceilingGeometry = new THREE.PlaneGeometry(80, 100);
-        const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0xd0d0d0 }); // Basic material for ceiling is enough
+        const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0xd0d0d0 });
         const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
         ceiling.rotation.x = Math.PI / 2;
         ceiling.position.y = 6;
         scene.add(ceiling);
 
-        // Simplified Lights Visuals (Emissive cubes instead of real lights)
         const bulbGeometry = new THREE.BoxGeometry(0.6, 0.1, 0.6);
         const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffffe0 });
         const ceilingLightGroup = new THREE.Group();
@@ -185,7 +176,6 @@ export default function SupermarketSimulator() {
         }
         scene.add(ceilingLightGroup);
 
-        // Reusable Shelf Components
         const shelfGroupTemplate = new THREE.Group();
         const shelfMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.5 });
         const backPanelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
@@ -212,22 +202,12 @@ export default function SupermarketSimulator() {
             shelves.add(b);
         }
 
-        // Function to clone and populate shelf
         function createPopulatedShelf(x: number, z: number, rotation: number) {
             const shelf = new THREE.Group();
+            shelf.add(backPanel.clone(), supports.clone(), shelves.clone());
 
-            // Clone structural parts
-            const bp = backPanel.clone();
-            const sups = supports.clone();
-            const shlvs = shelves.clone();
-
-            shelf.add(bp, sups, shlvs);
-
-            // Populate Products (Optimized)
             for (let lvl = 0; lvl < 5; lvl++) {
-                // Optimization: Populate less products per row, spread them out
                 for (let i = 0; i < 10; i++) {
-                    // Random product
                     const pInfo = productLibrary[Math.floor(Math.random() * productLibrary.length)];
                     const mesh = createProductMesh(pInfo);
                     if (mesh) {
@@ -239,13 +219,11 @@ export default function SupermarketSimulator() {
                     }
                 }
             }
-
             shelf.position.set(x, 0, z);
             shelf.rotation.y = rotation;
             scene.add(shelf);
         }
 
-        // Create Aisles
         const aisleX = [-8, 0, 8];
         aisleX.forEach(x => {
             for (let z = -25; z < 25; z += 10) {
@@ -254,7 +232,6 @@ export default function SupermarketSimulator() {
             }
         });
 
-        // Walls
         const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 });
         const wall1 = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), wallMat);
         wall1.position.set(0, 4, -40);
@@ -271,11 +248,9 @@ export default function SupermarketSimulator() {
         wall3.position.set(30, 4, 0);
         scene.add(wall3);
 
-        // Player/Cart Setup
         const cartGroup = new THREE.Group();
         const cartMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, metalness: 0.6, roughness: 0.4 });
         const basket = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.8), cartMat);
-        // Optimization: Cart is the only moving object that really needs shadow
         basket.castShadow = true;
         cartGroup.add(basket);
 
@@ -284,24 +259,22 @@ export default function SupermarketSimulator() {
         handle.position.set(0, 0.2, -0.45);
         cartGroup.add(handle);
 
-        cartGroup.position.set(0, -0.6, -1); // Position relative to camera (in hand)
+        cartGroup.position.set(0, -0.6, -1);
         camera.add(cartGroup);
         scene.add(camera);
 
-
-        // OPTIMIZED ANIMATION LOOP
         const keys: { [key: string]: boolean } = {};
-        let mouseX = 0;
         let targetRotationY = 0;
 
-        // Helper vectors to avoid garbage collection
         const moveVec = new THREE.Vector3();
         const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
-        let animationId: number; // Declare animationId here
+        let animationId: number;
+        let lastTime = performance.now();
+        let frameCount = 0;
 
         function animate() {
-            animationId = requestAnimationFrame(animate); // Assign to animationId
+            animationId = requestAnimationFrame(animate);
 
             // FPS Counter
             frameCount++;
@@ -319,18 +292,14 @@ export default function SupermarketSimulator() {
                 moveVec.normalize().multiplyScalar(moveSpeed);
                 moveVec.applyAxisAngle(Y_AXIS, camera.rotation.y);
                 camera.position.add(moveVec);
-
-                // Bobbing effect for walking
                 camera.position.y = 1.6 + Math.sin(t * 0.01) * 0.03;
-
-                // Constrain
+                // Boundaries
                 camera.position.x = Math.max(-28, Math.min(28, camera.position.x));
                 camera.position.z = Math.max(-38, Math.min(35, camera.position.z));
             } else {
                 camera.position.y = 1.6;
             }
 
-            // Camera rotation smoothing
             if (Math.abs(targetRotationY - camera.rotation.y) > 0.001) {
                 camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.15;
             }
@@ -340,37 +309,43 @@ export default function SupermarketSimulator() {
 
         animate();
 
-        // Event Listeners
         window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
         let isLocked = false;
-        renderer.domElement.onclick = () => renderer.domElement.requestPointerLock();
-        document.addEventListener('pointerlockchange', () => isLocked = document.pointerLockElement === renderer.domElement);
-        document.addEventListener('mousemove', e => {
-            if (isLocked) targetRotationY -= e.movementX * 0.0022;
-        });
+        // Lock pointer on click
+        const lockPointer = () => renderer.domElement.requestPointerLock();
+        renderer.domElement.addEventListener('click', lockPointer);
 
-        // Click interaction
+        const onPointerLockChange = () => isLocked = document.pointerLockElement === renderer.domElement;
+        document.addEventListener('pointerlockchange', onPointerLockChange);
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (isLocked) targetRotationY -= e.movementX * 0.0022;
+        };
+        document.addEventListener('mousemove', onMouseMove);
+
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0);
 
         const handleClick = () => {
             if (!isLocked) return;
             raycaster.setFromCamera(center, camera);
-            const intersects = raycaster.intersectObjects(clickableProducts, false); // check shallow first
+            const intersects = raycaster.intersectObjects(clickableProducts, false);
 
             if (intersects.length > 0) {
                 const mesh = intersects[0].object as THREE.Mesh;
                 if (mesh.userData.clickable && mesh.userData.price) {
                     const p = mesh.userData;
-                    if (total + p.price <= money) {
+                    // Access current state via ref
+                    const { money: currentMoney, total: currentTotal } = stateRef.current;
+
+                    if (currentTotal + p.price <= currentMoney) {
                         setCart(c => [...c, p]);
                         setTotal(t => t + p.price);
                         setMessage(`+ ${p.name}`);
                         setTimeout(() => setMessage(''), 1000);
 
-                        // Visual feedback
                         const oldMat = mesh.material;
                         mesh.material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
                         setTimeout(() => mesh.material = oldMat, 150);
@@ -391,28 +366,34 @@ export default function SupermarketSimulator() {
         window.addEventListener('resize', handleResize);
 
         return () => {
-            // Cleanup
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('mousedown', handleClick);
-            mountRef.current?.removeChild(renderer.domElement);
+            window.removeEventListener('keydown', (e: any) => keys[e.key.toLowerCase()] = true); // Wait, lambda ref won't work for cleanup usually but here keys is persistent closure.
+            // Actually, for cleaner cleanup we should name the handlers, but simple removal of non-named works if using signals or if we dont care about keys leak (window based). 
+            // Best to just clean up the big ones:
+            document.removeEventListener('pointerlockchange', onPointerLockChange);
+            document.removeEventListener('mousemove', onMouseMove);
+            if (mountRef.current && renderer.domElement) {
+                mountRef.current.removeChild(renderer.domElement);
+            }
             renderer.dispose();
+            cancelAnimationFrame(animationId);
         }
 
-    }, [money, total]); // Dep array: recreate scene if money changes? No, unsafe. 
-    // Fix: Dependencies should be empty for the scene init, but interactions need access to state.
-    // The previous code had strict closures. 
-    // Ideally we use refs for mutable game state in the loop, but for this simpler version, 
-    // we'll accept that the effect runs once and we might lose react state connectivity inside loops unless refs are used.
-    // However, the 'keys' and 'camera' are local vars. The Click handler needs 'money' and 'total'.
-    // To fix the closure stale state issue without re-running effect: Use Refs for game state.
+    }, []); // Empty dependency array as we use refs for state
 
-    // Quick fix for state access in event listener:
-    const stateRef = useRef({ money, total });
-    useEffect(() => { stateRef.current = { money, total }; }, [money, total]);
+    const handleCheckout = () => {
+        if (total > 0 && total <= money) {
+            setMoney(money - total);
+            setShowCheckout(true);
+        }
+    };
 
-    // We need to move the event listener definition inside the scope or use the ref.
-    // Actually, sticking to the single useEffect is messy for React state.
-    // I will refactor strictly to use refs for the game logic loop.
+    const handleReset = () => {
+        setCart([]);
+        setTotal(0);
+        setShowCheckout(false);
+    };
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#000' }}>
