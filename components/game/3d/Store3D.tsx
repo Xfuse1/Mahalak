@@ -60,18 +60,35 @@ export default function SupermarketSimulator() {
         sunLight.shadow.camera.bottom = -30;
         scene.add(sunLight);
 
-        // Texture Generation
+        // Texture Generation (Expanded Library)
         const productLibrary = [
-            { name: 'كورن فليكس', color: 0xff3333, label: 'CEREAL', price: 4.99, category: 'cereal' },
-            { name: 'شوكو بوبس', color: 0xd32f2f, label: 'CHOCO', price: 5.49, category: 'cereal' },
-            { name: 'حليب', color: 0x2196f3, label: 'MILK', price: 3.99, category: 'dairy' },
-            { name: 'عصير برتقال', color: 0xff9800, label: 'ORANGE', price: 5.99, category: 'juice' },
+            // Drinks & Dairy (Aisle 1)
+            { name: 'حليب كامل', color: 0x2196f3, label: 'MILK', price: 3.99, category: 'dairy' },
+            { name: 'حليب قليل', color: 0x64b5f6, label: 'SKIM', price: 3.49, category: 'dairy' },
+            { name: 'زبادي', color: 0xffffff, label: 'YOGURT', price: 1.99, category: 'dairy' },
+            { name: 'عصير برتقال', color: 0xff9800, label: 'JUICE', price: 5.99, category: 'drinks' },
+            { name: 'عصير تفاح', color: 0x8bc34a, label: 'APPLE', price: 4.99, category: 'drinks' },
+            { name: 'كولا', color: 0xd32f2f, label: 'COLA', price: 2.99, category: 'drinks' },
+            { name: 'سبرايت', color: 0x00c853, label: 'SPRITE', price: 2.99, category: 'drinks' },
+            { name: 'مياه', color: 0x03a9f4, label: 'WATER', price: 0.99, category: 'drinks' },
+
+            // Breakfast & Snacks (Aisle 2)
+            { name: 'كورن فليكس', color: 0xff3333, label: 'CEREAL', price: 6.99, category: 'breakfast' },
+            { name: 'شوفان', color: 0x795548, label: 'OATS', price: 5.49, category: 'breakfast' },
+            { name: 'شوكو بوبس', color: 0x5d4037, label: 'CHOCO', price: 6.49, category: 'breakfast' },
             { name: 'شيبسي', color: 0xff5722, label: 'CHIPS', price: 3.99, category: 'snacks' },
-            { name: 'كولا', color: 0xd32f2f, label: 'COLA', price: 1.99, category: 'soda' },
-            { name: 'مياه', color: 0x64b5f6, label: 'WATER', price: 0.99, category: 'water' },
-            { name: 'معكرونة', color: 0xfdd835, label: 'PASTA', price: 3.49, category: 'grains' },
-            { name: 'أرز', color: 0xfff9c4, label: 'RICE', price: 6.99, category: 'grains' },
-            { name: 'تونة', color: 0x607d8b, label: 'TUNA', price: 4.49, category: 'canned' },
+            { name: 'بسكويت', color: 0xffeb3b, label: 'BISCUIT', price: 2.49, category: 'snacks' },
+            { name: 'شوكولاتة', color: 0x3e2723, label: 'BAR', price: 1.99, category: 'snacks' },
+            { name: 'فوشار', color: 0xffca28, label: 'POPCORN', price: 3.49, category: 'snacks' },
+
+            // Pantry & Grains (Aisle 3)
+            { name: 'معكرونة', color: 0xfdd835, label: 'PASTA', price: 2.99, category: 'pantry' },
+            { name: 'أرز بسمتي', color: 0xfff9c4, label: 'RICE', price: 8.99, category: 'pantry' },
+            { name: 'زيت طبخ', color: 0xffd600, label: 'OIL', price: 12.99, category: 'pantry' },
+            { name: 'صلصة طماطم', color: 0xb71c1c, label: 'SAUCE', price: 2.49, category: 'pantry' },
+            { name: 'تونة', color: 0x607d8b, label: 'TUNA', price: 4.99, category: 'pantry' },
+            { name: 'فول معلب', color: 0x8d6e63, label: 'BEANS', price: 1.49, category: 'pantry' },
+            { name: 'سكر', color: 0xe0e0e0, label: 'SUGAR', price: 3.99, category: 'pantry' },
         ];
 
         const productAssets = new Map();
@@ -90,47 +107,48 @@ export default function SupermarketSimulator() {
         }
 
         const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
+        canvas.width = 128; // Optimized size
+        canvas.height = 128;
         const ctx = canvas.getContext('2d', { willReadFrequently: false });
 
         if (ctx) {
             productLibrary.forEach(info => {
                 const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
-                const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-                gradient.addColorStop(0, baseColor);
-                gradient.addColorStop(1, adjustBrightness(baseColor, -30));
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 256, 256);
 
-                ctx.fillStyle = 'rgba(255,255,255,0.9)';
-                ctx.fillRect(20, 90, 216, 60);
+                // Simple solid background for performance + clean look
+                ctx.fillStyle = baseColor;
+                ctx.fillRect(0, 0, 128, 128);
 
+                // Add some "design" lines
+                ctx.fillStyle = adjustBrightness(baseColor, -20);
+                ctx.fillRect(0, 0, 128, 30);
+                ctx.fillRect(0, 98, 128, 30);
+
+                // Label Box
+                ctx.fillStyle = 'white';
+                ctx.fillRect(10, 40, 108, 48);
+
+                // Text
                 ctx.fillStyle = '#000';
-                ctx.font = 'bold 36px Arial';
+                ctx.font = 'bold 24px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(info.label, 128, 132);
+                ctx.fillText(info.label, 64, 72);
 
+                // Price Tag
                 ctx.fillStyle = '#ffeb3b';
-                ctx.fillRect(30, 180, 196, 50);
-                ctx.strokeStyle = '#000';
-                ctx.strokeRect(30, 180, 196, 50);
-
+                ctx.fillRect(80, 80, 40, 25);
                 ctx.fillStyle = '#d32f2f';
-                ctx.font = 'bold 32px Arial';
-                ctx.fillText(`$${info.price}`, 128, 215);
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(`$${Math.floor(info.price)}`, 100, 98);
 
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.colorSpace = THREE.SRGBColorSpace;
 
-                const materials = [
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }),
-                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }),
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                ];
+                const materials = new THREE.MeshStandardMaterial({
+                    map: texture,
+                    roughness: 0.5,
+                    metalness: 0.1
+                });
 
                 productAssets.set(info.label, materials);
             });
@@ -139,9 +157,10 @@ export default function SupermarketSimulator() {
         const clickableProducts: THREE.Mesh[] = [];
 
         function createProductMesh(productInfo: any) {
-            const materials = productAssets.get(productInfo.label);
-            if (!materials) return null;
-            const mesh = new THREE.Mesh(boxGeometry, materials);
+            const material = productAssets.get(productInfo.label);
+            if (!material) return null;
+            // Use same material for all sides to reduce draw calls/complexity
+            const mesh = new THREE.Mesh(boxGeometry, material);
             mesh.castShadow = false;
             mesh.receiveShadow = false;
             mesh.userData = { ...productInfo, clickable: true };
@@ -149,35 +168,35 @@ export default function SupermarketSimulator() {
         }
 
         // Environment
-        const floorGeometry = new THREE.PlaneGeometry(80, 100);
+        const floorGeometry = new THREE.PlaneGeometry(80, 120);
         const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
         scene.add(floor);
 
-        const ceilingGeometry = new THREE.PlaneGeometry(80, 100);
+        const ceilingGeometry = new THREE.PlaneGeometry(80, 120);
         const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0xd0d0d0 });
         const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
         ceiling.rotation.x = Math.PI / 2;
         ceiling.position.y = 6;
         scene.add(ceiling);
 
-        const bulbGeometry = new THREE.BoxGeometry(0.6, 0.1, 0.6);
+        // Optimized Lights - Row of lights over aisles
+        const bulbGeometry = new THREE.BoxGeometry(0.6, 0.1, 80);
         const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffffe0 });
         const ceilingLightGroup = new THREE.Group();
 
-        for (let i = -30; i < 50; i += 8) {
-            for (let j = -8; j < 8; j += 6) {
-                const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
-                bulb.position.set(j, 5.9, i);
-                ceilingLightGroup.add(bulb);
-            }
-        }
+        // Lights aligned with aisles
+        [-8, 0, 8].forEach(x => {
+            const strip = new THREE.Mesh(bulbGeometry, bulbMaterial);
+            strip.position.set(x, 5.9, 0);
+            ceilingLightGroup.add(strip);
+        });
         scene.add(ceilingLightGroup);
 
         const shelfGroupTemplate = new THREE.Group();
-        const shelfMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.5 });
+        const shelfMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 });
         const backPanelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
 
         const backPanel = new THREE.Mesh(new THREE.BoxGeometry(7, 3.2, 0.05), backPanelMat);
@@ -202,18 +221,29 @@ export default function SupermarketSimulator() {
             shelves.add(b);
         }
 
-        function createPopulatedShelf(x: number, z: number, rotation: number) {
+        function createPopulatedShelf(x: number, z: number, rotation: number, categories: string[]) {
             const shelf = new THREE.Group();
             shelf.add(backPanel.clone(), supports.clone(), shelves.clone());
 
+            // Filter products for this aisle
+            const allowedProducts = productLibrary.filter(p => categories.includes(p.category));
+            if (allowedProducts.length === 0) return shelf;
+
             for (let lvl = 0; lvl < 5; lvl++) {
-                for (let i = 0; i < 10; i++) {
-                    const pInfo = productLibrary[Math.floor(Math.random() * productLibrary.length)];
-                    const mesh = createProductMesh(pInfo);
+                // Organize: One product type per shelf row for neatness
+                const rowProduct = allowedProducts[Math.floor(Math.random() * allowedProducts.length)];
+                const rowCount = 14; // HIGH DENSITY (Full Shelf)
+
+                for (let i = 0; i < rowCount; i++) {
+                    const mesh = createProductMesh(rowProduct);
                     if (mesh) {
-                        const xPos = -3.0 + i * 0.65;
-                        mesh.position.set(xPos, 0.2 + lvl * 0.6 + 0.26, 0);
-                        if (Math.random() > 0.5) mesh.rotation.y = Math.PI;
+                        // Tightly packed spacing
+                        const xPos = -3.2 + i * 0.48;
+                        // Add slight variation for realism, but mostly neat
+                        const zOffset = (Math.random() * 0.05) - 0.025;
+                        mesh.position.set(xPos, 0.2 + lvl * 0.6 + 0.26, zOffset);
+                        // Perfect alignment
+                        mesh.rotation.y = rotation;
                         shelf.add(mesh);
                         clickableProducts.push(mesh);
                     }
@@ -224,28 +254,36 @@ export default function SupermarketSimulator() {
             scene.add(shelf);
         }
 
-        const aisleX = [-8, 0, 8];
-        aisleX.forEach(x => {
-            for (let z = -25; z < 25; z += 10) {
-                createPopulatedShelf(x, z, 0);
-                createPopulatedShelf(x, z, Math.PI);
+        // Aisle Layout Configuration
+        const aisleLayouts = [
+            { x: -8, categories: ['dairy', 'drinks'] },      // Aisle 1 (Left)
+            { x: 0, categories: ['breakfast', 'snacks'] },   // Aisle 2 (Center)
+            { x: 8, categories: ['pantry'] }                 // Aisle 3 (Right)
+        ];
+
+        aisleLayouts.forEach(layout => {
+            // Create long aisles
+            for (let z = -35; z < 35; z += 8) {
+                createPopulatedShelf(layout.x, z, 0, layout.categories); // Front facing
+                createPopulatedShelf(layout.x, z, Math.PI, layout.categories); // Back facing (shared aisle wall)
             }
         });
 
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 });
-        const wall1 = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), wallMat);
-        wall1.position.set(0, 4, -40);
+        // Walls
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5 });
+        const wall1 = new THREE.Mesh(new THREE.PlaneGeometry(80, 10), wallMat);
+        wall1.position.set(0, 5, -50);
         wall1.receiveShadow = true;
         scene.add(wall1);
 
-        const wall2 = new THREE.Mesh(new THREE.PlaneGeometry(100, 8), wallMat);
+        const wall2 = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), wallMat);
         wall2.rotation.y = Math.PI / 2;
-        wall2.position.set(-30, 4, 0);
+        wall2.position.set(-35, 5, 0);
         scene.add(wall2);
 
-        const wall3 = new THREE.Mesh(new THREE.PlaneGeometry(100, 8), wallMat);
+        const wall3 = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), wallMat);
         wall3.rotation.y = -Math.PI / 2;
-        wall3.position.set(30, 4, 0);
+        wall3.position.set(35, 5, 0);
         scene.add(wall3);
 
         const cartGroup = new THREE.Group();
