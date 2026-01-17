@@ -364,6 +364,146 @@ export default function SupermarketSimulator() {
             }
         });
 
+        // End-Caps (Shelves at the ends of aisles for maximum density)
+        const endCapZ = [-41, 41];
+        [-14, 0, 14].forEach(x => {
+            endCapZ.forEach(z => {
+                const shelf = new THREE.Group();
+                shelf.add(backPanel.clone(), supports.clone(), shelves.clone());
+
+                // Facing outwards
+                const rotation = z > 0 ? 0 : Math.PI;
+
+                // Fill with random "Grab & Go" items
+                const categories = ['snacks', 'drinks'];
+                const allowedProducts = productLibrary.filter(p => categories.includes(p.category));
+
+                for (let lvl = 0; lvl < 6; lvl++) {
+                    const rowProduct = allowedProducts[Math.floor(Math.random() * allowedProducts.length)];
+                    for (let i = 0; i < 18; i++) {
+                        const mesh = createProductMesh(rowProduct);
+                        if (mesh) {
+                            const xPos = -3.2 + i * 0.38;
+                            mesh.position.set(xPos, 0.2 + lvl * 0.55 + 0.26, (Math.random() * 0.04) - 0.02);
+                            mesh.rotation.y = rotation;
+                            shelf.add(mesh);
+                            clickableProducts.push(mesh);
+                        }
+                    }
+                }
+
+                // Rotate 90 degrees to face the walkway
+                shelf.rotation.y = rotation + Math.PI / 2;
+                // Adjust position to center on aisle end
+                shelf.position.set(x, 0, z);
+                scene.add(shelf);
+            });
+        });
+
+        // --- CASHIER AREA (Detailed 3D Model) ---
+        function createCashier(x: number, z: number) {
+            const cashierGroup = new THREE.Group();
+
+            // 1. The Counter (L-Shape look)
+            const counterMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.2 });
+            const topMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.1 });
+
+            const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1.2, 2.5), counterMat);
+            base.position.set(0, 0.6, 0);
+            base.castShadow = true;
+            base.receiveShadow = true;
+            cashierGroup.add(base);
+
+            const top = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.1, 2.7), topMat);
+            top.position.set(0, 1.25, 0);
+            cashierGroup.add(top);
+
+            // 2. Conveyor Belt
+            const beltMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+            const belt = new THREE.Mesh(new THREE.BoxGeometry(4, 0.05, 1.8), beltMat);
+            belt.position.set(-0.8, 1.31, 0);
+            cashierGroup.add(belt);
+
+            // 3. POS Register & Screen
+            const screenGroup = new THREE.Group();
+            const stand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.2), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            stand.position.set(2, 1.4, 0.5);
+
+            const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            monitor.position.set(2, 1.7, 0.5);
+            monitor.rotation.y = -Math.PI / 6;
+
+            // Screen Glow (Green "Ready")
+            const screenFace = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.5), new THREE.MeshBasicMaterial({ color: 0x00ff00 }));
+            screenFace.position.set(0, 0, 0.06);
+            monitor.add(screenFace);
+
+            screenGroup.add(stand, monitor);
+            cashierGroup.add(screenGroup);
+
+            // 4. Overhead Sign "CASHIER"
+            const signPole1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4), new THREE.MeshStandardMaterial({ color: 0x888888 }));
+            signPole1.position.set(-2, 3, 0);
+            const signPole2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4), new THREE.MeshStandardMaterial({ color: 0x888888 }));
+            signPole2.position.set(2, 3, 0);
+            cashierGroup.add(signPole1, signPole2);
+
+            const signBoard = new THREE.Mesh(new THREE.BoxGeometry(5, 1, 0.2), new THREE.MeshStandardMaterial({ color: 0x4caf50 }));
+            signBoard.position.set(0, 4.5, 0);
+            cashierGroup.add(signBoard);
+
+            // Checkered Floor for Cashier Area
+            const matCheck = new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.1 });
+            const areaFloor = new THREE.Mesh(new THREE.PlaneGeometry(8, 6), matCheck);
+            areaFloor.rotation.x = -Math.PI / 2;
+            areaFloor.position.set(0, 0.02, 0);
+            cashierGroup.add(areaFloor);
+
+            // Impulse Buy Rack on Counter
+            const rack = new THREE.Group();
+            for (let i = 0; i < 3; i++) {
+                const candy = createProductMesh(productLibrary.find(p => p.category === 'snacks'));
+                if (candy) {
+                    candy.scale.set(0.5, 0.5, 0.5);
+                    candy.position.set(2.5, 1.4, -0.5 + i * 0.4);
+                    rack.add(candy);
+                }
+            }
+            cashierGroup.add(rack);
+
+            cashierGroup.position.set(x, 0, z);
+            // cashierGroup.rotation.y = Math.PI; // Face the store
+            scene.add(cashierGroup);
+
+            // Dynamic light for cashier
+            const cashLight = new THREE.PointLight(0x4caf50, 0.8, 10);
+            cashLight.position.set(x, 4, z);
+            scene.add(cashLight);
+        }
+
+        // Place Cashier Desk near entrance/start
+        createCashier(0, 48); // Centered at the "front"
+
+        // Walls
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5 });
+        const wallGeometry = new THREE.BoxGeometry(0.1, 6, 120);
+
+        const wallLeft = new THREE.Mesh(wallGeometry, wallMat);
+        wallLeft.position.set(-35, 3, 0);
+        scene.add(wallLeft);
+
+        const wallRight = new THREE.Mesh(wallGeometry, wallMat);
+        wallRight.position.set(35, 3, 0);
+        scene.add(wallRight);
+
+        const wallBack = new THREE.Mesh(new THREE.BoxGeometry(70, 6, 0.1), wallMat);
+        wallBack.position.set(0, 3, -50);
+        scene.add(wallBack);
+
+        const wallFront = new THREE.Mesh(new THREE.BoxGeometry(70, 6, 0.1), wallMat);
+        wallFront.position.set(0, 3, 50);
+        scene.add(wallFront);
+
         const cartGroup = new THREE.Group();
         const cartMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, metalness: 0.6, roughness: 0.4 });
         const basket = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.8), cartMat);
