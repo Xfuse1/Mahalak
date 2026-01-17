@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useState, useMemo, Suspense } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import React, { useRef, useState, useMemo, Suspense, useEffect } from 'react';
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import {
     PointerLockControls,
     Sky,
@@ -9,10 +9,12 @@ import {
     PerspectiveCamera,
     Html,
     useTexture,
-    Environment
+    Environment,
+    Loader
 } from '@react-three/drei';
 import * as THREE from 'three';
-import { ShoppingCart, Move, MousePointer2 } from 'lucide-react';
+import { ShoppingCart, Move, MousePointer2, Loader2 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 
 // --- Constants ---
 const SHELF_WIDTH = 12;
@@ -21,7 +23,7 @@ const SHELF_DEPTH = 1.0;
 const AISLE_GAP = 7.0;
 const LEVELS = 5;
 
-// --- Real Product Data (Updated with stable IDs) ---
+// --- Real Product Data ---
 const PRODUCTS = [
     { name: 'Cereal Box', img: 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=128&q=80', price: 25 },
     { name: 'Fresh Milk', img: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=128&q=80', price: 15 },
@@ -105,8 +107,12 @@ function ProductPlaceholder({ position, data, onPick }: any) {
 
 function ProductWithTexture({ position, data, onPick }: any) {
     const [hovered, setHovered] = useState(false);
-    // useTexture can suspend or throw
-    const texture = useTexture(data.img);
+    // useTexture can suspend. We added safe fallbacks.
+    const texture = useTexture(data.img, (texture) => {
+        if (texture instanceof THREE.Texture) {
+            texture.colorSpace = THREE.SRGBColorSpace;
+        }
+    });
 
     return (
         <group
@@ -250,6 +256,9 @@ function Player() {
         camera.position.z = Math.max(-25, Math.min(25, camera.position.z));
 
         velocity.current.multiplyScalar(0.85);
+
+        // Initial position fix if falling
+        if (camera.position.y < 1.0) camera.position.y = 1.68;
     });
 
     React.useEffect(() => {
@@ -298,8 +307,14 @@ function SceneContent() {
 
     return (
         <group>
-            <Sky sunPosition={[100, 45, 100]} />
-            <Environment preset="city" />
+            {/* Background Color to ensure we see something if Sky/Env fails */}
+            <color attach="background" args={['#87CEEB']} />
+
+            <Suspense fallback={null}>
+                <Sky sunPosition={[100, 45, 100]} />
+                <Environment preset="city" />
+            </Suspense>
+
             <ambientLight intensity={0.4} />
 
             {/* Distributed Lights */}
@@ -400,7 +415,12 @@ function SceneContent() {
     );
 }
 
-export default function Store3D() {
+// -------------------------------------------------------------
+// MAIN COMPONENT WRAPPER
+// -------------------------------------------------------------
+// We create a separate rendering component to use in the dynamic export below.
+
+function Store3DRenderer() {
     return (
         <div className="w-full h-screen bg-white relative font-sans overflow-hidden">
             {/* Target Aim */}
@@ -411,39 +431,68 @@ export default function Store3D() {
             <Canvas shadows dpr={[1, 1.5]}>
                 <PerspectiveCamera makeDefault fov={70} position={[0, 1.68, 12]} />
                 <PointerLockControls />
-                {/* We use Suspense around the entire scene as a last resort, but individual products handle their own fallbacks */}
+                {/* Main Suspense for the whole scene */}
                 <Suspense fallback={null}>
                     <SceneContent />
                 </Suspense>
             </Canvas>
+
+            {/* Visible Loader to indicate the app is working */}
+            <Loader
+                containerStyles={{ background: 'rgba(255, 255, 255, 1)' }}
+                innerStyles={{ width: '300px', background: '#f1f5f9' }}
+                barStyles={{ background: '#2563eb', height: '10px' }}
+                dataStyles={{ color: '#0f172a', fontWeight: 'bold', fontSize: '14px' }}
+            />
         </div>
     );
 }
 
+// Ensure strict client-side rendering ONLY
+const Store3D = dynamic(() => Promise.resolve(Store3DRenderer), {
+    ssr: false,
+    loading: () => (
+        <div className="w-full h-screen bg-white flex items-center justify-center flex-col gap-4">
+            <div className="animate-spin text-blue-600">
+                <Loader2 size={48} />
+            </div>
+            <div className="text-slate-500 font-bold uppercase tracking-widest text-sm">Initializing 3D Engine...</div>
+        </div>
+    )
+});
+
+export default Store3D;
+
 function TileMaterial() {
-    // Generate simple procedural tile texture to avoid useTexture issues for floor
+    // Generate simple procedural tile texture
     const texture = useMemo(() => {
         if (typeof document === 'undefined') return null;
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, 512, 512);
-            ctx.strokeStyle = '#f1f5f9';
-            ctx.lineWidth = 1;
-            const size = 64;
-            for (let i = 0; i <= 512; i += size) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, 512, 512);
+                ctx.strokeStyle = '#f1f5f9';
+                ctx.lineWidth = 1;
+                const size = 64;
+                for (let i = 0; i <= 512; i += size) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+                }
             }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(20, 20);
+            return tex;
+        } catch (e) {
+            return null;
         }
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(20, 20);
-        return tex;
     }, []);
+
+    if (!texture) return <meshStandardMaterial color="#ffffff" />;
 
     return <meshStandardMaterial map={texture as THREE.Texture} roughness={0.15} metalness={0.05} />;
 }
