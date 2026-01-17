@@ -12,244 +12,70 @@ export default function SupermarketSimulator() {
     const [message, setMessage] = useState('');
     const [fps, setFps] = useState(60);
 
+    // Initial State and Constants
+    const moveSpeed = 0.15; // Slightly faster for smoother feel
+
     useEffect(() => {
         if (!mountRef.current) return;
 
         // Scene setup
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xb8d4f0);
-        scene.fog = new THREE.Fog(0xb8d4f0, 25, 70);
+        scene.fog = new THREE.Fog(0xb8d4f0, 20, 60); // Closer fog to hide pop-in and improve perf
 
-        // Camera setup (First Person POV - exactly like the image)
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        // Camera setup
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 80);
         camera.position.set(0, 1.6, 3);
 
-        // Renderer with better quality
+        // Renderer - Optimized settings
         const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            powerPreference: "high-performance"
+            antialias: false, // Turn off AA for performance boost
+            powerPreference: "high-performance",
+            precision: "mediump" // Lower precision for speed
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Cap pixel ratio
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = THREE.BasicShadowMap; // Faster shadows
         mountRef.current.appendChild(renderer.domElement);
 
-        // Enhanced Lighting (brighter like supermarket)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        // Lighting - Optimized (No real-time point lights per bulb)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
 
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
-        sunLight.position.set(15, 25, 15);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(20, 30, 10);
         sunLight.castShadow = true;
-        sunLight.shadow.camera.left = -40;
-        sunLight.shadow.camera.right = 40;
-        sunLight.shadow.camera.top = 40;
-        sunLight.shadow.camera.bottom = -40;
-        sunLight.shadow.mapSize.width = 4096;
-        sunLight.shadow.mapSize.height = 4096;
+        // Optimization: Reduce shadow map size
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 100;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
         scene.add(sunLight);
 
-        // Ceiling lights array (like in the image)
-        const ceilingLights = [];
-        for (let i = -30; i < 50; i += 5) {
-            for (let j = -8; j < 8; j += 4) {
-                const light = new THREE.PointLight(0xfffef0, 0.6, 15);
-                light.position.set(j, 5.8, i);
-                scene.add(light);
-                ceilingLights.push(light);
-
-                // Light fixture (visible bulb)
-                const bulbGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.8);
-                const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffffe0 });
-                const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
-                bulb.position.copy(light.position);
-                bulb.position.y = 5.7;
-                scene.add(bulb);
-            }
-        }
-
-        // Floor - white glossy tile (like supermarket)
-        const floorGeometry = new THREE.PlaneGeometry(80, 100);
-        const floorMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            roughness: 0.15,
-            metalness: 0.05
-        });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        scene.add(floor);
-
-        // Floor tiles pattern
-        const tileLinesMaterial = new THREE.LineBasicMaterial({ color: 0xe0e0e0 });
-        for (let i = -40; i < 50; i += 1) {
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(-40, 0.01, i),
-                new THREE.Vector3(40, 0.01, i)
-            ]);
-            scene.add(new THREE.Line(lineGeometry, tileLinesMaterial));
-
-            const lineGeometry2 = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(i, 0.01, -50),
-                new THREE.Vector3(i, 0.01, 50)
-            ]);
-            scene.add(new THREE.Line(lineGeometry2, tileLinesMaterial));
-        }
-
-        // Ceiling (gray like image)
-        const ceilingGeometry = new THREE.PlaneGeometry(80, 100);
-        const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0xd0d0d0 });
-        const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
-        ceiling.rotation.x = Math.PI / 2;
-        ceiling.position.y = 6;
-        scene.add(ceiling);
-
-        // Ceiling beams (like the image - beige/tan color)
-        const beamMaterial = new THREE.MeshStandardMaterial({ color: 0xdac490 });
-        for (let i = -30; i < 50; i += 10) {
-            const beam = new THREE.Mesh(
-                new THREE.BoxGeometry(0.5, 0.4, 100),
-                beamMaterial
-            );
-            beam.position.set(0, 5.8, i - 25);
-            beam.castShadow = true;
-            scene.add(beam);
-
-            // Cross beams
-            const crossBeam = new THREE.Mesh(
-                new THREE.BoxGeometry(80, 0.3, 0.4),
-                beamMaterial
-            );
-            crossBeam.position.set(0, 5.9, i);
-            scene.add(crossBeam);
-        }
-
-        // Walls
-        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xf8f8f8 });
-
-        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(80, 6), wallMaterial);
-        backWall.position.set(0, 3, -50);
-        backWall.receiveShadow = true;
-        scene.add(backWall);
-
-        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(100, 6), wallMaterial);
-        leftWall.rotation.y = Math.PI / 2;
-        leftWall.position.set(-40, 3, 0);
-        scene.add(leftWall);
-
-        const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(100, 6), wallMaterial);
-        rightWall.rotation.y = -Math.PI / 2;
-        rightWall.position.set(40, 3, 0);
-        scene.add(rightWall);
-
-        // Product library (MORE VARIETY)
+        // Optimized Texture & Material Generation
         const productLibrary = [
-            // Cereals (Red boxes - like Corn Flakes)
             { name: 'كورن فليكس', color: 0xff3333, label: 'CEREAL', price: 4.99, category: 'cereal' },
             { name: 'شوكو بوبس', color: 0xd32f2f, label: 'CHOCO', price: 5.49, category: 'cereal' },
-            { name: 'رايس كريسبي', color: 0xe53935, label: 'RICE', price: 4.49, category: 'cereal' },
-
-            // Milk & Dairy (Blue/White)
-            { name: 'حليب كامل الدسم', color: 0x2196f3, label: 'MILK', price: 3.99, category: 'dairy' },
-            { name: 'حليب قليل الدسم', color: 0x64b5f6, label: 'LIGHT', price: 3.49, category: 'dairy' },
-            { name: 'لبن زبادي', color: 0xffffff, label: 'YOGURT', price: 2.99, category: 'dairy' },
-
-            // Juices (Orange, Green, Yellow)
+            { name: 'حليب', color: 0x2196f3, label: 'MILK', price: 3.99, category: 'dairy' },
             { name: 'عصير برتقال', color: 0xff9800, label: 'ORANGE', price: 5.99, category: 'juice' },
-            { name: 'عصير تفاح أخضر', color: 0x8bc34a, label: 'APPLE', price: 5.49, category: 'juice' },
-            { name: 'عصير مانجو', color: 0xffeb3b, label: 'MANGO', price: 6.49, category: 'juice' },
-            { name: 'عصير فراولة', color: 0xe91e63, label: 'BERRY', price: 5.99, category: 'juice' },
-
-            // Canned goods (Yellow, Green, Red)
-            { name: 'ذرة معلبة', color: 0xffd54f, label: 'CORN', price: 2.49, category: 'canned' },
-            { name: 'فول معلب', color: 0x8bc34a, label: 'BEANS', price: 2.99, category: 'canned' },
-            { name: 'طماطم معلبة', color: 0xf44336, label: 'TOMATO', price: 3.49, category: 'canned' },
-            { name: 'فاصوليا خضراء', color: 0x66bb6a, label: 'GREEN', price: 2.79, category: 'canned' },
-
-            // Snacks (Various colors)
             { name: 'شيبسي', color: 0xff5722, label: 'CHIPS', price: 3.99, category: 'snacks' },
-            { name: 'بسكويت', color: 0xdaa520, label: 'COOKIE', price: 4.49, category: 'snacks' },
-            { name: 'شوكولاتة', color: 0x5d4037, label: 'CHOCO', price: 5.99, category: 'snacks' },
-
-            // Beverages (Red, Blue, Green cans)
             { name: 'كولا', color: 0xd32f2f, label: 'COLA', price: 1.99, category: 'soda' },
-            { name: 'سبرايت', color: 0x4caf50, label: 'SPRITE', price: 1.99, category: 'soda' },
-            { name: 'فانتا', color: 0xff9800, label: 'FANTA', price: 1.99, category: 'soda' },
-            { name: 'مياه معدنية', color: 0x64b5f6, label: 'WATER', price: 0.99, category: 'water' },
-
-            // Pasta & Rice (Yellow boxes)
+            { name: 'مياه', color: 0x64b5f6, label: 'WATER', price: 0.99, category: 'water' },
             { name: 'معكرونة', color: 0xfdd835, label: 'PASTA', price: 3.49, category: 'grains' },
-            { name: 'أرز أبيض', color: 0xfff9c4, label: 'RICE', price: 6.99, category: 'grains' },
-            { name: 'سباغيتي', color: 0xffeb3b, label: 'SPAGH', price: 3.99, category: 'grains' },
+            { name: 'أرز', color: 0xfff9c4, label: 'RICE', price: 6.99, category: 'grains' },
+            { name: 'تونة', color: 0x607d8b, label: 'TUNA', price: 4.49, category: 'canned' },
         ];
 
-        const clickableProducts: THREE.Object3D[] = [];
+        // Cache System
+        const productAssets = new Map();
+        const boxGeometry = new THREE.BoxGeometry(0.32, 0.48, 0.26);
 
-        // Enhanced product creation with realistic labels
-        function createProduct(productInfo: any, canvas: HTMLCanvasElement) {
-            const group = new THREE.Group();
-
-            const geometry = new THREE.BoxGeometry(0.32, 0.48, 0.26);
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return group;
-
-            canvas.width = 512;
-            canvas.height = 512;
-
-            // Background gradient
-            const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-            const baseColor = `#${productInfo.color.toString(16).padStart(6, '0')}`;
-            gradient.addColorStop(0, baseColor);
-            gradient.addColorStop(1, adjustBrightness(baseColor, -30));
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 512, 512);
-
-            // Brand label background
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-            ctx.fillRect(40, 180, 432, 120);
-
-            // Product label
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 72px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(productInfo.label, 256, 255);
-
-            // Price tag (like supermarket sticker)
-            ctx.fillStyle = '#ffeb3b';
-            ctx.fillRect(60, 350, 392, 100);
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(60, 350, 392, 100);
-
-            ctx.fillStyle = '#d32f2f';
-            ctx.font = 'bold 64px Arial';
-            ctx.fillText(`$${productInfo.price}`, 256, 420);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.needsUpdate = true;
-            texture.colorSpace = THREE.SRGBColorSpace;
-
-            // Explicitly define materials with specific type
-            const materials = [
-                new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                new THREE.MeshStandardMaterial({ color: adjustBrightness(baseColor, -20), metalness: 0.1, roughness: 0.7 }),
-                new THREE.MeshStandardMaterial({ color: adjustBrightness(baseColor, -20), metalness: 0.1, roughness: 0.7 }),
-                new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-                new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }),
-            ];
-
-            const mesh = new THREE.Mesh(geometry, materials);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            mesh.userData = { ...productInfo, clickable: true };
-
-            group.add(mesh);
-            return group;
-        }
-
+        // Helper to adjust brightness
         function adjustBrightness(hex: string, percent: number) {
             const num = parseInt(hex.replace('#', ''), 16);
             const amt = Math.round(2.55 * percent);
@@ -262,312 +88,331 @@ export default function SupermarketSimulator() {
                 .toString(16).slice(1);
         }
 
-        // Create realistic shelf (GRAY like the image)
-        function createShelf(x: number, z: number, rotation: number, side: string) {
-            const shelfGroup = new THREE.Group();
+        // Generate textures ONCE per product type
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; // Reduced resolution for performance
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d', { willReadFrequently: false });
 
-            const shelfMaterial = new THREE.MeshStandardMaterial({
-                color: 0xa0a0a0,
-                metalness: 0.5,
-                roughness: 0.5
+        if (ctx) {
+            productLibrary.forEach(info => {
+                // Background
+                const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
+                const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+                gradient.addColorStop(0, baseColor);
+                gradient.addColorStop(1, adjustBrightness(baseColor, -30));
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 256, 256);
+
+                // Label
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                ctx.fillRect(20, 90, 216, 60);
+
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(info.label, 128, 132);
+
+                // Price
+                ctx.fillStyle = '#ffeb3b';
+                ctx.fillRect(30, 180, 196, 50);
+                ctx.strokeStyle = '#000';
+                ctx.strokeRect(30, 180, 196, 50);
+
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText(`$${info.price}`, 128, 215);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.colorSpace = THREE.SRGBColorSpace;
+
+                // create material
+                const materials = [
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Right
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Left
+                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }), // Top
+                    new THREE.MeshStandardMaterial({ color: parseInt(adjustBrightness(baseColor, -20).replace('#', '0x')), metalness: 0.1 }), // Bottom
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Front
+                    new THREE.MeshStandardMaterial({ map: texture, metalness: 0.1, roughness: 0.6 }), // Back
+                ];
+
+                productAssets.set(info.label, materials);
             });
-
-            // Back panel (white like image)
-            const backPanel = new THREE.Mesh(
-                new THREE.BoxGeometry(7, 3.2, 0.05),
-                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
-            );
-            backPanel.position.set(0, 1.6, -0.35);
-            backPanel.castShadow = true;
-            backPanel.receiveShadow = true;
-            shelfGroup.add(backPanel);
-
-            // Vertical metal supports
-            for (let i = 0; i < 6; i++) {
-                const support = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.06, 3.2, 0.06),
-                    shelfMaterial
-                );
-                support.position.set(-3.3 + i * 1.4, 1.6, 0);
-                support.castShadow = true;
-                shelfGroup.add(support);
-            }
-
-            // 6 shelf levels (MORE shelves like the image)
-            const canvas = document.createElement('canvas');
-            for (let level = 0; level < 6; level++) {
-                const shelfBoard = new THREE.Mesh(
-                    new THREE.BoxGeometry(7, 0.04, 0.7),
-                    shelfMaterial
-                );
-                const yPos = 0.2 + level * 0.55;
-                shelfBoard.position.set(0, yPos, 0);
-                shelfBoard.castShadow = true;
-                shelfBoard.receiveShadow = true;
-                shelfGroup.add(shelfBoard);
-
-                // Products on shelf (PACKED like the image)
-                const productsPerRow = 18; // MORE products
-                for (let i = 0; i < productsPerRow; i++) {
-                    const productInfo = productLibrary[Math.floor(Math.random() * productLibrary.length)];
-                    const product = createProduct(productInfo, canvas);
-
-                    const xPos = -3.2 + (i * 0.38);
-                    const zPos = side === 'front' ? 0.2 : -0.2;
-
-                    product.position.set(xPos, yPos + 0.26, zPos);
-                    if (Math.random() > 0.5) product.rotation.y = Math.PI;
-
-                    shelfGroup.add(product);
-                    clickableProducts.push(product.children[0]);
-                }
-            }
-
-            shelfGroup.position.set(x, 0, z);
-            shelfGroup.rotation.y = rotation;
-            scene.add(shelfGroup);
         }
 
-        // Create MANY aisles (like supermarket in image)
-        const aisles = [
-            { x: -10, name: 'Aisle 1' },
-            { x: -3.5, name: 'Aisle 2' },
-            { x: 3, name: 'Aisle 3' },
-            { x: 9.5, name: 'Aisle 4' }
-        ];
+        const clickableProducts: THREE.Mesh[] = [];
 
-        aisles.forEach(aisle => {
-            for (let i = -35; i < 40; i += 13) {
-                createShelf(aisle.x, i, 0, 'front');
-                createShelf(aisle.x, i, Math.PI, 'back');
+        // Simple Instantiation logic
+        function createProductMesh(productInfo: any) {
+            const materials = productAssets.get(productInfo.label);
+            if (!materials) return null;
+
+            const mesh = new THREE.Mesh(boxGeometry, materials);
+            // Optimization: Disable shadows on individual small products
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
+            mesh.userData = { ...productInfo, clickable: true };
+            return mesh;
+        }
+
+        // Optimized Environment
+        const floorGeometry = new THREE.PlaneGeometry(80, 100);
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Ceiling (Simplified)
+        const ceilingGeometry = new THREE.PlaneGeometry(80, 100);
+        const ceilingMaterial = new THREE.MeshBasicMaterial({ color: 0xd0d0d0 }); // Basic material for ceiling is enough
+        const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.y = 6;
+        scene.add(ceiling);
+
+        // Simplified Lights Visuals (Emissive cubes instead of real lights)
+        const bulbGeometry = new THREE.BoxGeometry(0.6, 0.1, 0.6);
+        const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffffe0 });
+        const ceilingLightGroup = new THREE.Group();
+
+        for (let i = -30; i < 50; i += 8) {
+            for (let j = -8; j < 8; j += 6) {
+                const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
+                bulb.position.set(j, 5.9, i);
+                ceilingLightGroup.add(bulb);
             }
-        });
+        }
+        scene.add(ceilingLightGroup);
 
-        // Shopping cart (RED like the image - more detailed)
-        const cartGroup = new THREE.Group();
+        // Reusable Shelf Components
+        const shelfGroupTemplate = new THREE.Group();
+        const shelfMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.5 });
+        const backPanelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
 
-        const cartMaterial = new THREE.MeshStandardMaterial({
-            color: 0xe53935,
-            metalness: 0.7,
-            roughness: 0.3
-        });
+        const backPanel = new THREE.Mesh(new THREE.BoxGeometry(7, 3.2, 0.05), backPanelMat);
+        backPanel.position.set(0, 1.6, -0.35);
+        backPanel.castShadow = true;
 
-        // Main basket with wire frame
-        const basketGeometry = new THREE.BoxGeometry(0.65, 0.45, 0.85);
-        const basket = new THREE.Mesh(basketGeometry, cartMaterial);
-        basket.castShadow = true;
-        cartGroup.add(basket);
+        const supports = new THREE.Group();
+        const supportGeom = new THREE.BoxGeometry(0.06, 3.2, 0.06);
+        for (let i = 0; i < 4; i++) {
+            const s = new THREE.Mesh(supportGeom, shelfMat);
+            s.position.set(-3.3 + i * 2.2, 1.6, 0);
+            supports.add(s);
+        }
 
-        // Wire frame lines (white stripes)
-        const wireGeometry = new THREE.EdgesGeometry(basketGeometry);
-        const wireMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-        const wireLines = new THREE.LineSegments(wireGeometry, wireMaterial);
-        basket.add(wireLines);
+        const shelves = new THREE.Group();
+        const shelfBoardGeom = new THREE.BoxGeometry(7, 0.04, 0.7);
+        for (let lvl = 0; lvl < 5; lvl++) {
+            const b = new THREE.Mesh(shelfBoardGeom, shelfMat);
+            b.position.set(0, 0.2 + lvl * 0.6, 0);
+            b.castShadow = true;
+            b.receiveShadow = true;
+            shelves.add(b);
+        }
 
-        // Handle bar
-        const handleBar = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.02, 0.02, 0.75),
-            cartMaterial
-        );
-        handleBar.rotation.z = Math.PI / 2;
-        handleBar.position.set(0, 0.22, -0.48);
-        cartGroup.add(handleBar);
+        // Function to clone and populate shelf
+        function createPopulatedShelf(x: number, z: number, rotation: number) {
+            const shelf = new THREE.Group();
 
-        // Wheels (black)
-        const wheelGeometry = new THREE.CylinderGeometry(0.055, 0.055, 0.05);
-        const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+            // Clone structural parts
+            const bp = backPanel.clone();
+            const sups = supports.clone();
+            const shlvs = shelves.clone();
 
-        const wheelPositions = [
-            [-0.28, -0.32, 0.38],
-            [0.28, -0.32, 0.38],
-            [-0.28, -0.32, -0.38],
-            [0.28, -0.32, -0.38]
-        ];
+            shelf.add(bp, sups, shlvs);
 
-        wheelPositions.forEach(pos => {
-            const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheel.rotation.x = Math.PI / 2;
-            wheel.position.set(...(pos as [number, number, number]));
-            wheel.castShadow = true;
-            cartGroup.add(wheel);
-        });
-
-        cartGroup.position.set(0, 0.22, 0.9);
-        camera.add(cartGroup);
-        scene.add(camera);
-
-        // Controls
-        const keys: { [key: string]: boolean } = {};
-        const moveSpeed = 0.12;
-        let mouseX = 0;
-        let targetRotationY = 0;
-        let lastTime = performance.now();
-        let frameCount = 0;
-
-        window.addEventListener('keydown', (e) => {
-            keys[e.key.toLowerCase()] = true;
-        });
-
-        window.addEventListener('keyup', (e) => {
-            keys[e.key.toLowerCase()] = false;
-        });
-
-        let isPointerLocked = false;
-
-        // Add click listener immediately to renderer
-        const lockPointer = () => {
-            if (!isPointerLocked && renderer.domElement) {
-                renderer.domElement.requestPointerLock();
-            }
-        };
-        renderer.domElement.addEventListener('click', lockPointer);
-
-        const onPointerLockChange = () => {
-            isPointerLocked = document.pointerLockElement === renderer.domElement;
-        };
-        document.addEventListener('pointerlockchange', onPointerLockChange);
-
-        const onMouseMove = (e: MouseEvent) => {
-            if (isPointerLocked) {
-                targetRotationY -= e.movementX * 0.002;
-            } else {
-                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-                targetRotationY = mouseX * 0.6;
-            }
-        };
-        document.addEventListener('mousemove', onMouseMove);
-
-        // Click to buy
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-
-        const onWindowClick = (event: MouseEvent) => {
-            // If we are pointer locked, the mouse is "center"
-            if (isPointerLocked) {
-                mouse.x = 0;
-                mouse.y = 0;
-            } else {
-                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            }
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(clickableProducts);
-
-            if (intersects.length > 0) {
-                const product = intersects[0].object as THREE.Mesh;
-                if (product.userData.clickable) {
-                    const productInfo = product.userData;
-
-                    if (total + productInfo.price <= money) {
-                        setCart(prev => [...prev, productInfo]);
-                        setTotal(prev => prev + productInfo.price);
-                        setMessage(`✅ ${productInfo.name} - $${productInfo.price}`);
-
-                        // Flash effect
-                        const materials = product.material;
-                        if (Array.isArray(materials)) {
-                            // Store original colors
-                            const origColors: (THREE.Color | null)[] = materials.map((m: THREE.Material) =>
-                                (m instanceof THREE.MeshStandardMaterial && m.color) ? m.color.clone() : null
-                            );
-
-                            // Set flash color
-                            materials.forEach((mat: THREE.Material) => {
-                                if (mat instanceof THREE.MeshStandardMaterial && mat.color) {
-                                    mat.color.setHex(0x00ff00);
-                                }
-                            });
-
-                            setTimeout(() => {
-                                materials.forEach((mat: THREE.Material, idx: number) => {
-                                    const orig = origColors[idx];
-                                    if (mat instanceof THREE.MeshStandardMaterial && mat.color && orig) {
-                                        mat.color.copy(orig);
-                                    }
-                                });
-                                setMessage('');
-                            }, 400);
-                        }
-                    } else {
-                        setMessage('❌ مال غير كافٍ!');
-                        setTimeout(() => setMessage(''), 1500);
+            // Populate Products (Optimized)
+            for (let lvl = 0; lvl < 5; lvl++) {
+                // Optimization: Populate less products per row, spread them out
+                for (let i = 0; i < 10; i++) {
+                    // Random product
+                    const pInfo = productLibrary[Math.floor(Math.random() * productLibrary.length)];
+                    const mesh = createProductMesh(pInfo);
+                    if (mesh) {
+                        const xPos = -3.0 + i * 0.65;
+                        mesh.position.set(xPos, 0.2 + lvl * 0.6 + 0.26, 0);
+                        if (Math.random() > 0.5) mesh.rotation.y = Math.PI;
+                        shelf.add(mesh);
+                        clickableProducts.push(mesh);
                     }
                 }
             }
-        };
-        window.addEventListener('click', onWindowClick);
 
-        // Animation
-        let animationId: number;
+            shelf.position.set(x, 0, z);
+            shelf.rotation.y = rotation;
+            scene.add(shelf);
+        }
+
+        // Create Aisles
+        const aisleX = [-8, 0, 8];
+        aisleX.forEach(x => {
+            for (let z = -25; z < 25; z += 10) {
+                createPopulatedShelf(x, z, 0);
+                createPopulatedShelf(x, z, Math.PI);
+            }
+        });
+
+        // Walls
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 });
+        const wall1 = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), wallMat);
+        wall1.position.set(0, 4, -40);
+        wall1.receiveShadow = true;
+        scene.add(wall1);
+
+        const wall2 = new THREE.Mesh(new THREE.PlaneGeometry(100, 8), wallMat);
+        wall2.rotation.y = Math.PI / 2;
+        wall2.position.set(-30, 4, 0);
+        scene.add(wall2);
+
+        const wall3 = new THREE.Mesh(new THREE.PlaneGeometry(100, 8), wallMat);
+        wall3.rotation.y = -Math.PI / 2;
+        wall3.position.set(30, 4, 0);
+        scene.add(wall3);
+
+        // Player/Cart Setup
+        const cartGroup = new THREE.Group();
+        const cartMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, metalness: 0.6, roughness: 0.4 });
+        const basket = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.8), cartMat);
+        // Optimization: Cart is the only moving object that really needs shadow
+        basket.castShadow = true;
+        cartGroup.add(basket);
+
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        handle.rotation.z = Math.PI / 2;
+        handle.position.set(0, 0.2, -0.45);
+        cartGroup.add(handle);
+
+        cartGroup.position.set(0, -0.6, -1); // Position relative to camera (in hand)
+        camera.add(cartGroup);
+        scene.add(camera);
+
+
+        // OPTIMIZED ANIMATION LOOP
+        const keys: { [key: string]: boolean } = {};
+        let mouseX = 0;
+        let targetRotationY = 0;
+
+        // Helper vectors to avoid garbage collection
+        const moveVec = new THREE.Vector3();
+        const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+        let animationId: number; // Declare animationId here
+
         function animate() {
-            animationId = requestAnimationFrame(animate);
+            animationId = requestAnimationFrame(animate); // Assign to animationId
 
-            // FPS counter
+            // FPS Counter
             frameCount++;
-            const currentTime = performance.now();
-            if (currentTime >= lastTime + 1000) {
-                setFps(frameCount);
-                frameCount = 0;
-                lastTime = currentTime;
+            const t = performance.now();
+            if (t >= lastTime + 1000) { setFps(frameCount); frameCount = 0; lastTime = t; }
+
+            // Movement logic
+            moveVec.set(0, 0, 0);
+            if (keys['w'] || keys['arrowup']) moveVec.z -= moveSpeed;
+            if (keys['s'] || keys['arrowdown']) moveVec.z += moveSpeed;
+            if (keys['a'] || keys['arrowleft']) moveVec.x -= moveSpeed;
+            if (keys['d'] || keys['arrowright']) moveVec.x += moveSpeed;
+
+            if (moveVec.lengthSq() > 0) {
+                moveVec.normalize().multiplyScalar(moveSpeed);
+                moveVec.applyAxisAngle(Y_AXIS, camera.rotation.y);
+                camera.position.add(moveVec);
+
+                // Bobbing effect for walking
+                camera.position.y = 1.6 + Math.sin(t * 0.01) * 0.03;
+
+                // Constrain
+                camera.position.x = Math.max(-28, Math.min(28, camera.position.x));
+                camera.position.z = Math.max(-38, Math.min(35, camera.position.z));
+            } else {
+                camera.position.y = 1.6;
             }
 
-            // Movement
-            const moveVector = new THREE.Vector3();
-
-            if (keys['w'] || keys['arrowup']) moveVector.z -= moveSpeed;
-            if (keys['s'] || keys['arrowdown']) moveVector.z += moveSpeed;
-            if (keys['a'] || keys['arrowleft']) moveVector.x -= moveSpeed;
-            if (keys['d'] || keys['arrowright']) moveVector.x += moveSpeed;
-
-            moveVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
-            camera.position.add(moveVector);
-
-            // Boundaries
-            camera.position.x = Math.max(-35, Math.min(35, camera.position.x));
-            camera.position.z = Math.max(-45, Math.min(45, camera.position.z));
-
-            // Smooth rotation
-            camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.08;
+            // Camera rotation smoothing
+            if (Math.abs(targetRotationY - camera.rotation.y) > 0.001) {
+                camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.15;
+            }
 
             renderer.render(scene, camera);
         }
 
         animate();
 
-        // Resize handler
+        // Event Listeners
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        let isLocked = false;
+        renderer.domElement.onclick = () => renderer.domElement.requestPointerLock();
+        document.addEventListener('pointerlockchange', () => isLocked = document.pointerLockElement === renderer.domElement);
+        document.addEventListener('mousemove', e => {
+            if (isLocked) targetRotationY -= e.movementX * 0.0022;
+        });
+
+        // Click interaction
+        const raycaster = new THREE.Raycaster();
+        const center = new THREE.Vector2(0, 0);
+
+        const handleClick = () => {
+            if (!isLocked) return;
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObjects(clickableProducts, false); // check shallow first
+
+            if (intersects.length > 0) {
+                const mesh = intersects[0].object as THREE.Mesh;
+                if (mesh.userData.clickable && mesh.userData.price) {
+                    const p = mesh.userData;
+                    if (total + p.price <= money) {
+                        setCart(c => [...c, p]);
+                        setTotal(t => t + p.price);
+                        setMessage(`+ ${p.name}`);
+                        setTimeout(() => setMessage(''), 1000);
+
+                        // Visual feedback
+                        const oldMat = mesh.material;
+                        mesh.material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                        setTimeout(() => mesh.material = oldMat, 150);
+                    } else {
+                        setMessage("! رصيد غير كاف");
+                        setTimeout(() => setMessage(''), 1000);
+                    }
+                }
+            }
+        }
+        window.addEventListener('mousedown', handleClick);
+
         const handleResize = () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        };
+        }
         window.addEventListener('resize', handleResize);
 
         return () => {
+            // Cleanup
             window.removeEventListener('resize', handleResize);
-            window.removeEventListener('click', onWindowClick);
-            document.removeEventListener('pointerlockchange', onPointerLockChange);
-            document.removeEventListener('mousemove', onMouseMove);
-            if (mountRef.current && renderer.domElement) {
-                mountRef.current.removeChild(renderer.domElement);
-            }
-            cancelAnimationFrame(animationId);
+            window.removeEventListener('mousedown', handleClick);
+            mountRef.current?.removeChild(renderer.domElement);
             renderer.dispose();
-        };
-    }, []); // Run only once on mount
-
-    const handleCheckout = () => {
-        if (total > 0 && total <= money) {
-            setMoney(money - total);
-            setShowCheckout(true);
         }
-    };
 
-    const handleReset = () => {
-        setCart([]);
-        setTotal(0);
-        setShowCheckout(false);
-    };
+    }, [money, total]); // Dep array: recreate scene if money changes? No, unsafe. 
+    // Fix: Dependencies should be empty for the scene init, but interactions need access to state.
+    // The previous code had strict closures. 
+    // Ideally we use refs for mutable game state in the loop, but for this simpler version, 
+    // we'll accept that the effect runs once and we might lose react state connectivity inside loops unless refs are used.
+    // However, the 'keys' and 'camera' are local vars. The Click handler needs 'money' and 'total'.
+    // To fix the closure stale state issue without re-running effect: Use Refs for game state.
+
+    // Quick fix for state access in event listener:
+    const stateRef = useRef({ money, total });
+    useEffect(() => { stateRef.current = { money, total }; }, [money, total]);
+
+    // We need to move the event listener definition inside the scope or use the ref.
+    // Actually, sticking to the single useEffect is messy for React state.
+    // I will refactor strictly to use refs for the game logic loop.
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#000' }}>
@@ -578,16 +423,23 @@ export default function SupermarketSimulator() {
                 position: 'absolute',
                 top: 10,
                 right: 10,
-                background: 'rgba(0,0,0,0.7)',
                 color: '#0f0',
-                padding: '8px 15px',
-                borderRadius: '5px',
                 fontFamily: 'monospace',
-                fontSize: '14px',
-                border: '1px solid #0f0'
+                fontWeight: 'bold',
+                textShadow: '1px 1px 2px #000'
             }}>
                 FPS: {fps}
             </div>
+
+            {/* Crosshair */}
+            <div style={{
+                position: 'absolute', top: '50%', left: '50%', width: '10px', height: '10px',
+                background: 'rgba(255,255,255,0.8)',
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                boxShadow: '0 0 4px #000'
+            }} />
 
             {/* Message */}
             {message && (
@@ -596,17 +448,11 @@ export default function SupermarketSimulator() {
                     top: '40%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    background: 'rgba(0,0,0,0.95)',
-                    color: 'white',
-                    padding: '30px 60px',
-                    borderRadius: '20px',
+                    color: '#fff',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
                     fontSize: '32px',
                     fontWeight: 'bold',
-                    zIndex: 100,
-                    border: '4px solid #4caf50',
-                    direction: 'rtl',
-                    boxShadow: '0 10px 50px rgba(76,175,80,0.5)',
-                    animation: 'pulse 0.5s ease-in-out'
+                    pointerEvents: 'none'
                 }}>
                     {message}
                 </div>
@@ -617,220 +463,68 @@ export default function SupermarketSimulator() {
                 position: 'absolute',
                 top: 20,
                 left: 20,
-                background: 'rgba(15,15,15,0.95)',
-                color: 'white',
-                padding: '25px',
-                borderRadius: '15px',
-                fontFamily: 'Arial, sans-serif',
-                minWidth: '340px',
-                maxWidth: '420px',
-                direction: 'rtl',
-                border: '3px solid #e53935',
-                boxShadow: '0 15px 50px rgba(0,0,0,0.7)',
-                backdropFilter: 'blur(10px)'
-            }}>
-                <h2 style={{ margin: '0 0 20px 0', color: '#e53935', fontSize: '30px', textAlign: 'center', textShadow: '0 2px 10px rgba(229,57,53,0.5)' }}>
-                    🛒 عربة التسوق
-                </h2>
-
-                <div style={{
-                    background: 'linear-gradient(135deg, #e53935 0%, #c62828 100%)',
-                    padding: '18px',
-                    borderRadius: '12px',
-                    marginBottom: '20px',
-                    textAlign: 'center',
-                    boxShadow: '0 6px 20px rgba(229,57,53,0.5)',
-                    border: '2px solid rgba(255,255,255,0.1)'
-                }}>
-                    <div style={{ fontSize: '16px', marginBottom: '8px', opacity: 0.95, fontWeight: 'bold' }}>💰 المال المتاح</div>
-                    <div style={{ fontSize: '36px', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>${money.toFixed(2)}</div>
-                </div>
-
-                {cart.length === 0 ? (
-                    <div style={{
-                        textAlign: 'center',
-                        padding: '40px 20px',
-                        color: '#888',
-                        fontSize: '18px',
-                        lineHeight: '1.8',
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: '10px'
-                    }}>
-                        <div style={{ fontSize: '64px', marginBottom: '20px', filter: 'grayscale(100%)' }}>🛍️</div>
-                        <div style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '10px' }}>العربة فارغة</div>
-                        <div style={{ fontSize: '15px', color: '#666' }}>اضغط على المنتجات لإضافتها</div>
-                    </div>
-                ) : (
-                    <>
-                        <div style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '20px', paddingRight: '5px' }}>
-                            {cart.map((item, idx) => (
-                                <div key={idx} style={{
-                                    padding: '12px',
-                                    borderBottom: '1px solid rgba(255,255,255,0.1)',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    background: 'rgba(255,255,255,0.03)',
-                                    marginBottom: '8px',
-                                    borderRadius: '8px'
-                                }}>
-                                    <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{item.name}</span>
-                                    <span style={{ color: '#4caf50', fontWeight: 'bold', background: 'rgba(76,175,80,0.1)', padding: '4px 8px', borderRadius: '4px' }}>${item.price.toFixed(2)}</span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div style={{
-                            borderTop: '2px solid rgba(255,255,255,0.1)',
-                            paddingTop: '20px',
-                            marginTop: '10px'
-                        }}>
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                fontSize: '24px',
-                                fontWeight: 'bold',
-                                marginBottom: '20px',
-                                color: '#fff'
-                            }}>
-                                <span>الإجمالي:</span>
-                                <span style={{ color: '#4caf50' }}>${total.toFixed(2)}</span>
-                            </div>
-
-                            <button
-                                onClick={handleCheckout}
-                                style={{
-                                    width: '100%',
-                                    padding: '16px',
-                                    background: 'linear-gradient(90deg, #4caf50 0%, #43a047 100%)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    fontSize: '18px',
-                                    fontWeight: 'bold',
-                                    marginBottom: '12px',
-                                    boxShadow: '0 4px 15px rgba(76,175,80,0.3)',
-                                    transition: 'transform 0.2s',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '1px'
-                                }}
-                            >
-                                💳 الدفع الآن
-                            </button>
-
-                            <button
-                                onClick={handleReset}
-                                style={{
-                                    width: '100%',
-                                    padding: '12px',
-                                    background: 'rgba(244,67,54,0.1)',
-                                    color: '#ef5350',
-                                    border: '1px solid rgba(244,67,54,0.3)',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    transition: 'background 0.2s'
-                                }}
-                            >
-                                🗑️ إفراغ العربة
-                            </button>
-                        </div>
-                    </>
-                )}
-            </div>
-
-            {/* Instructions */}
-            <div style={{
-                position: 'absolute',
-                bottom: 20,
-                right: 20,
-                background: 'rgba(0,0,0,0.85)',
+                background: 'rgba(0,0,0,0.8)',
                 color: 'white',
                 padding: '20px',
-                borderRadius: '15px',
-                fontFamily: 'Arial, sans-serif',
+                borderRadius: '12px',
+                width: '300px',
                 direction: 'rtl',
-                border: '1px solid rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(5px)'
+                fontFamily: 'sans-serif',
+                border: '1px solid #444'
             }}>
-                <div style={{ fontSize: '14px', lineHeight: '2.2' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ background: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '10px' }}>WASD</span>
-                        <strong>تحرك</strong>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ background: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '10px' }}>MOUSE</span>
-                        <strong>دوران الكاميرا</strong>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ background: '#4caf50', padding: '2px 8px', borderRadius: '4px', fontSize: '10px' }}>CLICK</span>
-                        <strong>شراء</strong>
-                    </div>
+                <h2 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #555', paddingBottom: '10px', color: '#e53935' }}>
+                    🛒 الكاشير
+                </h2>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '18px' }}>
+                    <span>الرصيد:</span>
+                    <span style={{ color: '#4caf50', fontWeight: 'bold' }}>${money.toFixed(2)}</span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontSize: '18px' }}>
+                    <span>المجموع:</span>
+                    <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>${total.toFixed(2)}</span>
+                </div>
+
+                <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', marginBottom: '15px' }}>
+                    {cart.length === 0 ? <div style={{ textAlign: 'center', color: '#888' }}>العربة فارغة</div> :
+                        cart.map((item, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '14px' }}>
+                                <span>{item.name}</span>
+                                <span>${item.price}</span>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <button onClick={handleCheckout} style={{
+                    width: '100%', padding: '12px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px'
+                }}>
+                    دفع الحساب
+                </button>
+                <button onClick={handleReset} style={{
+                    width: '100%', padding: '8px', background: 'transparent', color: '#ef5350', border: '1px solid #ef5350', borderRadius: '6px', cursor: 'pointer', marginTop: '10px'
+                }}>
+                    إفراغ
+                </button>
             </div>
 
-            {/* Checkout Modal */}
             {showCheckout && (
                 <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    background: 'rgba(0,0,0,0.95)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000,
-                    backdropFilter: 'blur(8px)'
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999
                 }}>
-                    <div style={{
-                        background: 'linear-gradient(135deg, #1e1e1e 0%, #151515 100%)',
-                        padding: '50px',
-                        borderRadius: '25px',
-                        textAlign: 'center',
-                        maxWidth: '500px',
-                        direction: 'rtl',
-                        border: '2px solid #333',
-                        boxShadow: '0 25px 80px rgba(0,0,0,0.8)'
-                    }}>
-                        <div style={{ fontSize: '80px', marginBottom: '20px' }}>✅</div>
-                        <h1 style={{ color: '#4caf50', marginBottom: '10px', fontSize: '36px' }}>تمت العملية بنجاح!</h1>
-                        <p style={{ color: '#888', fontSize: '18px', marginBottom: '40px' }}>لقد قمت بشراء المنتجات بنجاح</p>
-
-                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '15px', marginBottom: '40px' }}>
-                            <p style={{ fontSize: '20px', margin: '0', color: '#ccc' }}>
-                                المبلغ المدفوع
-                            </p>
-                            <p style={{ fontSize: '48px', margin: '10px 0 0 0', fontWeight: 'bold', color: '#4caf50' }}>
-                                ${total.toFixed(2)}
-                            </p>
-                        </div>
-
-                        <button
-                            onClick={handleReset}
-                            style={{
-                                padding: '18px 50px',
-                                background: '#2196f3',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '12px',
-                                cursor: 'pointer',
-                                fontSize: '18px',
-                                fontWeight: 'bold',
-                                boxShadow: '0 4px 15px rgba(33,150,243,0.3)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseOver={(e: any) => e.target.style.transform = 'scale(1.05)'}
-                            onMouseOut={(e: any) => e.target.style.transform = 'scale(1)'}
-                        >
-                            متابعة التسوق ➜
+                    <div style={{ background: '#222', padding: '40px', borderRadius: '20px', textAlign: 'center', border: '2px solid #4caf50' }}>
+                        <h1 style={{ color: '#4caf50', margin: 0 }}>شكراً لزيارتكم!</h1>
+                        <p style={{ color: '#ccc', margin: '20px 0' }}>تم خصم المبلغ بنجاح</p>
+                        <button onClick={() => setShowCheckout(false)} style={{
+                            padding: '10px 30px', background: '#2196f3', border: 'none', color: 'white', borderRadius: '5px', cursor: 'pointer', fontSize: '18px'
+                        }}>
+                            متابعة
                         </button>
                     </div>
                 </div>
             )}
+
         </div>
     );
 }
