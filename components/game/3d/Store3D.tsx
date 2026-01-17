@@ -387,7 +387,7 @@ export default function SupermarketSimulator() {
         wheelPositions.forEach(pos => {
             const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
             wheel.rotation.x = Math.PI / 2;
-            wheel.position.set(...pos);
+            wheel.position.set(...(pos as [number, number, number]));
             wheel.castShadow = true;
             cartGroup.add(wheel);
         });
@@ -465,19 +465,26 @@ export default function SupermarketSimulator() {
                         setMessage(`✅ ${productInfo.name} - $${productInfo.price}`);
 
                         // Flash effect
-                        const materials = product.material as THREE.MeshStandardMaterial[];
+                        const materials = product.material;
                         if (Array.isArray(materials)) {
-                            // @ts-ignore
-                            const origColors = materials.map(m => m.color ? m.color.clone() : null);
+                            // Store original colors
+                            const origColors: (THREE.Color | null)[] = materials.map((m: THREE.Material) =>
+                                (m instanceof THREE.MeshStandardMaterial && m.color) ? m.color.clone() : null
+                            );
 
-                            materials.forEach(mat => {
-                                if (mat.color) mat.color.setHex(0x00ff00);
+                            // Set flash color
+                            materials.forEach((mat: THREE.Material) => {
+                                if (mat instanceof THREE.MeshStandardMaterial && mat.color) {
+                                    mat.color.setHex(0x00ff00);
+                                }
                             });
 
                             setTimeout(() => {
-                                materials.forEach((mat, idx) => {
-                                    // @ts-ignore
-                                    if (origColors[idx]) mat.color.copy(origColors[idx]);
+                                materials.forEach((mat: THREE.Material, idx: number) => {
+                                    const orig = origColors[idx];
+                                    if (mat instanceof THREE.MeshStandardMaterial && mat.color && orig) {
+                                        mat.color.copy(orig);
+                                    }
                                 });
                                 setMessage('');
                             }, 400);
