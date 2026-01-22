@@ -175,7 +175,7 @@ function SearchResults() {
                         <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden border-2 border-gray-200 hover:border-[#1F478B] hover:border-opacity-50">
                           <div className="relative h-48 bg-gray-100">
                             <Image
-                              src={store.image_url || "/placeholder.svg?height=200&width=400"}
+                              src={store.image_url || "/placeholder.svg"}
                               alt={store.name}
                               fill
                               className="object-cover"

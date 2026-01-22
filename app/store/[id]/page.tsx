@@ -120,19 +120,19 @@ export default function StorePage({ params }: { params: { id: string } }) {
     if (!store || !user) return
     let mounted = true
 
-    ;(async () => {
-      try {
-        const existing = await getUserStoreReview(store.id, user.id)
-        if (!mounted) return
-        if (existing && typeof existing.rating === "number") {
-          setUserStoreReview(existing.rating)
-        } else {
-          setUserStoreReview(null)
+      ; (async () => {
+        try {
+          const existing = await getUserStoreReview(store.id, user.id)
+          if (!mounted) return
+          if (existing && typeof existing.rating === "number") {
+            setUserStoreReview(existing.rating)
+          } else {
+            setUserStoreReview(null)
+          }
+        } catch (err) {
+          console.error("[v0] Error fetching user store review:", err)
         }
-      } catch (err) {
-        console.error("[v0] Error fetching user store review:", err)
-      }
-    })()
+      })()
 
     return () => {
       mounted = false
@@ -225,7 +225,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
               <div className="relative h-64 lg:h-full rounded-lg overflow-hidden bg-gray-100">
                 <Image
-                  src={store.image_url || "/placeholder.svg?height=400&width=600"}
+                  src={store.image_url || "/placeholder.svg"}
                   alt={store.name}
                   fill
                   priority

@@ -80,7 +80,7 @@ export default function StoresPage() {
                   <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden">
                     <div className="relative h-48 bg-gray-100">
                       <Image
-                        src={store.image_url || "/placeholder.svg?height=200&width=400"}
+                        src={store.image_url || "/placeholder.svg"}
                         alt={store.name}
                         fill
                         className="object-cover"

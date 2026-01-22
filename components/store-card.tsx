@@ -23,7 +23,7 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
         <Card className="overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] h-full">
           <div className="aspect-video relative bg-gray-100">
             <Image
-              src={(store as any).image_url || store.logo || "/placeholder.svg?height=200&width=300"}
+              src={(store as any).image_url || store.logo || "/placeholder.svg"}
               alt={store.name}
               fill
               className="object-cover"
