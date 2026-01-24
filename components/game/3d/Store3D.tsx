@@ -2,6 +2,8 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { useProductStore } from '@/lib/stores/product-store';
+import { LayoutGrid } from 'lucide-react';
 
 export default function SupermarketSimulator() {
     const mountRef = useRef<HTMLDivElement>(null);
@@ -9,13 +11,19 @@ export default function SupermarketSimulator() {
     const [total, setTotal] = useState(0);
     const [money, setMoney] = useState(500);
     const [showCheckout, setShowCheckout] = useState(false);
+    const toggleDashboard = useProductStore(state => state.toggleDashboard);
     const [message, setMessage] = useState('');
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const [isHovering, setIsHovering] = useState(false);
     const [fps, setFps] = useState(60);
     const [isLockedState, setIsLockedState] = useState(false);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const basketContentsRef = useRef<THREE.Group | null>(null);
+    const npcRef = useRef<any>(null);
 
     // Refs for accessing latest state inside event listeners without re-binding
     const stateRef = useRef({ money, total });
+    const lockPointerRef = useRef<() => void>(() => { });
     useEffect(() => { stateRef.current = { money, total }; }, [money, total]);
 
     // Initial State and Constants
@@ -33,94 +41,80 @@ export default function SupermarketSimulator() {
         const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(0, 1.6, 40); // Start near cashier facing aisles
 
-        // Renderer
+        // Renderer - Optimized for performance
         const renderer = new THREE.WebGLRenderer({
             antialias: false,
             powerPreference: "high-performance",
-            precision: "mediump"
+            precision: "lowp", // Faster than mediump
+            stencil: false,
+            depth: true
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0)); // Cap pixel ratio for speed
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.BasicShadowMap;
+        renderer.shadowMap.type = THREE.BasicShadowMap; // Fastest shadow type
         rendererRef.current = renderer;
         mountRef.current.appendChild(renderer.domElement);
 
-        // Lighting - Significantly brighter for a vibrant hypermarket feel
-        const ambientLight = new THREE.AmbientLight(0xfff5e6, 1.5);
+        // Lighting - Reduced light count for extreme performance
+        const ambientLight = new THREE.AmbientLight(0xfff5e6, 1.2);
         scene.add(ambientLight);
 
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
-        scene.add(hemiLight);
-
-        const sunLight = new THREE.DirectionalLight(0xfff5e6, 2.0); // Stronger sun
+        // One main directional light for global shadows
+        const sunLight = new THREE.DirectionalLight(0xfff5e6, 1.0);
         sunLight.position.set(20, 30, 10);
         sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.width = 1024; // Increased for better product shadows
         sunLight.shadow.mapSize.height = 1024;
-        sunLight.shadow.camera.near = 0.5;
-        sunLight.shadow.camera.far = 100;
-        sunLight.shadow.camera.left = -30;
-        sunLight.shadow.camera.right = 30;
-        sunLight.shadow.camera.top = 30;
-        sunLight.shadow.camera.bottom = -30;
         scene.add(sunLight);
 
         // Texture Generation (Realistic Brands & Variety)
         const productLibrary = [
-            // --- DAIRY & FRIDGE ---
-            { name: 'حليب المراعي', color: 0x1e88e5, label: 'ALMARAI', price: 6.50, category: 'dairy', pattern: 'stripe' },
-            { name: 'حليب نادك', color: 0xffffff, label: 'NADEC', price: 6.00, category: 'dairy', pattern: 'simple' },
-            { name: 'زبادي', color: 0xe3f2fd, label: 'YOGURT', price: 2.50, category: 'dairy', pattern: 'circle' },
-            { name: 'جبنة شيدر', color: 0xffc107, label: 'CHEDDAR', price: 12.00, category: 'dairy', pattern: 'block' },
-            { name: 'زبدة', color: 0xffeb3b, label: 'BUTTER', price: 8.50, category: 'dairy', pattern: 'simple' },
-            { name: 'كريمة طبخ', color: 0xf48fb1, label: 'CREAM', price: 14.00, category: 'dairy', pattern: 'curve' },
+            // --- PRODUCE ( الخضروات والفواكه ) ---
+            { name: 'تفاح أحمر', color: 0xd32f2f, label: 'APPLE', price: 4.50, category: 'produce', pattern: 'circle' },
+            { name: 'موز طازج', color: 0xffeb3b, label: 'BANANA', price: 3.00, category: 'produce', pattern: 'curve' },
+            { name: 'برتقال', color: 0xff9800, label: 'ORANGE', price: 5.50, category: 'produce', pattern: 'circle' },
+            { name: 'خيار', color: 0x2e7d32, label: 'CUCUMBER', price: 2.50, category: 'produce', pattern: 'stripe' },
+            { name: 'طماطم', color: 0xe53935, label: 'TOMATO', price: 3.50, category: 'produce', pattern: 'circle' },
 
-            // --- DRINKS ---
-            { name: 'كوكاكولا', color: 0xb71c1c, label: 'COLA', price: 3.00, category: 'drinks', pattern: 'curve' },
+            // --- BAKERY ( المخبز ) ---
+            { name: 'خبز صمون', color: 0xffcc80, label: 'BREAD', price: 2.00, category: 'bakery', pattern: 'stripe' },
+            { name: 'كرواسون', color: 0xe6a15c, label: 'CROISSANT', price: 4.00, category: 'bakery', pattern: 'curve' },
+            { name: 'كيكة شوكولاتة', color: 0x4e342e, label: 'CAKE', price: 25.00, category: 'bakery', pattern: 'block' },
+            { name: 'كوكيز', color: 0x8d6e63, label: 'COOKIES', price: 8.00, category: 'bakery', pattern: 'dots' },
+
+            // --- DAIRY & CHEESE ( الألبان والأجبان ) ---
+            { name: 'حليب المراعي', color: 0x1e88e5, label: 'MILK', price: 6.50, category: 'dairy', pattern: 'stripe' },
+            { name: 'زبادي طازج', color: 0xffffff, label: 'YOGURT', price: 2.00, category: 'dairy', pattern: 'circle' },
+            { name: 'جبنة فيتا', color: 0xe3f2fd, label: 'FETA', price: 12.00, category: 'dairy', pattern: 'block' },
+            { name: 'لبنة', color: 0xf5f5f5, label: 'LABNEH', price: 9.00, category: 'dairy', pattern: 'simple' },
+
+            // --- MEAT & SEAFOOD ( اللحوم والأسماك ) ---
+            { name: 'لحم بقري', color: 0xb71c1c, label: 'BEEF', price: 45.00, category: 'meat', pattern: 'block' },
+            { name: 'دجاج طازج', color: 0xfff9c4, label: 'CHICKEN', price: 18.00, category: 'meat', pattern: 'curve' },
+            { name: 'سمك سلمون', color: 0xffab91, label: 'SALMON', price: 60.00, category: 'meat', pattern: 'stripe' },
+
+            // --- GROCERY ( المعلبات والبقالة الجافة ) ---
+            { name: 'أرز بسمتي', color: 0xfff9c4, label: 'RICE', price: 40.00, category: 'grocery', pattern: 'grain' },
+            { name: 'زيت زيتون', color: 0xafb42b, label: 'OIL', price: 22.00, category: 'grocery', pattern: 'drop' },
+            { name: 'مكرونة', color: 0xffd54f, label: 'PASTA', price: 4.50, category: 'grocery', pattern: 'stripe' },
+            { name: 'صلصة طماطم', color: 0xc62828, label: 'SAUCE', price: 3.50, category: 'grocery', pattern: 'circle' },
+
+            // --- BEVERAGES & SNACKS ( المشروبات والوجبات الخفيفة ) ---
             { name: 'بيبسي', color: 0x1565c0, label: 'PEPSI', price: 3.00, category: 'drinks', pattern: 'circle' },
-            { name: 'سفن اب', color: 0x2e7d32, label: '7UP', price: 3.00, category: 'drinks', pattern: 'simple' },
-            { name: 'عصير برتقال', color: 0xff9800, label: 'ORANGE', price: 7.00, category: 'drinks', pattern: 'fresh' },
-            { name: 'عصير تفاح', color: 0x8bc34a, label: 'APPLE', price: 6.50, category: 'drinks', pattern: 'fresh' },
-            { name: 'مياه معدنية', color: 0x81d4fa, label: 'WATER', price: 1.50, category: 'drinks', pattern: 'simple' },
-            { name: 'مشروب طاقة', color: 0x212121, label: 'POWER', price: 12.00, category: 'drinks', pattern: 'bolt' },
-            { name: 'ايس تي', color: 0x8d6e63, label: 'ICE TEA', price: 5.00, category: 'drinks', pattern: 'leaf' },
+            { name: 'كوكاكولا', color: 0xb71c1c, label: 'COLA', price: 3.00, category: 'drinks', pattern: 'curve' },
+            { name: 'عصير برتقال', color: 0xff9800, label: 'JUICE', price: 7.00, category: 'drinks', pattern: 'fresh' },
+            { name: 'شيبس', color: 0xffeb3b, label: 'CHIPS', price: 5.00, category: 'snacks', pattern: 'dots' },
 
-            // --- SNACKS & CANDY ---
-            { name: 'شيبسي ملح', color: 0xffd600, label: 'CHIPS', price: 5.00, category: 'snacks', pattern: 'circle' },
-            { name: 'شيبسي حار', color: 0xd32f2f, label: 'HOT', price: 5.00, category: 'snacks', pattern: 'fire' },
-            { name: 'دوريتوس', color: 0xbf360c, label: 'NACHO', price: 6.00, category: 'snacks', pattern: 'triangle' },
-            { name: 'بسكويت شاي', color: 0xd7ccc8, label: 'BISCUIT', price: 3.50, category: 'snacks', pattern: 'grid' },
-            { name: 'شوكولاتة', color: 0x3e2723, label: 'CHOCO', price: 4.00, category: 'snacks', pattern: 'flow' },
-            { name: 'ويفر', color: 0xffcc80, label: 'WAFER', price: 3.00, category: 'snacks', pattern: 'stripe' },
-            { name: 'فشار', color: 0xfff59d, label: 'POP', price: 4.50, category: 'snacks', pattern: 'dots' },
+            // --- HEALTH & BEAUTY ( الصحة والجمال ) ---
+            { name: 'شامبو', color: 0x5c6bc0, label: 'SHAMPOO', price: 18.00, category: 'beauty', pattern: 'wave' },
+            { name: 'عطر نسائي', color: 0xf06292, label: 'PERFUME', price: 120.00, category: 'beauty', pattern: 'curve' },
+            { name: 'معجون أسنان', color: 0x81d4fa, label: 'COLGATE', price: 11.00, category: 'beauty', pattern: 'stripe' },
 
-            // --- BREAKFAST ---
-            { name: 'كورن فليكس', color: 0xff5722, label: 'CORN', price: 18.00, category: 'breakfast', pattern: 'rooster' },
-            { name: 'كوكو بوبس', color: 0x5d4037, label: 'COCO', price: 19.00, category: 'breakfast', pattern: 'coco' },
-            { name: 'شوفان', color: 0x8d6e63, label: 'OATS', price: 15.00, category: 'breakfast', pattern: 'grain' },
-            { name: 'مربى فراولة', color: 0xc2185b, label: 'JAM', price: 11.00, category: 'breakfast', pattern: 'fruit' },
-            { name: 'عسل طبيعي', color: 0xffb300, label: 'HONEY', price: 35.00, category: 'breakfast', pattern: 'hex' },
-
-            // --- PANTRY ---
-            { name: 'أرز بسمتي', color: 0xffecb3, label: 'RICE', price: 45.00, category: 'pantry', pattern: 'grain' },
-            { name: 'مكرونة', color: 0xffd54f, label: 'PASTA', price: 5.00, category: 'pantry', pattern: 'wheat' },
-            { name: 'زيت ذرة', color: 0xffeb3b, label: 'OIL', price: 28.00, category: 'pantry', pattern: 'drop' },
-            { name: 'سمن نباتي', color: 0x4caf50, label: 'GHEE', price: 32.00, category: 'pantry', pattern: 'cow' },
-            { name: 'صلصة طماطم', color: 0xb71c1c, label: 'TOMATO', price: 4.00, category: 'pantry', pattern: 'red_circle' },
-            { name: 'تونة', color: 0x90a4ae, label: 'TUNA', price: 7.50, category: 'pantry', pattern: 'fish' },
-            { name: 'فول مدمس', color: 0x795548, label: 'BEANS', price: 3.50, category: 'pantry', pattern: 'bean' },
-            { name: 'سكر', color: 0xf5f5f5, label: 'SUGAR', price: 14.00, category: 'pantry', pattern: 'sugar' },
-            { name: 'دقيق', color: 0xffffff, label: 'FLOUR', price: 12.00, category: 'pantry', pattern: 'wheat' },
-            { name: 'ملح', color: 0xe0f7fa, label: 'SALT', price: 2.00, category: 'pantry', pattern: 'crystal' },
-
-            // --- HOUSEHOLD & CLEANING ---
-            { name: 'مسحوق غسيل', color: 0x1565c0, label: 'TIDE', price: 45.00, category: 'household', pattern: 'swirl' },
-            { name: 'سائل جلي', color: 0x76ff03, label: 'FAIRY', price: 12.00, category: 'household', pattern: 'bubble' },
-            { name: 'منعم ملابس', color: 0xec407a, label: 'SOFT', price: 18.00, category: 'household', pattern: 'flower' },
-            { name: 'شامبو', color: 0x5c6bc0, label: 'SHAMPOO', price: 16.00, category: 'household', pattern: 'wave' },
-            { name: 'صابون', color: 0xffcdd2, label: 'SOAP', price: 4.00, category: 'household', pattern: 'clean' },
-            { name: 'مناديل', color: 0xffffff, label: 'TISSUE', price: 22.00, category: 'household', pattern: 'soft' }
+            // --- HOUSEHOLD CARE ( المنظفات ) ---
+            { name: 'مطهر أرضيات', color: 0x4caf50, label: 'DETTOL', price: 24.00, category: 'cleaning', pattern: 'swirl' },
+            { name: 'تيد غسيل', color: 0x1565c0, label: 'TIDE', price: 55.00, category: 'cleaning', pattern: 'block' },
+            { name: 'منظف زجاج', color: 0x03a9f4, label: 'GLASS', price: 15.00, category: 'cleaning', pattern: 'simple' }
         ];
 
         const productAssets = new Map();
@@ -334,6 +328,19 @@ export default function SupermarketSimulator() {
                 // --- Procedural Branding Patterns ---
                 ctx.fillStyle = adjustBrightness(baseColor, -15);
 
+                // Specific category icons/motifs
+                if (info.category === 'drinks') {
+                    ctx.fillRect(80, 20, 96, 100); // Bottle shape silhouette
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); ctx.arc(128, 60, 20, 0, Math.PI * 2); ctx.fill();
+                } else if (info.category === 'produce') {
+                    ctx.beginPath(); ctx.arc(128, 80, 50, 0, Math.PI * 2); ctx.fill(); // Fruit shape
+                } else if (info.category === 'dairy') {
+                    ctx.fillRect(90, 30, 76, 100); // Milk carton
+                }
+
+                ctx.fillStyle = adjustBrightness(baseColor, -15);
+
                 switch (info.pattern) {
                     case 'stripe':
                         for (let i = 0; i < 256; i += 40) ctx.fillRect(i, 0, 20, 256);
@@ -378,27 +385,70 @@ export default function SupermarketSimulator() {
                         break;
                 }
 
-                // Label area
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(20, 160, 216, 60);
+                // --- Label area ---
+                // Skip large labels for produce, use a tiny "sticker" instead
+                if (info.category !== 'produce') {
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(10, 140, 236, 80);
 
-                // Text
-                ctx.fillStyle = '#000';
-                ctx.font = 'bold 36px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(info.label, 128, 205);
+                    // Text (Main Title)
+                    ctx.fillStyle = '#111';
+                    ctx.font = 'bold 32px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(info.label, 128, 175);
 
-                // Price tag
-                ctx.fillStyle = '#ffeb3b';
+                    // Subtext / Brand Detail
+                    ctx.font = '14px sans-serif';
+                    ctx.fillText('PREMIUM QUALITY', 128, 195);
+
+                    // Barcode simulation
+                    ctx.fillStyle = '#000';
+                    for (let i = 0; i < 30; i++) {
+                        if (Math.random() > 0.3) {
+                            ctx.fillRect(180 + i * 2, 205, 1, 15);
+                        }
+                    }
+                } else {
+                    // Small price sticker for produce
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(60, 60, 30, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#111';
+                    ctx.font = 'bold 20px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(info.label.substring(0, 3), 60, 68);
+                }
+
+                // Price tag (Smaller/Simpler for produce)
+                const isProduce = info.category === 'produce';
+                ctx.fillStyle = isProduce ? 'rgba(255,235,59,0.8)' : '#ffeb3b';
                 ctx.beginPath();
-                ctx.arc(200, 220, 40, 0, Math.PI * 2);
+                const prX = isProduce ? 220 : 210;
+                const prY = isProduce ? 220 : 200;
+                ctx.arc(prX, prY, isProduce ? 25 : 35, 0, Math.PI * 2);
                 ctx.fill();
+
+                if (!isProduce) {
+                    ctx.strokeStyle = '#fbc02d';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
                 ctx.fillStyle = '#c62828';
-                ctx.font = 'bold 24px sans-serif';
-                ctx.fillText(`$${info.price}`, 200, 220);
+                ctx.font = isProduce ? 'bold 16px sans-serif' : 'bold 22px sans-serif';
+                ctx.fillText(`$${info.price.toFixed(2)}`, prX, prY + 8);
 
                 const tex = new THREE.CanvasTexture(canvas);
-                const mat = new THREE.MeshStandardMaterial({ map: tex.clone(), roughness: 0.3 });
+                tex.anisotropy = 4;
+
+                const mat = new THREE.MeshPhysicalMaterial({
+                    map: tex.clone(),
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    clearcoat: info.category === 'drinks' || info.category === 'beauty' ? 0.8 : 0.2,
+                    clearcoatRoughness: 0.1
+                });
                 productAssets.set(info.name, mat);
             });
         }
@@ -465,12 +515,12 @@ export default function SupermarketSimulator() {
         function createPremiumPlant(x: number, z: number) {
             const plantGroup = new THREE.Group();
 
-            // Pot: High-End Polished Gold Designer Pot
+            // Pot: Premium Organic Wood Designer Pot
             const potMat = new THREE.MeshPhysicalMaterial({
-                color: 0xaa8833, // Gold
-                metalness: 1.0,
-                roughness: 0.1,
-                clearcoat: 1.0
+                map: woodTex,
+                roughness: 0.6,
+                metalness: 0.05,
+                clearcoat: 0.2
             });
             const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.35, 1.0, 16), potMat);
             pot.position.y = 0.5;
@@ -514,11 +564,6 @@ export default function SupermarketSimulator() {
 
             plantGroup.position.set(x, 0, z);
             scene.add(plantGroup);
-
-            // Add a subtle point light to make the gold pot and plant pop
-            const pLight = new THREE.PointLight(0xfff5e6, 5, 8);
-            pLight.position.set(x, 3, z);
-            scene.add(pLight);
         }
 
         pillarPositions.forEach(([x, y, z]) => {
@@ -526,8 +571,10 @@ export default function SupermarketSimulator() {
             pillar.position.set(x, y, z);
             scene.add(pillar);
 
-            // Add Premium Plant with Gold Pot for visual pop
-            createPremiumPlant(x, z + 2);
+            // Add Premium Plant with Wooden Pot
+            // Offset shifted to avoid pillar overlap and centered better
+            const offsetX = x < 0 ? 2.5 : -2.5;
+            createPremiumPlant(x + offsetX, z);
         });
 
         const shelfGroupTemplate = new THREE.Group();
@@ -603,22 +650,22 @@ export default function SupermarketSimulator() {
         // --- Central Display Island ---
         function createDisplayIsland(x: number, z: number) {
             const island = new THREE.Group();
-            const baseGeom = new THREE.CylinderGeometry(4, 4, 0.8, 8); // Octagonal base
+            const baseGeom = new THREE.CylinderGeometry(2.5, 2.5, 0.8, 8); // Smaller radius (2.5 instead of 4)
             const base = new THREE.Mesh(baseGeom, shelfMat);
             base.position.y = 0.4;
             island.add(base);
 
-            const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 0.6, 8), shelfMat);
+            const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.6, 8), shelfMat); // Smaller tier
             tier2.position.y = 1.1;
             island.add(tier2);
 
             // Featured Products on the island
             const featuredInfo = productLibrary.find(p => p.category === 'drinks');
-            for (let i = 0; i < 12; i++) {
-                const angle = (i / 12) * Math.PI * 2;
+            for (let i = 0; i < 8; i++) { // Reduced count for smaller size
+                const angle = (i / 8) * Math.PI * 2;
                 const p = createProductMesh(featuredInfo);
                 if (p) {
-                    p.position.set(Math.cos(angle) * 3, 1.1 + 0.24, Math.sin(angle) * 3);
+                    p.position.set(Math.cos(angle) * 1.8, 1.1 + 0.24, Math.sin(angle) * 1.8);
                     island.add(p);
                     clickableProducts.push(p);
                 }
@@ -636,10 +683,111 @@ export default function SupermarketSimulator() {
 
         function createProductMesh(info: any) {
             if (!info) return null;
-            const geom = new THREE.BoxGeometry(0.35, 0.48, 0.3);
+
+            let geom;
+            const category = info.category;
+
+            if (category === 'produce') {
+                if (info.name.includes('موز')) {
+                    // Banana: Curved ellipsoid approximation using Capsule
+                    geom = new THREE.CapsuleGeometry(0.08, 0.4, 4, 12);
+                } else if (info.name.includes('خيار')) {
+                    // Cucumber: Long cylinder
+                    geom = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 12);
+                } else {
+                    // Apples, Oranges, Tomatoes
+                    geom = new THREE.SphereGeometry(0.18, 16, 12);
+                }
+            } else if (category === 'drinks' || category === 'cleaning' || info.name.includes('زيت')) {
+                // Bottles/Cylinders
+                geom = new THREE.CylinderGeometry(0.18, 0.18, 0.55, 16);
+            } else if (category === 'dairy' && info.name.includes('حليب')) {
+                // Milk carton style
+                geom = new THREE.BoxGeometry(0.25, 0.6, 0.25);
+            } else if (category === 'bakery' && info.name.includes('كيك')) {
+                // Cake/Round box
+                geom = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 24);
+            } else {
+                // Default box for snacks, grocery, etc.
+                geom = new THREE.BoxGeometry(0.32, 0.48, 0.22);
+            }
+
             const mesh = new THREE.Mesh(geom, productAssets.get(info.name));
+
+            // Add details
+            if (category === 'produce') {
+                if (!info.name.includes('موز') && !info.name.includes('خيار')) {
+                    // Add a tiny brown stalk for spherical fruits
+                    const stalkMat = new THREE.MeshStandardMaterial({ color: 0x4e342e });
+                    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.01, 0.08), stalkMat);
+                    stalk.position.y = 0.18;
+                    mesh.add(stalk);
+                }
+            } else if (category === 'drinks' || category === 'cleaning' || info.name.includes('زيت')) {
+                const capMat = new THREE.MeshPhysicalMaterial({ color: 0x333333, roughness: 0.1, metalness: 0.5 });
+                const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 8), capMat);
+                cap.position.y = 0.3;
+                mesh.add(cap);
+            }
+
             mesh.userData = { ...info, clickable: true };
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
             return mesh;
+        }
+
+        // --- Helper: Create Department Sign ---
+        function createDepartmentSign(textAr: string, textEn: string, x: number, y: number, z: number, rotationY: number = 0) {
+            const signCanvas = document.createElement('canvas');
+            signCanvas.width = 1024;
+            signCanvas.height = 256;
+            const sCtx = signCanvas.getContext('2d')!;
+
+            // Background - Premium Dark Gold Glossy
+            const grad = sCtx.createLinearGradient(0, 0, 0, 256);
+            grad.addColorStop(0, '#222');
+            grad.addColorStop(0.5, '#444');
+            grad.addColorStop(1, '#222');
+            sCtx.fillStyle = grad;
+            sCtx.fillRect(0, 0, 1024, 256);
+
+            // Border
+            sCtx.strokeStyle = '#aa8833';
+            sCtx.lineWidth = 15;
+            sCtx.strokeRect(10, 10, 1004, 236);
+
+            // Text Arabic
+            sCtx.fillStyle = '#aa8833';
+            sCtx.font = 'bold 80px sans-serif';
+            sCtx.textAlign = 'center';
+            sCtx.direction = 'rtl';
+            sCtx.fillText(textAr, 512, 110);
+
+            // Text English
+            sCtx.font = '50px sans-serif';
+            sCtx.fillText(textEn, 512, 180);
+
+            const tex = new THREE.CanvasTexture(signCanvas);
+            const signGeom = new THREE.PlaneGeometry(6, 1.5);
+            const signMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+            const signMesh = new THREE.Mesh(signGeom, signMat);
+
+            // Mounting Group
+            const group = new THREE.Group();
+            group.add(signMesh);
+
+            // Add hanging wires
+            const wireMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            const wireGeom = new THREE.CylinderGeometry(0.02, 0.02, 3);
+            const w1 = new THREE.Mesh(wireGeom, wireMat);
+            const w2 = new THREE.Mesh(wireGeom, wireMat);
+            w1.position.set(-2.5, 1.5, 0);
+            w2.position.set(2.5, 1.5, 0);
+            group.add(w1, w2);
+
+            group.position.set(x, y, z);
+            group.rotation.y = rotationY;
+            scene.add(group);
         }
 
         function createPopulatedShelf(x: number, z: number, rotation: number, categoryList: string[]) {
@@ -667,59 +815,230 @@ export default function SupermarketSimulator() {
             scene.add(shelf);
         }
 
-        // FULL STORE LAYOUT
-        const aisleLayouts = [
-            // Left Wall (Single Sided)
-            { x: -28, zStart: -45, zEnd: 45, type: 'wall_right', categories: ['household', 'pantry'] },
-            // Aisle 1 (Double)
-            { x: -14, zStart: -40, zEnd: 40, type: 'aisle', categories: ['dairy', 'drinks', 'breakfast'] },
-            // Aisle 2 (Double)
-            { x: 0, zStart: -40, zEnd: 40, type: 'aisle', categories: ['snacks', 'pantry'] },
-            // Aisle 3 (Double)
-            { x: 14, zStart: -40, zEnd: 40, type: 'aisle', categories: ['drinks', 'household'] },
-            // Right Wall (Single Sided)
-            { x: 28, zStart: -45, zEnd: 45, type: 'wall_left', categories: ['pantry', 'dairy'] }
-        ];
+        // --- SPECIALIZED SUPERMARKET DEPARTMENTS ---
 
-        aisleLayouts.forEach(layout => {
-            // Continuous Shelves (Small step to avoid gaps)
-            for (let z = layout.zStart; z < layout.zEnd; z += 7.1) {
+        // 1. Produce Section (خضروات وفواكه) - Wooden tables and warm light
+        function createProduceSection(x: number, z: number) {
+            const produceGroup = new THREE.Group();
+            const tableMat = woodTex.clone();
+            tableMat.repeat.set(2, 2);
+            const woodMaterial = new THREE.MeshStandardMaterial({ map: tableMat, roughness: 0.8 });
 
-                if (layout.type === 'aisle') {
-                    createPopulatedShelf(layout.x, z, 0, layout.categories);
-                    createPopulatedShelf(layout.x, z, Math.PI, layout.categories);
-                } else if (layout.type === 'wall_right') {
-                    // Wall on left, facing right (0 rotation)
-                    createPopulatedShelf(layout.x, z, 0, layout.categories);
-                } else if (layout.type === 'wall_left') {
-                    // Wall on right, facing left (PI rotation)
-                    createPopulatedShelf(layout.x, z, Math.PI, layout.categories);
+            // Create slanted wooden tables
+            for (let i = -1; i <= 1; i++) {
+                const table = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 2.5), woodMaterial);
+                table.position.set(i * 5, 0.4, 0);
+                table.rotation.x = -0.2; // Slanted
+                produceGroup.add(table);
+
+                // Add products on top
+                const items = productLibrary.filter(p => p.category === 'produce');
+                for (let px = -1.5; px <= 1.5; px += 0.6) {
+                    for (let pz = -0.8; pz <= 0.8; pz += 0.6) {
+                        const info = items[Math.floor(Math.random() * items.length)];
+                        const p = createProductMesh(info);
+                        if (p) {
+                            p.position.set(i * 5 + px, 0.9, pz);
+                            produceGroup.add(p);
+                            clickableProducts.push(p);
+                        }
+                    }
                 }
             }
 
-            // ADD AISLE POINT LIGHTS (Brighter walkways)
-            const aisleLight = new THREE.PointLight(0xfff5e6, 15, 30);
-            aisleLight.position.set(layout.x, 5, 0);
-            scene.add(aisleLight);
+            // Warm produce lighting
+            const warmLight = new THREE.PointLight(0xffcc88, 30, 15);
+            warmLight.position.set(0, 4, 0);
+            produceGroup.add(warmLight);
+
+            produceGroup.position.set(x, 0, z);
+            scene.add(produceGroup);
+        }
+
+        // 2. Bakery (المخبز) - Glass and wood
+        function createBakerySection(x: number, z: number) {
+            const bakeryGroup = new THREE.Group();
+            const counterMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.5 });
+            const glassMat = new THREE.MeshPhysicalMaterial({ transparent: true, opacity: 0.3, transmission: 0.9, roughness: 0.1 });
+
+            const counter = new THREE.Mesh(new THREE.BoxGeometry(8, 1.2, 1.5), counterMat);
+            counter.position.y = 0.6;
+            bakeryGroup.add(counter);
+
+            const glassTop = new THREE.Mesh(new THREE.BoxGeometry(8, 0.8, 1.5), glassMat);
+            glassTop.position.y = 1.6;
+            bakeryGroup.add(glassTop);
+
+            // Baked products inside/on top
+            const items = productLibrary.filter(p => p.category === 'bakery');
+            for (let bx = -3.5; bx <= 3.5; bx += 1) {
+                const info = items[Math.floor(Math.random() * items.length)];
+                const p = createProductMesh(info);
+                if (p) {
+                    p.position.set(bx, 1.3, 0);
+                    bakeryGroup.add(p);
+                    clickableProducts.push(p);
+                }
+            }
+
+            // Delicious warm glow
+            const bakeryLight = new THREE.PointLight(0xffa726, 20, 10);
+            bakeryLight.position.set(0, 3, 0);
+            bakeryGroup.add(bakeryLight);
+
+            bakeryGroup.position.set(x, 0, z);
+            scene.add(bakeryGroup);
+        }
+
+        // 3. Dairy & Cheese (الألبان والأجبان) - Open Fridges
+        function createDairySection(x: number, z: number, rotation: number) {
+            const dairyGroup = new THREE.Group();
+            const fridgeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+            const coldLightMat = new THREE.MeshStandardMaterial({ color: 0x81d4fa, emissive: 0x81d4fa, emissiveIntensity: 2 });
+
+            const base = new THREE.Mesh(new THREE.BoxGeometry(10, 3, 1), fridgeMat);
+            base.position.y = 1.5;
+            dairyGroup.add(base);
+
+            // Cold LED strips
+            const led = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.1, 0.1), coldLightMat);
+            led.position.set(0, 2.8, 0.5);
+            dairyGroup.add(led);
+
+            // Layout products
+            const items = productLibrary.filter(p => p.category === 'dairy');
+            for (let lvl = 0; lvl < 4; lvl++) {
+                for (let dx = -4.5; dx <= 4.5; dx += 0.8) {
+                    const info = items[Math.floor(Math.random() * items.length)];
+                    const p = createProductMesh(info);
+                    if (p) {
+                        p.position.set(dx, 0.5 + lvl * 0.7, 0.4);
+                        dairyGroup.add(p);
+                        clickableProducts.push(p);
+                    }
+                }
+            }
+
+            dairyGroup.position.set(x, 0, z);
+            dairyGroup.rotation.y = rotation;
+            scene.add(dairyGroup);
+        }
+
+        // 4. Meat & Seafood (اللحوم والأسماك) - Glass Counter
+        function createMeatSection(x: number, z: number) {
+            const meatGroup = new THREE.Group();
+            const counterMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0 });
+            const counter = new THREE.Mesh(new THREE.BoxGeometry(10, 1.1, 2), counterMat);
+            counter.position.y = 0.55;
+            meatGroup.add(counter);
+
+            const glass = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 1.8), new THREE.MeshPhysicalMaterial({ transparent: true, opacity: 0.4, transmission: 0.8 }));
+            glass.position.y = 1.4;
+            meatGroup.add(glass);
+
+            const items = productLibrary.filter(p => p.category === 'meat');
+            for (let mx = -4; mx <= 4; mx += 1.5) {
+                const info = items[Math.floor(Math.random() * items.length)];
+                const p = createProductMesh(info);
+                if (p) {
+                    p.scale.set(1.5, 1, 1.5); // Meat chunks look bigger
+                    p.position.set(mx, 1.2, 0);
+                    meatGroup.add(p);
+                    clickableProducts.push(p);
+                }
+            }
+
+            meatGroup.position.set(x, 0, z);
+            scene.add(meatGroup);
+        }
+
+        // 5. Health & Beauty (الصحة والجمال) - Bright Glass Shelves
+        function createBeautySection(x: number, z: number, rotation: number) {
+            const beautyGroup = new THREE.Group();
+            const glassShelfMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, transmission: 0.5 });
+            const backMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+            const back = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 0.1), backMat);
+            back.position.y = 2;
+            beautyGroup.add(back);
+
+            for (let i = 0; i < 5; i++) {
+                const shelf = new THREE.Mesh(new THREE.BoxGeometry(8, 0.05, 0.6), glassShelfMat);
+                shelf.position.y = 0.2 + i * 0.8;
+                shelf.position.z = 0.3;
+                beautyGroup.add(shelf);
+
+                // Add beauty products
+                const items = productLibrary.filter(p => p.category === 'beauty');
+                for (let bx = -3.5; bx <= 3.5; bx += 0.7) {
+                    const info = items[Math.floor(Math.random() * items.length)];
+                    const p = createProductMesh(info);
+                    if (p) {
+                        p.position.set(bx, 0.2 + i * 0.8 + 0.25, 0.3);
+                        beautyGroup.add(p);
+                        clickableProducts.push(p);
+                    }
+                }
+
+                // Bright white LED for each shelf
+                const led = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.02, 0.05), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 5 }));
+                led.position.set(0, 0.2 + i * 0.8 + 0.78, 0.55);
+                beautyGroup.add(led);
+            }
+
+            beautyGroup.position.set(x, 0, z);
+            beautyGroup.rotation.y = rotation;
+            scene.add(beautyGroup);
+        }
+
+        // --- NEW STORE LAYOUT WITH SIGNS ---
+
+        // 1. Bakery (المخبز)
+        createBakerySection(-20, 42);
+        createDepartmentSign("قسم المخبز", "BAKERY", -20, 4.5, 42);
+
+        // 2. Produce (الخضروات والفواكه)
+        createProduceSection(-15, 20);
+        createDepartmentSign("الخضروات والفواكه", "FRESH PRODUCE", -15, 4.5, 20);
+
+        // 3. Dairy & Cheese (الألبان والأجبان)
+        createDairySection(-28, 0, Math.PI / 2);
+        createDairySection(-28, -12, Math.PI / 2);
+        createDepartmentSign("الألبان والأجبان", "DAIRY & CHEESE", -25, 4.5, -6, Math.PI / 2);
+
+        // 4. Meat & Seafood (اللحوم والأسماك)
+        createMeatSection(0, -45);
+        createDepartmentSign("اللحوم والأسماك", "MEAT & SEAFOOD", 0, 4.5, -42);
+
+        // 5. Health & Beauty (الصحة والجمال)
+        createBeautySection(28, 0, -Math.PI / 2);
+        createBeautySection(28, 12, -Math.PI / 2);
+        createDepartmentSign("الصحة والجمال", "HEALTH & BEAUTY", 25, 4.5, 6, -Math.PI / 2);
+
+        // 6. Grocery & Cleaning (البقالة والمنظفات) - Adjusted spacing to avoid island overlap
+        const mainAisles = [
+            { x: -10, categories: ['grocery'], labelAr: "البقالة", labelEn: "GROCERY" },
+            { x: 10, categories: ['drinks', 'snacks'], labelAr: "المشروبات والوجبات الخفيفة", labelEn: "DRINKS & SNACKS" },
+            { x: 20, categories: ['cleaning', 'grocery'], labelAr: "المنظفات والورقيات", labelEn: "CLEANING" }
+        ];
+
+        mainAisles.forEach(aisle => {
+            for (let z = -35; z <= 35; z += 12) {
+                createPopulatedShelf(aisle.x, z, 0, aisle.categories);
+                createPopulatedShelf(aisle.x, z, Math.PI, aisle.categories);
+            }
+            createDepartmentSign(aisle.labelAr, aisle.labelEn, aisle.x, 4.5, 0);
         });
 
-        // End-Caps (Shelves at the ends of aisles)
-        const endCapZ = [-41.2, 41.2];
-        [-14, 0, 14].forEach(x => {
-            endCapZ.forEach(z => {
-                const categories = ['snacks', 'drinks'];
-                const rotation = z > 0 ? 0 : Math.PI;
-                // Rotate to face the walkway at the ends
-                createPopulatedShelf(x, z, rotation + Math.PI / 2, categories);
-            });
-        });
+        // Cashier Sign
+        createDepartmentSign("منطقة المحاسبة", "CHECKOUT", 0, 4.5, 48);
 
-        // --- CASHIER AREA (Executive Design) ---
+        // Cashier already remains at createCashier(0, 48)
+
+        // --- CASHIER AREA (Professional Design & Animated NPC) ---
         function createCashier(x: number, z: number) {
             const cashierGroup = new THREE.Group();
-
-            // 1. Executive Counter
-            const counterMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.8 }); // Dark wood/matte
+            const counterMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.1, metalness: 0.5 }); // Sleek Noir
             const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1.3, 1.2), counterMat);
             base.position.y = 0.65;
             cashierGroup.add(base);
@@ -763,6 +1082,83 @@ export default function SupermarketSimulator() {
             const pLight = new THREE.PointLight(0xfff5e6, 20, 15);
             pLight.position.set(x, 4.5, z);
             scene.add(pLight);
+
+            // --- ADDING NPC (Cashier Personnel) ---
+            const npcGroup = new THREE.Group(); // ANIMATED REPLACEMENT START
+            function createCashierNPC(nx: number, nz: number) { // NPC_REBUILD_START
+                // improved materials
+                const skinMat = new THREE.MeshPhysicalMaterial({ color: 0xffdbac, roughness: 0.75 });
+                const shirtMat = new THREE.MeshPhysicalMaterial({ color: 0x111111, roughness: 0.5 });
+                const uniformMat = new THREE.MeshPhysicalMaterial({ color: 0x2e7d32, roughness: 0.8 });
+                const hairMat = new THREE.MeshStandardMaterial({ color: 0x221105, roughness: 0.9 });
+
+                // Head
+                const hGroup = new THREE.Group();
+                const face = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.08, 4, 12), skinMat);
+                face.position.y = 1.68;
+                hGroup.add(face);
+
+                // facial features
+                const eyeGeom = new THREE.SphereGeometry(0.012, 8, 8);
+                const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+                const lEye = new THREE.Mesh(eyeGeom, eyeMat); lEye.position.set(-0.03, 1.7, 0.085);
+                const rEye = new THREE.Mesh(eyeGeom, eyeMat); rEye.position.set(0.03, 1.7, 0.085);
+                hGroup.add(lEye, rEye);
+
+                // Friendly Smile
+                const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.004, 8, 12, Math.PI), eyeMat);
+                mouth.position.set(0, 1.63, 0.085); mouth.rotation.x = 0.4;
+                hGroup.add(mouth);
+
+                const hair = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2), hairMat);
+                hair.position.y = 1.72;
+                hGroup.add(hair);
+
+                npcGroup.add(hGroup);
+
+                // body
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.22), shirtMat);
+                torso.position.y = 1.35;
+                npcGroup.add(torso);
+
+                const apron = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.02), uniformMat);
+                apron.position.set(0, 1.25, 0.12);
+                npcGroup.add(apron);
+
+                const collar = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 8, 16, Math.PI), shirtMat);
+                collar.rotation.x = Math.PI / 2;
+                collar.position.y = 1.63;
+                npcGroup.add(collar);
+
+                // Improved Arms with Joints for Animation
+                const armGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.28);
+                const lArm = new THREE.Mesh(armGeom, shirtMat);
+                lArm.position.set(-0.25, 1.5, 0); lArm.rotation.z = 0.25;
+                npcGroup.add(lArm);
+
+                const rArmJoint = new THREE.Group();
+                rArmJoint.position.set(0.25, 1.5, 0);
+                const rArm = new THREE.Mesh(armGeom, shirtMat);
+                rArm.position.y = -0.14;
+                rArmJoint.add(rArm);
+                rArmJoint.rotation.x = -1.1;
+                npcGroup.add(rArmJoint);
+
+                // hands
+                const handGeom = new THREE.SphereGeometry(0.05, 8, 8);
+                const lHand = new THREE.Mesh(handGeom, skinMat); lHand.position.set(-0.3, 1.25, 0.08); // MARKER_HANDS
+                const rHand = new THREE.Mesh(handGeom, skinMat); rHand.position.set(0.3, 1.4, 0.3);
+                npcGroup.add(lHand, rHand);
+
+                npcGroup.position.set(nx, 0.1, nz);
+                npcGroup.rotation.y = Math.PI;
+
+                // Bind to animation refs
+                npcRef.current = { group: npcGroup, head: hGroup, rArm: rArmJoint };
+            }
+
+            createCashierNPC(0, 0.5);
+            cashierGroup.add(npcGroup);
         }
 
         // Place Cashier Desk near entrance/start
@@ -842,18 +1238,10 @@ export default function SupermarketSimulator() {
                 parent.add(trough);
             }
 
-            // High-End Up-Down Sconce (Elegant Black & Gold)
+            // Removed sconce point lights (Save resources)
             const sconceBox = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.3), new THREE.MeshStandardMaterial({ color: 0x050505 }));
             sconceBox.position.set(0, 2.5, 0.3);
             parent.add(sconceBox);
-
-            const upLight = new THREE.PointLight(0xfff5e6, 8, 10);
-            upLight.position.set(0, 3, 0.4);
-            parent.add(upLight);
-
-            const downLight = new THREE.PointLight(0xfff5e6, 8, 10);
-            downLight.position.set(0, 2, 0.4);
-            parent.add(downLight);
         }
 
         function createArchitecturalWall(width: number, height: number, depth: number, x: number, y: number, z: number, rotationY: number) {
@@ -943,18 +1331,99 @@ export default function SupermarketSimulator() {
         welcomeGroup.position.set(0, 3.5, 49.8);
         scene.add(welcomeGroup);
 
+        // --- REALISTIC SHOPPING CART MODEL ---
         const cartGroup = new THREE.Group();
-        const cartMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 }); // Metallic Dark Grey
-        const basket = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.8), cartMat);
-        basket.castShadow = true;
-        cartGroup.add(basket);
+        const cartMetalMat = new THREE.MeshStandardMaterial({
+            color: 0xf5f5f5, // Much lighter, chrome-like silver
+            metalness: 1.0,
+            roughness: 0.1,
+            envMapIntensity: 1.0
+        });
+        const plasticHandleMat = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.5 }); // Red handle
 
-        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-        handle.rotation.z = Math.PI / 2;
-        handle.position.set(0, 0.2, -0.45);
-        cartGroup.add(handle);
+        // 1. Support Frame (The "Chassis")
+        const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.7), cartMetalMat);
+        frameBottom.position.set(0, -0.35, -0.1);
+        cartGroup.add(frameBottom);
 
-        cartGroup.position.set(0, -0.6, -1);
+        const verticalBarGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.6);
+        const bars = [
+            [-0.22, -0.05, 0.25], [0.22, -0.05, 0.25], // Back bars near user
+            [-0.22, -0.05, -0.45], [0.22, -0.05, -0.45] // Front bars
+        ];
+        bars.forEach(([bx, by, bz]) => {
+            const bar = new THREE.Mesh(verticalBarGeom, cartMetalMat);
+            bar.position.set(bx, by, bz);
+            cartGroup.add(bar);
+        });
+
+        // 2. Open Wire Basket (Grid Design)
+        const basketGroup = new THREE.Group();
+        for (let h = 0; h <= 0.4; h += 0.08) {
+            const barF = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.02, 0.02), cartMetalMat);
+            const barB = barF.clone();
+            const barL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.75), cartMetalMat);
+            const barR = barL.clone();
+            barF.position.set(0, h, -0.375);
+            barB.position.set(0, h, 0.375);
+            barL.position.set(-0.275, h, 0);
+            barR.position.set(0.275, h, 0);
+            basketGroup.add(barF, barB, barL, barR);
+        }
+
+        const wireGeom = new THREE.BoxGeometry(0.01, 0.4, 0.01);
+        for (let x = -0.275; x <= 0.275; x += 0.05) {
+            const wF = new THREE.Mesh(wireGeom, cartMetalMat);
+            wF.position.set(x, 0.2, -0.375);
+            const wB = wF.clone();
+            wB.position.z = 0.375;
+            basketGroup.add(wF, wB);
+        }
+        for (let z = -0.375; z <= 0.375; z += 0.05) {
+            const wL = new THREE.Mesh(wireGeom, cartMetalMat);
+            wL.position.set(-0.275, 0.2, z);
+            const wR = wL.clone();
+            wR.position.x = 0.275;
+            basketGroup.add(wL, wR);
+        }
+
+        const basketBottom = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.01, 0.75), new THREE.MeshStandardMaterial({ color: 0x888888, wireframe: true }));
+        basketBottom.position.y = 0;
+        basketGroup.add(basketBottom);
+
+        const basketContents = new THREE.Group();
+        basketContents.position.y = 0.1;
+        basketGroup.add(basketContents);
+        basketContentsRef.current = basketContents;
+
+        basketGroup.position.set(0, -0.1, -0.1);
+        cartGroup.add(basketGroup);
+
+        // 3. Handle (Slimmed down for natural perspective)
+        const handleSupportL = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.4, 0.012), cartMetalMat);
+        handleSupportL.position.set(-0.25, 0.45, 0.35);
+        handleSupportL.rotation.x = 0.6;
+        const handleSupportR = handleSupportL.clone();
+        handleSupportR.position.x = 0.25;
+        cartGroup.add(handleSupportL, handleSupportR);
+
+        const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 16), plasticHandleMat);
+        handleBar.rotation.z = Math.PI / 2;
+        handleBar.position.set(0, 0.6, 0.45);
+        cartGroup.add(handleBar);
+
+        // 4. Wheels
+        const wheelGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12);
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+        const wheelPositions = [[-0.2, -0.4, 0.15], [0.2, -0.4, 0.15], [-0.2, -0.4, -0.45], [0.2, -0.4, -0.45]];
+        wheelPositions.forEach(([wx, wy, wz]) => {
+            const w = new THREE.Mesh(wheelGeom, wheelMat);
+            w.rotation.z = Math.PI / 2;
+            w.position.set(wx, wy, wz);
+            cartGroup.add(w);
+        });
+
+        cartGroup.position.set(0, -0.85, -1.2); // Pushed further and lower for natural feel
         camera.add(cartGroup);
         scene.add(camera);
 
@@ -980,25 +1449,46 @@ export default function SupermarketSimulator() {
             moveVec.set(0, 0, 0);
             if (keys['KeyW'] || keys['ArrowUp']) moveVec.z -= moveSpeed;
             if (keys['KeyS'] || keys['ArrowDown']) moveVec.z += moveSpeed;
-            if (keys['KeyA'] || keys['ArrowLeft']) moveVec.x -= moveSpeed;
-            if (keys['KeyD'] || keys['ArrowRight']) moveVec.x += moveSpeed;
+
+            // Rotation logic via Keyboard (A / D or Arrows) - replaces strafing
+            if (keys['KeyA'] || keys['ArrowLeft']) targetRotationY += 0.03;
+            if (keys['KeyD'] || keys['ArrowRight']) targetRotationY -= 0.03;
 
             if (moveVec.lengthSq() > 0) {
                 moveVec.normalize().multiplyScalar(moveSpeed);
                 moveVec.applyAxisAngle(Y_AXIS, camera.rotation.y);
                 camera.position.add(moveVec);
+
                 camera.position.y = 1.6 + Math.sin(t * 0.01) * 0.03;
-                // Boundaries (Increased Z to allow reaching cashier at 48)
                 camera.position.x = Math.max(-28, Math.min(28, camera.position.x));
                 camera.position.z = Math.max(-42, Math.min(55, camera.position.z));
             } else {
                 camera.position.y = 1.6;
             }
 
+            // Apply smoothing to horizontal rotation
             if (Math.abs(targetRotationY - camera.rotation.y) > 0.001) {
                 camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.15;
             }
 
+            // NPC Lively Animation
+            if (npcRef.current) {
+                const time = t * 0.001;
+                // Subtle breathing
+                npcRef.current.group.position.y = Math.sin(time * 2) * 0.01;
+                // Looking around
+                npcRef.current.head.rotation.y = Math.sin(time * 0.5) * 0.2;
+                npcRef.current.head.rotation.x = Math.sin(time * 0.8) * 0.1;
+                // Hand movement on POS
+                npcRef.current.rArm.rotation.x = -1.0 + Math.sin(time * 4) * 0.05;
+            }
+
+            // Lock vertical look (Pitch) and reset cart position
+            camera.rotation.x = 0;
+            cartGroup.rotation.set(0, 0, 0);
+            cartGroup.position.set(0, -0.85, -1.2);
+
+            camera.rotation.order = 'YXZ';
             renderer.render(scene, camera);
         }
 
@@ -1010,42 +1500,44 @@ export default function SupermarketSimulator() {
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
 
-        let isLocked = false;
-        // Lock pointer on click - with error handling
-        const lockPointer = () => {
-            try {
-                const promise = renderer.domElement.requestPointerLock() as any;
-                if (promise && typeof promise.catch === 'function') {
-                    promise.catch((err: any) => {
-                        // Suppress pointer lock errors as they are common and usually non-fatal
-                        console.warn("Pointer lock request failed:", err);
-                    });
-                }
-            } catch (err) {
-                console.warn("Browser blocked pointer lock request:", err);
+        // Start game logic (replaces pointer lock)
+        const startGame = () => {
+            setIsLockedState(true);
+        };
+        lockPointerRef.current = startGame;
+
+        // Click to start when overlay is visible
+        const onCanvasClick = (e: MouseEvent) => {
+            if (!isLockedState && e.target === renderer.domElement) {
+                startGame();
             }
         };
-
-        renderer.domElement.addEventListener('click', lockPointer);
-
-        const onPointerLockChange = () => {
-            const locked = document.pointerLockElement === renderer.domElement;
-            isLocked = locked;
-            setIsLockedState(locked);
-        };
-        document.addEventListener('pointerlockchange', onPointerLockChange);
+        renderer.domElement.addEventListener('click', onCanvasClick);
 
         const onMouseMove = (e: MouseEvent) => {
-            if (isLocked) targetRotationY -= e.movementX * 0.0022;
+            // Update 2D cursor position
+            setMousePos({ x: e.clientX, y: e.clientY });
+
+            // Check for hover
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(clickableProducts, false);
+            setIsHovering(intersects.length > 0);
         };
         document.addEventListener('mousemove', onMouseMove);
 
         const raycaster = new THREE.Raycaster();
-        const center = new THREE.Vector2(0, 0);
+        const mouse = new THREE.Vector2();
 
-        const handleClick = () => {
-            if (!isLocked) return;
-            raycaster.setFromCamera(center, camera);
+        const handleClick = (e: MouseEvent) => {
+            // Only handle clicks on the canvas
+            if (e.target !== renderer.domElement) return;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(clickableProducts, false);
 
             if (intersects.length > 0) {
@@ -1085,7 +1577,7 @@ export default function SupermarketSimulator() {
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
             window.removeEventListener('mousedown', handleClick);
-            document.removeEventListener('pointerlockchange', onPointerLockChange);
+            renderer.domElement.removeEventListener('click', onCanvasClick);
             document.removeEventListener('mousemove', onMouseMove);
             cancelAnimationFrame(animationId);
             mountRef.current?.removeChild(renderer.domElement);
@@ -1107,6 +1599,41 @@ export default function SupermarketSimulator() {
         setShowCheckout(false);
     };
 
+    // --- Sync 3D Cart Visualization ---
+    useEffect(() => {
+        const group = basketContentsRef.current;
+        if (!group) return;
+
+        // Clear previous visual items
+        while (group.children.length > 0) {
+            group.remove(group.children[0]);
+        }
+
+        // Add visual products to 3D basket
+        cart.forEach((item, index) => {
+            // Simplified mini-mesh for performance
+            const geom = item.category === 'produce'
+                ? new THREE.SphereGeometry(0.08, 8, 8)
+                : new THREE.BoxGeometry(0.12, 0.15, 0.1);
+
+            const mat = new THREE.MeshStandardMaterial({
+                color: item.color || 0xffffff,
+                roughness: 0.5
+            });
+
+            const mesh = new THREE.Mesh(geom, mat);
+
+            // Random-ish stacking inside the basket
+            const rx = (Math.random() - 0.5) * 0.4;
+            const ry = Math.floor(index / 4) * 0.15; // Stack upwards
+            const rz = (Math.random() - 0.5) * 0.6;
+
+            mesh.position.set(rx, ry, rz);
+            mesh.rotation.set(Math.random(), Math.random(), Math.random());
+            group.add(mesh);
+        });
+    }, [cart]);
+
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#000' }}>
             <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
@@ -1124,15 +1651,68 @@ export default function SupermarketSimulator() {
                 FPS: {fps}
             </div>
 
-            {/* Crosshair */}
+            {/* Management Dashboard Trigger */}
             <div style={{
-                position: 'absolute', top: '50%', left: '50%', width: '10px', height: '10px',
-                background: 'rgba(255,255,255,0.8)',
-                transform: 'translate(-50%, -50%)',
+                position: 'absolute',
+                bottom: 20,
+                right: 20,
+                zIndex: 50
+            }}>
+                <button
+                    onClick={() => toggleDashboard(true)}
+                    style={{
+                        background: '#4A90E2',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '12px 20px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 4px 15px rgba(74, 144, 226, 0.4)',
+                        fontFamily: 'sans-serif',
+                        direction: 'rtl'
+                    }}
+                >
+                    <LayoutGrid size={20} />
+                    لوحة الإدارة
+                </button>
+            </div>
+
+            {/* Dynamic 2D Cursor/Pointer */}
+            <div style={{
+                position: 'fixed',
+                left: mousePos.x,
+                top: mousePos.y,
+                width: isHovering ? '36px' : '24px',
+                height: isHovering ? '36px' : '24px',
+                border: isHovering ? '3px solid #ffbb33' : '2px solid rgba(255,255,255,0.8)',
                 borderRadius: '50%',
+                backgroundColor: isHovering ? 'rgba(255, 187, 51, 0.2)' : 'transparent',
                 pointerEvents: 'none',
-                boxShadow: '0 0 4px #000'
-            }} />
+                transform: 'translate(-50%, -50%)',
+                transition: 'width 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), height 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.2s',
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: isHovering ? '0 0 15px rgba(255, 187, 51, 0.4)' : 'none'
+            }}>
+                <div style={{
+                    width: isHovering ? '6px' : '4px',
+                    height: isHovering ? '6px' : '4px',
+                    backgroundColor: isHovering ? '#fff' : 'rgba(255,255,255,0.8)',
+                    borderRadius: '50%',
+                    boxShadow: '0 0 4px rgba(0,0,0,0.5)'
+                }} />
+            </div>
+
+            {/* Hidden system cursor to use our custom one */}
+            <style>{`
+                canvas { cursor: none !important; }
+            `}</style>
 
             {/* Message */}
             {message && (
@@ -1222,25 +1802,8 @@ export default function SupermarketSimulator() {
             {/* Click to Play Overlay */}
             {!isLockedState && (
                 <div
-                    onClick={async (e) => {
-                        const target = e.currentTarget;
-                        if (document.pointerLockElement) return;
-
-                        try {
-                            if (rendererRef.current) {
-                                // Some browsers return a promise, some don't.
-                                const result = rendererRef.current.domElement.requestPointerLock();
-                                if (result && typeof result.catch === 'function') {
-                                    await result.catch((err: any) => {
-                                        if (err.name !== 'NotAllowedError' && err.name !== 'SecurityError') {
-                                            console.error("Pointer lock error:", err);
-                                        }
-                                    });
-                                }
-                            }
-                        } catch (err) {
-                            console.warn("Pointer lock request ignored or failed:", err);
-                        }
+                    onClick={() => {
+                        lockPointerRef.current();
                     }}
                     style={{
                         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -1255,7 +1818,7 @@ export default function SupermarketSimulator() {
                     }}>
                         <h2 style={{ margin: '0 0 10px 0' }}>اضغط للبدء</h2>
                         <p style={{ margin: 0, fontSize: '14px', opacity: 0.8 }}>استخدم WASD أو الأسهم للحركة</p>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '14px', opacity: 0.8 }}>حرك الماوس للنظر حولك</p>
+                        <p style={{ margin: '5px 0 0 0', fontSize: '14px', opacity: 0.8 }}>استخدم الماوس لاختيار المنتجات</p>
                     </div>
                 </div>
             )}

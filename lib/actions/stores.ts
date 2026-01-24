@@ -131,7 +131,7 @@ export async function searchStores(query: string) {
     .from("stores")
     .select("*")
     .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-  .order("rating", { ascending: false })
+    .order("rating", { ascending: false })
 
   if (error) {
     console.error("[v0] Error searching stores:", error)
