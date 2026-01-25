@@ -1,65 +1,56 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import { getAdminDb } from "@/lib/firebase/admin"
 import { updateStore } from "./stores"
 
+type ReviewRecord = Record<string, any>
+
 export async function getUserStoreReview(storeId: string, customerId: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
 
-  const { data, error } = await supabase
-    .from("store_reviews")
-    .select("*")
-    .eq("store_id", storeId)
-    .eq("customer_id", customerId)
-    .maybeSingle()
+  const snapshot = await db
+    .collection("store_reviews")
+    .where("store_id", "==", storeId)
+    .where("customer_id", "==", customerId)
+    .limit(1)
+    .get()
 
-  if (error) {
-    console.error("[v0] Error fetching user store review:", error)
+  const docSnap = snapshot.docs[0]
+  if (!docSnap) {
     return null
   }
 
-  return data
+  return { id: docSnap.id, ...(docSnap.data() as ReviewRecord) }
 }
 
 export async function upsertStoreReview(storeId: string, customerId: string, rating: number, comment?: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
   const r = Math.max(1, Math.min(5, Math.round(rating)))
+  const now = new Date().toISOString()
 
   try {
-    const { data: existing } = await supabase
-      .from("store_reviews")
-      .select("id")
-      .eq("store_id", storeId)
-      .eq("customer_id", customerId)
-      .maybeSingle()
+    const existingSnap = await db
+      .collection("store_reviews")
+      .where("store_id", "==", storeId)
+      .where("customer_id", "==", customerId)
+      .limit(1)
+      .get()
 
-    if (existing?.id) {
-      const { error: updateErr } = await supabase
-        .from("store_reviews")
-        .update({ rating: r, comment })
-        .eq("id", existing.id)
-
-      if (updateErr) throw updateErr
+    if (existingSnap.docs[0]) {
+      await existingSnap.docs[0].ref.set({ rating: r, comment, updated_at: now }, { merge: true })
     } else {
-      const { error: insertErr } = await supabase.from("store_reviews").insert({
+      await db.collection("store_reviews").doc().set({
         store_id: storeId,
         customer_id: customerId,
         rating: r,
         comment,
+        created_at: now,
+        updated_at: now,
       })
-
-      if (insertErr) throw insertErr
     }
 
-    // Recompute average rating for the store (Ideally this should be a DB trigger)
-    const { data: rows, error: rowsErr } = await supabase
-      .from("store_reviews")
-      .select("rating")
-      .eq("store_id", storeId)
-
-    if (rowsErr) throw rowsErr
-
-    const ratings = (rows || []).map((row: any) => Number(row.rating) || 0)
+    const rowsSnap = await db.collection("store_reviews").where("store_id", "==", storeId).get()
+    const ratings = rowsSnap.docs.map((doc) => Number((doc.data() as ReviewRecord).rating || 0))
     const avg = ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0
 
     await updateStore(storeId, { rating: avg })

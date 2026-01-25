@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/lib/language-context"
-import { createClient } from "@/lib/supabase/client"
+import { getFirebaseAuth } from "@/lib/firebase/client"
+import { sendPasswordResetEmail } from "firebase/auth"
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
 
 export default function ForgotPasswordPage() {
@@ -31,12 +32,11 @@ export default function ForgotPasswordPage() {
     setSuccess(false)
 
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+      const auth = getFirebaseAuth()
+      await sendPasswordResetEmail(auth, email, {
+        url: `${window.location.origin}/auth/reset-password`,
+        handleCodeInApp: true,
       })
-
-      if (error) throw error
 
       setSuccess(true)
     } catch (error: any) {

@@ -1,23 +1,18 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { getAdminDb } from "@/lib/firebase/admin"
+import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+
+type OfferRecord = Record<string, any>
 
 export async function getStoreOffers(storeId: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const snapshot = await db.collection("offers").where("store_id", "==", storeId).get()
+  const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as OfferRecord) }))
 
-  const { data, error } = await supabase
-    .from("offers")
-    .select("*")
-    .eq("store_id", storeId)
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    console.error("[v0] Error fetching offers:", error)
-    return []
-  }
-
-  return data || []
+  offers.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  return offers
 }
 
 export async function createOffer(formData: {
@@ -28,17 +23,22 @@ export async function createOffer(formData: {
   start_date: string
   end_date: string
 }) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const docRef = db.collection("offers").doc()
+  const payload = {
+    ...formData,
+    created_at: new Date().toISOString(),
+  }
 
-  const { data, error } = await supabase.from("offers").insert(formData).select().single()
-
-  if (error) {
+  try {
+    await docRef.set(payload)
+  } catch (error: any) {
     console.error("[v0] Error creating offer:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to create offer" }
   }
 
   revalidatePath("/seller/offers")
-  return { success: true, data }
+  return { success: true, data: { id: docRef.id, ...payload } }
 }
 
 export async function updateOffer(
@@ -51,27 +51,33 @@ export async function updateOffer(
     end_date: string
   }>,
 ) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const docRef = db.collection("offers").doc(id)
 
-  const { data, error } = await supabase.from("offers").update(formData).eq("id", id).select().single()
-
-  if (error) {
+  try {
+    await docRef.set(cleanUndefined(formData), { merge: true })
+  } catch (error: any) {
     console.error("[v0] Error updating offer:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to update offer" }
+  }
+
+  const updatedSnap = await docRef.get()
+  if (!updatedSnap.exists) {
+    return { success: false, error: "Offer not found" }
   }
 
   revalidatePath("/seller/offers")
-  return { success: true, data }
+  return { success: true, data: { id: updatedSnap.id, ...(updatedSnap.data() as OfferRecord) } }
 }
 
 export async function deleteOffer(id: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
 
-  const { error } = await supabase.from("offers").delete().eq("id", id)
-
-  if (error) {
+  try {
+    await db.collection("offers").doc(id).delete()
+  } catch (error: any) {
     console.error("[v0] Error deleting offer:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to delete offer" }
   }
 
   revalidatePath("/seller/offers")

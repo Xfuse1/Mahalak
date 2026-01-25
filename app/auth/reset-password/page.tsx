@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
@@ -11,17 +11,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/lib/language-context"
-import { createClient } from "@/lib/supabase/client"
+import { getFirebaseAuth } from "@/lib/firebase/client"
+import { confirmPasswordReset } from "firebase/auth"
 import { CheckCircle2 } from "lucide-react"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { t } = useLanguage()
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const oobCode = searchParams.get("oobCode")
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -41,12 +44,19 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.updateUser({
-        password: password,
-      })
+      if (!oobCode) {
+        setError(
+          t(
+            "Ø±Ø§Ø¨Ø· Ø¥Ø¹Ø§Ø¯Ø© ØªØ¹ÙŠÙŠÙ† ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± ØºÙŠØ± ØµØ§Ù„Ø­ Ø£Ùˆ Ù…Ù†ØªÙ‡ÙŠ Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ©",
+            "Reset link is invalid or expired",
+          ),
+        )
+        setIsLoading(false)
+        return
+      }
 
-      if (error) throw error
+      const auth = getFirebaseAuth()
+      await confirmPasswordReset(auth, oobCode, password)
 
       setSuccess(true)
       setTimeout(() => {

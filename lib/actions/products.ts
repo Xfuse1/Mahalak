@@ -1,65 +1,87 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import type { FirebaseFirestore } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
+import { getAdminDb } from "@/lib/firebase/admin"
+import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+
+type ProductRecord = Record<string, any>
+type StoreRecord = Record<string, any>
+
+function mapProduct(doc: FirebaseFirestore.DocumentSnapshot) {
+  if (!doc.exists) return null
+  return { id: doc.id, ...(doc.data() as ProductRecord) }
+}
+
+async function getStoreMap(db: FirebaseFirestore.Firestore, storeIds: string[]) {
+  const uniqueIds = Array.from(new Set(storeIds.filter(Boolean)))
+  if (uniqueIds.length === 0) {
+    return new Map<string, StoreRecord>()
+  }
+
+  const refs = uniqueIds.map((id) => db.collection("stores").doc(id))
+  const docs = await db.getAll(...refs)
+  const map = new Map<string, StoreRecord>()
+
+  docs.forEach((doc) => {
+    if (doc.exists) {
+      map.set(doc.id, { id: doc.id, ...(doc.data() as StoreRecord) })
+    }
+  })
+
+  return map
+}
+
+function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>) {
+  const store = storeMap.get(product.store_id)
+  if (!store) return product
+
+  return {
+    ...product,
+    stores: {
+      id: store.id,
+      name: store.name,
+      category: store.category,
+      phone: store.phone,
+      address: store.address,
+    },
+  }
+}
 
 export async function getProducts(category?: string) {
-  const supabase = await createServerClient()
-
-  let query = supabase
-    .from("products")
-    .select(
-      `
-      *,
-      stores (
-        id,
-        name,
-        category
-      )
-    `,
-    )
-    .order("rating", { ascending: false })
+  const db = getAdminDb()
+  let query: FirebaseFirestore.Query = db.collection("products")
 
   if (category) {
-    query = query.eq("category", category)
+    query = query.where("category", "==", category)
   }
 
-  const { data, error } = await query
+  const snapshot = await query.get()
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+  products.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
 
-  if (error) {
-    console.error("[v0] Error fetching products:", error)
-    return []
-  }
+  const storeMap = await getStoreMap(
+    db,
+    products.map((product) => product.store_id).filter(Boolean),
+  )
 
-  return data || []
+  return products.map((product) => attachStore(product, storeMap))
 }
 
 export async function getProduct(id: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const docSnap = await db.collection("products").doc(id).get()
 
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      *,
-      stores (
-        id,
-        name,
-        category,
-        phone,
-        address
-      )
-    `,
-    )
-    .eq("id", id)
-    .single()
-
-  if (error) {
-    console.error("[v0] Error fetching product:", error)
+  if (!docSnap.exists) {
+    console.error("[v0] Error fetching product:", "Product not found")
     return null
   }
 
-  return data
+  const product = mapProduct(docSnap)
+  if (!product) return null
+
+  const storeMap = await getStoreMap(db, [product.store_id])
+  return attachStore(product, storeMap)
 }
 
 export async function createProduct(formData: {
@@ -71,17 +93,33 @@ export async function createProduct(formData: {
   image_url?: string
   store_id: string
 }) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const docRef = db.collection("products").doc()
+  const now = new Date().toISOString()
 
-  const { data, error } = await supabase.from("products").insert(formData).select().single()
+  const payload = {
+    name: formData.name,
+    description: formData.description,
+    price: formData.price,
+    category: formData.category,
+    stock: formData.stock,
+    image_url: formData.image_url || "",
+    store_id: formData.store_id,
+    rating: 0,
+    rating_count: 0,
+    created_at: now,
+    updated_at: now,
+  }
 
-  if (error) {
+  try {
+    await docRef.set(payload)
+  } catch (error: any) {
     console.error("[v0] Error creating product:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to create product" }
   }
 
   revalidatePath("/seller/products")
-  return { success: true, data }
+  return { success: true, data: { id: docRef.id, ...payload } }
 }
 
 export async function updateProduct(
@@ -96,33 +134,39 @@ export async function updateProduct(
     rating: number
   }>,
 ) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const docRef = db.collection("products").doc(id)
 
-  const { data, error } = await supabase
-    .from("products")
-    .update({ ...formData, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single()
+  const updateData = cleanUndefined({
+    ...formData,
+    updated_at: new Date().toISOString(),
+  })
 
-  if (error) {
+  try {
+    await docRef.set(updateData, { merge: true })
+  } catch (error: any) {
     console.error("[v0] Error updating product:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to update product" }
+  }
+
+  const updatedSnap = await docRef.get()
+  if (!updatedSnap.exists) {
+    return { success: false, error: "Product not found" }
   }
 
   revalidatePath("/seller/products")
   revalidatePath(`/product/${id}`)
-  return { success: true, data }
+  return { success: true, data: mapProduct(updatedSnap) }
 }
 
 export async function deleteProduct(id: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
 
-  const { error } = await supabase.from("products").delete().eq("id", id)
-
-  if (error) {
+  try {
+    await db.collection("products").doc(id).delete()
+  } catch (error: any) {
     console.error("[v0] Error deleting product:", error)
-    return { success: false, error: error.message }
+    return { success: false, error: error?.message || "Failed to delete product" }
   }
 
   revalidatePath("/seller/products")
@@ -130,79 +174,44 @@ export async function deleteProduct(id: string) {
 }
 
 export async function getProductsByStoreId(storeId: string) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .eq("store_id", storeId)
-    .order("rating", { ascending: false })
-
-  if (error) {
-    console.error("[v0] Error fetching products by store:", error)
-    return []
-  }
-
-  return data || []
+  products.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+  return products
 }
 
 export async function searchProducts(query: string) {
-  const supabase = await createServerClient()
+  const products = await getProducts()
+  const q = query.trim().toLowerCase()
 
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      *,
-      stores (
-        id,
-        name,
-        category
-      )
-    `,
-    )
-    .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-    .order("rating", { ascending: false })
-
-  if (error) {
-    console.error("[v0] Error searching products:", error)
-    return []
+  if (!q) {
+    return products
   }
 
-  // Also filter by store name on the client side since we can't do it in the query
-  const filtered = data?.filter(
-    (product) =>
-      product.name.toLowerCase().includes(query.toLowerCase()) ||
-      product.description.toLowerCase().includes(query.toLowerCase()) ||
-      (product.stores && product.stores.name.toLowerCase().includes(query.toLowerCase())),
-  )
-
-  return filtered || []
+  return products.filter((product: any) => {
+    const name = (product.name || "").toLowerCase()
+    const description = (product.description || "").toLowerCase()
+    const storeName = (product.stores?.name || "").toLowerCase()
+    return name.includes(q) || description.includes(q) || storeName.includes(q)
+  })
 }
 
 export async function getRelatedProducts(productId: string, category: string, limit = 4) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const snapshot = await db.collection("products").where("category", "==", category).get()
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      *,
-      stores (
-        id,
-        name
-      )
-    `,
-    )
-    .eq("category", category)
-    .neq("id", productId)
-    .limit(limit)
-    .order("rating", { ascending: false })
+  const filtered = products
+    .filter((product) => product.id !== productId)
+    .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+    .slice(0, limit)
 
-  if (error) {
-    console.error("[v0] Error fetching related products:", error)
-    return []
-  }
+  const storeMap = await getStoreMap(
+    db,
+    filtered.map((product) => product.store_id).filter(Boolean),
+  )
 
-  return data || []
+  return filtered.map((product) => attachStore(product, storeMap))
 }

@@ -249,7 +249,8 @@ const resources = {
 
 i18n.use(initReactI18next).init({
   resources,
-  lng: typeof window !== "undefined" ? localStorage.getItem("language") || "ar" : "ar",
+  // Keep initial language stable for SSR/CSR; localStorage is applied in I18nProvider after mount.
+  lng: "ar",
   fallbackLng: "ar",
   defaultNS: "common",
   interpolation: {

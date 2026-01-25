@@ -7,15 +7,17 @@ import { useRouter } from "next/navigation"
 type OrderStatusSelectorProps = {
   orderId: string
   currentStatus: string
+  onUpdated?: () => void
 }
 
-export function OrderStatusSelector({ orderId, currentStatus }: OrderStatusSelectorProps) {
+export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: OrderStatusSelectorProps) {
   const router = useRouter()
 
   const handleStatusChange = async (newStatus: string) => {
     const result = await updateOrderStatus(orderId, newStatus)
     if (result.success) {
       router.refresh()
+      onUpdated?.()
     } else {
       console.error("[v0] Failed to update order status:", result.error)
     }

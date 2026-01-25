@@ -1,123 +1,128 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import type { FirebaseFirestore } from "firebase-admin/firestore"
+import { getAdminDb } from "@/lib/firebase/admin"
+import { chunkArray } from "@/lib/firebase/firestore-helpers"
 
-export async function getDashboardAnalytics(storeId: string) {
-  const supabase = await createServerClient()
+type RecordMap = Record<string, any>
 
-  // Get total products
-  const { count: totalProducts } = await supabase
-    .from("products")
-    .select("*", { count: "exact", head: true })
-    .eq("store_id", storeId)
+async function fetchDocsMap(db: FirebaseFirestore.Firestore, collection: string, ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
+  if (uniqueIds.length === 0) {
+    return new Map<string, RecordMap>()
+  }
 
-  // Get total orders and revenue
-  const { data: orders } = await supabase.from("orders").select("total, status").eq("store_id", storeId)
+  const refs = uniqueIds.map((id) => db.collection(collection).doc(id))
+  const docs = await db.getAll(...refs)
+  const map = new Map<string, RecordMap>()
 
-  const totalOrders = orders?.length || 0
-  const totalRevenue = orders?.reduce((sum, order) => sum + Number(order.total || 0), 0) || 0
-
-  // Get low stock products (stock < 10)
-  const { count: lowStockProducts } = await supabase
-    .from("products")
-    .select("*", { count: "exact", head: true })
-    .eq("store_id", storeId)
-    .lt("stock", 10)
-
-  // Get top selling product
-  const { data: orderItems } = await supabase
-    .from("order_items")
-    .select(
-      `
-      product_id,
-      quantity,
-      products (
-        id,
-        name,
-        store_id
-      )
-    `,
-    )
-    .eq("products.store_id", storeId)
-
-  // Calculate top product by quantity sold
-  const productSales: Record<string, { name: string; quantity: number }> = {}
-  orderItems?.forEach((item: any) => {
-    if (item.products && item.products.store_id === storeId) {
-      const productId = item.product_id
-      if (!productSales[productId]) {
-        productSales[productId] = { name: item.products.name, quantity: 0 }
-      }
-      productSales[productId].quantity += item.quantity
+  docs.forEach((doc) => {
+    if (doc.exists) {
+      map.set(doc.id, { id: doc.id, ...(doc.data() as RecordMap) })
     }
   })
 
-  const topProduct = Object.values(productSales).sort((a, b) => b.quantity - a.quantity)[0] || {
-    name: "لا يوجد",
-    quantity: 0,
+  return map
+}
+
+async function fetchByIn(db: FirebaseFirestore.Firestore, collection: string, field: string, values: string[]) {
+  const uniqueValues = Array.from(new Set(values.filter(Boolean)))
+  if (uniqueValues.length === 0) return []
+
+  const results: RecordMap[] = []
+  const chunks = chunkArray(uniqueValues, 10)
+
+  for (const chunk of chunks) {
+    const snapshot = await db.collection(collection).where(field, "in", chunk).get()
+    snapshot.docs.forEach((doc) => {
+      results.push({ id: doc.id, ...(doc.data() as RecordMap) })
+    })
   }
 
-  // Get reviews for store products
-  const { data: storeProducts } = await supabase.from("products").select("id").eq("store_id", storeId)
+  return results
+}
 
-  const productIds = storeProducts?.map((p) => p.id) || []
+export async function getDashboardAnalytics(storeId: string) {
+  const db = getAdminDb()
+
+  const productsSnap = await db.collection("products").where("store_id", "==", storeId).get()
+  const products = productsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as RecordMap) }))
+  const productIds = products.map((product) => product.id)
+
+  const totalProducts = products.length
+  const lowStockProducts = products.filter((product) => Number(product.stock || 0) < 10).length
+
+  const ordersSnap = await db.collection("orders").where("store_id", "==", storeId).get()
+  const orders = ordersSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as RecordMap) }))
+
+  const totalOrders = orders.length
+  const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0)
+
+  const orderItems = await fetchByIn(db, "order_items", "product_id", productIds)
+
+  const productSales: Record<string, { name: string; quantity: number }> = {}
+  const productMap = new Map(products.map((product) => [product.id, product]))
+
+  orderItems.forEach((item) => {
+    const product = productMap.get(item.product_id)
+    if (!product) return
+    if (!productSales[item.product_id]) {
+      productSales[item.product_id] = { name: product.name, quantity: 0 }
+    }
+    productSales[item.product_id].quantity += Number(item.quantity || 0)
+  })
+
+  const topProduct = Object.values(productSales).sort((a, b) => b.quantity - a.quantity)[0] || {
+    name: "Ù„Ø§ ÙŠÙˆØ¬Ø¯",
+    quantity: 0,
+  }
 
   let averageRating = 0
   let totalReviews = 0
 
   if (productIds.length > 0) {
-    const { data: reviews } = await supabase.from("reviews").select("rating").in("product_id", productIds)
-
-    totalReviews = reviews?.length || 0
+    const reviews = await fetchByIn(db, "reviews", "product_id", productIds)
+    totalReviews = reviews.length
     if (totalReviews > 0) {
-      const sumRatings = reviews?.reduce((sum, review) => sum + (review.rating || 0), 0) || 0
+      const sumRatings = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0)
       averageRating = sumRatings / totalReviews
     }
   }
 
-  // For messages, we'll use reviews count as a proxy since there's no messages table
   const totalMessages = totalReviews
 
   return {
     totalRevenue,
     totalOrders,
-    totalProducts: totalProducts || 0,
+    totalProducts,
     totalMessages,
     topProduct: topProduct.name,
     topProductSales: topProduct.quantity,
-    lowStockProducts: lowStockProducts || 0,
+    lowStockProducts,
     averageRating: Number(averageRating.toFixed(1)),
     totalReviews,
   }
 }
 
 export async function getRecentOrders(storeId: string, limit = 3) {
-  const supabase = await createServerClient()
+  const db = getAdminDb()
+  const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
+  const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as RecordMap) }))
 
-  const { data: orders } = await supabase
-    .from("orders")
-    .select(
-      `
-      id,
-      total,
-      status,
-      created_at,
-      profiles (
-        full_name
-      )
-    `,
-    )
-    .eq("store_id", storeId)
-    .order("created_at", { ascending: false })
-    .limit(limit)
+  orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
-  return (
-    orders?.map((order: any) => ({
-      id: order.id.substring(0, 8).toUpperCase(),
-      customer: order.profiles?.full_name || "عميل",
-      total: Number(order.total || 0),
-      status: order.status || "pending",
-      date: new Date(order.created_at).toLocaleDateString("en-CA"),
-    })) || []
+  const limited = orders.slice(0, limit)
+  const customerMap = await fetchDocsMap(
+    db,
+    "profiles",
+    limited.map((order) => order.customer_id),
   )
+
+  return limited.map((order) => ({
+    id: order.id.substring(0, 8).toUpperCase(),
+    customer: customerMap.get(order.customer_id)?.full_name || "Ø¹Ù…ÙŠÙ„",
+    total: Number(order.total || 0),
+    status: order.status || "pending",
+    date: new Date(order.created_at).toLocaleDateString("en-CA"),
+  }))
 }

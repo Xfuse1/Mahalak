@@ -3,11 +3,18 @@
 import type React from "react"
 
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react"
-import { createClient } from "@/lib/supabase/client"
-import type { User as SupabaseUser } from "@supabase/supabase-js"
-import { createStore } from "@/lib/actions/stores"
-import { useRouter } from "next/navigation"
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile as updateFirebaseProfile,
+  type User as FirebaseUser,
+} from "firebase/auth"
+import { doc, getDoc, setDoc } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
+import { createStore } from "@/lib/actions/stores"
+import { getFirebaseAuth, getFirestoreClient } from "@/lib/firebase/client"
 
 interface User {
   id: string
@@ -25,7 +32,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null
-  supabaseUser: SupabaseUser | null
+  firebaseUser: FirebaseUser | null
   login: (email: string, password: string, role: "customer" | "seller") => Promise<boolean>
   register: (
     email: string,
@@ -52,29 +59,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const loadingProfile = useRef(false)
-  const router = useRouter()
   const { t } = useTranslation()
-  const [role, setRole] = useState<"customer" | "seller">("customer") // Declare the role variable
 
-  const supabase = createClient()
+  const auth = getFirebaseAuth()
+  const db = getFirestoreClient()
 
-  const loadUserProfile = useCallback(async (userId: string) => {
+  const loadUserProfile = useCallback(async (currentUser: FirebaseUser) => {
     if (loadingProfile.current) return
     loadingProfile.current = true
 
     try {
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", userId).single()
+      const profileRef = doc(db, "profiles", currentUser.uid)
+      const profileSnap = await getDoc(profileRef)
 
-      if (profile) {
+      if (profileSnap.exists()) {
+        const profile = profileSnap.data()
+
         setUser({
-          id: profile.id,
-          email: profile.email,
-          name: profile.full_name || profile.email.split("@")[0],
-          role: profile.role,
+          id: profileSnap.id,
+          email: profile.email || currentUser.email || "",
+          name:
+            profile.full_name ||
+            profile.email?.split("@")[0] ||
+            currentUser.email?.split("@")[0] ||
+            "",
+          role: profile.role || "customer",
           phone: profile.phone,
           // normalize possible DB column names into the user object
           street: profile.street ?? profile.address_street ?? profile.address ?? undefined,
@@ -83,6 +96,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           country: profile.country ?? undefined,
           address: profile.address ?? undefined,
         })
+      } else {
+        const fallbackEmail = currentUser.email || ""
+        const fallbackName = currentUser.displayName || (fallbackEmail ? fallbackEmail.split("@")[0] : "")
+        const now = new Date().toISOString()
+
+        const profileData = {
+          email: fallbackEmail,
+          full_name: fallbackName,
+          role: "customer",
+          phone: null,
+          street: null,
+          city: null,
+          state: null,
+          country: null,
+          address: null,
+          created_at: now,
+          updated_at: now,
+        }
+
+        await setDoc(profileRef, profileData)
+
+        setUser({
+          id: currentUser.uid,
+          email: profileData.email,
+          name: profileData.full_name || profileData.email.split("@")[0],
+          role: "customer",
+        })
       }
     } catch (error) {
       console.error("[v0] Error loading user profile:", error)
@@ -90,64 +130,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       loadingProfile.current = false
     }
-  }, [supabase])
+  }, [db])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setSupabaseUser(session.user)
-        loadUserProfile(session.user.id)
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setFirebaseUser(currentUser)
+        await loadUserProfile(currentUser)
       } else {
-        setIsLoading(false)
-      }
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setSupabaseUser(session.user)
-        if (!loadingProfile.current) {
-          loadUserProfile(session.user.id)
-        }
-      } else {
-        setSupabaseUser(null)
+        setFirebaseUser(null)
         setUser(null)
         setIsLoading(false)
         loadingProfile.current = false
       }
     })
 
-    return () => subscription.unsubscribe()
-  }, [loadUserProfile, supabase.auth])
+    return () => unsubscribe()
+  }, [auth, loadUserProfile])
 
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const credential = await signInWithEmailAndPassword(auth, email, password)
+      const profileRef = doc(db, "profiles", credential.user.uid)
+      const profileSnap = await getDoc(profileRef)
+      const profileData = profileSnap.exists() ? profileSnap.data() : null
+      const profileRole = (profileData?.role as "customer" | "seller") || "customer"
 
-      if (error) {
-        throw new Error(error.message)
+      if (profileRole !== role) {
+        await signOut(auth)
+        throw new Error("Invalid role for this account type")
       }
 
-      if (data.user) {
-        const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
-
-        if (profile?.role !== role) {
-          await supabase.auth.signOut()
-          throw new Error("Invalid role for this account type")
-        }
-
-        return true
+      if (!profileSnap.exists()) {
+        const now = new Date().toISOString()
+        await setDoc(profileRef, {
+          email,
+          full_name: credential.user.displayName || email.split("@")[0],
+          role: profileRole,
+          created_at: now,
+          updated_at: now,
+        })
       }
 
-      return false
+      return true
     } catch (error: any) {
+      const code = error?.code as string | undefined
+      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        throw new Error("Invalid login credentials")
+      }
       throw error
     }
-  }, [supabase])
+  }, [auth, db])
 
   const register = useCallback(async (
     email: string,
@@ -166,147 +199,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     country?: string,
   ): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-            role,
-            phone: sellerData?.phone,
-            street,
-            city,
-            country,
+      const credential = await createUserWithEmailAndPassword(auth, email, password)
 
-          },
-        },
-      })
-
-      if (error) {
-        console.error("[v0] Supabase signUp error:", error)
-        const message = (error as any)?.message ?? String(error)
-        if (message.includes("already registered") || message.includes("User already registered")) {
-          setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
-        } else {
-          setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
-        }
-        return false
+      try {
+        await updateFirebaseProfile(credential.user, { displayName: name })
+      } catch {
+        // ignore profile update errors
       }
 
-      if (role === "seller" && data.user && sellerData?.storeName) {
-        console.log("[v0] Creating store for seller:", data.user.id)
+      const now = new Date().toISOString()
+      const profileData = {
+        email,
+        full_name: name,
+        role,
+        phone: sellerData?.phone ?? null,
+        street: street ?? null,
+        city: city ?? null,
+        country: country ?? null,
+        created_at: now,
+        updated_at: now,
+      }
 
+      await setDoc(doc(db, "profiles", credential.user.uid), profileData)
+
+      if (role === "seller" && credential.user && sellerData?.storeName) {
         const result = await createStore({
-          seller_id: data.user.id,
+          seller_id: credential.user.uid,
           name: sellerData.storeName,
           description: sellerData.storeDescription || "",
           address: sellerData.address || "",
           phone: sellerData.phone || "",
-          category: sellerData.storeType || "خدمات أخرى",
+          category: sellerData.storeType || "Ø®Ø¯Ù…Ø§Øª Ø£Ø®Ø±Ù‰",
         })
 
         if (!result.success) {
-          console.error("[v0] Error creating store:", result.error)
+          await signOut(auth)
           throw new Error("Failed to create store: " + result.error)
-        }
-
-        console.log("[v0] Store created successfully:", result.data)
-      }
-
-      if (data.user) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-
-        if (signInError) {
-          console.log("[v0] Auto sign-in after registration failed:", signInError.message)
         }
       }
 
       return true
     } catch (error: any) {
-      console.error("[v0] Registration error:", error)
-      const message = error?.message ?? String(error)
-      if (message.includes("already registered") || message.includes("User already registered")) {
-        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
-      } else {
-        setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
+      const code = error?.code as string | undefined
+      if (code === "auth/email-already-in-use") {
+        setError(t("Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ù…Ø³Ø¬Ù„ Ø¨Ø§Ù„ÙØ¹Ù„", "Email already registered"))
+        throw new Error("already registered")
       }
-      return false
+
+      console.error("[v0] Registration error:", error)
+      setError(t("ÙØ´Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.", "Account creation failed. Please try again."))
+      throw error
     }
-  }, [supabase, t])
+  }, [auth, db, t])
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut()
+    await signOut(auth)
     setUser(null)
-    setSupabaseUser(null)
-  }, [supabase])
-
-  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-
-    const formData = new FormData(e.currentTarget)
-    const name = formData.get("name") as string
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-    const confirmPassword = formData.get("confirmPassword") as string
-    const street = formData.get("street") as string
-    const city = formData.get("city") as string
-    const country = formData.get("country") as string
-
-    let sellerData
-    if (role === "seller") {
-      const phone = formData.get("phone") as string
-      const storeName = formData.get("storeName") as string
-      const storeDescription = formData.get("storeDescription") as string
-      const address = formData.get("address") as string
-      const storeType = formData.get("storeType") as string
-
-      if (!phone || !storeName || !address || !storeType) {
-        setError(t("يرجى ملء جميع الحقول المطلوبة", "Please fill all required fields"))
-        setIsLoading(false)
-        return
-      }
-
-      sellerData = { phone, storeName, storeDescription, address, storeType }
-    }
-
-    if (password !== confirmPassword) {
-      setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      const success = await register(email, password, name, role, sellerData, street, city, country)
-
-      if (success) {
-        router.push(role === "seller" ? "/seller/dashboard" : "/")
-      }
-    } catch (error: any) {
-      if (error.message?.includes("already registered")) {
-        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
-      } else {
-        setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
-      }
-    }
-
-    setIsLoading(false)
-  }
+    setFirebaseUser(null)
+  }, [auth])
 
   const contextValue = useMemo(
-    () => ({ user, supabaseUser, login, register, logout, isLoading, error }),
-    [user, supabaseUser, login, register, logout, isLoading, error]
+    () => ({ user, firebaseUser, login, register, logout, isLoading, error }),
+    [user, firebaseUser, login, register, logout, isLoading, error],
   )
 
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

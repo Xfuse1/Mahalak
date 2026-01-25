@@ -15,7 +15,6 @@ import { getProduct, getRelatedProducts, updateProduct } from "@/lib/actions/pro
 import { getUserReview, upsertReview } from "@/lib/actions/reviews"
 import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
-import { createClient } from "@/lib/supabase/client"
 
 type Product = {
   id: string
