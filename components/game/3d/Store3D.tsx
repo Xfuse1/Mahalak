@@ -1,36 +1,263 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { useProductStore } from '@/lib/stores/product-store';
+import Link from 'next/link';
+import { useProductStore } from '../../../lib/stores/product-store';
+import { useCartStore } from '../../../lib/stores/cart-store';
+import { getProducts } from '../../../lib/actions/products';
+import { getSupermarketLayout } from '../../../lib/actions/layout';
+import { getStoreByUserId } from '../../../lib/actions/stores';
+import { useAuth } from '../../../lib/auth-context';
 import { LayoutGrid } from 'lucide-react';
+
+type SimProduct = {
+    id: string;
+    name: string;
+    description?: string;
+    price: number;
+    category: string;
+    image_url?: string | null;
+    store_id?: string;
+    store_name?: string;
+    color: number;
+    label: string;
+    pattern?: string;
+};
+
+function normalizeCategory(value?: string) {
+    const raw = (value || '').toLowerCase();
+    if (raw.includes('produce') || raw.includes('veg') || raw.includes('fruit') || raw.includes('خضار') || raw.includes('فواكه')) {
+        return 'produce';
+    }
+    if (raw.includes('bakery') || raw.includes('خبز') || raw.includes('مخبز')) {
+        return 'bakery';
+    }
+    if (raw.includes('dairy') || raw.includes('لبن') || raw.includes('ألبان') || raw.includes('جبن')) {
+        return 'dairy';
+    }
+    if (raw.includes('meat') || raw.includes('لحوم') || raw.includes('سمك')) {
+        return 'meat';
+    }
+    if (raw.includes('beauty') || raw.includes('صحة') || raw.includes('جمال')) {
+        return 'beauty';
+    }
+    if (raw.includes('drink') || raw.includes('مشروب')) {
+        return 'drinks';
+    }
+    if (raw.includes('snack') || raw.includes('شيبس') || raw.includes('سناك')) {
+        return 'snacks';
+    }
+    if (raw.includes('clean') || raw.includes('منظف')) {
+        return 'cleaning';
+    }
+    return 'grocery';
+}
+
+function hashToColor(seed: string) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return Math.abs(hash) & 0xffffff;
+}
+
+const fallbackPatterns = ['stripe', 'circle', 'curve', 'dots', 'grid', 'triangle', 'swirl'];
+
+function pickPattern(seed: string) {
+    const idx = Math.abs(seed.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)) % fallbackPatterns.length;
+    return fallbackPatterns[idx];
+}
 
 export default function SupermarketSimulator() {
     const mountRef = useRef<HTMLDivElement>(null);
-    const [cart, setCart] = useState<any[]>([]);
-    const [total, setTotal] = useState(0);
+    const { items: cartItems, addItem, decrementItem, clear } = useCartStore();
+    const { user } = useAuth();
+    const total = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
+    const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems]);
     const [money, setMoney] = useState(500);
     const [showCheckout, setShowCheckout] = useState(false);
     const toggleDashboard = useProductStore(state => state.toggleDashboard);
     const [message, setMessage] = useState('');
+    const [isCartMinimized, setIsCartMinimized] = useState(true); // Start minimized/as button
+    const [catalog, setCatalog] = useState<SimProduct[]>([]);
+    const [catalogLoaded, setCatalogLoaded] = useState(false);
+    const [hoveredProduct, setHoveredProduct] = useState<SimProduct | null>(null);
+    const hoverIdRef = useRef<string | null>(null);
+    const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [isHovering, setIsHovering] = useState(false);
     const [fps, setFps] = useState(60);
     const [isLockedState, setIsLockedState] = useState(false);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const basketContentsRef = useRef<THREE.Group | null>(null);
-    const npcRef = useRef<any>(null);
 
     // Refs for accessing latest state inside event listeners without re-binding
-    const stateRef = useRef({ money, total });
-    const lockPointerRef = useRef<() => void>(() => { });
-    useEffect(() => { stateRef.current = { money, total }; }, [money, total]);
+    const stateRef = useRef({ money, total, isLocked: isLockedState });
+    const lockPointerRef = useRef<(posX?: number, posZ?: number) => void>(() => { });
+    const heldProductRef = useRef<any>(null);
+    const heldMeshRef = useRef<THREE.Mesh | null>(null);
+    useEffect(() => { stateRef.current = { money, total, isLocked: isLockedState }; }, [money, total, isLockedState]);
 
-    // Initial State and Constants
-    const moveSpeed = 0.15;
+    const keysRef = useRef<Record<string, boolean>>({});
+    const moveSpeed = 0.1; // Slightly increased for responsiveness
+
+    // Mobile Control States
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    }, []);
+
+    const joystickRef = useRef({ x: 0, y: 0, active: false });
+    const touchLookRef = useRef({ dx: 0, dy: 0 });
+
+    const departments = [
+        { id: 'produce', label: 'الخضروات والفواكه', icon: '🍎', x: 20, z: 15 },
+        { id: 'bakery', label: 'المخبز الطازج', icon: '🍞', x: -20, z: 15 },
+        { id: 'dairy', label: 'الألبان والأجبان', icon: '🥛', x: 20, z: -15 },
+        { id: 'meat', label: 'اللحوم والأسماك', icon: '🥩', x: -20, z: -15 },
+        { id: 'beauty', label: 'الصحة والجمال', icon: '🧴', x: 0, z: -35 },
+        { id: 'grocery', label: 'البقالة العامة', icon: '🥫', x: 0, z: 10 }
+    ];
 
     useEffect(() => {
-        if (!mountRef.current) return;
+        let active = true;
+
+        (async () => {
+            try {
+                // Fetch Products
+                const products = await getProducts();
+
+                // Fetch User Store & Layout (For Seller Preview)
+                let fetchedLayout = null;
+
+                if (user?.id) {
+                    try {
+                        const userStore = await getStoreByUserId(user.id);
+                        if (userStore) {
+                            const layoutRes = await getSupermarketLayout(userStore.id);
+                            if (layoutRes.success && layoutRes.data) {
+                                fetchedLayout = layoutRes.data;
+                                console.log("3D Sim: Loaded Saved Layout", fetchedLayout);
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error fetching user store:", err);
+                    }
+                }
+
+                // Store layout in global/ref for the render effect to access
+                // Since we can't easily pass it to the next effect without state, and state triggers re-render...
+                // We will attach it to the window or a useRef?
+                // Better: Use a dedicated state for layout and add it to the dependency of the render effect
+                // But the render effect is huge.
+                // Hack: Attach to `window.simLayout` or similar just for this pass, or use a Ref.
+                (window as any).simLayoutData = fetchedLayout;
+
+                if (!active) return;
+
+                const normalized = Array.isArray(products) ? products.slice(0, 160).map((product: any, index: number) => {
+                    const name = product?.name || 'منتج';
+                    const id = product?.id || `product_${index}`;
+                    const category = normalizeCategory(product?.category);
+                    const color = hashToColor(`${id}_${name}`);
+
+                    return {
+                        id,
+                        name,
+                        description: product?.description || '',
+                        price: Number(product?.price || 0),
+                        category,
+                        image_url: product?.image_url || null,
+                        store_id: product?.store_id,
+                        store_name: product?.stores?.name || '',
+                        color,
+                        label: name.slice(0, 16),
+                        pattern: pickPattern(id)
+                    } satisfies SimProduct;
+                }) : [];
+
+                setCatalog(normalized);
+            } catch (error) {
+                console.error('[simulator] Failed to load data:', error);
+                if (active) {
+                    setCatalog([]);
+                }
+            } finally {
+                if (active) {
+                    setCatalogLoaded(true);
+                }
+            }
+        })();
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!mountRef.current || !catalogLoaded) return;
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const clickableObjs: THREE.Object3D[] = []; // Unified list for raycasting
+
+        // To collect instances for radical optimization
+        const productInstancingMap = new Map<string, {
+            geometry: THREE.BufferGeometry,
+            material: THREE.Material,
+            matrices: THREE.Matrix4[],
+            metadata: any[]
+        }>();
+
+        const shelfInstancingMap = new Map<string, {
+            geometry: THREE.BufferGeometry,
+            material: THREE.Material,
+            matrices: THREE.Matrix4[]
+        }>();
+        const obstacles: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
+
+        const addObstacle = (centerX: number, centerZ: number, width: number, depth: number) => {
+            obstacles.push({
+                minX: centerX - width / 2,
+                maxX: centerX + width / 2,
+                minZ: centerZ - depth / 2,
+                maxZ: centerZ + depth / 2
+            });
+        };
+
+        const addObstacleFromObject = (object: THREE.Object3D) => {
+            object.updateWorldMatrix(true, true);
+            const box = new THREE.Box3().setFromObject(object);
+            if (!Number.isFinite(box.min.x) || !Number.isFinite(box.min.z)) {
+                return;
+            }
+            const width = box.max.x - box.min.x;
+            const depth = box.max.z - box.min.z;
+            if (width <= 0 || depth <= 0) {
+                return;
+            }
+            const centerX = (box.min.x + box.max.x) / 2;
+            const centerZ = (box.min.z + box.max.z) / 2;
+            addObstacle(centerX, centerZ, width, depth);
+        };
+
+        const addShelfObstacle = (x: number, z: number, rotation: number) => {
+            const shelfWidth = 7.25;
+            const shelfDepth = 0.85;
+            const dir = Math.sign(Math.cos(rotation)) || 1;
+            const centerZ = z + dir * 0.3;
+            addObstacle(x, centerZ, shelfWidth, shelfDepth);
+        };
+
+        const isPointBlocked = (x: number, z: number) => (
+            obstacles.some((obs) => (
+                x >= obs.minX &&
+                x <= obs.maxX &&
+                z >= obs.minZ &&
+                z <= obs.maxZ
+            ))
+        );
 
         // Scene setup
         const scene = new THREE.Scene();
@@ -38,87 +265,85 @@ export default function SupermarketSimulator() {
         scene.fog = new THREE.Fog(0x0a0a0a, 40, 100); // Pushed back for more visibility
 
         // Camera setup
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        const containerWidth = mountRef.current.clientWidth || window.innerWidth;
+        const containerHeight = mountRef.current.clientHeight || window.innerHeight;
+        const camera = new THREE.PerspectiveCamera(70, containerWidth / containerHeight, 0.1, 100);
         camera.position.set(0, 1.6, 40); // Start near cashier facing aisles
+
+        const width = mountRef.current.clientWidth || window.innerWidth;
+        const height = mountRef.current.clientHeight || window.innerHeight;
+
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         // Renderer - Optimized for performance
         const renderer = new THREE.WebGLRenderer({
             antialias: false,
             powerPreference: "high-performance",
-            precision: "lowp", // Faster than mediump
+            precision: isMobileDevice ? "highp" : "mediump", // High precision might help mobile if shadows are off
             stencil: false,
             depth: true
         });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0)); // Cap pixel ratio for speed
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.BasicShadowMap; // Fastest shadow type
+        renderer.setSize(width, height);
+        // Drastic Resolution Boost for Mobile Performance
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice ? 0.75 : 1.5));
+        renderer.shadowMap.enabled = !isMobileDevice; // Disable shadows on mobile for speed and to fix black spots
+        renderer.shadowMap.type = THREE.BasicShadowMap;
         rendererRef.current = renderer;
+        renderer.domElement.tabIndex = 0; // Make focusable
+        renderer.domElement.style.outline = 'none';
         mountRef.current.appendChild(renderer.domElement);
 
-        // Lighting - Reduced light count for extreme performance
-        const ambientLight = new THREE.AmbientLight(0xfff5e6, 1.2);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xfff5e6, isMobileDevice ? 1.8 : 1.2);
         scene.add(ambientLight);
 
-        // One main directional light for global shadows
-        const sunLight = new THREE.DirectionalLight(0xfff5e6, 1.0);
+        // One main directional light
+        const sunLight = new THREE.DirectionalLight(0xfff5e6, isMobileDevice ? 0.8 : 1.0);
         sunLight.position.set(20, 30, 10);
-        sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 1024; // Increased for better product shadows
-        sunLight.shadow.mapSize.height = 1024;
+        sunLight.castShadow = !isMobileDevice;
+        if (sunLight.castShadow) {
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+        }
         scene.add(sunLight);
 
         // Texture Generation (Realistic Brands & Variety)
-        const productLibrary = [
-            // --- PRODUCE ( الخضروات والفواكه ) ---
-            { name: 'تفاح أحمر', color: 0xd32f2f, label: 'APPLE', price: 4.50, category: 'produce', pattern: 'circle' },
-            { name: 'موز طازج', color: 0xffeb3b, label: 'BANANA', price: 3.00, category: 'produce', pattern: 'curve' },
-            { name: 'برتقال', color: 0xff9800, label: 'ORANGE', price: 5.50, category: 'produce', pattern: 'circle' },
-            { name: 'خيار', color: 0x2e7d32, label: 'CUCUMBER', price: 2.50, category: 'produce', pattern: 'stripe' },
-            { name: 'طماطم', color: 0xe53935, label: 'TOMATO', price: 3.50, category: 'produce', pattern: 'circle' },
+        const productLibrary = catalog;
+        const categoryPools = new Map<string, SimProduct[]>();
 
-            // --- BAKERY ( المخبز ) ---
-            { name: 'خبز صمون', color: 0xffcc80, label: 'BREAD', price: 2.00, category: 'bakery', pattern: 'stripe' },
-            { name: 'كرواسون', color: 0xe6a15c, label: 'CROISSANT', price: 4.00, category: 'bakery', pattern: 'curve' },
-            { name: 'كيكة شوكولاتة', color: 0x4e342e, label: 'CAKE', price: 25.00, category: 'bakery', pattern: 'block' },
-            { name: 'كوكيز', color: 0x8d6e63, label: 'COOKIES', price: 8.00, category: 'bakery', pattern: 'dots' },
+        function shuffleInPlace<T>(list: T[]) {
+            for (let i = list.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [list[i], list[j]] = [list[j], list[i]];
+            }
+        }
 
-            // --- DAIRY & CHEESE ( الألبان والأجبان ) ---
-            { name: 'حليب المراعي', color: 0x1e88e5, label: 'MILK', price: 6.50, category: 'dairy', pattern: 'stripe' },
-            { name: 'زبادي طازج', color: 0xffffff, label: 'YOGURT', price: 2.00, category: 'dairy', pattern: 'circle' },
-            { name: 'جبنة فيتا', color: 0xe3f2fd, label: 'FETA', price: 12.00, category: 'dairy', pattern: 'block' },
-            { name: 'لبنة', color: 0xf5f5f5, label: 'LABNEH', price: 9.00, category: 'dairy', pattern: 'simple' },
+        productLibrary.forEach((product) => {
+            if (!categoryPools.has(product.category)) {
+                categoryPools.set(product.category, []);
+            }
+            categoryPools.get(product.category)!.push(product);
+        });
 
-            // --- MEAT & SEAFOOD ( اللحوم والأسماك ) ---
-            { name: 'لحم بقري', color: 0xb71c1c, label: 'BEEF', price: 45.00, category: 'meat', pattern: 'block' },
-            { name: 'دجاج طازج', color: 0xfff9c4, label: 'CHICKEN', price: 18.00, category: 'meat', pattern: 'curve' },
-            { name: 'سمك سلمون', color: 0xffab91, label: 'SALMON', price: 60.00, category: 'meat', pattern: 'stripe' },
+        categoryPools.forEach((pool) => shuffleInPlace(pool));
 
-            // --- GROCERY ( المعلبات والبقالة الجافة ) ---
-            { name: 'أرز بسمتي', color: 0xfff9c4, label: 'RICE', price: 40.00, category: 'grocery', pattern: 'grain' },
-            { name: 'زيت زيتون', color: 0xafb42b, label: 'OIL', price: 22.00, category: 'grocery', pattern: 'drop' },
-            { name: 'مكرونة', color: 0xffd54f, label: 'PASTA', price: 4.50, category: 'grocery', pattern: 'stripe' },
-            { name: 'صلصة طماطم', color: 0xc62828, label: 'SAUCE', price: 3.50, category: 'grocery', pattern: 'circle' },
+        function pickFromCategory(category: string) {
+            const pool = categoryPools.get(category);
+            if (!pool || pool.length === 0) return undefined;
+            return pool.pop();
+        }
 
-            // --- BEVERAGES & SNACKS ( المشروبات والوجبات الخفيفة ) ---
-            { name: 'بيبسي', color: 0x1565c0, label: 'PEPSI', price: 3.00, category: 'drinks', pattern: 'circle' },
-            { name: 'كوكاكولا', color: 0xb71c1c, label: 'COLA', price: 3.00, category: 'drinks', pattern: 'curve' },
-            { name: 'عصير برتقال', color: 0xff9800, label: 'JUICE', price: 7.00, category: 'drinks', pattern: 'fresh' },
-            { name: 'شيبس', color: 0xffeb3b, label: 'CHIPS', price: 5.00, category: 'snacks', pattern: 'dots' },
+        function pickFromCategories(categories: string[]) {
+            const available = categories.filter((category) => (categoryPools.get(category)?.length ?? 0) > 0);
+            if (available.length === 0) return undefined;
+            const selected = available[Math.floor(Math.random() * available.length)];
+            return pickFromCategory(selected);
+        }
 
-            // --- HEALTH & BEAUTY ( الصحة والجمال ) ---
-            { name: 'شامبو', color: 0x5c6bc0, label: 'SHAMPOO', price: 18.00, category: 'beauty', pattern: 'wave' },
-            { name: 'عطر نسائي', color: 0xf06292, label: 'PERFUME', price: 120.00, category: 'beauty', pattern: 'curve' },
-            { name: 'معجون أسنان', color: 0x81d4fa, label: 'COLGATE', price: 11.00, category: 'beauty', pattern: 'stripe' },
-
-            // --- HOUSEHOLD CARE ( المنظفات ) ---
-            { name: 'مطهر أرضيات', color: 0x4caf50, label: 'DETTOL', price: 24.00, category: 'cleaning', pattern: 'swirl' },
-            { name: 'تيد غسيل', color: 0x1565c0, label: 'TIDE', price: 55.00, category: 'cleaning', pattern: 'block' },
-            { name: 'منظف زجاج', color: 0x03a9f4, label: 'GLASS', price: 15.00, category: 'cleaning', pattern: 'simple' }
-        ];
-
-        const productAssets = new Map();
-        const clickableProducts: THREE.Mesh[] = [];
+        const productAssets = new Map<string, THREE.Material>();
+        const textureCache = new Map<string, THREE.Texture>();
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.setCrossOrigin('anonymous');
 
         function adjustBrightness(hex: string, percent: number) {
             const num = parseInt(hex.replace('#', ''), 16);
@@ -131,11 +356,6 @@ export default function SupermarketSimulator() {
                 (B < 255 ? B < 1 ? 0 : B : 255))
                 .toString(16).slice(1);
         }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
 
         // --- Helper: Generate Premium Marble Texture (for Floor) ---
         function createMarbleTexture() {
@@ -312,160 +532,195 @@ export default function SupermarketSimulator() {
         const stoneTex = createStoneTexture();
 
         // --- Premium Art Gallery Textures (Original AI Arts) ---
-        const texLoader = new THREE.TextureLoader();
-        const artTex1 = texLoader.load('/images/art_emerald.png');
-        const artTex2 = texLoader.load('/images/art_saffron.png');
-        const artTex3 = texLoader.load('/images/art_midnight.png');
+        const artTex1 = textureLoader.load('/images/art_emerald.png');
+        const artTex2 = textureLoader.load('/images/art_saffron.png');
+        const artTex3 = textureLoader.load('/images/art_midnight.png');
 
-        if (ctx) {
-            productLibrary.forEach(info => {
-                const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
+        function createFallbackTexture(info: SimProduct) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
 
-                // Base
-                ctx.fillStyle = baseColor;
-                ctx.fillRect(0, 0, 256, 256);
+            if (!ctx) {
+                return new THREE.CanvasTexture(canvas);
+            }
 
-                // --- Procedural Branding Patterns ---
-                ctx.fillStyle = adjustBrightness(baseColor, -15);
+            const baseColor = `#${info.color.toString(16).padStart(6, '0')}`;
 
-                // Specific category icons/motifs
-                if (info.category === 'drinks') {
-                    ctx.fillRect(80, 20, 96, 100); // Bottle shape silhouette
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath(); ctx.arc(128, 60, 20, 0, Math.PI * 2); ctx.fill();
-                } else if (info.category === 'produce') {
-                    ctx.beginPath(); ctx.arc(128, 80, 50, 0, Math.PI * 2); ctx.fill(); // Fruit shape
-                } else if (info.category === 'dairy') {
-                    ctx.fillRect(90, 30, 76, 100); // Milk carton
-                }
+            // Base
+            ctx.fillStyle = baseColor;
+            ctx.fillRect(0, 0, 256, 256);
 
-                ctx.fillStyle = adjustBrightness(baseColor, -15);
+            // --- Procedural Branding Patterns ---
+            ctx.fillStyle = adjustBrightness(baseColor, -15);
 
-                switch (info.pattern) {
-                    case 'stripe':
-                        for (let i = 0; i < 256; i += 40) ctx.fillRect(i, 0, 20, 256);
-                        break;
-                    case 'grid':
-                        for (let i = 0; i < 256; i += 30) {
-                            ctx.fillRect(i, 0, 2, 256);
-                            ctx.fillRect(0, i, 256, 2);
-                        }
-                        break;
-                    case 'circle':
-                        ctx.beginPath();
-                        ctx.arc(128, 128, 90, 0, Math.PI * 2);
-                        ctx.fill();
-                        break;
-                    case 'curve':
-                        ctx.beginPath();
-                        ctx.ellipse(128, 128, 140, 80, Math.PI / 4, 0, Math.PI * 2);
-                        ctx.fill();
-                        break;
-                    case 'swirl':
-                        ctx.beginPath();
-                        ctx.arc(128, 128, 100, 0, Math.PI * 2);
-                        ctx.strokeStyle = adjustBrightness(baseColor, 30);
-                        ctx.lineWidth = 20;
-                        ctx.stroke();
-                        break;
-                    case 'triangle':
-                        ctx.beginPath();
-                        ctx.moveTo(128, 40);
-                        ctx.lineTo(216, 200);
-                        ctx.lineTo(40, 200);
-                        ctx.closePath();
-                        ctx.fill();
-                        break;
-                    case 'dots':
-                        for (let x = 32; x < 256; x += 64) {
-                            for (let y = 32; y < 256; y += 64) {
-                                ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
-                            }
-                        }
-                        break;
-                }
+            // Specific category icons/motifs
+            if (info.category === 'drinks') {
+                ctx.fillRect(80, 20, 96, 100);
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(128, 60, 20, 0, Math.PI * 2); ctx.fill();
+            } else if (info.category === 'produce') {
+                ctx.beginPath(); ctx.arc(128, 80, 50, 0, Math.PI * 2); ctx.fill();
+            } else if (info.category === 'dairy') {
+                ctx.fillRect(90, 30, 76, 100);
+            }
 
-                // --- Label area ---
-                // Skip large labels for produce, use a tiny "sticker" instead
-                if (info.category !== 'produce') {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(10, 140, 236, 80);
+            ctx.fillStyle = adjustBrightness(baseColor, -15);
 
-                    // Text (Main Title)
-                    ctx.fillStyle = '#111';
-                    ctx.font = 'bold 32px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(info.label, 128, 175);
-
-                    // Subtext / Brand Detail
-                    ctx.font = '14px sans-serif';
-                    ctx.fillText('PREMIUM QUALITY', 128, 195);
-
-                    // Barcode simulation
-                    ctx.fillStyle = '#000';
-                    for (let i = 0; i < 30; i++) {
-                        if (Math.random() > 0.3) {
-                            ctx.fillRect(180 + i * 2, 205, 1, 15);
+            switch (info.pattern) {
+                case 'stripe':
+                    for (let i = 0; i < 256; i += 40) ctx.fillRect(i, 0, 20, 256);
+                    break;
+                case 'grid':
+                    for (let i = 0; i < 256; i += 30) {
+                        ctx.fillRect(i, 0, 2, 256);
+                        ctx.fillRect(0, i, 256, 2);
+                    }
+                    break;
+                case 'circle':
+                    ctx.beginPath();
+                    ctx.arc(128, 128, 90, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'curve':
+                    ctx.beginPath();
+                    ctx.ellipse(128, 128, 140, 80, Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'swirl':
+                    ctx.beginPath();
+                    ctx.arc(128, 128, 100, 0, Math.PI * 2);
+                    ctx.strokeStyle = adjustBrightness(baseColor, 30);
+                    ctx.lineWidth = 20;
+                    ctx.stroke();
+                    break;
+                case 'triangle':
+                    ctx.beginPath();
+                    ctx.moveTo(128, 40);
+                    ctx.lineTo(216, 200);
+                    ctx.lineTo(40, 200);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                case 'dots':
+                    for (let x = 32; x < 256; x += 64) {
+                        for (let y = 32; y < 256; y += 64) {
+                            ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
                         }
                     }
-                } else {
-                    // Small price sticker for produce
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.arc(60, 60, 30, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#111';
-                    ctx.font = 'bold 20px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(info.label.substring(0, 3), 60, 68);
-                }
+                    break;
+            }
 
-                // Price tag (Smaller/Simpler for produce)
-                const isProduce = info.category === 'produce';
-                ctx.fillStyle = isProduce ? 'rgba(255,235,59,0.8)' : '#ffeb3b';
+            // --- Label area ---
+            if (info.category !== 'produce') {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(10, 140, 236, 80);
+
+                ctx.fillStyle = '#111';
+                ctx.font = 'bold 24px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(info.label, 128, 172);
+
+                ctx.font = '12px sans-serif';
+                ctx.fillText('PREMIUM QUALITY', 128, 194);
+            } else {
+                ctx.fillStyle = '#fff';
                 ctx.beginPath();
-                const prX = isProduce ? 220 : 210;
-                const prY = isProduce ? 220 : 200;
-                ctx.arc(prX, prY, isProduce ? 25 : 35, 0, Math.PI * 2);
+                ctx.arc(60, 60, 30, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(info.label.substring(0, 3), 60, 66);
+            }
 
-                if (!isProduce) {
-                    ctx.strokeStyle = '#fbc02d';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
+            const isProduce = info.category === 'produce';
+            ctx.fillStyle = isProduce ? 'rgba(255,235,59,0.8)' : '#ffeb3b';
+            ctx.beginPath();
+            const prX = isProduce ? 220 : 210;
+            const prY = isProduce ? 220 : 200;
+            ctx.arc(prX, prY, isProduce ? 25 : 35, 0, Math.PI * 2);
+            ctx.fill();
 
-                ctx.fillStyle = '#c62828';
-                ctx.font = isProduce ? 'bold 16px sans-serif' : 'bold 22px sans-serif';
-                ctx.fillText(`$${info.price.toFixed(2)}`, prX, prY + 8);
+            ctx.fillStyle = '#c62828';
+            ctx.font = isProduce ? 'bold 14px sans-serif' : 'bold 18px sans-serif';
+            ctx.fillText(`$${info.price.toFixed(2)}`, prX, prY + 6);
 
-                const tex = new THREE.CanvasTexture(canvas);
-                tex.anisotropy = 4;
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.anisotropy = 4;
+            return tex;
+        }
 
-                const mat = new THREE.MeshPhysicalMaterial({
-                    map: tex.clone(),
+        function applyTexture(material: THREE.Material, texture: THREE.Texture) {
+            (material as THREE.MeshStandardMaterial).map = texture;
+            material.needsUpdate = true;
+        }
+
+        function loadProductTexture(url: string, material: THREE.Material, fallback: THREE.Texture) {
+            if (!url) return;
+            const cached = textureCache.get(url);
+            if (cached) {
+                applyTexture(material, cached);
+                return;
+            }
+            textureLoader.load(
+                url,
+                (tex) => {
+                    tex.anisotropy = 4;
+                    textureCache.set(url, tex);
+                    applyTexture(material, tex);
+                },
+                undefined,
+                () => {
+                    applyTexture(material, fallback);
+                },
+            );
+        }
+
+        productLibrary.forEach((info) => {
+            const fallback = createFallbackTexture(info);
+            const mat = isMobileDevice
+                ? new THREE.MeshStandardMaterial({
+                    map: fallback,
+                    roughness: 0.3,
+                    metalness: 0.1,
+                })
+                : new THREE.MeshPhysicalMaterial({
+                    map: fallback,
                     roughness: 0.2,
                     metalness: 0.1,
                     clearcoat: info.category === 'drinks' || info.category === 'beauty' ? 0.8 : 0.2,
-                    clearcoatRoughness: 0.1
+                    clearcoatRoughness: 0.1,
                 });
-                productAssets.set(info.name, mat);
-            });
-        }
+
+            productAssets.set(info.id, mat);
+
+            if (info.image_url) {
+                loadProductTexture(info.image_url, mat, fallback);
+            }
+        });
 
         // --- Floor ---
         const floorGeometry = new THREE.PlaneGeometry(100, 120);
         const floorTexture = marbleTex.clone();
         floorTexture.repeat.set(10, 12);
-        const floorMaterial = new THREE.MeshPhysicalMaterial({
-            map: floorTexture,
-            color: 0xffffff,
-            roughness: 0.1,
-            metalness: 0.1,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.1,
-            reflectivity: 0.8
-        });
+        const floorMaterial = isMobileDevice
+            ? new THREE.MeshStandardMaterial({
+                map: floorTexture,
+                color: 0xffffff,
+                roughness: 0.2,
+                metalness: 0.0
+            })
+            : new THREE.MeshPhysicalMaterial({
+                map: floorTexture,
+                color: 0xffffff,
+                roughness: 0.1,
+                metalness: 0.1,
+                clearcoat: 1.0,
+                clearcoatRoughness: 0.1,
+                reflectivity: 0.8
+            });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
@@ -486,30 +741,71 @@ export default function SupermarketSimulator() {
         lobbyRunner.position.set(0, 0.01, 44);
         scene.add(lobbyRunner);
 
-        const ceilingGroup = new THREE.Group();
         const slatMat = new THREE.MeshPhysicalMaterial({
             map: woodTex,
             roughness: 0.5,
             metalness: 0.1,
-            clearcoat: 0.3
+            clearcoat: 0.1
         });
         const slatGeom = new THREE.BoxGeometry(80, 0.15, 0.4);
 
-        // Wood slats on ceiling for high-end look
-        for (let i = -60; i < 60; i += 1.5) {
-            const slat = new THREE.Mesh(slatGeom, slatMat);
-            slat.position.set(0, 5.85, i);
-            ceilingGroup.add(slat);
+        // Optimization: Use InstancedMesh for the ceiling (80 slats = 1 draw call)
+        const slatCount = Math.floor(120 / 1.5);
+        const ceilingMesh = new THREE.InstancedMesh(slatGeom, slatMat, slatCount);
+        const dummy = new THREE.Object3D();
+        for (let i = 0; i < slatCount; i++) {
+            dummy.position.set(0, 5.85, -60 + i * 1.5);
+            dummy.updateMatrix();
+            ceilingMesh.setMatrixAt(i, dummy.matrix);
         }
-        scene.add(ceilingGroup);
+        scene.add(ceilingMesh);
 
         // Structural Pillars (Architectural Elements)
         const pillarMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.5 });
         const pillarGeom = new THREE.BoxGeometry(2, 6, 2);
         const pillarPositions = [
-            [-20, 3, -20], [20, 3, -20],
-            [-20, 3, 20], [20, 3, 20],
+            [-26, 3, -31], [26, 3, -31],
+            [-26, 3, 31], [26, 3, 31],
         ];
+
+        // --- Helper: Realistic Hand Model (Subtle version) ---
+        function createHandModel() {
+            const handGroup = new THREE.Group();
+            const skinMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffdbac,
+                roughness: 0.8,
+                metalness: 0.0
+            });
+
+            // Palm - Thinner and more subtle
+            const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.1), skinMat);
+            palm.position.z = -0.05;
+            handGroup.add(palm);
+
+            // Fingers - Thinner and curved for gripping
+            const fingerGeom = new THREE.CapsuleGeometry(0.012, 0.06, 4, 8);
+            for (let i = 0; i < 4; i++) {
+                const finger = new THREE.Mesh(fingerGeom, skinMat);
+                // Positioned to wrap around a handle
+                finger.position.set(-0.04 + i * 0.026, -0.01, -0.1);
+                finger.rotation.x = -1.2; // Gripping curve
+                handGroup.add(finger);
+            }
+
+            // Thumb - Gripping naturally
+            const thumb = new THREE.Mesh(fingerGeom, skinMat);
+            thumb.position.set(0.06, 0.01, -0.04);
+            thumb.rotation.set(0, -0.5, 0.8);
+            handGroup.add(thumb);
+
+            // Wrist / Short Forearm (Partial)
+            const wrist = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.12, 4, 8), skinMat);
+            wrist.position.set(0, 0, 0.06);
+            wrist.rotation.x = 0.4;
+            handGroup.add(wrist);
+
+            return handGroup;
+        }
 
         // --- Helper: Premium Organic Designer Plant ---
         function createPremiumPlant(x: number, z: number) {
@@ -563,87 +859,63 @@ export default function SupermarketSimulator() {
             }
 
             plantGroup.position.set(x, 0, z);
+            addObstacleFromObject(plantGroup);
             scene.add(plantGroup);
         }
+
+        const dummyWorld = new THREE.Object3D();
+        scene.add(dummyWorld); // Used to calculate world matrices for instancing
 
         pillarPositions.forEach(([x, y, z]) => {
             const pillar = new THREE.Mesh(pillarGeom, pillarMat);
             pillar.position.set(x, y, z);
             scene.add(pillar);
+            addObstacleFromObject(pillar);
 
-            // Add Premium Plant with Wooden Pot
-            // Offset shifted to avoid pillar overlap and centered better
-            const offsetX = x < 0 ? 2.5 : -2.5;
-            createPremiumPlant(x + offsetX, z);
+            // Skip Plants on Mobile (Very heavy draw calls)
+            if (!isMobileDevice) {
+                const offsetZ = z < 0 ? 3 : -3;
+                createPremiumPlant(x, z + offsetZ);
+            }
         });
 
-        const shelfGroupTemplate = new THREE.Group();
-        const shelfMat = new THREE.MeshPhysicalMaterial({
-            map: woodTex,
-            roughness: 0.4,
-            metalness: 0.05,
-            clearcoat: 0.4,
-            clearcoatRoughness: 0.2
-        });
-        const metalMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.2, metalness: 0.8 }); // Metal pillars
-        const railMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.5 }); // Price rail
-        const backPanelMat = new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.9 });
+        const shelfMat = isMobileDevice
+            ? new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.5, metalness: 0.0 })
+            : new THREE.MeshPhysicalMaterial({ map: woodTex, roughness: 0.4, metalness: 0.05, clearcoat: 0.4, clearcoatRoughness: 0.2 });
+
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.5 });
         const ledMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe0b3, emissiveIntensity: 4 });
 
-        // Back Panel (now at the center/back of the group)
-        const backPanel = new THREE.Mesh(new THREE.BoxGeometry(7, 3.2, 0.05), backPanelMat);
-        backPanel.position.set(0, 1.6, 0);
-        shelfGroupTemplate.add(backPanel);
+        // Helper to register shelf parts for instancing
+        function registerShelfPart(name: string, geom: THREE.BufferGeometry, mat: THREE.Material, localMatrix: THREE.Matrix4, worldMatrix: THREE.Matrix4) {
+            if (!shelfInstancingMap.has(name)) {
+                shelfInstancingMap.set(name, { geometry: geom, material: mat, matrices: [] });
+            }
+            const worldPart = worldMatrix.clone().multiply(localMatrix);
+            shelfInstancingMap.get(name)!.matrices.push(worldPart);
+        }
 
-        // Thick Premium Framing (Left/Right)
-        const frameGeom = new THREE.BoxGeometry(0.25, 3.6, 0.8);
-        const leftFrame = new THREE.Mesh(frameGeom, shelfMat);
-        leftFrame.position.set(-3.5, 1.8, 0.3);
-        const rightFrame = new THREE.Mesh(frameGeom, shelfMat);
-        rightFrame.position.set(3.5, 1.8, 0.3);
-        shelfGroupTemplate.add(leftFrame, rightFrame);
-
-        // Shelf Header (Top signage area)
-        const headerGeom = new THREE.BoxGeometry(7.2, 0.4, 0.85);
-        const header = new THREE.Mesh(headerGeom, shelfMat);
-        header.position.set(0, 3.5, 0.3);
-        shelfGroupTemplate.add(header);
-
-        // Header LED
-        const headerLight = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.02, 0.6), ledMat);
-        headerLight.position.set(0, 3.25, 0.3);
-        shelfGroupTemplate.add(headerLight);
-
-        // Bottom LED Glow (Floating Shelf Effect)
-        const bottomGlow = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.02, 0.1), ledMat);
-        bottomGlow.position.set(0, 0.05, 0.65);
-        shelfGroupTemplate.add(bottomGlow);
-
-        // Shelves and Rails (facing Z+ direction)
         const shelfBoardGeom = new THREE.BoxGeometry(6.9, 0.06, 0.65);
-        const railGeom = new THREE.BoxGeometry(6.9, 0.1, 0.03);
-        const ledGeom = new THREE.BoxGeometry(6.8, 0.02, 0.05);
+        const shelfRailGeom = new THREE.BoxGeometry(6.9, 0.1, 0.03);
+        const shelfFrameGeom = new THREE.BoxGeometry(0.25, 3.6, 0.8);
+        const shelfHeaderGeom = new THREE.BoxGeometry(7.2, 0.4, 0.85);
 
-        for (let lvl = 0; lvl < 6; lvl++) {
-            const yPos = 0.2 + lvl * 0.55;
+        function recordShelfInstances(worldMatrix: THREE.Matrix4) {
+            const m = new THREE.Matrix4();
 
-            // Shelf Board - offset forward from back panel
-            const b = new THREE.Mesh(shelfBoardGeom, shelfMat);
-            b.position.set(0, yPos, 0.35);
-            b.castShadow = true;
-            b.receiveShadow = true;
-            shelfGroupTemplate.add(b);
+            // Frame Left & Right
+            registerShelfPart('frame_l', shelfFrameGeom, shelfMat, m.makeTranslation(-3.5, 1.8, 0.3), worldMatrix);
+            registerShelfPart('frame_r', shelfFrameGeom, shelfMat, m.makeTranslation(3.5, 1.8, 0.3), worldMatrix);
 
-            // Front Rail
-            const rail = new THREE.Mesh(railGeom, railMat);
-            rail.position.set(0, yPos, 0.68);
-            shelfGroupTemplate.add(rail);
+            // Header
+            registerShelfPart('header', shelfHeaderGeom, shelfMat, m.makeTranslation(0, 3.5, 0.3), worldMatrix);
+            registerShelfPart('header_led', new THREE.BoxGeometry(6.8, 0.02, 0.6), ledMat, m.makeTranslation(0, 3.25, 0.3), worldMatrix);
 
-            // LED strip
-            if (lvl > 0) {
-                const led = new THREE.Mesh(ledGeom, ledMat);
-                led.position.set(0, yPos - 0.04, 0.6);
-                shelfGroupTemplate.add(led);
+            // Boards & Rails
+            for (let lvl = 0; lvl < 6; lvl++) {
+                const yPos = 0.2 + lvl * 0.55;
+                registerShelfPart('board_' + lvl, shelfBoardGeom, shelfMat, m.makeTranslation(0, yPos, 0.35), worldMatrix);
+                registerShelfPart('rail_' + lvl, shelfRailGeom, railMat, m.makeTranslation(0, yPos, 0.68), worldMatrix);
             }
         }
 
@@ -660,17 +932,17 @@ export default function SupermarketSimulator() {
             island.add(tier2);
 
             // Featured Products on the island
-            const featuredInfo = productLibrary.find(p => p.category === 'drinks');
-            for (let i = 0; i < 8; i++) { // Reduced count for smaller size
+            for (let i = 0; i < 8; i++) {
+                const info = pickFromCategory('drinks');
+                if (!info) break;
                 const angle = (i / 8) * Math.PI * 2;
-                const p = createProductMesh(featuredInfo);
-                if (p) {
-                    p.position.set(Math.cos(angle) * 1.8, 1.1 + 0.24, Math.sin(angle) * 1.8);
-                    island.add(p);
-                    clickableProducts.push(p);
-                }
+                dummyWorld.position.set(x + Math.cos(angle) * 1.8, 0.8, z + Math.sin(angle) * 1.8);
+                dummyWorld.rotation.set(0, 0, 0);
+                dummyWorld.updateMatrixWorld(true);
+                registerProductInstance(info, dummyWorld.matrixWorld);
             }
             island.position.set(x, 0, z);
+            addObstacleFromObject(island);
             scene.add(island);
 
             // Highlight Light for the island
@@ -681,59 +953,40 @@ export default function SupermarketSimulator() {
 
         createDisplayIsland(0, 0);
 
-        function createProductMesh(info: any) {
-            if (!info) return null;
+        /**
+         * REGISTERS A PRODUCT INSTANCE
+         * Instead of creating a mesh, it records the transform and info
+         */
+        function registerProductInstance(info: SimProduct | undefined, worldMatrix: THREE.Matrix4) {
+            if (!info || !productAssets.has(info.id)) return;
 
-            let geom;
-            const category = info.category;
-
-            if (category === 'produce') {
-                if (info.name.includes('موز')) {
-                    // Banana: Curved ellipsoid approximation using Capsule
-                    geom = new THREE.CapsuleGeometry(0.08, 0.4, 4, 12);
-                } else if (info.name.includes('خيار')) {
-                    // Cucumber: Long cylinder
-                    geom = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 12);
+            if (!productInstancingMap.has(info.id)) {
+                let geom;
+                const segments = isMobileDevice ? 8 : 16;
+                if (info.category === 'produce') {
+                    geom = new THREE.SphereGeometry(0.18, segments, segments);
+                } else if (info.category === 'drinks' || info.category === 'cleaning') {
+                    geom = new THREE.CylinderGeometry(0.18, 0.18, 0.55, segments);
+                } else if (info.category === 'dairy') {
+                    geom = new THREE.BoxGeometry(0.25, 0.6, 0.25);
+                } else if (info.category === 'bakery') {
+                    geom = new THREE.CylinderGeometry(0.3, 0.3, 0.25, segments);
                 } else {
-                    // Apples, Oranges, Tomatoes
-                    geom = new THREE.SphereGeometry(0.18, 16, 12);
+                    geom = new THREE.BoxGeometry(0.32, 0.48, 0.22);
                 }
-            } else if (category === 'drinks' || category === 'cleaning' || info.name.includes('زيت')) {
-                // Bottles/Cylinders
-                geom = new THREE.CylinderGeometry(0.18, 0.18, 0.55, 16);
-            } else if (category === 'dairy' && info.name.includes('حليب')) {
-                // Milk carton style
-                geom = new THREE.BoxGeometry(0.25, 0.6, 0.25);
-            } else if (category === 'bakery' && info.name.includes('كيك')) {
-                // Cake/Round box
-                geom = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 24);
-            } else {
-                // Default box for snacks, grocery, etc.
-                geom = new THREE.BoxGeometry(0.32, 0.48, 0.22);
+                geom.translate(0, (geom as any).parameters?.height / 2 || 0.24, 0);
+
+                productInstancingMap.set(info.id, {
+                    geometry: geom,
+                    material: productAssets.get(info.id)!,
+                    matrices: [],
+                    metadata: []
+                });
             }
 
-            const mesh = new THREE.Mesh(geom, productAssets.get(info.name));
-
-            // Add details
-            if (category === 'produce') {
-                if (!info.name.includes('موز') && !info.name.includes('خيار')) {
-                    // Add a tiny brown stalk for spherical fruits
-                    const stalkMat = new THREE.MeshStandardMaterial({ color: 0x4e342e });
-                    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.01, 0.08), stalkMat);
-                    stalk.position.y = 0.18;
-                    mesh.add(stalk);
-                }
-            } else if (category === 'drinks' || category === 'cleaning' || info.name.includes('زيت')) {
-                const capMat = new THREE.MeshPhysicalMaterial({ color: 0x333333, roughness: 0.1, metalness: 0.5 });
-                const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 8), capMat);
-                cap.position.y = 0.3;
-                mesh.add(cap);
-            }
-
-            mesh.userData = { ...info, clickable: true };
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            return mesh;
+            const entry = productInstancingMap.get(info.id)!;
+            entry.matrices.push(worldMatrix.clone());
+            entry.metadata.push({ ...info, clickable: true });
         }
 
         // --- Helper: Create Department Sign ---
@@ -791,28 +1044,38 @@ export default function SupermarketSimulator() {
         }
 
         function createPopulatedShelf(x: number, z: number, rotation: number, categoryList: string[]) {
-            const shelf = shelfGroupTemplate.clone();
-            const categories = productLibrary.filter(p => categoryList.includes(p.category));
+            const hasItems = categoryList.some((category) => (categoryPools.get(category)?.length ?? 0) > 0);
+
+            const shelfDummy = new THREE.Object3D();
+            shelfDummy.position.set(x, 0, z);
+            shelfDummy.rotation.y = rotation;
+            shelfDummy.updateMatrixWorld(true);
+            addShelfObstacle(x, z, rotation);
+
+            if (!hasItems) {
+                recordShelfInstances(shelfDummy.matrixWorld);
+                return;
+            }
 
             for (let lvl = 0; lvl < 6; lvl++) {
-                // Populate random products from categories
                 for (let xOff = -3; xOff <= 3; xOff += 0.8) {
-                    const info = categories[Math.floor(Math.random() * categories.length)];
-                    const mesh = createProductMesh(info);
-                    if (mesh) {
-                        const xPos = xOff + (Math.random() - 0.5) * 0.1;
-                        const zPos = 0.4 + (Math.random() - 0.5) * 0.05;
-                        const randRot = (Math.random() - 0.5) * 0.2;
-                        mesh.position.set(xPos, 0.2 + lvl * 0.55 + 0.26, zPos);
-                        mesh.rotation.y = randRot;
-                        shelf.add(mesh);
-                        clickableProducts.push(mesh);
+                    const info = pickFromCategories(categoryList);
+                    if (!info) {
+                        continue;
                     }
+                    const xPos = xOff + (Math.random() - 0.5) * 0.1;
+                    const zPos = 0.4 + (Math.random() - 0.5) * 0.05;
+                    const randRot = (Math.random() - 0.5) * 0.2;
+
+                    dummyWorld.position.set(xPos, 0.24 + lvl * 0.55, zPos);
+                    dummyWorld.rotation.y = randRot;
+                    dummyWorld.updateMatrix();
+
+                    const worldMat = shelfDummy.matrixWorld.clone().multiply(dummyWorld.matrix);
+                    registerProductInstance(info, worldMat);
                 }
             }
-            shelf.position.set(x, 0, z);
-            shelf.rotation.y = rotation;
-            scene.add(shelf);
+            recordShelfInstances(shelfDummy.matrixWorld);
         }
 
         // --- SPECIALIZED SUPERMARKET DEPARTMENTS ---
@@ -820,6 +1083,7 @@ export default function SupermarketSimulator() {
         // 1. Produce Section (خضروات وفواكه) - Wooden tables and warm light
         function createProduceSection(x: number, z: number) {
             const produceGroup = new THREE.Group();
+            produceGroup.position.set(x, 0, z);
             const tableMat = woodTex.clone();
             tableMat.repeat.set(2, 2);
             const woodMaterial = new THREE.MeshStandardMaterial({ map: tableMat, roughness: 0.8 });
@@ -830,18 +1094,18 @@ export default function SupermarketSimulator() {
                 table.position.set(i * 5, 0.4, 0);
                 table.rotation.x = -0.2; // Slanted
                 produceGroup.add(table);
+                addObstacleFromObject(table);
 
-                // Add products on top
-                const items = productLibrary.filter(p => p.category === 'produce');
                 for (let px = -1.5; px <= 1.5; px += 0.6) {
                     for (let pz = -0.8; pz <= 0.8; pz += 0.6) {
-                        const info = items[Math.floor(Math.random() * items.length)];
-                        const p = createProductMesh(info);
-                        if (p) {
-                            p.position.set(i * 5 + px, 0.9, pz);
-                            produceGroup.add(p);
-                            clickableProducts.push(p);
+                        const info = pickFromCategory('produce');
+                        if (!info) {
+                            continue;
                         }
+                        dummyWorld.position.set(x + i * 5 + px, 0.8, z + pz);
+                        dummyWorld.rotation.set(0, 0, 0);
+                        dummyWorld.updateMatrixWorld(true);
+                        registerProductInstance(info, dummyWorld.matrixWorld);
                     }
                 }
             }
@@ -851,7 +1115,6 @@ export default function SupermarketSimulator() {
             warmLight.position.set(0, 4, 0);
             produceGroup.add(warmLight);
 
-            produceGroup.position.set(x, 0, z);
             scene.add(produceGroup);
         }
 
@@ -870,15 +1133,15 @@ export default function SupermarketSimulator() {
             bakeryGroup.add(glassTop);
 
             // Baked products inside/on top
-            const items = productLibrary.filter(p => p.category === 'bakery');
             for (let bx = -3.5; bx <= 3.5; bx += 1) {
-                const info = items[Math.floor(Math.random() * items.length)];
-                const p = createProductMesh(info);
-                if (p) {
-                    p.position.set(bx, 1.3, 0);
-                    bakeryGroup.add(p);
-                    clickableProducts.push(p);
+                const info = pickFromCategory('bakery');
+                if (!info) {
+                    break;
                 }
+                dummyWorld.position.set(x + bx, 1.2, z);
+                dummyWorld.rotation.set(0, 0, 0);
+                dummyWorld.updateMatrixWorld(true);
+                registerProductInstance(info, dummyWorld.matrixWorld);
             }
 
             // Delicious warm glow
@@ -887,6 +1150,7 @@ export default function SupermarketSimulator() {
             bakeryGroup.add(bakeryLight);
 
             bakeryGroup.position.set(x, 0, z);
+            addObstacleFromObject(bakeryGroup);
             scene.add(bakeryGroup);
         }
 
@@ -905,22 +1169,28 @@ export default function SupermarketSimulator() {
             led.position.set(0, 2.8, 0.5);
             dairyGroup.add(led);
 
-            // Layout products
-            const items = productLibrary.filter(p => p.category === 'dairy');
+            const dairyDummy = new THREE.Object3D();
+            dairyDummy.position.set(x, 0, z);
+            dairyDummy.rotation.y = rotation;
+            dairyDummy.updateMatrixWorld(true);
+
             for (let lvl = 0; lvl < 4; lvl++) {
                 for (let dx = -4.5; dx <= 4.5; dx += 0.8) {
-                    const info = items[Math.floor(Math.random() * items.length)];
-                    const p = createProductMesh(info);
-                    if (p) {
-                        p.position.set(dx, 0.5 + lvl * 0.7, 0.4);
-                        dairyGroup.add(p);
-                        clickableProducts.push(p);
+                    const info = pickFromCategory('dairy');
+                    if (!info) {
+                        continue;
                     }
+                    dummyWorld.position.set(dx, 0.425 + lvl * 0.7, 0.4);
+                    dummyWorld.rotation.set(0, 0, 0);
+                    dummyWorld.updateMatrix();
+                    const worldMat = dairyDummy.matrixWorld.clone().multiply(dummyWorld.matrix);
+                    registerProductInstance(info, worldMat);
                 }
             }
 
             dairyGroup.position.set(x, 0, z);
             dairyGroup.rotation.y = rotation;
+            addObstacleFromObject(dairyGroup);
             scene.add(dairyGroup);
         }
 
@@ -936,19 +1206,19 @@ export default function SupermarketSimulator() {
             glass.position.y = 1.4;
             meatGroup.add(glass);
 
-            const items = productLibrary.filter(p => p.category === 'meat');
             for (let mx = -4; mx <= 4; mx += 1.5) {
-                const info = items[Math.floor(Math.random() * items.length)];
-                const p = createProductMesh(info);
-                if (p) {
-                    p.scale.set(1.5, 1, 1.5); // Meat chunks look bigger
-                    p.position.set(mx, 1.2, 0);
-                    meatGroup.add(p);
-                    clickableProducts.push(p);
+                const info = pickFromCategory('meat');
+                if (!info) {
+                    break;
                 }
+                dummyWorld.position.set(x + mx, 1.1, z);
+                dummyWorld.rotation.set(0, 0, 0);
+                dummyWorld.updateMatrixWorld(true);
+                registerProductInstance(info, dummyWorld.matrixWorld);
             }
 
             meatGroup.position.set(x, 0, z);
+            addObstacleFromObject(meatGroup);
             scene.add(meatGroup);
         }
 
@@ -969,15 +1239,21 @@ export default function SupermarketSimulator() {
                 beautyGroup.add(shelf);
 
                 // Add beauty products
-                const items = productLibrary.filter(p => p.category === 'beauty');
+                const beautyDummy = new THREE.Object3D();
+                beautyDummy.position.set(x, 0, z);
+                beautyDummy.rotation.y = rotation;
+                beautyDummy.updateMatrixWorld(true);
+
                 for (let bx = -3.5; bx <= 3.5; bx += 0.7) {
-                    const info = items[Math.floor(Math.random() * items.length)];
-                    const p = createProductMesh(info);
-                    if (p) {
-                        p.position.set(bx, 0.2 + i * 0.8 + 0.25, 0.3);
-                        beautyGroup.add(p);
-                        clickableProducts.push(p);
+                    const info = pickFromCategory('beauty');
+                    if (!info) {
+                        continue;
                     }
+                    dummyWorld.position.set(bx, 0.275 + i * 0.8, 0.3);
+                    dummyWorld.rotation.set(0, 0, 0);
+                    dummyWorld.updateMatrix();
+                    const worldMat = beautyDummy.matrixWorld.clone().multiply(dummyWorld.matrix);
+                    registerProductInstance(info, worldMat);
                 }
 
                 // Bright white LED for each shelf
@@ -988,52 +1264,220 @@ export default function SupermarketSimulator() {
 
             beautyGroup.position.set(x, 0, z);
             beautyGroup.rotation.y = rotation;
+            addObstacleFromObject(beautyGroup);
             scene.add(beautyGroup);
         }
 
-        // --- NEW STORE LAYOUT WITH SIGNS ---
+        // --- DYNAMIC STORE LAYOUT FROM DB ---
 
-        // 1. Bakery (المخبز)
-        createBakerySection(-20, 42);
-        createDepartmentSign("قسم المخبز", "BAKERY", -20, 4.5, 42);
+        function renderDynamicShelf(shelf: any) {
+            const group = new THREE.Group();
+            const { x, y, z } = shelf.position;
+            const rotY = shelf.rotation ? shelf.rotation.y : 0; // Map editor Y rotation
 
-        // 2. Produce (الخضروات والفواكه)
-        createProduceSection(-15, 20);
-        createDepartmentSign("الخضروات والفواكه", "FRESH PRODUCE", -15, 4.5, 20);
+            // Visuals based on type
+            if (shelf.type === 'traditional_shelf' || shelf.type === 'grocery_shelf') {
+                // Shelf Structure (Metal/Wood)
+                for (let i = 0; i < 5; i++) {
+                    const plate = new THREE.Mesh(new THREE.BoxGeometry(7, 0.05, 0.6), shelfMat);
+                    plate.position.y = 0.2 + i * 0.6;
+                    group.add(plate);
+                }
+                const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3, 0.6), shelfMat);
+                sideL.position.set(-3.5, 1.5, 0);
+                const sideR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3, 0.6), shelfMat);
+                sideR.position.set(3.5, 1.5, 0);
+                group.add(sideL, sideR);
 
-        // 3. Dairy & Cheese (الألبان والأجبان)
-        createDairySection(-28, 0, Math.PI / 2);
-        createDairySection(-28, -12, Math.PI / 2);
-        createDepartmentSign("الألبان والأجبان", "DAIRY & CHEESE", -25, 4.5, -6, Math.PI / 2);
+            } else if (shelf.type === 'glass_counter') {
+                // Bakery/Meat Counter style
+                const counter = new THREE.Mesh(new THREE.BoxGeometry(7, 1.1, 1.2), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+                counter.position.y = 0.55;
+                group.add(counter);
+                const glass = new THREE.Mesh(new THREE.BoxGeometry(7, 0.6, 1.2), new THREE.MeshPhysicalMaterial({ transparent: true, opacity: 0.3, color: 0x88ccff }));
+                glass.position.y = 1.4;
+                group.add(glass);
 
-        // 4. Meat & Seafood (اللحوم والأسماك)
-        createMeatSection(0, -45);
-        createDepartmentSign("اللحوم والأسماك", "MEAT & SEAFOOD", 0, 4.5, -42);
+            } else if (shelf.type === 'slanted_table') {
+                // Produce Table
+                const table = new THREE.Mesh(new THREE.BoxGeometry(6, 0.8, 2.5), new THREE.MeshStandardMaterial({ map: woodTex }));
+                table.position.y = 0.6;
+                table.rotation.x = 0.2;
+                group.add(table);
 
-        // 5. Health & Beauty (الصحة والجمال)
-        createBeautySection(28, 0, -Math.PI / 2);
-        createBeautySection(28, 12, -Math.PI / 2);
-        createDepartmentSign("الصحة والجمال", "HEALTH & BEAUTY", 25, 4.5, 6, -Math.PI / 2);
-
-        // 6. Grocery & Cleaning (البقالة والمنظفات) - Adjusted spacing to avoid island overlap
-        const mainAisles = [
-            { x: -10, categories: ['grocery'], labelAr: "البقالة", labelEn: "GROCERY" },
-            { x: 10, categories: ['drinks', 'snacks'], labelAr: "المشروبات والوجبات الخفيفة", labelEn: "DRINKS & SNACKS" },
-            { x: 20, categories: ['cleaning', 'grocery'], labelAr: "المنظفات والورقيات", labelEn: "CLEANING" }
-        ];
-
-        mainAisles.forEach(aisle => {
-            for (let z = -35; z <= 35; z += 12) {
-                createPopulatedShelf(aisle.x, z, 0, aisle.categories);
-                createPopulatedShelf(aisle.x, z, Math.PI, aisle.categories);
+            } else if (shelf.type === 'open_fridge') {
+                // Fridge
+                const base = new THREE.Mesh(new THREE.BoxGeometry(7, 3, 1), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                base.position.y = 1.5;
+                group.add(base);
+                const light = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xccffff }));
+                light.position.set(0, 2.8, 0.4);
+                group.add(light);
+            } else {
+                // Default Box
+                const box = new THREE.Mesh(new THREE.BoxGeometry(7, 0.5, 1), shelfMat);
+                box.position.y = 0.25;
+                group.add(box);
             }
-            createDepartmentSign(aisle.labelAr, aisle.labelEn, aisle.x, 4.5, 0);
+
+            // Apply Transform
+            group.position.set(x, 0, z); // Force Y=0 for floor placement
+            group.rotation.y = rotY;
+
+            // Add to scene & collisions
+            addObstacleFromObject(group);
+            scene.add(group);
+
+            // Store reference for product placement
+            shelf.object3D = group;
+        }
+
+        function renderDynamicProduct(placement: any, shelves: any[]) {
+            const shelf = shelves.find((s: any) => s.shelfId === placement.shelfId);
+            if (!shelf || !shelf.object3D) return;
+
+            const productInfo = catalog.find((p) => p.id === placement.productId);
+            if (!productInfo) return;
+
+            // Auto-Layout Logic
+            // We attach directly to the shelf group so local coords work!
+            // But verify if we can add to the group after it's in scene? Yes.
+
+            // We need to know "slot index" of this product on this shelf
+            // Map logic:
+            if (!shelf.placementCount) shelf.placementCount = 0;
+            const idx = shelf.placementCount++;
+
+            // Simple grid layout based on shelf type
+            let lx = 0, ly = 0, lz = 0;
+
+            if (shelf.type === 'traditional_shelf') {
+                const itemsPerShelf = 8;
+                const shelfLevel = Math.floor(idx / itemsPerShelf);
+                const slot = idx % itemsPerShelf;
+
+                lx = -3.0 + slot * 0.8;
+                ly = 0.25 + shelfLevel * 0.6;
+                lz = 0;
+            } else if (shelf.type === 'glass_counter') {
+                const itemsPerRow = 8;
+                const row = Math.floor(idx / itemsPerRow);
+                const slot = idx % itemsPerRow;
+                lx = -3.0 + slot * 0.8;
+                ly = 1.25 + row * 0.4; // Inside glass
+                lz = 0;
+            } else if (shelf.type === 'slanted_table') {
+                const itemsPerRow = 6;
+                const row = Math.floor(idx / itemsPerRow);
+                const slot = idx % itemsPerRow;
+                lx = -2.5 + slot * 1.0;
+                ly = 0.9 + row * 0.3;
+                lz = -0.5 + row * 0.5;
+            } else {
+                // Default
+                const itemsPerShelf = 8;
+                lx = -3.0 + (idx % itemsPerShelf) * 0.8;
+                ly = 0.6 + Math.floor(idx / itemsPerShelf) * 0.5;
+            }
+
+            // Create Instance/Mesh
+            dummyWorld.position.set(lx, ly, lz);
+            dummyWorld.rotation.set(0, (Math.random() - 0.5) * 0.5, 0); // Random slight rotation
+            dummyWorld.updateMatrix();
+
+            // Transform to world space
+            const worldMat = shelf.object3D.matrixWorld.clone().multiply(dummyWorld.matrix);
+            registerProductInstance(productInfo, worldMat);
+        }
+
+        const layoutData = (window as any).simLayoutData;
+        const useCustomLayout = layoutData && layoutData.shelves && layoutData.shelves.length > 0;
+
+        if (useCustomLayout) {
+            console.log("Building 3D Store from Layout...");
+            layoutData.shelves.forEach((s: any) => renderDynamicShelf(s));
+            if (layoutData.placements) {
+                layoutData.placements.forEach((p: any) => renderDynamicProduct(p, layoutData.shelves));
+            }
+
+            // Still add Cashier and Dept Signs if needed, or rely on user adding them?
+            // For now, keep the Default Cashier at front
+            createDepartmentSign("منطقة المحاسبة", "CHECKOUT", 0, 4.5, 48);
+
+        } else {
+            // --- FALLBACK: DEFAULT PROCEDURAL LAYOUT ---
+
+            // 1. Bakery (المخبز)
+            createBakerySection(-20, 42);
+            createDepartmentSign("قسم المخبز", "BAKERY", -20, 4.5, 42);
+
+            // 2. Produce (الخضروات والفواكه)
+            createProduceSection(-15, 20);
+            createDepartmentSign("الخضروات والفواكه", "FRESH PRODUCE", -15, 4.5, 20);
+
+            // 3. Dairy & Cheese (الألبان والأجبان)
+            createDairySection(-28, 0, Math.PI / 2);
+            createDairySection(-28, -12, Math.PI / 2);
+            createDepartmentSign("الألبان والأجبان", "DAIRY & CHEESE", -25, 4.5, -6, Math.PI / 2);
+
+            // 4. Meat & Seafood (اللحوم والأسماك)
+            createMeatSection(0, -45);
+            createDepartmentSign("اللحوم والأسماك", "MEAT & SEAFOOD", 0, 4.5, -42);
+
+            // 5. Health & Beauty (الصحة والجمال)
+            createBeautySection(28, 0, -Math.PI / 2);
+            createBeautySection(28, 12, -Math.PI / 2);
+            createDepartmentSign("الصحة والجمال", "HEALTH & BEAUTY", 25, 4.5, 6, -Math.PI / 2);
+
+            // 6. Grocery & Cleaning (البقالة والمنظفات)
+            const mainAisles = [
+                { x: -10, categories: ['grocery'], labelAr: "البقالة", labelEn: "GROCERY" },
+                { x: 10, categories: ['drinks', 'snacks'], labelAr: "المشروبات والوجبات الخفيفة", labelEn: "DRINKS & SNACKS" },
+                { x: 20, categories: ['cleaning', 'grocery'], labelAr: "المنظفات والورقيات", labelEn: "CLEANING" }
+            ];
+
+            mainAisles.forEach(aisle => {
+                for (let z = -35; z <= 35; z += 12) {
+                    createPopulatedShelf(aisle.x, z, 0, aisle.categories);
+                    createPopulatedShelf(aisle.x, z, Math.PI, aisle.categories);
+                }
+                createDepartmentSign(aisle.labelAr, aisle.labelEn, aisle.x, 4.5, 0);
+            });
+
+            // Cashier Sign
+            createDepartmentSign("منطقة المحاسبة", "CHECKOUT", 0, 4.5, 48);
+        }
+
+        // --- FINALIZE INSTANCING (THE RADICAL PERFORMANCE BOOST) ---
+        productInstancingMap.forEach((entry, name) => {
+            const count = entry.matrices.length;
+            const imesh = new THREE.InstancedMesh(entry.geometry, entry.material, count);
+            for (let i = 0; i < count; i++) {
+                imesh.setMatrixAt(i, entry.matrices[i]);
+            }
+            imesh.instanceMatrix.needsUpdate = true;
+            imesh.castShadow = !isMobileDevice;
+            imesh.receiveShadow = !isMobileDevice;
+
+            // Store metadata on the Mesh itself for simple retrieval
+            (imesh as any).instanceMetadata = entry.metadata;
+            imesh.userData = { clickable: true };
+
+            scene.add(imesh);
+            clickableObjs.push(imesh);
         });
 
-        // Cashier Sign
-        createDepartmentSign("منطقة المحاسبة", "CHECKOUT", 0, 4.5, 48);
-
-        // Cashier already remains at createCashier(0, 48)
+        shelfInstancingMap.forEach((entry, name) => {
+            const count = entry.matrices.length;
+            const imesh = new THREE.InstancedMesh(entry.geometry, entry.material, count);
+            for (let i = 0; i < count; i++) {
+                imesh.setMatrixAt(i, entry.matrices[i]);
+            }
+            imesh.instanceMatrix.needsUpdate = true;
+            imesh.castShadow = !isMobileDevice;
+            imesh.receiveShadow = !isMobileDevice;
+            scene.add(imesh);
+        });
 
         // --- CASHIER AREA (Professional Design & Animated NPC) ---
         function createCashier(x: number, z: number) {
@@ -1070,6 +1514,7 @@ export default function SupermarketSimulator() {
             cashierGroup.add(signLight);
 
             cashierGroup.position.set(x, 0, z);
+            addObstacleFromObject(cashierGroup);
             scene.add(cashierGroup);
 
             // Designer Pendant Light (Ring)
@@ -1083,82 +1528,6 @@ export default function SupermarketSimulator() {
             pLight.position.set(x, 4.5, z);
             scene.add(pLight);
 
-            // --- ADDING NPC (Cashier Personnel) ---
-            const npcGroup = new THREE.Group(); // ANIMATED REPLACEMENT START
-            function createCashierNPC(nx: number, nz: number) { // NPC_REBUILD_START
-                // improved materials
-                const skinMat = new THREE.MeshPhysicalMaterial({ color: 0xffdbac, roughness: 0.75 });
-                const shirtMat = new THREE.MeshPhysicalMaterial({ color: 0x111111, roughness: 0.5 });
-                const uniformMat = new THREE.MeshPhysicalMaterial({ color: 0x2e7d32, roughness: 0.8 });
-                const hairMat = new THREE.MeshStandardMaterial({ color: 0x221105, roughness: 0.9 });
-
-                // Head
-                const hGroup = new THREE.Group();
-                const face = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.08, 4, 12), skinMat);
-                face.position.y = 1.68;
-                hGroup.add(face);
-
-                // facial features
-                const eyeGeom = new THREE.SphereGeometry(0.012, 8, 8);
-                const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-                const lEye = new THREE.Mesh(eyeGeom, eyeMat); lEye.position.set(-0.03, 1.7, 0.085);
-                const rEye = new THREE.Mesh(eyeGeom, eyeMat); rEye.position.set(0.03, 1.7, 0.085);
-                hGroup.add(lEye, rEye);
-
-                // Friendly Smile
-                const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.004, 8, 12, Math.PI), eyeMat);
-                mouth.position.set(0, 1.63, 0.085); mouth.rotation.x = 0.4;
-                hGroup.add(mouth);
-
-                const hair = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2), hairMat);
-                hair.position.y = 1.72;
-                hGroup.add(hair);
-
-                npcGroup.add(hGroup);
-
-                // body
-                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.22), shirtMat);
-                torso.position.y = 1.35;
-                npcGroup.add(torso);
-
-                const apron = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.02), uniformMat);
-                apron.position.set(0, 1.25, 0.12);
-                npcGroup.add(apron);
-
-                const collar = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 8, 16, Math.PI), shirtMat);
-                collar.rotation.x = Math.PI / 2;
-                collar.position.y = 1.63;
-                npcGroup.add(collar);
-
-                // Improved Arms with Joints for Animation
-                const armGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.28);
-                const lArm = new THREE.Mesh(armGeom, shirtMat);
-                lArm.position.set(-0.25, 1.5, 0); lArm.rotation.z = 0.25;
-                npcGroup.add(lArm);
-
-                const rArmJoint = new THREE.Group();
-                rArmJoint.position.set(0.25, 1.5, 0);
-                const rArm = new THREE.Mesh(armGeom, shirtMat);
-                rArm.position.y = -0.14;
-                rArmJoint.add(rArm);
-                rArmJoint.rotation.x = -1.1;
-                npcGroup.add(rArmJoint);
-
-                // hands
-                const handGeom = new THREE.SphereGeometry(0.05, 8, 8);
-                const lHand = new THREE.Mesh(handGeom, skinMat); lHand.position.set(-0.3, 1.25, 0.08); // MARKER_HANDS
-                const rHand = new THREE.Mesh(handGeom, skinMat); rHand.position.set(0.3, 1.4, 0.3);
-                npcGroup.add(lHand, rHand);
-
-                npcGroup.position.set(nx, 0.1, nz);
-                npcGroup.rotation.y = Math.PI;
-
-                // Bind to animation refs
-                npcRef.current = { group: npcGroup, head: hGroup, rArm: rArmJoint };
-            }
-
-            createCashierNPC(0, 0.5);
-            cashierGroup.add(npcGroup);
         }
 
         // Place Cashier Desk near entrance/start
@@ -1185,20 +1554,19 @@ export default function SupermarketSimulator() {
         });
 
         function createArchitecturalFeature(parent: THREE.Group, type: "bronze" | "wood" | "light" | "art", index: number = 0) {
-            const featureY = 0.5; // Centered eye-level height (relative to wall group)
+            const featureY = 0.5;
 
             if (type === "bronze") {
-                // Large Bronze Reflective Panel
                 const panel = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 0.2), bronzeMat);
                 panel.position.set(0, featureY, 0.1);
                 parent.add(panel);
 
-                // Slim gold border
-                const border = new THREE.Mesh(new THREE.BoxGeometry(8.4, 5.4, 0.05), goldMat);
-                border.position.set(0, featureY, 0.05);
-                parent.add(border);
+                if (!isMobileDevice) {
+                    const border = new THREE.Mesh(new THREE.BoxGeometry(8.4, 5.4, 0.05), goldMat);
+                    border.position.set(0, featureY, 0.05);
+                    parent.add(border);
+                }
             } else if (type === "art") {
-                // SMALLER, MORE REFINED SQUARE ART PIECE
                 const arts = [artTex1, artTex2, artTex3];
                 const frameSize = 5.0;
                 const paintSize = 4.7;
@@ -1214,34 +1582,30 @@ export default function SupermarketSimulator() {
                 painting.position.set(0, featureY, 0.2);
                 parent.add(painting);
 
-                // Tight Spotlight for Small Art
-                const sLight = new THREE.SpotLight(0xfff5e6, 40, 15, Math.PI / 6, 0.8);
-                sLight.position.set(0, featureY + 3, 3);
-                sLight.target = painting;
-                parent.add(sLight);
+                if (!isMobileDevice) {
+                    const sLight = new THREE.SpotLight(0xfff5e6, 40, 15, Math.PI / 6, 0.8);
+                    sLight.position.set(0, featureY + 3, 3);
+                    sLight.target = painting;
+                    parent.add(sLight);
+                }
             } else if (type === "wood") {
-                // Vertical Slat Section
-                for (let i = -4; i < 4; i += 0.45) {
-                    const m = new THREE.MeshPhysicalMaterial({
-                        map: woodTex,
-                        roughness: 0.5,
-                        clearcoat: 0.3
-                    });
-                    const s = new THREE.Mesh(new THREE.BoxGeometry(0.15, 5, 0.3), m);
-                    s.position.set(i, featureY, 0.15);
-                    parent.add(s);
+                if (isMobileDevice) {
+                    const panel = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 0.2), shelfMat);
+                    panel.position.set(0, featureY, 0.1);
+                    parent.add(panel);
+                } else {
+                    for (let i = -4; i < 4; i += 0.45) {
+                        const m = new THREE.MeshPhysicalMaterial({ map: woodTex, roughness: 0.5, clearcoat: 0.3 });
+                        const s = new THREE.Mesh(new THREE.BoxGeometry(0.15, 5, 0.3), m);
+                        s.position.set(i, featureY, 0.15);
+                        parent.add(s);
+                    }
                 }
             } else {
-                // Vertical Light Trough (Glowing Slot)
                 const trough = new THREE.Mesh(new THREE.BoxGeometry(0.6, 6, 0.2), ledMat);
                 trough.position.set(0, 0, 0.1);
                 parent.add(trough);
             }
-
-            // Removed sconce point lights (Save resources)
-            const sconceBox = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.3), new THREE.MeshStandardMaterial({ color: 0x050505 }));
-            sconceBox.position.set(0, 2.5, 0.3);
-            parent.add(sconceBox);
         }
 
         function createArchitecturalWall(width: number, height: number, depth: number, x: number, y: number, z: number, rotationY: number) {
@@ -1255,9 +1619,11 @@ export default function SupermarketSimulator() {
                 wallGroup.add(panel);
 
                 // Gold inlay strip between slabs
-                const inlay = new THREE.Mesh(new THREE.BoxGeometry(0.1, height, depth + 0.05), goldMat);
-                inlay.position.set(i + 12, 0, 0.02);
-                wallGroup.add(inlay);
+                if (!isMobileDevice) { // Skip borders on mobile
+                    const inlay = new THREE.Mesh(new THREE.BoxGeometry(0.1, height, depth + 0.05), goldMat);
+                    inlay.position.set(i + 12, 0, 0.02);
+                    wallGroup.add(inlay);
+                }
 
                 // Add Features in a rhythm: Art -> Wood -> Bronze -> Light
                 if (Math.abs(i) % 48 === 0) {
@@ -1285,6 +1651,7 @@ export default function SupermarketSimulator() {
 
             wallGroup.position.set(x, y, z);
             wallGroup.rotation.y = rotationY;
+            addObstacleFromObject(wallGroup);
             scene.add(wallGroup);
         }
 
@@ -1313,6 +1680,7 @@ export default function SupermarketSimulator() {
         backWallGroup.add(halo);
 
         backWallGroup.position.set(0, 3, -55);
+        addObstacleFromObject(backWallGroup);
         scene.add(backWallGroup);
 
         // Entrance Welcome Sign (Behind Cashier)
@@ -1329,109 +1697,149 @@ export default function SupermarketSimulator() {
         welcomeGroup.add(wLight);
 
         welcomeGroup.position.set(0, 3.5, 49.8);
+        addObstacleFromObject(welcomeGroup);
         scene.add(welcomeGroup);
 
-        // --- REALISTIC SHOPPING CART MODEL ---
+        // --- SHOPPING CART MODEL (Optimized for Device) ---
         const cartGroup = new THREE.Group();
         const cartMetalMat = new THREE.MeshStandardMaterial({
-            color: 0xf5f5f5, // Much lighter, chrome-like silver
+            color: 0xf5f5f5,
             metalness: 1.0,
             roughness: 0.1,
             envMapIntensity: 1.0
         });
-        const plasticHandleMat = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.5 }); // Red handle
-
-        // 1. Support Frame (The "Chassis")
-        const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.7), cartMetalMat);
-        frameBottom.position.set(0, -0.35, -0.1);
-        cartGroup.add(frameBottom);
-
-        const verticalBarGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.6);
-        const bars = [
-            [-0.22, -0.05, 0.25], [0.22, -0.05, 0.25], // Back bars near user
-            [-0.22, -0.05, -0.45], [0.22, -0.05, -0.45] // Front bars
-        ];
-        bars.forEach(([bx, by, bz]) => {
-            const bar = new THREE.Mesh(verticalBarGeom, cartMetalMat);
-            bar.position.set(bx, by, bz);
-            cartGroup.add(bar);
-        });
-
-        // 2. Open Wire Basket (Grid Design)
-        const basketGroup = new THREE.Group();
-        for (let h = 0; h <= 0.4; h += 0.08) {
-            const barF = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.02, 0.02), cartMetalMat);
-            const barB = barF.clone();
-            const barL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.75), cartMetalMat);
-            const barR = barL.clone();
-            barF.position.set(0, h, -0.375);
-            barB.position.set(0, h, 0.375);
-            barL.position.set(-0.275, h, 0);
-            barR.position.set(0.275, h, 0);
-            basketGroup.add(barF, barB, barL, barR);
-        }
-
-        const wireGeom = new THREE.BoxGeometry(0.01, 0.4, 0.01);
-        for (let x = -0.275; x <= 0.275; x += 0.05) {
-            const wF = new THREE.Mesh(wireGeom, cartMetalMat);
-            wF.position.set(x, 0.2, -0.375);
-            const wB = wF.clone();
-            wB.position.z = 0.375;
-            basketGroup.add(wF, wB);
-        }
-        for (let z = -0.375; z <= 0.375; z += 0.05) {
-            const wL = new THREE.Mesh(wireGeom, cartMetalMat);
-            wL.position.set(-0.275, 0.2, z);
-            const wR = wL.clone();
-            wR.position.x = 0.275;
-            basketGroup.add(wL, wR);
-        }
-
-        const basketBottom = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.01, 0.75), new THREE.MeshStandardMaterial({ color: 0x888888, wireframe: true }));
-        basketBottom.position.y = 0;
-        basketGroup.add(basketBottom);
-
+        const plasticHandleMat = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.5 }); // Efficient Cart Model for Mobile vs High-Poly for Desktop
         const basketContents = new THREE.Group();
         basketContents.position.y = 0.1;
-        basketGroup.add(basketContents);
         basketContentsRef.current = basketContents;
 
-        basketGroup.position.set(0, -0.1, -0.1);
-        cartGroup.add(basketGroup);
+        if (isMobileDevice) {
+            // 1. Generate high-performance wireframe texture
+            const basketCanvas = document.createElement('canvas');
+            basketCanvas.width = 64; basketCanvas.height = 64;
+            const bCtx = basketCanvas.getContext('2d')!;
+            bCtx.strokeStyle = '#aaaaaa';
+            bCtx.lineWidth = 4;
+            bCtx.strokeRect(0, 0, 64, 64);
+            bCtx.lineWidth = 2;
+            bCtx.moveTo(0, 32); bCtx.lineTo(64, 32);
+            bCtx.moveTo(32, 0); bCtx.lineTo(32, 64);
+            bCtx.stroke();
+            const basketTex = new THREE.CanvasTexture(basketCanvas);
+            basketTex.repeat.set(8, 6);
+            basketTex.wrapS = basketTex.wrapT = THREE.RepeatWrapping;
 
-        // 3. Handle (Slimmed down for natural perspective)
-        const handleSupportL = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.4, 0.012), cartMetalMat);
-        handleSupportL.position.set(-0.25, 0.45, 0.35);
-        handleSupportL.rotation.x = 0.6;
-        const handleSupportR = handleSupportL.clone();
-        handleSupportR.position.x = 0.25;
-        cartGroup.add(handleSupportL, handleSupportR);
+            const mobileBasketMat = new THREE.MeshStandardMaterial({
+                map: basketTex,
+                transparent: true,
+                opacity: 0.8,
+                color: 0xffffff,
+                side: THREE.DoubleSide
+            });
 
-        const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 16), plasticHandleMat);
-        handleBar.rotation.z = Math.PI / 2;
-        handleBar.position.set(0, 0.6, 0.45);
-        cartGroup.add(handleBar);
+            // 2. Realistic Basket Shape for Mobile
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.9), mobileBasketMat);
+            body.position.set(0, 0.15, 0);
+            cartGroup.add(body);
+            body.add(basketContents);
 
-        // 4. Wheels
-        const wheelGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12);
-        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-        const wheelPositions = [[-0.2, -0.4, 0.15], [0.2, -0.4, 0.15], [-0.2, -0.4, -0.45], [0.2, -0.4, -0.45]];
-        wheelPositions.forEach(([wx, wy, wz]) => {
-            const w = new THREE.Mesh(wheelGeom, wheelMat);
-            w.rotation.z = Math.PI / 2;
-            w.position.set(wx, wy, wz);
-            cartGroup.add(w);
-        });
+            // 3. Modern Handlebar Frame
+            const hL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.02), cartMetalMat);
+            hL.position.set(-0.35, 0.35, 0.45); hL.rotation.x = 0.5;
+            const hR = hL.clone(); hR.position.x = 0.35;
+            cartGroup.add(hL, hR);
+
+            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.04, 0.04), plasticHandleMat);
+            handle.position.set(0, 0.5, 0.55);
+            cartGroup.add(handle);
+        } else {
+            // High-Poly Wireframe
+            const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.7), cartMetalMat);
+            frameBottom.position.set(0, -0.35, -0.1);
+            cartGroup.add(frameBottom);
+
+            const verticalBarGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.6);
+            const bars = [[-0.22, -0.05, 0.25], [0.22, -0.05, 0.25], [-0.22, -0.05, -0.45], [0.22, -0.05, -0.45]];
+            bars.forEach(([bx, by, bz]) => {
+                const bar = new THREE.Mesh(verticalBarGeom, cartMetalMat);
+                bar.position.set(bx, by, bz);
+                cartGroup.add(bar);
+            });
+
+            const basketGroup = new THREE.Group();
+            for (let h = 0; h <= 0.4; h += 0.08) {
+                const barF = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.02, 0.02), cartMetalMat);
+                const barB = barF.clone();
+                const barL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.75), cartMetalMat);
+                const barR = barL.clone();
+                barF.position.set(0, h, -0.375); barB.position.set(0, h, 0.375);
+                barL.position.set(-0.275, h, 0); barR.position.set(0.275, h, 0);
+                basketGroup.add(barF, barB, barL, barR);
+            }
+            const wireGeom = new THREE.BoxGeometry(0.01, 0.4, 0.01);
+            for (let x = -0.275; x <= 0.275; x += 0.05) {
+                const wF = new THREE.Mesh(wireGeom, cartMetalMat); wF.position.set(x, 0.2, -0.375);
+                const wB = wF.clone(); wB.position.z = 0.375;
+                basketGroup.add(wF, wB);
+            }
+            for (let z = -0.375; z <= 0.375; z += 0.05) {
+                const wL = new THREE.Mesh(wireGeom, cartMetalMat); wL.position.set(-0.275, 0.2, z);
+                const wR = wL.clone(); wR.position.x = 0.275;
+                basketGroup.add(wL, wR);
+            }
+            basketGroup.add(basketContents);
+            cartGroup.add(basketGroup);
+
+            const handleSupportL = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.4, 0.012), cartMetalMat);
+            handleSupportL.position.set(-0.25, 0.45, 0.35);
+            handleSupportL.rotation.x = 0.6;
+            const handleSupportR = handleSupportL.clone();
+            handleSupportR.position.x = 0.25;
+            cartGroup.add(handleSupportL, handleSupportR);
+
+            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.03, 0.03), plasticHandleMat);
+            handle.position.set(0, 0.52, 0.48);
+            cartGroup.add(handle);
+        }
 
         cartGroup.position.set(0, -0.85, -1.2); // Pushed further and lower for natural feel
         camera.add(cartGroup);
         scene.add(camera);
 
-        const keys: { [key: string]: boolean } = {};
+        const keys = keysRef.current;
         let targetRotationY = 0;
 
         const moveVec = new THREE.Vector3();
+        const forward = new THREE.Vector3();
+        const right = new THREE.Vector3();
         const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+        const cartHalfWidth = isMobileDevice ? 0.35 : 0.275;
+        const cartFrontExtent = isMobileDevice ? 0.45 : 0.375;
+        const cartFrontDistance = Math.abs(cartGroup.position.z) + cartFrontExtent;
+
+        const isCartBlockedAt = (x: number, z: number) => {
+            const frontX = x + forward.x * cartFrontDistance;
+            const frontZ = z + forward.z * cartFrontDistance;
+
+            if (isPointBlocked(frontX, frontZ)) {
+                return true;
+            }
+
+            const leftX = frontX + right.x * cartHalfWidth;
+            const leftZ = frontZ + right.z * cartHalfWidth;
+            if (isPointBlocked(leftX, leftZ)) {
+                return true;
+            }
+
+            const rightX = frontX - right.x * cartHalfWidth;
+            const rightZ = frontZ - right.z * cartHalfWidth;
+            if (isPointBlocked(rightX, rightZ)) {
+                return true;
+            }
+
+            return false;
+        };
 
         let animationId: number;
         let lastTime = performance.now();
@@ -1447,21 +1855,60 @@ export default function SupermarketSimulator() {
 
             // Movement logic
             moveVec.set(0, 0, 0);
+
+            // 1. Keyboard Movement
             if (keys['KeyW'] || keys['ArrowUp']) moveVec.z -= moveSpeed;
             if (keys['KeyS'] || keys['ArrowDown']) moveVec.z += moveSpeed;
 
-            // Rotation logic via Keyboard (A / D or Arrows) - replaces strafing
+            // 2. Joystick Movement (Mobile)
+            if (joystickRef.current.active) {
+                moveVec.z -= joystickRef.current.y * moveSpeed;
+                moveVec.x += joystickRef.current.x * moveSpeed;
+            }
+
+            // Rotation logic 
+            // 1. Keyboard Rotation (A / D or Arrows)
             if (keys['KeyA'] || keys['ArrowLeft']) targetRotationY += 0.03;
             if (keys['KeyD'] || keys['ArrowRight']) targetRotationY -= 0.03;
 
-            if (moveVec.lengthSq() > 0) {
-                moveVec.normalize().multiplyScalar(moveSpeed);
-                moveVec.applyAxisAngle(Y_AXIS, camera.rotation.y);
-                camera.position.add(moveVec);
+            // 2. Touch Look (Mobile)
+            if (touchLookRef.current.dx !== 0) {
+                targetRotationY -= touchLookRef.current.dx * 0.005;
+                touchLookRef.current.dx = 0; // Consumption
+            }
 
+            if (moveVec.lengthSq() > 0) {
+                // Limit speed if moving diagonally
+                if (moveVec.lengthSq() > moveSpeed * moveSpeed) {
+                    moveVec.normalize().multiplyScalar(moveSpeed);
+                }
+                moveVec.applyAxisAngle(Y_AXIS, camera.rotation.y);
+                forward.set(0, 0, -1).applyAxisAngle(Y_AXIS, camera.rotation.y);
+                right.set(1, 0, 0).applyAxisAngle(Y_AXIS, camera.rotation.y);
+                const nextX = camera.position.x + moveVec.x;
+                const nextZ = camera.position.z + moveVec.z;
+                let finalX = camera.position.x;
+                let finalZ = camera.position.z;
+
+                if (!isCartBlockedAt(nextX, nextZ)) {
+                    finalX = nextX;
+                    finalZ = nextZ;
+                } else {
+                    if (!isCartBlockedAt(nextX, camera.position.z)) {
+                        finalX = nextX;
+                    }
+                    if (!isCartBlockedAt(finalX, nextZ)) {
+                        finalZ = nextZ;
+                    }
+                }
+
+                const clampedX = Math.max(-28, Math.min(28, finalX));
+                const clampedZ = Math.max(-42, Math.min(55, finalZ));
+                if (!isCartBlockedAt(clampedX, clampedZ)) {
+                    camera.position.x = clampedX;
+                    camera.position.z = clampedZ;
+                }
                 camera.position.y = 1.6 + Math.sin(t * 0.01) * 0.03;
-                camera.position.x = Math.max(-28, Math.min(28, camera.position.x));
-                camera.position.z = Math.max(-42, Math.min(55, camera.position.z));
             } else {
                 camera.position.y = 1.6;
             }
@@ -1471,22 +1918,23 @@ export default function SupermarketSimulator() {
                 camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.15;
             }
 
-            // NPC Lively Animation
-            if (npcRef.current) {
-                const time = t * 0.001;
-                // Subtle breathing
-                npcRef.current.group.position.y = Math.sin(time * 2) * 0.01;
-                // Looking around
-                npcRef.current.head.rotation.y = Math.sin(time * 0.5) * 0.2;
-                npcRef.current.head.rotation.x = Math.sin(time * 0.8) * 0.1;
-                // Hand movement on POS
-                npcRef.current.rArm.rotation.x = -1.0 + Math.sin(time * 4) * 0.05;
-            }
 
             // Lock vertical look (Pitch) and reset cart position
             camera.rotation.x = 0;
             cartGroup.rotation.set(0, 0, 0);
             cartGroup.position.set(0, -0.85, -1.2);
+
+            // Handle Held Mesh Position (Drag & Drop Visual) - Follow Cursor
+            if (heldMeshRef.current) {
+                // Map [-1, 1] mouse range to a comfortable 'in-hand' 3D range
+                const dragPosX = mouse.x * 0.5;
+                const dragPosY = mouse.y * 0.4 - 0.1;
+                heldMeshRef.current.position.set(dragPosX, dragPosY, -0.6);
+
+                // Dynamic tilt for 'weighty' feel
+                heldMeshRef.current.rotation.set(0.2 - mouse.y * 0.2, -mouse.x * 0.3, 0);
+            }
+
 
             camera.rotation.order = 'YXZ';
             renderer.render(scene, camera);
@@ -1494,81 +1942,219 @@ export default function SupermarketSimulator() {
 
         animate();
 
-        const onKeyDown = (e: KeyboardEvent) => keys[e.code] = true;
-        const onKeyUp = (e: KeyboardEvent) => keys[e.code] = false;
+        const onKeyDown = (e: KeyboardEvent) => {
+            keysRef.current[e.code] = true;
+        };
+        const onKeyUp = (e: KeyboardEvent) => {
+            keysRef.current[e.code] = false;
+        };
 
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
 
         // Start game logic (replaces pointer lock)
-        const startGame = () => {
+        const startGame = (posX?: number, posZ?: number) => {
+            if (posX !== undefined && posZ !== undefined) {
+                camera.position.set(posX, 1.6, posZ);
+                // Face the center of the aisle 
+                camera.lookAt(0, 1.6, 0);
+                targetRotationY = camera.rotation.y;
+            }
             setIsLockedState(true);
+            renderer.domElement.focus();
         };
-        lockPointerRef.current = startGame;
+        lockPointerRef.current = (posX?: number, posZ?: number) => startGame(posX, posZ);
 
         // Click to start when overlay is visible
         const onCanvasClick = (e: MouseEvent) => {
-            if (!isLockedState && e.target === renderer.domElement) {
+            if (!stateRef.current.isLocked) {
                 startGame();
             }
         };
         renderer.domElement.addEventListener('click', onCanvasClick);
 
-        const onMouseMove = (e: MouseEvent) => {
+        const onMove = (clientX: number, clientY: number) => {
             // Update 2D cursor position
-            setMousePos({ x: e.clientX, y: e.clientY });
+            lastPointerRef.current = { x: clientX, y: clientY };
+            setMousePos({ x: clientX, y: clientY });
 
-            // Check for hover
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            if (!mountRef.current) return;
+            const rect = mountRef.current.getBoundingClientRect();
+
+            // Check for hover using container-relative coords
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(clickableProducts, false);
-            setIsHovering(intersects.length > 0);
+            const intersects = raycaster.intersectObjects(clickableObjs, false);
+            const intersect = intersects[0];
+            let nextHover: SimProduct | null = null;
+
+            if (intersect) {
+                const mesh = intersect.object as THREE.Mesh;
+                if (mesh instanceof THREE.InstancedMesh && intersect.instanceId !== undefined) {
+                    nextHover = (mesh as any).instanceMetadata?.[intersect.instanceId] || null;
+                } else if (mesh.userData?.clickable) {
+                    nextHover = mesh.userData as SimProduct;
+                }
+            }
+
+            const nextId = nextHover?.id || null;
+            if (hoverIdRef.current !== nextId) {
+                hoverIdRef.current = nextId;
+                setHoveredProduct(nextHover);
+            }
+
+            setIsHovering(Boolean(nextHover));
         };
+
+        const onMouseMove = (e: MouseEvent) => onMove(e.clientX, e.clientY);
+        const onTouchMove = (e: TouchEvent) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+
+                // 1. If holding product, handle drag 
+                if (heldProductRef.current) {
+                    e.preventDefault();
+                    onMove(touch.clientX, touch.clientY);
+                    return;
+                }
+
+                // 2. Otherwise, check for swipe-to-look
+                if (touchLookRef.current.dx === 0) { // Only if not currently processing
+                    const dx = touch.clientX - (touchLookRef.current as any).lastX || 0;
+                    touchLookRef.current.dx = dx;
+                }
+                (touchLookRef.current as any).lastX = touch.clientX;
+            }
+        };
+
         document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
 
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
 
-        const handleClick = (e: MouseEvent) => {
-            // Only handle clicks on the canvas
-            if (e.target !== renderer.domElement) return;
+        const onDown = (clientX: number, clientY: number) => {
+            // Generous check: if locked, we handle it
+            if (!stateRef.current.isLocked) return;
 
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            lastPointerRef.current = { x: clientX, y: clientY };
+            if (!mountRef.current) return;
+            const rect = mountRef.current.getBoundingClientRect();
+
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(clickableProducts, false);
+            const intersects = raycaster.intersectObjects(clickableObjs, false);
 
             if (intersects.length > 0) {
-                const mesh = intersects[0].object as THREE.Mesh;
-                if (mesh.userData.clickable && mesh.userData.price) {
-                    const p = mesh.userData;
-                    // Access current state via ref
-                    const { money: currentMoney, total: currentTotal } = stateRef.current;
+                const intersect = intersects[0];
+                const mesh = intersect.object as THREE.Mesh;
 
-                    if (currentTotal + p.price <= currentMoney) {
-                        setCart(c => [...c, p]);
-                        setTotal(t => t + p.price);
-                        setMessage(`+ ${p.name}`);
-                        setTimeout(() => setMessage(''), 1000);
-
-                        const oldMat = mesh.material;
-                        mesh.material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-                        setTimeout(() => mesh.material = oldMat, 150);
+                if (mesh.userData.clickable) {
+                    let p;
+                    // If it's an InstancedMesh, retrieve metadata by id
+                    if (mesh instanceof THREE.InstancedMesh && intersect.instanceId !== undefined) {
+                        p = (mesh as any).instanceMetadata[intersect.instanceId];
                     } else {
-                        setMessage("! رصيد غير كاف");
-                        setTimeout(() => setMessage(''), 1000);
+                        p = mesh.userData;
+                    }
+
+                    if (p && p.price) {
+                        heldProductRef.current = p;
+
+                        // Create a temporary visual for holding 
+                        // (Use original assets to create a single mesh)
+                        const visualGeom = mesh.geometry.clone();
+                        const visualMat = mesh.material;
+                        const visualClone = new THREE.Mesh(visualGeom, visualMat);
+                        visualClone.scale.set(0.3, 0.3, 0.3);
+                        camera.add(visualClone);
+                        heldMeshRef.current = visualClone;
+
+                        // Visual feedback (Brief flash on the instance?) 
+                        // Unfortunately InstancedMesh color updates are tricky, so we rely on the pickup animation
                     }
                 }
             }
-        }
-        window.addEventListener('mousedown', handleClick);
+        };
+
+        const handleMouseDown = (e: MouseEvent) => onDown(e.clientX, e.clientY);
+        const handleTouchStart = (e: TouchEvent) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                (touchLookRef.current as any).lastX = touch.clientX;
+                onDown(touch.clientX, touch.clientY);
+            }
+        };
+
+        const onUp = (clientX?: number, clientY?: number) => {
+            if (!heldProductRef.current) return;
+
+            const pointer = clientX !== undefined && clientY !== undefined
+                ? { x: clientX, y: clientY }
+                : lastPointerRef.current;
+            if (pointer && mountRef.current) {
+                const rect = mountRef.current.getBoundingClientRect();
+                mouse.x = ((pointer.x - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((pointer.y - rect.top) / rect.height) * 2 + 1;
+            }
+
+            const p = heldProductRef.current;
+            const { money: currentMoney, total: currentTotal } = stateRef.current;
+
+            // Manual Drop Check: Only add to cart if released over the lower half (Cart area)
+            // mouse.y range is [-1, 1], -1 is bottom. -0.2 and below is roughly the cart/bottom HUD area.
+            if (mouse.y < -0.2) {
+                if (currentTotal + p.price <= currentMoney) {
+                    addItem({
+                        id: p.id,
+                        name: p.name,
+                        price: p.price,
+                        category: p.category,
+                        image_url: p.image_url || null,
+                        store_id: p.store_id,
+                        store_name: p.store_name,
+                        description: p.description
+                    });
+                    setMessage(`+ ${p.name}`);
+                    setTimeout(() => setMessage(''), 1000);
+                    console.log("Product Dropped into Cart:", p.name);
+                } else {
+                    setMessage("! رصيد غير كاف");
+                    setTimeout(() => setMessage(''), 1000);
+                }
+            } else {
+                setMessage("تم الإلغاء");
+                setTimeout(() => setMessage(''), 800);
+                console.log("Product Return/Cancel Drop");
+            }
+
+            // Cleanup
+            if (heldMeshRef.current) {
+                camera.remove(heldMeshRef.current);
+                heldMeshRef.current = null;
+            }
+            heldProductRef.current = null;
+        };
+
+        const handleMouseUp = (e: MouseEvent) => onUp(e.clientX, e.clientY);
+        const handleTouchEnd = () => {
+            const last = lastPointerRef.current;
+            onUp(last?.x, last?.y);
+        };
+
+        renderer.domElement.addEventListener('mousedown', handleMouseDown);
+        renderer.domElement.addEventListener('touchstart', handleTouchStart, { passive: false });
+        window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('touchend', handleTouchEnd);
 
         const handleResize = () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            if (!mountRef.current) return;
+            const w = mountRef.current.clientWidth;
+            const h = mountRef.current.clientHeight;
+            camera.aspect = w / h;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(w, h);
         }
         window.addEventListener('resize', handleResize);
 
@@ -1576,27 +2162,39 @@ export default function SupermarketSimulator() {
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
-            window.removeEventListener('mousedown', handleClick);
+            window.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('touchstart', handleTouchStart);
+            window.removeEventListener('touchend', handleTouchEnd);
             renderer.domElement.removeEventListener('click', onCanvasClick);
             document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchmove', onTouchMove);
+            if (heldMeshRef.current) {
+                camera.remove(heldMeshRef.current);
+                heldMeshRef.current = null;
+            }
+            heldProductRef.current = null;
             cancelAnimationFrame(animationId);
             mountRef.current?.removeChild(renderer.domElement);
             renderer.dispose();
         }
-    }, []);
+    }, [catalogLoaded]);
 
     const handleCheckout = () => {
         if (total === 0) return;
         setMoney(m => m - total);
-        setCart([]);
-        setTotal(0);
+        clear();
         setShowCheckout(true);
     };
 
     const handleReset = () => {
-        setCart([]);
-        setTotal(0);
+        clear();
         setShowCheckout(false);
+    };
+
+    const handleRemoveItem = (id: string) => {
+        decrementItem(id);
     };
 
     // --- Sync 3D Cart Visualization ---
@@ -1609,34 +2207,52 @@ export default function SupermarketSimulator() {
             group.remove(group.children[0]);
         }
 
-        // Add visual products to 3D basket
-        cart.forEach((item, index) => {
-            // Simplified mini-mesh for performance
-            const geom = item.category === 'produce'
-                ? new THREE.SphereGeometry(0.08, 8, 8)
-                : new THREE.BoxGeometry(0.12, 0.15, 0.1);
+        let renderIndex = 0;
+        cartItems.forEach((item: any) => {
+            const count = item.quantity || 1;
+            for (let i = 0; i < count; i++) {
+                const geom = item.category === 'produce'
+                    ? new THREE.SphereGeometry(0.08, 8, 8)
+                    : new THREE.BoxGeometry(0.12, 0.15, 0.1);
 
-            const mat = new THREE.MeshStandardMaterial({
-                color: item.color || 0xffffff,
-                roughness: 0.5
-            });
+                const mat = new THREE.MeshStandardMaterial({
+                    color: hashToColor(item.id),
+                    roughness: 0.5
+                });
 
-            const mesh = new THREE.Mesh(geom, mat);
+                const mesh = new THREE.Mesh(geom, mat);
 
-            // Random-ish stacking inside the basket
-            const rx = (Math.random() - 0.5) * 0.4;
-            const ry = Math.floor(index / 4) * 0.15; // Stack upwards
-            const rz = (Math.random() - 0.5) * 0.6;
+                const rx = (Math.random() - 0.5) * 0.4;
+                const ry = Math.floor(renderIndex / 4) * 0.15;
+                const rz = (Math.random() - 0.5) * 0.6;
 
-            mesh.position.set(rx, ry, rz);
-            mesh.rotation.set(Math.random(), Math.random(), Math.random());
-            group.add(mesh);
+                mesh.position.set(rx, ry, rz);
+                mesh.rotation.set(Math.random(), Math.random(), Math.random());
+                group.add(mesh);
+                renderIndex += 1;
+            }
         });
-    }, [cart]);
+    }, [cartItems]);
 
     return (
-        <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#000' }}>
-            <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+        <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            background: '#000',
+            zIndex: 0
+        }}>
+            <div ref={mountRef} style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                zIndex: 1
+            }} />
 
             {/* FPS Counter */}
             <div style={{
@@ -1646,40 +2262,75 @@ export default function SupermarketSimulator() {
                 color: '#0f0',
                 fontFamily: 'monospace',
                 fontWeight: 'bold',
-                textShadow: '1px 1px 2px #000'
+                textShadow: '1px 1px 2px #000',
+                zIndex: 100
             }}>
                 FPS: {fps}
             </div>
 
-            {/* Management Dashboard Trigger */}
+            {/* Back to Site */}
             <div style={{
                 position: 'absolute',
-                bottom: 20,
-                right: 20,
-                zIndex: 50
+                top: 10,
+                left: 10,
+                zIndex: 100
             }}>
-                <button
-                    onClick={() => toggleDashboard(true)}
+                <Link
+                    href="/"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                     style={{
-                        background: '#4A90E2',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '12px',
-                        padding: '12px 20px',
-                        cursor: 'pointer',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '10px',
-                        fontWeight: 'bold',
-                        boxShadow: '0 4px 15px rgba(74, 144, 226, 0.4)',
-                        fontFamily: 'sans-serif',
-                        direction: 'rtl'
+                        gap: '8px',
+                        padding: '6px 12px',
+                        borderRadius: '999px',
+                        background: 'rgba(0,0,0,0.65)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
                     }}
                 >
-                    <LayoutGrid size={20} />
-                    لوحة الإدارة
-                </button>
+                    العودة للموقع
+                </Link>
             </div>
+
+            {/* Specialization Badge - Centered and Responsive */}
+            <div style={{
+                position: 'absolute',
+                top: 10,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(31, 71, 139, 0.95)',
+                padding: '6px 14px',
+                borderRadius: '30px',
+                border: '1px solid rgba(74, 144, 226, 0.6)',
+                color: 'white',
+                fontSize: 'clamp(10px, 2.5vw, 13px)', // Responsive font size
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                zIndex: 100,
+                fontFamily: 'sans-serif',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+                pointerEvents: 'none',
+                whiteSpace: 'nowrap',
+                maxWidth: '90vw',
+                overflow: 'hidden'
+            }}>
+                <span style={{ color: '#4A90E2', fontSize: '10px' }}>●</span>
+                <span style={{ display: 'flex', gap: '5px' }}>
+                    <span className="badge-desktop">SUPERMARKET SIMULATION |</span>
+                    <span>سوبرماركت فقط</span>
+                </span>
+            </div>
+
 
             {/* Dynamic 2D Cursor/Pointer */}
             <div style={{
@@ -1709,9 +2360,12 @@ export default function SupermarketSimulator() {
                 }} />
             </div>
 
-            {/* Hidden system cursor to use our custom one */}
+            {/* Responsive UI Styles */}
             <style>{`
                 canvas { cursor: none !important; }
+                @media (max-width: 600px) {
+                    .badge-desktop { display: none; }
+                }
             `}</style>
 
             {/* Message */}
@@ -1731,56 +2385,193 @@ export default function SupermarketSimulator() {
                 </div>
             )}
 
-            {/* Cart UI - Glassmorphism */}
-            <div style={{
-                position: 'absolute',
-                top: 20,
-                left: 20,
-                background: 'rgba(0,0,0,0.5)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                color: 'white',
-                padding: '20px',
-                borderRadius: '16px',
-                width: '320px',
-                direction: 'rtl',
-                fontFamily: 'sans-serif',
-                border: '1px solid rgba(255,255,255,0.1)',
-                boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
-            }}>
-                <h2 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #555', paddingBottom: '10px', color: '#e53935' }}>
-                    🛒 الكاشير
-                </h2>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '18px' }}>
-                    <span>الرصيد:</span>
-                    <span style={{ color: '#4caf50', fontWeight: 'bold' }}>${money.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontSize: '18px' }}>
-                    <span>المجموع:</span>
-                    <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>${total.toFixed(2)}</span>
-                </div>
-
-                <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', marginBottom: '15px' }}>
-                    {cart.map((item, i) => (
-                        <div key={i} style={{ fontSize: '14px', marginBottom: '5px', opacity: 0.9 }}>
-                            • {item.name} - ${item.price}
+            {hoveredProduct && isLockedState && (
+                <div style={{
+                    position: 'absolute',
+                    top: 80,
+                    right: 20,
+                    width: 300,
+                    background: 'rgba(0,0,0,0.75)',
+                    color: 'white',
+                    padding: '14px',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    zIndex: 120,
+                    direction: 'rtl',
+                    fontFamily: 'sans-serif'
+                }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <div style={{
+                            width: '72px',
+                            height: '72px',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            background: '#111',
+                            flexShrink: 0,
+                            border: '1px solid rgba(255,255,255,0.08)'
+                        }}>
+                            <img
+                                src={hoveredProduct.image_url || '/placeholder.svg'}
+                                alt={hoveredProduct.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
                         </div>
-                    ))}
-                    {cart.length === 0 && <div style={{ textAlign: 'center', opacity: 0.5 }}>السلة فارغة</div>}
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '15px', fontWeight: 'bold', lineHeight: '1.4' }}>
+                                {hoveredProduct.name}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#bdbdbd', marginTop: '4px' }}>
+                                {hoveredProduct.store_name || 'المتجر'}
+                            </div>
+                            <div style={{
+                                fontSize: '12px',
+                                color: '#9e9e9e',
+                                marginTop: '8px',
+                                lineHeight: '1.5',
+                                maxHeight: '3.6em',
+                                overflow: 'hidden'
+                            }}>
+                                {hoveredProduct.description || 'بدون وصف'}
+                            </div>
+                            <div style={{ marginTop: '10px', fontWeight: 'bold', color: '#ffeb3b' }}>
+                                ${hoveredProduct.price.toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            )}
 
-                <button onClick={handleCheckout} style={{
-                    width: '100%', padding: '12px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px'
-                }}>
-                    دفع الحساب
+            {/* Cart UI - Floating Button or Glassmorphism Card */}
+            {isCartMinimized ? (
+                // Floating Action Button (FAB)
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCartMinimized(false);
+                    }}
+                    style={{
+                        position: 'absolute',
+                        bottom: 25,
+                        right: 25, // Standard FAB position
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '50%',
+                        background: 'rgba(229, 57, 53, 0.95)',
+                        color: 'white',
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                        zIndex: 110,
+                        fontSize: '24px'
+                    }}
+                    title="فتح السلة"
+                >
+                    🛒
+                    {cartCount > 0 && (
+                        <span style={{
+                            position: 'absolute',
+                            top: -5,
+                            right: -5,
+                            background: '#4caf50',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 'bold',
+                            border: '2px solid #222'
+                        }}>
+                            {cartCount}
+                        </span>
+                    )}
                 </button>
-                <button onClick={handleReset} style={{
-                    width: '100%', padding: '8px', background: 'transparent', color: '#ef5350', border: '1px solid #ef5350', borderRadius: '6px', cursor: 'pointer', marginTop: '10px'
+            ) : (
+                // Full Cart Card
+                <div style={{
+                    position: 'absolute',
+                    top: 20,
+                    left: 20,
+                    background: 'rgba(0,0,0,0.85)',
+                    backdropFilter: 'blur(15px)',
+                    WebkitBackdropFilter: 'blur(15px)',
+                    color: 'white',
+                    padding: '20px',
+                    borderRadius: '20px',
+                    width: 'calc(100% - 40px)',
+                    maxWidth: '350px',
+                    direction: 'rtl',
+                    fontFamily: 'sans-serif',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    zIndex: 110
                 }}>
-                    إفراغ
-                </button>
-            </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
+                        <h2 style={{ margin: 0, color: '#e53935', fontSize: '22px' }}>🛒 السلة</h2>
+                        <button
+                            onClick={() => setIsCartMinimized(true)}
+                            style={{
+                                background: 'rgba(255,255,255,0.1)',
+                                border: 'none',
+                                color: 'white',
+                                borderRadius: '50%',
+                                width: '30px',
+                                height: '30px',
+                                cursor: 'pointer',
+                                fontSize: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontSize: '18px' }}>
+                        <span style={{ opacity: 0.8 }}>المجموع:</span>
+                        <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>${total.toFixed(2)}</span>
+                    </div>
+
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px', marginBottom: '20px' }}>
+                        {cartItems.map((item) => (
+                            <div key={item.id} style={{ fontSize: '14px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '6px', opacity: 0.9 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span>• {item.name}</span>
+                                    <span style={{ color: '#ffeb3b', fontSize: '12px' }}>${item.price}</span>
+                                    <span style={{ color: '#9e9e9e', fontSize: '12px' }}>x{item.quantity}</span>
+                                </div>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.id); }}
+                                    style={{ background: 'rgba(239, 83, 80, 0.2)', color: '#ef5350', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontSize: '12px' }}
+                                >
+                                    إرجاع
+                                </button>
+                            </div>
+                        ))}
+                        {cartItems.length === 0 && <div style={{ textAlign: 'center', opacity: 0.5, padding: '10px' }}>السلة فارغة</div>}
+                    </div>
+
+                    <button onClick={handleCheckout} style={{
+                        width: '100%', padding: '14px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)'
+                    }}>
+                        تأكيد ودفع الحساب
+                    </button>
+                    <button onClick={handleReset} style={{
+                        width: '100%', padding: '10px', background: 'transparent', color: '#ef5350', border: '1px solid rgba(239, 83, 80, 0.5)', borderRadius: '10px', cursor: 'pointer', marginTop: '12px', fontSize: '14px'
+                    }}>
+                        إفراغ السلة
+                    </button>
+                </div>
+            )}
 
             {showCheckout && (
                 <div style={{
@@ -1799,7 +2590,45 @@ export default function SupermarketSimulator() {
                 </div>
             )}
 
-            {/* Click to Play Overlay */}
+            {/* Mobile Navigation Arrows (Bottom Left) */}
+            {isMobile && isLockedState && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: 30,
+                    left: 20,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 50px)',
+                    gap: '10px',
+                    zIndex: 200,
+                    direction: 'ltr'
+                }}>
+                    <div />
+                    <button
+                        onTouchStart={(e) => { e.preventDefault(); joystickRef.current.active = true; joystickRef.current.y = 1; }}
+                        onTouchEnd={() => { joystickRef.current.active = false; joystickRef.current.y = 0; }}
+                        style={{ width: '50px', height: '50px', background: 'rgba(255,255,255,0.2)', border: '2px solid #fff', borderRadius: '8px', color: '#fff', fontSize: '20px' }}
+                    >▲</button>
+                    <div />
+
+                    <button
+                        onTouchStart={(e) => { e.preventDefault(); joystickRef.current.active = true; joystickRef.current.x = -1; }}
+                        onTouchEnd={() => { joystickRef.current.active = false; joystickRef.current.x = 0; }}
+                        style={{ width: '50px', height: '50px', background: 'rgba(255,255,255,0.2)', border: '2px solid #fff', borderRadius: '8px', color: '#fff', fontSize: '20px' }}
+                    >◀</button>
+                    <button
+                        onTouchStart={(e) => { e.preventDefault(); joystickRef.current.active = true; joystickRef.current.y = -1; }}
+                        onTouchEnd={() => { joystickRef.current.active = false; joystickRef.current.y = 0; }}
+                        style={{ width: '50px', height: '50px', background: 'rgba(255,255,255,0.2)', border: '2px solid #fff', borderRadius: '8px', color: '#fff', fontSize: '20px' }}
+                    >▼</button>
+                    <button
+                        onTouchStart={(e) => { e.preventDefault(); joystickRef.current.active = true; joystickRef.current.x = 1; }}
+                        onTouchEnd={() => { joystickRef.current.active = false; joystickRef.current.x = 0; }}
+                        style={{ width: '50px', height: '50px', background: 'rgba(255,255,255,0.2)', border: '2px solid #fff', borderRadius: '8px', color: '#fff', fontSize: '20px' }}
+                    >▶</button>
+                </div>
+            )}
+
+            {/* Click to Play / Teleport Overlay */}
             {!isLockedState && (
                 <div
                     onClick={() => {
@@ -1807,18 +2636,59 @@ export default function SupermarketSimulator() {
                     }}
                     style={{
                         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                        background: 'rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column',
+                        background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column',
                         alignItems: 'center', justifyContent: 'center', zIndex: 100,
-                        cursor: 'pointer', backdropFilter: 'blur(4px)'
+                        cursor: 'pointer', backdropFilter: 'blur(8px)'
                     }}
                 >
                     <div style={{
-                        background: 'rgba(255,255,255,0.1)', padding: '30px', borderRadius: '20px',
-                        border: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', color: 'white'
+                        background: 'rgba(255,255,255,0.1)', padding: '30px', borderRadius: '30px',
+                        border: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', color: 'white',
+                        maxWidth: '90vw', width: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
                     }}>
-                        <h2 style={{ margin: '0 0 10px 0' }}>اضغط للبدء</h2>
-                        <p style={{ margin: 0, fontSize: '14px', opacity: 0.8 }}>استخدم WASD أو الأسهم للحركة</p>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '14px', opacity: 0.8 }}>استخدم الماوس لاختيار المنتجات</p>
+                        <h2 style={{ margin: '0 0 10px 0', color: '#4A90E2' }}>أهلاً بك في المتجر الذكي</h2>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '14px', opacity: 0.8 }}>اختر قسماً للانتقال إليه فوراً، أو اضغط في أي مكان للبدء من المدخل:</p>
+
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, 1fr)',
+                            gap: '15px',
+                            marginTop: '10px'
+                        }}>
+                            {departments.map(dept => (
+                                <button
+                                    key={dept.id}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        lockPointerRef.current(dept.x, dept.z);
+                                    }}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        color: 'white',
+                                        padding: '15px 10px',
+                                        borderRadius: '16px',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'all 0.2s',
+                                        backdropFilter: 'blur(5px)'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(74, 144, 226, 0.2)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                >
+                                    <span style={{ fontSize: '28px' }}>{dept.icon}</span>
+                                    <span style={{ fontWeight: 'bold' }}>{dept.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div style={{ marginTop: '25px', fontSize: '12px', opacity: 0.6 }}>
+                            {isMobile ? 'استخدم عصا التحكم للحركة، واسحب في أي مكان للنظر' : 'استخدم WASD أو الأسهم للحركة، والماوس للنظر'}
+                        </div>
                     </div>
                 </div>
             )}

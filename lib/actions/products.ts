@@ -1,19 +1,20 @@
 "use server"
 
-import type { FirebaseFirestore } from "firebase-admin/firestore"
+import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "@/lib/firebase/admin"
+import { createAdminClient } from "@/lib/supabase/server"
 import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
 
 type ProductRecord = Record<string, any>
 type StoreRecord = Record<string, any>
 
-function mapProduct(doc: FirebaseFirestore.DocumentSnapshot) {
+function mapProduct(doc: DocumentSnapshot) {
   if (!doc.exists) return null
   return { id: doc.id, ...(doc.data() as ProductRecord) }
 }
 
-async function getStoreMap(db: FirebaseFirestore.Firestore, storeIds: string[]) {
+async function getStoreMap(db: Firestore, storeIds: string[]) {
   const uniqueIds = Array.from(new Set(storeIds.filter(Boolean)))
   if (uniqueIds.length === 0) {
     return new Map<string, StoreRecord>()
@@ -50,22 +51,23 @@ function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>)
 
 export async function getProducts(category?: string) {
   const db = getAdminDb()
-  let query: FirebaseFirestore.Query = db.collection("products")
+  let query: Query = db.collection("products")
 
   if (category) {
     query = query.where("category", "==", category)
   }
 
   const snapshot = await query.get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
-  products.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+
+  products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
 
   const storeMap = await getStoreMap(
     db,
-    products.map((product) => product.store_id).filter(Boolean),
+    products.map((product: any) => product.store_id).filter(Boolean),
   )
 
-  return products.map((product) => attachStore(product, storeMap))
+  return products.map((product: any) => attachStore(product, storeMap))
 }
 
 export async function getProduct(id: string) {
@@ -77,7 +79,7 @@ export async function getProduct(id: string) {
     return null
   }
 
-  const product = mapProduct(docSnap)
+  const product = mapProduct(docSnap) as any
   if (!product) return null
 
   const storeMap = await getStoreMap(db, [product.store_id])
@@ -176,9 +178,9 @@ export async function deleteProduct(id: string) {
 export async function getProductsByStoreId(storeId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
 
-  products.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+  products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
   return products
 }
 
@@ -201,7 +203,7 @@ export async function searchProducts(query: string) {
 export async function getRelatedProducts(productId: string, category: string, limit = 4) {
   const db = getAdminDb()
   const snapshot = await db.collection("products").where("category", "==", category).get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+  const products = snapshot.docs.map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
 
   const filtered = products
     .filter((product) => product.id !== productId)
@@ -214,4 +216,42 @@ export async function getRelatedProducts(productId: string, category: string, li
   )
 
   return filtered.map((product) => attachStore(product, storeMap))
+}
+
+export async function uploadProductImage(formData: FormData) {
+  const file = formData.get("file") as File
+  const storeId = formData.get("storeId") as string
+
+  if (!file || !storeId) {
+    return { success: false, error: "Missing file or store ID" }
+  }
+
+  try {
+    const supabase = await createAdminClient()
+    const fileExt = file.name.split(".").pop()
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
+    const filePath = `products/${storeId}/${fileName}`
+
+    console.log(`[v0] Attempting to upload to path: ${filePath}`)
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (error) {
+      console.error("[v0] Storage upload error details:", JSON.stringify(error, null, 2))
+      return { success: false, error: error.message }
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("product-images").getPublicUrl(data.path)
+
+    return { success: true, url: publicUrl }
+  } catch (error: any) {
+    console.error("[v0] Server upload error:", error)
+    return { success: false, error: error?.message || "Internal server error during upload" }
+  }
 }

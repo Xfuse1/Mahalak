@@ -11,8 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Package, UserIcon, MapPin, Loader2 } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2, Store } from "lucide-react"
+import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
+import { getStoreByUserId } from "@/lib/actions/stores"
 import { getCustomerOrders } from "@/lib/actions/orders"
 import { updateProfile } from "@/lib/actions/profile"
 
@@ -45,11 +47,15 @@ export default function AccountPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
+  const [hasStore, setHasStore] = useState(false)
+  const [checkingStore, setCheckingStore] = useState(true)
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/auth")
+      return
     }
+
     if (user?.role === "seller") {
       router.push("/seller/dashboard")
     }
@@ -75,6 +81,17 @@ export default function AccountPage() {
     }
 
     fetchOrders()
+
+    async function checkStore() {
+      if (user?.id) {
+        try {
+          const store = await getStoreByUserId(user.id)
+          if (store) setHasStore(true)
+        } catch (e) { }
+        finally { setCheckingStore(false) }
+      }
+    }
+    checkStore()
   }, [user?.id, t])
 
   if (isLoading || !user) {
@@ -123,6 +140,27 @@ export default function AccountPage() {
           </div>
 
           <h1 className="text-3xl font-bold mb-8">{t("حسابي", "My Account")}</h1>
+
+          {hasStore && (
+            <Card className="mb-8 border-amber-200 bg-amber-50">
+              <CardContent className="pt-6">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <Store className="h-6 w-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-amber-900">{t("أنت تملك متجراً مسجلاً", "You have a registered store")}</p>
+                      <p className="text-sm text-amber-700">{t("انتقل إلى لوحة التاجر لإدارة منتجاتك وطلباتك", "Go to the merchant dashboard to manage your products and orders")}</p>
+                    </div>
+                  </div>
+                  <Button asChild className="bg-amber-600 hover:bg-amber-700">
+                    <Link href="/seller/dashboard">{t("لوحة التاجر", "Seller Dashboard")}</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Tabs defaultValue="orders" className="w-full">
             <TabsList className="mb-6">

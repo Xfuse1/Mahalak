@@ -1,13 +1,15 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Box } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/lib/auth-context"
+import { Button } from "./ui/button"
+import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
-import { Logo } from "@/components/logo"
+import { Logo } from "./logo"
 import { useTranslation } from "react-i18next"
+import { cn } from "../lib/utils"
 
 export function SellerHeader() {
   const pathname = usePathname()
@@ -30,40 +32,49 @@ export function SellerHeader() {
   }
 
   return (
-    <aside className="w-64 bg-white border-l border-gray-200 min-h-screen flex flex-col">
-      <div className="p-6 border-b border-gray-200">
-        <Link href="/" className="block hover:opacity-90 transition-opacity">
-          <Logo className="h-10 w-auto" />
+    <aside className="w-72 bg-white border-l border-gray-100 min-h-screen flex flex-col shadow-[rgba(0,0,0,0.02)_1px_0_10px] z-50">
+      <div className="p-8 border-b border-gray-50 flex items-center justify-center">
+        <Link href="/" className="block hover:opacity-80 transition-all hover:scale-105 active:scale-95">
+          <Logo className="h-12 w-auto" />
         </Link>
       </div>
 
-      <nav className="flex-1 p-4">
-        <ul className="space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all border-2 ${isActive
-                    ? "bg-[#1F478B] text-white border-[#1F478B] shadow-md scale-[1.02]"
-                    : "text-gray-700 hover:bg-gray-100 hover:border-gray-300 border-transparent hover:scale-[1.02] active:bg-gray-200 active:scale-100"
-                    }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
+      <nav className="flex-1 p-6 space-y-1 overflow-y-auto custom-scrollbar">
+        <div className="pb-4">
+          <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">القائمة الرئيسية</p>
+          <ul className="space-y-2">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 relative group overflow-hidden",
+                      isActive
+                        ? "bg-[#1F478B] text-white shadow-xl shadow-blue-900/10 scale-102"
+                        : "text-gray-500 hover:bg-blue-50/50 hover:text-[#1F478B]"
+                    )}
+                  >
+                    {isActive && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-white opacity-20" />
+                    )}
+                    <Icon className={cn("h-5 w-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-white" : "text-gray-400 group-hover:text-[#1F478B]")} />
+                    <span className="font-black text-[14px]">{item.label}</span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       </nav>
 
-      <div className="p-4 border-t border-gray-200 space-y-2">
+      <div className="p-6 border-t border-gray-50 bg-gray-50/30 space-y-3">
+
         <Button
           variant="ghost"
-          className="w-full justify-start gap-3 text-[#1F478B] hover:text-[#1a3a70] hover:bg-blue-50 active:bg-blue-100 active:scale-95 transition-all border-2 border-transparent hover:border-blue-200 focus:border-blue-300 focus:bg-blue-50"
+          className="w-full justify-start gap-4 px-4 h-12 rounded-xl text-gray-500 hover:text-[#1F478B] hover:bg-blue-50/50 font-black text-sm transition-all"
           onClick={() => router.push("/")}
         >
           <Home className="h-5 w-5" />
@@ -71,7 +82,7 @@ export function SellerHeader() {
         </Button>
         <Button
           variant="ghost"
-          className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 active:scale-95 transition-all border-2 border-transparent hover:border-red-200 focus:border-red-300 focus:bg-red-50"
+          className="w-full justify-start gap-4 px-4 h-12 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 font-black text-sm transition-all"
           onClick={handleLogout}
         >
           <LogOut className="h-5 w-5" />

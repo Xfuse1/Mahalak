@@ -8,6 +8,7 @@ import { OrderStatusSelector } from "@/components/order-status-selector"
 import { getStoreByUserId } from "@/lib/actions/stores"
 import { getStoreOrders } from "@/lib/actions/orders"
 import { useAuth } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/language-context"
 
 type OrderItem = {
   id: string
@@ -41,6 +42,7 @@ type Order = {
 export default function SellerOrdersPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
 
@@ -84,11 +86,11 @@ export default function SellerOrdersPage() {
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
-      pending: "Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±",
-      processing: "Ù‚ÙŠØ¯ Ø§Ù„Ù…Ø¹Ø§Ù„Ø¬Ø©",
-      shipped: "ØªÙ… Ø§Ù„Ø´Ø­Ù†",
-      delivered: "ØªÙ… Ø§Ù„ØªÙˆØµÙŠÙ„",
-      cancelled: "Ù…Ù„ØºÙŠ",
+      pending: t("قيد الانتظار", "Pending"),
+      processing: t("قيد المعالجة", "Processing"),
+      shipped: t("تم الشحن", "Shipped"),
+      delivered: t("تم التوصيل", "Delivered"),
+      cancelled: t("ملغي", "Cancelled"),
     }
     return statusMap[status] || status
   }
@@ -106,7 +108,7 @@ export default function SellerOrdersPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString("ar-EG", {
+    return date.toLocaleDateString(t("ar-EG", "en-US"), {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -119,7 +121,7 @@ export default function SellerOrdersPage() {
         <SellerHeader />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
-            <p className="text-center text-gray-500">Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­Ù…ÙŠÙ„...</p>
+            <p className="text-center text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
           </div>
         </main>
       </div>
@@ -132,16 +134,16 @@ export default function SellerOrdersPage() {
 
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-8">Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø·Ù„Ø¨Ø§Øª</h1>
+          <h1 className="text-3xl font-bold mb-8">{t("إدارة الطلبات", "Order Management")}</h1>
 
           <Card>
             <CardHeader>
-              <CardTitle>Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø·Ù„Ø¨Ø§Øª</CardTitle>
-              <CardDescription>Ø¥Ø¯Ø§Ø±Ø© ÙˆÙ…ØªØ§Ø¨Ø¹Ø© Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡</CardDescription>
+              <CardTitle>{t("جميع الطلبات", "All Orders")}</CardTitle>
+              <CardDescription>{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</CardDescription>
             </CardHeader>
             <CardContent>
               {orders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">Ù„Ø§ ØªÙˆØ¬Ø¯ Ø·Ù„Ø¨Ø§Øª Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†</div>
+                <div className="text-center py-8 text-gray-500">{t("لا توجد طلبات حتى الآن", "No orders yet")}</div>
               ) : (
                 <div className="space-y-3">
                   {orders.map((order) => (
@@ -151,8 +153,8 @@ export default function SellerOrdersPage() {
                           <div>
                             <p className="font-semibold text-lg">#{order.id.slice(0, 8)}</p>
                             <p className="text-sm text-gray-600">
-                              {order.profiles?.full_name || order.profiles?.email || "Ø¹Ù…ÙŠÙ„ ØºÙŠØ± Ù…Ø¹Ø±ÙˆÙ"} â€¢{" "}
-                              {order.order_items.length} Ù…Ù†ØªØ¬
+                              {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
+                              {order.order_items.length} {t("منتج", "product")}
                             </p>
                           </div>
                         </div>
@@ -163,7 +165,7 @@ export default function SellerOrdersPage() {
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
                         <div className="flex items-center gap-4">
-                          <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} Ø¬Ù†ÙŠÙ‡</p>
+                          <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} {t("جنيه", "EGP")}</p>
                           <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
                         </div>
                       </div>

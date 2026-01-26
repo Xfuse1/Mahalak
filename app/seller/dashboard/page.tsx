@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
-import { useLanguage } from "@/lib/language-context"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { SellerHeader } from "../../../components/seller-header"
+import { useAuth } from "../../../lib/auth-context"
+import { useLanguage } from "../../../lib/language-context"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Button } from "../../../components/ui/button"
 import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus } from "lucide-react"
 import Link from "next/link"
-import { getStoreByUserId } from "@/lib/actions/stores"
-import { getDashboardAnalytics, getRecentOrders } from "@/lib/actions/dashboard"
+import { getStoreByUserId } from "../../../lib/actions/stores"
+import { getDashboardAnalytics, getRecentOrders } from "../../../lib/actions/dashboard"
 
 export default function SellerDashboard() {
   const { user, isLoading } = useAuth()
@@ -32,12 +32,24 @@ export default function SellerDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return
+
+    if (!user) {
       router.push("/auth?role=seller")
+      return
     }
-    if (user?.role !== "seller") {
-      router.push("/")
+
+    async function verifySellerAccess() {
+      if (user?.role === "seller") return
+
+      // Fallback: Check if they have a store
+      const store = await getStoreByUserId(user!.id)
+      if (!store) {
+        router.push("/")
+      }
     }
+
+    verifySellerAccess()
   }, [user, isLoading, router])
 
   useEffect(() => {

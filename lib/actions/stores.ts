@@ -1,29 +1,29 @@
 "use server"
 
-import type { FirebaseFirestore } from "firebase-admin/firestore"
+import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "@/lib/firebase/admin"
 import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
-function mapStore(doc: FirebaseFirestore.DocumentSnapshot) {
+function mapStore(doc: DocumentSnapshot) {
   if (!doc.exists) return null
   return { id: doc.id, ...(doc.data() as StoreRecord) }
 }
 
 export async function getStores(category?: string) {
   const db = getAdminDb()
-  let query: FirebaseFirestore.Query = db.collection("stores")
+  let query: Query = db.collection("stores")
 
   if (category) {
     query = query.where("category", "==", category)
   }
 
   const snapshot = await query.get()
-  const stores = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as StoreRecord) }))
+  const stores = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
 
-  stores.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+  stores.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
   return stores
 }
 

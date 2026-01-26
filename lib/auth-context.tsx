@@ -97,32 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           address: profile.address ?? undefined,
         })
       } else {
-        const fallbackEmail = currentUser.email || ""
-        const fallbackName = currentUser.displayName || (fallbackEmail ? fallbackEmail.split("@")[0] : "")
-        const now = new Date().toISOString()
-
-        const profileData = {
-          email: fallbackEmail,
-          full_name: fallbackName,
-          role: "customer",
-          phone: null,
-          street: null,
-          city: null,
-          state: null,
-          country: null,
-          address: null,
-          created_at: now,
-          updated_at: now,
-        }
-
-        await setDoc(profileRef, profileData)
-
-        setUser({
-          id: currentUser.uid,
-          email: profileData.email,
-          name: profileData.full_name || profileData.email.split("@")[0],
-          role: "customer",
-        })
+        console.warn("[v0] No profile found for user:", currentUser.uid)
+        // Set loading to false but keep user null until profile is created by registration process
       }
     } catch (error) {
       console.error("[v0] Error loading user profile:", error)

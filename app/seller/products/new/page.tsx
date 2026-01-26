@@ -14,8 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { categories } from "@/lib/mock-data"
 import { Upload } from "lucide-react"
 import Image from "next/image"
-import { createClient } from "@/lib/supabase/client"
-import { createProduct } from "@/lib/actions/products"
+import { createProduct, uploadProductImage } from "@/lib/actions/products"
 import { getStoreByUserId } from "@/lib/actions/stores"
 
 export default function NewProductPage() {
@@ -46,7 +45,6 @@ export default function NewProductPage() {
 
     try {
       const formData = new FormData(e.currentTarget)
-      const supabase = createClient()
 
       // Get seller's store
       const store = await getStoreByUserId(user.id)
@@ -56,33 +54,21 @@ export default function NewProductPage() {
 
       let imageUrl = ""
 
-      // Upload image to Supabase storage if provided
+      // Upload image via server action if provided (bypasses RLS issues)
       if (imageFile) {
-        const fileExt = imageFile.name.split(".").pop()
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
-        const filePath = `products/${store.id}/${fileName}`
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", imageFile)
+        uploadFormData.append("storeId", store.id)
 
-        console.log("[v0] Uploading image to storage:")
+        console.log("[v0] Uploading image via server action:")
+        const uploadResult = await uploadProductImage(uploadFormData)
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("product-images")
-          .upload(filePath, imageFile, {
-            cacheControl: "3600",
-            upsert: false,
-          })
-
-        if (uploadError) {
-          console.error("[v0] Error uploading image:", uploadError)
-          throw new Error("فشل رفع الصورة: " + uploadError.message)
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || "فشل رفع الصورة")
         }
 
-        // Get public URL for the uploaded image
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("product-images").getPublicUrl(uploadData.path)
-
-        imageUrl = publicUrl
-        console.log("[v0] Image uploaded successfully:")
+        imageUrl = uploadResult.url!
+        console.log("[v0] Image uploaded successfully via server:")
       }
 
       // Create product in database
@@ -180,7 +166,7 @@ export default function NewProductPage() {
                       <SelectValue placeholder="اختر الفئة" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((category) => (
+                      {categories.map((category: string) => (
                         <SelectItem key={category} value={category}>
                           {category}
                         </SelectItem>

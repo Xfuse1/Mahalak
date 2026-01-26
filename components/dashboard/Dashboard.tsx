@@ -9,8 +9,10 @@ import ProductLibrary from './ProductLibrary';
 import { Button } from '@/components/ui/button';
 import { X, Search, Package, LayoutGrid } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useLanguage } from '@/lib/language-context';
 
 export default function Dashboard() {
+    const { t } = useLanguage();
     const {
         selectedSectionId,
         isDashboardOpen,
@@ -27,7 +29,17 @@ export default function Dashboard() {
                     <div className="bg-[#4A90E2] p-2 rounded-lg">
                         <LayoutGrid className="text-white w-6 h-6" />
                     </div>
-                    <h1 className="text-xl font-bold text-white">لوحة التحكم في السوبرماركت</h1>
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-lg font-bold text-white leading-none">{t("لوحة التحكم في المحاكي", "Simulator Control Panel")}</h1>
+                            <span className="bg-[#4A90E2]/20 text-[#4A90E2] text-[10px] px-2 py-0.5 rounded-full font-bold border border-[#4A90E2]/30 uppercase tracking-tighter">
+                                {t("سوبرماركت فقط", "SUPERMARKET ONLY")}
+                            </span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 font-medium mt-1">
+                            {t("قوالب المتاجر الأخرى قريباً", "Other store templates coming soon")}
+                        </p>
+                    </div>
                 </div>
 
                 <div className="flex-1 max-w-md mx-8">

@@ -1,60 +1,57 @@
 "use client";
 
 import React from 'react';
-import { useProductStore } from '@/lib/stores/product-store';
-import { sections } from '@/lib/mock/supermarket-data';
-import { cn } from '@/lib/utils';
-import { ChevronLeft } from 'lucide-react';
+import { useProductStore } from '../../lib/stores/product-store';
+import { sections } from '../../lib/mock/supermarket-data';
+import { cn } from '../../lib/utils';
+import { Shelf, Placement, SectionInfo } from '../../lib/types/product-management';
 
 export default function SectionsPanel() {
-    const { selectedSectionId, setSelectedSection } = useProductStore();
+    const { shelves, placements, selectedSectionId, setSelectedSection } = useProductStore();
+
+    const getProductCountForSection = (sectionId: string) => {
+        return placements.filter((p: Placement) => {
+            const shelf = shelves.find((s: Shelf) => s.shelfId === p.shelfId);
+            return shelf?.sectionEN === sectionId;
+        }).length;
+    };
 
     return (
-        <div className="flex flex-col h-full bg-white">
-            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">الأقسام الرئيسية</h2>
-            </div>
+        <div className="flex flex-col space-y-2">
+            {sections.map((section: SectionInfo) => {
+                const isActive = selectedSectionId === section.id;
+                const productCount = getProductCountForSection(section.id);
+                const sectionShelves = shelves.filter((s: Shelf) => s.sectionEN === section.id);
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {sections.map((section) => (
+                return (
                     <button
                         key={section.id}
                         onClick={() => setSelectedSection(section.id)}
                         className={cn(
-                            "w-full flex items-center justify-between p-4 transition-all border-b border-gray-50",
-                            "hover:bg-gray-50 active:bg-gray-100 text-right group",
-                            selectedSectionId === section.id
-                                ? "bg-blue-50/50 border-r-4 border-[#1F478B]"
-                                : "bg-transparent"
+                            "w-full flex items-center gap-3 p-4 rounded-xl transition-all text-right",
+                            isActive
+                                ? "bg-[#1F478B] text-white shadow-lg"
+                                : "hover:bg-gray-50 text-gray-600"
                         )}
                     >
-                        <div className="flex items-center gap-4">
-                            <div
-                                className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm border border-gray-100 bg-white"
-                                style={{ color: section.color }}
-                            >
-                                {section.icon}
-                            </div>
-                            <div>
-                                <div className={cn(
-                                    "font-bold text-sm",
-                                    selectedSectionId === section.id ? "text-[#1F478B]" : "text-gray-700"
-                                )}>
-                                    {section.nameAR}
-                                </div>
-                                <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
-                                    {section.nameEN}
-                                </div>
+                        <div className={cn(
+                            "w-10 h-10 rounded-lg flex items-center justify-center text-xl",
+                            isActive ? "bg-white/20" : "bg-gray-100"
+                        )}>
+                            {section.icon}
+                        </div>
+                        <div className="flex-1">
+                            <div className="font-bold text-sm">{section.nameAR}</div>
+                            <div className={cn(
+                                "text-[10px]",
+                                isActive ? "text-blue-100" : "text-gray-400"
+                            )}>
+                                {sectionShelves.length} رف | {productCount} منتج
                             </div>
                         </div>
-
-                        <ChevronLeft className={cn(
-                            "w-4 h-4 transition-transform",
-                            selectedSectionId === section.id ? "text-[#1F478B] translate-x-1" : "text-gray-300 group-hover:text-gray-400"
-                        )} />
                     </button>
-                ))}
-            </div>
+                );
+            })}
         </div>
     );
 }

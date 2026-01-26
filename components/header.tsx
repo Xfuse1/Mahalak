@@ -27,11 +27,11 @@ export function Header() {
             {/* 3D Supermarket Link */}
             <Button
               variant="ghost"
-              className="hidden md:flex items-center gap-2 text-white hover:bg-white/20 mr-2"
+              className="flex items-center gap-1 md:gap-2 text-white hover:bg-white/20"
               onClick={() => router.push("/supermarket")}
             >
               <Cuboid className="h-5 w-5" />
-              <span className="font-bold">3D Market</span>
+              <span className="font-bold hidden md:inline">3D Market</span>
             </Button>
 
             <LanguageSwitcher />

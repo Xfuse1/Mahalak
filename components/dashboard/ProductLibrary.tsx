@@ -8,13 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Search, Plus, Package } from 'lucide-react';
 import { useLanguage } from '@/lib/language-context';
+import { useRouter } from 'next/navigation';
 
 export default function ProductLibrary() {
-    const { products } = useProductStore();
+    const { products, selectedShelfId, addProductToShelf } = useProductStore();
     const { t } = useLanguage();
+    const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
-    const filteredProducts = products.filter(p =>
+    const filteredProducts = products.filter((p: any) =>
         p.nameAR.includes(searchTerm) ||
         p.nameEN.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -28,14 +30,14 @@ export default function ProductLibrary() {
                     <Input
                         placeholder="بحث عن منتج..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e: any) => setSearchTerm(e.target.value)}
                         className="bg-white border-gray-200 pr-10 focus:border-[#1F478B] h-9 text-sm shadow-sm"
                     />
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-white">
-                {filteredProducts.map((product) => (
+                {filteredProducts.map((product: any) => (
                     <div
                         key={product.id}
                         className="p-3 bg-white border border-gray-100 rounded-xl hover:border-[#1F478B]/30 hover:shadow-sm transition-all flex items-center justify-between group"
@@ -45,7 +47,11 @@ export default function ProductLibrary() {
                                 className="w-10 h-10 rounded-lg flex items-center justify-center border border-gray-100 overflow-hidden shadow-inner bg-gray-50"
                                 style={{ backgroundColor: `${product.color}15` }}
                             >
-                                <Package className="w-5 h-5" style={{ color: product.color }} />
+                                {product.textureURL ? (
+                                    <img src={product.textureURL} alt={product.nameAR} className="w-full h-full object-cover" />
+                                ) : (
+                                    <Package className="w-5 h-5" style={{ color: product.color }} />
+                                )}
                             </div>
                             <div>
                                 <div className="text-sm font-bold text-gray-800">{product.nameAR}</div>
@@ -56,7 +62,13 @@ export default function ProductLibrary() {
                             </div>
                         </div>
 
-                        <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity bg-gray-50 hover:bg-[#1F478B] hover:text-white rounded-full w-8 h-8 shadow-sm">
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => selectedShelfId && addProductToShelf(selectedShelfId, product.id)}
+                            className={`transition-all bg-gray-50 hover:bg-[#1F478B] hover:text-white rounded-full w-8 h-8 shadow-sm ${!selectedShelfId ? 'opacity-20 cursor-not-allowed' : 'opacity-0 group-hover:opacity-100'}`}
+                            disabled={!selectedShelfId}
+                        >
                             <Plus className="w-4 h-4" />
                         </Button>
                     </div>
@@ -71,7 +83,10 @@ export default function ProductLibrary() {
             </div>
 
             <div className="p-4 bg-gray-50/50 border-t border-gray-100">
-                <Button className="w-full bg-white border border-gray-200 hover:bg-[#1F478B] hover:text-white text-gray-700 text-xs h-10 shadow-sm font-semibold transition-all">
+                <Button
+                    className="w-full bg-white border border-gray-200 hover:bg-[#1F478B] hover:text-white text-gray-700 text-xs h-10 shadow-sm font-semibold transition-all"
+                    onClick={() => router.push('/seller/products/new')}
+                >
                     إضافة منتج جديد للمكتبة
                 </Button>
             </div>
