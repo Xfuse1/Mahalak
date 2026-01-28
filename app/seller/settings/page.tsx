@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getStoreByUserId, updateStore } from "@/lib/actions/stores"
+import { getStoreByUserId, updateStore, createStore } from "@/lib/actions/stores"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { Upload } from "lucide-react"
@@ -26,7 +26,21 @@ export default function SettingsPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
-  const [category, setCategory] = useState<string>("خدمات أخرى")
+
+  // Controlled form state
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    category: "خدمات أخرى",
+    address: "",
+    phone: "",
+    open_time: "09:00",
+    close_time: "22:00",
+    working_days: "السبت - الخميس",
+    support_email: "",
+    whatsapp_number: "",
+    return_policy: "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"
+  })
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -48,9 +62,19 @@ export default function SettingsPage() {
         if (storeData.image_url) {
           setImagePreview(storeData.image_url)
         }
-        if (storeData.category) {
-          setCategory(storeData.category)
-        }
+        setFormData({
+          name: storeData.name || "",
+          description: storeData.description || "",
+          category: storeData.category || "خدمات أخرى",
+          address: storeData.address || "",
+          phone: storeData.phone || "",
+          open_time: storeData.open_time || "09:00",
+          close_time: storeData.close_time || "22:00",
+          working_days: storeData.working_days || "السبت - الخميس",
+          support_email: storeData.support_email || "",
+          whatsapp_number: storeData.whatsapp_number || "",
+          return_policy: storeData.return_policy || "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"
+        })
       }
       setIsLoadingStore(false)
     }
@@ -76,29 +100,26 @@ export default function SettingsPage() {
     return null
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!store?.id) return
 
-    const form = e.currentTarget
-    const formElements = form.elements as any
-
-    const formValues = {
-      storeName: formElements.storeName.value,
-      storeDescription: formElements.storeDescription.value,
-      storeAddress: formElements.storeAddress.value,
-      storePhone: formElements.storePhone.value,
-      openTime: formElements.openTime.value,
-      closeTime: formElements.closeTime.value,
-      workingDays: formElements.workingDays.value,
-      supportEmail: formElements.supportEmail.value,
-      whatsappNumber: formElements.whatsappNumber.value,
-      returnPolicy: formElements.returnPolicy.value,
+    if (!user?.id) {
+      alert("لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.")
+      return
     }
 
     setIsSaving(true)
 
-    let imageUrl = store.image_url
+    let imageUrl = store?.image_url || ""
 
     if (imageFile) {
       setIsUploadingImage(true)
@@ -106,16 +127,12 @@ export default function SettingsPage() {
         const supabase = createClient()
         const fileExt = imageFile.name.split(".").pop()
         const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
-        const filePath = `stores/${store.id}/${fileName}`
+        const filePath = `stores/${store?.id || user.id}/${fileName}`
 
         const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, imageFile)
 
         if (uploadError) {
-          console.error("Error uploading image:", uploadError)
-          alert("فشل رفع الصورة: " + uploadError.message)
-          setIsSaving(false)
-          setIsUploadingImage(false)
-          return
+          throw new Error(uploadError.message)
         }
 
         const {
@@ -123,9 +140,9 @@ export default function SettingsPage() {
         } = supabase.storage.from("product-images").getPublicUrl(filePath)
 
         imageUrl = publicUrl
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error uploading image:", error)
-        alert("فشل رفع الصورة")
+        alert("فشل رفع الصورة: " + (error.message || "Unknown error"))
         setIsSaving(false)
         setIsUploadingImage(false)
         return
@@ -134,21 +151,20 @@ export default function SettingsPage() {
     }
 
     const updateData = {
-      name: formValues.storeName,
-      description: formValues.storeDescription,
-      category: category,
-      address: formValues.storeAddress,
-      phone: formValues.storePhone,
-      open_time: formValues.openTime,
-      close_time: formValues.closeTime,
-      working_days: formValues.workingDays,
-      support_email: formValues.supportEmail,
-      whatsapp_number: formValues.whatsappNumber,
-      return_policy: formValues.returnPolicy,
+      ...formData,
       image_url: imageUrl,
     }
 
-    const result = await updateStore(store.id, updateData)
+    let result
+    if (store?.id) {
+      result = await updateStore(store.id, updateData)
+    } else {
+      // Create new store if missing
+      result = await createStore({
+        seller_id: user.id,
+        ...updateData,
+      } as any)
+    }
 
     setIsSaving(false)
 
@@ -156,6 +172,7 @@ export default function SettingsPage() {
       setStore(result.data)
       setImageFile(null)
       alert("تم حفظ الإعدادات بنجاح")
+      window.location.reload() // Force reload to ensure data is fresh
     } else {
       alert("حدث خطأ أثناء حفظ الإعدادات: " + result.error)
     }
@@ -215,41 +232,37 @@ export default function SettingsPage() {
 
                 <div>
                   <Label htmlFor="storeName">اسم المتجر</Label>
-                  <Input id="storeName" name="storeName" defaultValue={store?.name || ""} required />
+                  <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required />
                 </div>
                 <div>
                   <Label htmlFor="storeDescription">وصف المتجر</Label>
                   <Textarea
                     id="storeDescription"
-                    name="storeDescription"
-                    defaultValue={store?.description || ""}
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
                     rows={4}
                   />
                 </div>
                 <div>
                   <Label htmlFor="storeCategory">فئة المتجر</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger id="storeCategory">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="بقالة">بقالة</SelectItem>
-                      <SelectItem value="صحة">صحة</SelectItem>
-                      <SelectItem value="ملابس">ملابس</SelectItem>
-                      <SelectItem value="إلكترونيات">إلكترونيات</SelectItem>
-                      <SelectItem value="أغذية">أغذية</SelectItem>
-                      <SelectItem value="أثاث">أثاث</SelectItem>
-                      <SelectItem value="خدمات أخرى">خدمات أخرى</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Input
+                      id="storeCategory"
+                      value={formData.category}
+                      disabled
+                      className="bg-gray-100 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">لا يمكن تغيير فئة المتجر بعد الإنشاء</p>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="storeAddress">العنوان</Label>
-                  <Input id="storeAddress" name="storeAddress" defaultValue={store?.address || ""} required />
+                  <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required />
                 </div>
                 <div>
                   <Label htmlFor="storePhone">رقم الهاتف</Label>
-                  <Input id="storePhone" name="storePhone" type="tel" defaultValue={store?.phone || ""} required />
+                  <Input id="storePhone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} required />
                 </div>
               </CardContent>
             </Card>
@@ -266,9 +279,10 @@ export default function SettingsPage() {
                     <Label htmlFor="openTime">وقت الفتح</Label>
                     <Input
                       id="openTime"
-                      name="openTime"
+                      name="open_time"
                       type="time"
-                      defaultValue={store?.open_time || "09:00"}
+                      value={formData.open_time}
+                      onChange={handleInputChange}
                       required
                     />
                   </div>
@@ -276,9 +290,10 @@ export default function SettingsPage() {
                     <Label htmlFor="closeTime">وقت الإغلاق</Label>
                     <Input
                       id="closeTime"
-                      name="closeTime"
+                      name="close_time"
                       type="time"
-                      defaultValue={store?.close_time || "22:00"}
+                      value={formData.close_time}
+                      onChange={handleInputChange}
                       required
                     />
                   </div>
@@ -287,8 +302,9 @@ export default function SettingsPage() {
                   <Label htmlFor="workingDays">أيام العمل</Label>
                   <Input
                     id="workingDays"
-                    name="workingDays"
-                    defaultValue={store?.working_days || "السبت - الخميس"}
+                    name="working_days"
+                    value={formData.working_days}
+                    onChange={handleInputChange}
                     required
                   />
                 </div>
@@ -306,9 +322,10 @@ export default function SettingsPage() {
                   <Label htmlFor="supportEmail">البريد الإلكتروني للدعم</Label>
                   <Input
                     id="supportEmail"
-                    name="supportEmail"
+                    name="support_email"
                     type="email"
-                    defaultValue={store?.support_email || ""}
+                    value={formData.support_email}
+                    onChange={handleInputChange}
                     required
                   />
                 </div>
@@ -316,9 +333,10 @@ export default function SettingsPage() {
                   <Label htmlFor="whatsappNumber">رقم واتساب</Label>
                   <Input
                     id="whatsappNumber"
-                    name="whatsappNumber"
+                    name="whatsapp_number"
                     type="tel"
-                    defaultValue={store?.whatsapp_number || store?.phone || ""}
+                    value={formData.whatsapp_number}
+                    onChange={handleInputChange}
                     required
                   />
                 </div>
@@ -326,8 +344,9 @@ export default function SettingsPage() {
                   <Label htmlFor="returnPolicy">سياسة الإرجاع</Label>
                   <Textarea
                     id="returnPolicy"
-                    name="returnPolicy"
-                    defaultValue={store?.return_policy || "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"}
+                    name="return_policy"
+                    value={formData.return_policy}
+                    onChange={handleInputChange}
                     rows={3}
                   />
                 </div>

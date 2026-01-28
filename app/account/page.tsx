@@ -2,21 +2,23 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { BackButton } from "@/components/back-button"
-import { useAuth } from "@/lib/auth-context"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store } from "lucide-react"
+import { Header } from "../../components/header"
+import { Footer } from "../../components/footer"
+import { BackButton } from "../../components/back-button"
+import { useAuth } from "../../lib/auth-context"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { Button } from "../../components/ui/button"
+import { Input } from "../../components/ui/input"
+import { Label } from "../../components/ui/label"
+import { Package, UserIcon, MapPin, Loader2, Store, Eye } from "lucide-react"
 import Link from "next/link"
-import { useLanguage } from "@/lib/language-context"
-import { getStoreByUserId } from "@/lib/actions/stores"
-import { getCustomerOrders } from "@/lib/actions/orders"
-import { updateProfile } from "@/lib/actions/profile"
+import { useLanguage } from "../../lib/language-context"
+import { getStoreByUserId } from "../../lib/actions/stores"
+import { getCustomerOrders } from "../../lib/actions/orders"
+import { updateProfile } from "../../lib/actions/profile"
+import { OrderTrackingModal } from "../../components/order-tracking-modal"
+import type { TimelineEntry } from "../../components/order-tracking-timeline"
 
 type Order = {
   id: string
@@ -24,6 +26,7 @@ type Order = {
   total: number
   status: string
   delivery_address: string
+  timeline?: TimelineEntry[]
   order_items: {
     id: string
     quantity: number
@@ -49,6 +52,8 @@ export default function AccountPage() {
   const [ordersError, setOrdersError] = useState<string | null>(null)
   const [hasStore, setHasStore] = useState(false)
   const [checkingStore, setCheckingStore] = useState(true)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -227,10 +232,24 @@ export default function AccountPage() {
                                 </p>
                               )}
                             </div>
-                            <div className="text-left">
-                              <p className="text-xl font-bold text-[#1F478B]">
-                                {Number(order.total).toFixed(2)} {t("جنيه", "EGP")}
-                              </p>
+                            <div className="flex items-center gap-3">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-[#1F478B] border-[#1F478B] hover:bg-[#1F478B]/10"
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  setIsTrackingModalOpen(true)
+                                }}
+                              >
+                                <Eye className="h-4 w-4 ml-1" />
+                                {t("تتبع الطلب", "Track Order")}
+                              </Button>
+                              <div className="text-left">
+                                <p className="text-xl font-bold text-[#1F478B]">
+                                  {Number(order.total).toFixed(2)} {t("جنيه", "EGP")}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -353,6 +372,18 @@ export default function AccountPage() {
       </main>
 
       <Footer />
+
+      {/* Order Tracking Modal */}
+      {selectedOrder && (
+        <OrderTrackingModal
+          order={selectedOrder}
+          isOpen={isTrackingModalOpen}
+          onClose={() => {
+            setIsTrackingModalOpen(false)
+            setSelectedOrder(null)
+          }}
+        />
+      )}
     </div>
   )
 }

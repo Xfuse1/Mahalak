@@ -4,18 +4,18 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Header } from "../../components/header"
+import { Footer } from "../../components/footer"
+import { Button } from "../../components/ui/button"
+import { Input } from "../../components/ui/input"
+import { Label } from "../../components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
 import Link from "next/link"
-import { useAuth } from "@/lib/auth-context"
-import { useLanguage } from "@/lib/language-context"
-import { EyeOpenIcon, EyeOffIcon } from "@/components/ui/icons"
+import { useAuth } from "../../lib/auth-context"
+import { useLanguage } from "../../lib/language-context"
+import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -27,15 +27,17 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
+    if (user && !isLoggingIn) {
       router.push(user.role === "seller" ? "/seller/dashboard" : "/")
     }
-  }, [user, router])
+  }, [user, router, isLoggingIn])
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -47,6 +49,7 @@ export default function AuthPage() {
     const password = formData.get("password") as string
 
     try {
+      setIsLoggingIn(true)
       const success = await login(email, password, role)
 
       if (success) {
@@ -72,6 +75,7 @@ export default function AuthPage() {
     }
 
     setIsLoading(false)
+    setIsLoggingIn(false)
   }
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -112,6 +116,7 @@ export default function AuthPage() {
     }
 
     try {
+      setIsLoggingIn(true)
       const success = await register(email, password, name, role, sellerData, street, city, country)
 
       if (success) {
@@ -126,10 +131,11 @@ export default function AuthPage() {
     }
 
     setIsLoading(false)
+    setIsLoggingIn(false)
   }
 
   return (
-  <div suppressHydrationWarning className="min-h-screen flex flex-col">
+    <div suppressHydrationWarning className="min-h-screen flex flex-col">
       <Header />
 
       <main className="flex-1 py-12 bg-secondary">
@@ -202,7 +208,7 @@ export default function AuthPage() {
                         className="h-12"
                       />
                     </div>
-                     <div className="space-y-2">
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="login-password" className="text-base">
                           {t("كلمة المرور", "Password")}

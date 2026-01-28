@@ -1,12 +1,12 @@
 "use client"
 import React from "react"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { ProductCard } from "@/components/product-card"
-import { BackButton } from "@/components/back-button"
-import { Star, MapPin, Phone, MessageCircle, FileText } from "lucide-react"
+import { Header } from "../../../components/header"
+import { Footer } from "../../../components/footer"
+import { ProductCard } from "../../../components/product-card"
+import { BackButton } from "../../../components/back-button"
+import { Star, MapPin, Phone, MessageCircle, FileText, Tag } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
+import { Button } from "../../../components/ui/button"
 import {
   Sheet,
   SheetContent,
@@ -14,15 +14,16 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
-import { useAuth } from "@/lib/auth-context"
-import { useLanguage } from "@/lib/language-context"
+} from "../../../components/ui/sheet"
+import { useAuth } from "../../../lib/auth-context"
+import { useLanguage } from "../../../lib/language-context"
 import Image from "next/image"
 import { useEffect, useState } from "react"
-import { getStore } from "@/lib/actions/stores"
-import { getProductsByStoreId } from "@/lib/actions/products"
-import { trackMetaEvent } from "@/lib/utils"
-import { getUserStoreReview, upsertStoreReview } from "@/lib/actions/storeReviews"
+import { getStore } from "../../../lib/actions/stores"
+import { getProductsByStoreId } from "../../../lib/actions/products"
+import { trackMetaEvent } from "../../../lib/utils"
+import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
+import { getStoreOffers } from "../../../lib/actions/offers"
 
 type Store = {
   id: string
@@ -51,10 +52,19 @@ type Product = {
   reviewCount: number
 }
 
+type Offer = {
+  id: string
+  title: string
+  description: string
+  discount_percentage: number
+  start_date: string
+  end_date: string
+}
+
 export default function StorePage({ params }: { params: { id: string } }) {
   const { user } = useAuth()
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   const unwrappedParams =
     typeof params === "object" && "then" in params
@@ -64,6 +74,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
   const [userStoreReview, setUserStoreReview] = useState<number | null>(null)
   const [hoverRating, setHoverRating] = useState<number | null>(null)
@@ -82,6 +93,17 @@ export default function StorePage({ params }: { params: { id: string } }) {
         }
 
         setStore(storeData)
+
+        // Fetch offers
+        const offersData = await getStoreOffers(id)
+        const now = new Date()
+        const activeOffers = offersData.filter((offer: any) => {
+          const startDate = new Date(offer.start_date)
+          const endDate = new Date(offer.end_date)
+          return startDate <= now && endDate >= now
+        })
+        setOffers(activeOffers as Offer[])
+
         const productsData = await getProductsByStoreId(id)
         const transformedProducts = productsData.map((product: any) => ({
           ...product,
@@ -215,11 +237,29 @@ export default function StorePage({ params }: { params: { id: string } }) {
     <div className="min-h-screen flex flex-col">
       <Header />
 
+      {offers.length > 0 && (
+        <div className="bg-green-600 text-white py-3 shadow-md animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
+          <div className="container mx-auto px-4 flex items-center justify-center gap-4 text-center">
+            <div className="flex items-center gap-2 font-bold text-lg md:text-xl">
+              <Tag className="h-6 w-6 animate-bounce" />
+              <span>{offers[0].title}</span>
+              <span className="bg-yellow-400 text-green-800 px-3 py-0.5 rounded-full text-sm ml-2">
+                {offers[0].discount_percentage}% {t("خصم", "OFF")}
+              </span>
+            </div>
+            <p className="hidden md:block text-green-50/90 text-sm">
+              {offers[0].description} • {t("يسري حتى", "Valid until")}: {new Date(offers[0].end_date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4">
           <div className="mb-6">
             <BackButton />
           </div>
+
 
           <div className="bg-white rounded-lg shadow-sm p-6 md:p-8 mb-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
@@ -234,8 +274,8 @@ export default function StorePage({ params }: { params: { id: string } }) {
               </div>
 
               <div className="space-y-4">
-                <h1 className="text-3xl md:text-4xl font-bold">{store.name}</h1>
-                <p className="text-gray-600 text-lg leading-relaxed">{store.description}</p>
+                <h1 className="text-3xl md:text-4xl font-bold break-words">{store.name}</h1>
+                <p className="text-gray-600 text-lg leading-relaxed break-words">{store.description}</p>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
@@ -316,7 +356,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
                     </SheetHeader>
                     <div className="py-4">
                       {store.return_policy ? (
-                        <p className="whitespace-pre-wrap">{store.return_policy}</p>
+                        <p className="whitespace-pre-wrap break-words">{store.return_policy}</p>
                       ) : (
                         <p>{t("لم يتم تحديد سياسة الإرجاع بعد.", "Return policy not set yet.")}</p>
                       )}
@@ -326,6 +366,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
+
 
           <div>
             <h2 className="text-2xl font-bold mb-6">{t("منتجات المتجر", "Store Products")}</h2>

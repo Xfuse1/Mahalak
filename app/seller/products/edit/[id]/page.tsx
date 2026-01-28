@@ -3,19 +3,20 @@
 import React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SellerHeader } from "../../../../../components/seller-header"
+import { useAuth } from "../../../../../lib/auth-context"
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../../components/ui/card"
+import { Button } from "../../../../../components/ui/button"
+import { Input } from "../../../../../components/ui/input"
+import { Label } from "../../../../../components/ui/label"
+import { Textarea } from "../../../../../components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select"
 import { Upload } from "lucide-react"
-import { getProduct, updateProduct } from "@/lib/actions/products"
-import { getStoreByUserId } from "@/lib/actions/stores"
-import { createClient } from "@/lib/supabase/client"
+import { getProduct, updateProduct } from "../../../../../lib/actions/products"
+import { getStoreByUserId } from "../../../../../lib/actions/stores"
+import { createClient } from "../../../../../lib/supabase/client"
 import Image from "next/image"
+import { sections } from "../../../../../lib/mock/supermarket-data"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   // Next.js 14+: params may be a Promise, unwrap with React.use()
@@ -31,6 +32,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [product, setProduct] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [storeCategory, setStoreCategory] = useState<string>("")
+
+  // Check if store is grocery/food type
+  const isGroceryStore = ["بقالة", "أغذية", "grocery", "food", "supermarket"].includes(storeCategory.toLowerCase())
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -55,6 +60,12 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
       setProduct(productData)
       setImagePreview(productData.image_url)
+
+      // Set store category from the store object we already fetched
+      if (store) {
+        setStoreCategory((store as any).category || "")
+      }
+
       setIsLoadingProduct(false)
     }
 
@@ -115,6 +126,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
         category: formData.get("category") as string,
+        simulator_section: isGroceryStore ? (formData.get("simulator_section") as string) : null,
         image_url: imageUrl,
       })
 
@@ -231,6 +243,24 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                   </Select>
                 </div>
 
+                {isGroceryStore && (
+                  <div>
+                    <Label htmlFor="simulator_section">قسم المحاكي (السوبر ماركت)</Label>
+                    <Select name="simulator_section" defaultValue={product.simulator_section || "GROCERY"}>
+                      <SelectTrigger id="simulator_section">
+                        <SelectValue placeholder="اختر قسم المحاكي" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sections.map((section) => (
+                          <SelectItem key={section.id} value={section.id}>
+                            {section.icon} {section.nameAR}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor="image">صورة المنتج</Label>
                   {imagePreview && (
@@ -282,7 +312,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   )
 }

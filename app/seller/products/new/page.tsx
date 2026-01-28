@@ -3,19 +3,20 @@
 import type React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { categories } from "@/lib/mock-data"
+import { SellerHeader } from "../../../../components/seller-header"
+import { useAuth } from "../../../../lib/auth-context"
+import { Button } from "../../../../components/ui/button"
+import { Input } from "../../../../components/ui/input"
+import { Label } from "../../../../components/ui/label"
+import { Textarea } from "../../../../components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../components/ui/select"
+import { categories } from "../../../../lib/mock-data"
 import { Upload } from "lucide-react"
 import Image from "next/image"
-import { createProduct, uploadProductImage } from "@/lib/actions/products"
-import { getStoreByUserId } from "@/lib/actions/stores"
+import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
+import { getStoreByUserId } from "../../../../lib/actions/stores"
+import { sections } from "../../../../lib/mock/supermarket-data"
 
 export default function NewProductPage() {
   const { user, isLoading } = useAuth()
@@ -24,6 +25,11 @@ export default function NewProductPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [storeCategory, setStoreCategory] = useState<string>("")
+  const [storeData, setStoreData] = useState<any>(null)
+
+  // Check if store is grocery/food type
+  const isGroceryStore = ['بقالة', 'أغذية', 'grocery', 'food', 'supermarket'].includes(storeCategory.toLowerCase())
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -31,6 +37,20 @@ export default function NewProductPage() {
     }
     if (user?.role !== "seller") {
       router.push("/")
+    }
+
+    // Fetch store data to check category
+    async function fetchStore() {
+      if (user?.id) {
+        const store = await getStoreByUserId(user.id)
+        if (store) {
+          setStoreData(store)
+          setStoreCategory((store as any).category || "")
+        }
+      }
+    }
+    if (user?.id) {
+      fetchStore()
     }
   }, [user, isLoading, router])
 
@@ -78,6 +98,7 @@ export default function NewProductPage() {
         price: Number.parseFloat(formData.get("price") as string),
         stock: Number.parseInt(formData.get("stock") as string),
         category: formData.get("category") as string,
+        simulator_section: isGroceryStore ? (formData.get("simulator_section") as string || "GROCERY") : null,
         image_url: imageUrl,
         store_id: store.id,
       }
@@ -174,6 +195,25 @@ export default function NewProductPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {isGroceryStore && (
+                  <div>
+                    <Label htmlFor="simulator_section">قسم المحاكي (السوبر ماركت)</Label>
+                    <p className="text-sm text-gray-500 mb-2">اختر القسم الذي سيظهر فيه المنتج في المحاكي ثلاثي الأبعاد</p>
+                    <Select name="simulator_section" defaultValue="GROCERY">
+                      <SelectTrigger id="simulator_section">
+                        <SelectValue placeholder="اختر قسم المحاكي" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sections.map((section) => (
+                          <SelectItem key={section.id} value={section.id}>
+                            {section.icon} {section.nameAR}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="image">صورة المنتج *</Label>

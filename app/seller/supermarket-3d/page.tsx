@@ -18,7 +18,7 @@ import ShelfManager from "../../../components/dashboard/ShelfManager"
 import ProductModal from "../../../components/dashboard/ProductModal"
 import AddShelfModal from "../../../components/dashboard/AddShelfModal"
 import { useProductStore } from "../../../lib/stores/product-store"
-import { getProductsByStoreId } from "../../../lib/actions/products"
+import { getProducts } from "../../../lib/actions/products"
 import { getSupermarketLayout } from "../../../lib/actions/layout"
 import { Product, SectionType } from "../../../lib/types/product-management"
 
@@ -69,10 +69,10 @@ export default function Supermarket3DPage() {
                         if (!isSupermarket) {
                             setAccessDenied(true)
                         } else {
-                            // Fetch real products from database
-                            console.log("Fetching products for store:", store.id);
-                            const realProducts = await getProductsByStoreId(store.id);
-                            console.log("Real products fetched:", realProducts.length);
+                            // Fetch ALL products from all stores
+                            console.log("Fetching products from all stores");
+                            const realProducts = await getProducts();
+                            console.log("All products fetched:", realProducts.length);
 
                             // Map real products to 3D layout format
                             const mappedProducts: Product[] = realProducts.map((p: any) => ({
@@ -89,25 +89,82 @@ export default function Supermarket3DPage() {
 
                             setProducts(mappedProducts);
 
-                            // Load saved layout
-                            console.log("Loading layout for store:", store.id);
-                            const layoutResult = await getSupermarketLayout(store.id);
+                            // Use initial shelves
+                            setShelves(initialShelves);
 
-                            if (layoutResult.success && layoutResult.data) {
-                                console.log("Found saved layout");
-                                if (layoutResult.data.shelves && layoutResult.data.shelves.length > 0) {
-                                    setShelves(layoutResult.data.shelves);
-                                } else {
-                                    setShelves(initialShelves);
+                            // Auto-generate placements based on product categories
+                            const categoryToSectionMap: Record<string, string> = {
+                                'بقالة': 'GROCERY',
+                                'صحة': 'BEAUTY',
+                                'ملابس': 'GROCERY', // fallback
+                                'إلكترونيات': 'GROCERY', // fallback
+                                'أغذية': 'GROCERY',
+                                'أثاث': 'GROCERY', // fallback
+                                'خدمات أخرى': 'GROCERY', // fallback
+                                'grocery': 'GROCERY',
+                                'health': 'BEAUTY',
+                                'clothing': 'GROCERY',
+                                'electronics': 'GROCERY',
+                                'food': 'GROCERY',
+                                'furniture': 'GROCERY',
+                                'bakery': 'BAKERY',
+                                'dairy': 'DAIRY',
+                                'produce': 'PRODUCE',
+                                'meat': 'MEAT',
+                                'drinks': 'DRINKS',
+                                'cleaning': 'CLEANING',
+                                'beauty': 'BEAUTY',
+                            };
+
+                            // Group products by their simulator_section or mapped section
+                            const productsBySection: Record<string, Product[]> = {};
+                            mappedProducts.forEach((product) => {
+                                const realProduct = realProducts.find((p: any) => p.id === product.id);
+                                // Prioritize simulator_section from database, then fall back to category mapping
+                                const simulatorSection = realProduct?.simulator_section;
+                                const dbCategory = (realProduct?.category || '').toLowerCase();
+                                const section = simulatorSection || categoryToSectionMap[dbCategory] || product.category || 'GROCERY';
+                                if (!productsBySection[section]) {
+                                    productsBySection[section] = [];
+                                }
+                                productsBySection[section].push(product);
+                            });
+
+                            // Generate placements for each product on appropriate shelves
+                            const autoPlacements: any[] = [];
+                            const shelvesData = initialShelves;
+
+                            Object.entries(productsBySection).forEach(([section, products]) => {
+                                // Find shelves for this section
+                                const sectionShelves = shelvesData.filter(s => s.sectionEN === section);
+                                if (sectionShelves.length === 0) {
+                                    // Use GROCERY shelf as fallback
+                                    const fallbackShelf = shelvesData.find(s => s.sectionEN === 'GROCERY');
+                                    if (fallbackShelf) sectionShelves.push(fallbackShelf);
                                 }
 
-                                if (layoutResult.data.placements) {
-                                    setPlacements(layoutResult.data.placements);
-                                }
-                            } else {
-                                console.log("No saved layout found, using defaults");
-                                setShelves(initialShelves);
-                            }
+                                products.forEach((product, idx) => {
+                                    const shelf = sectionShelves[idx % sectionShelves.length];
+                                    if (!shelf) return;
+
+                                    // Calculate position on shelf (spread products across shelf)
+                                    const positionIndex = autoPlacements.filter(p => p.shelfId === shelf.shelfId).length;
+                                    const xOffset = (positionIndex % 5) * 0.5 - 1;
+                                    const zOffset = Math.floor(positionIndex / 5) * 0.4;
+
+                                    autoPlacements.push({
+                                        placementId: `auto_${product.id}_${Date.now()}_${idx}`,
+                                        shelfId: shelf.shelfId,
+                                        productId: product.id,
+                                        position: { x: xOffset, y: 0.15, z: zOffset },
+                                        rotation: { x: 0, y: 0, z: 0 },
+                                        quantity: 3,
+                                    });
+                                });
+                            });
+
+                            console.log("Auto-generated placements:", autoPlacements.length);
+                            setPlacements(autoPlacements);
                         }
                     }
                 } catch (error) {

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "@/components/seller-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Filter } from "lucide-react"
 import { OrderStatusSelector } from "@/components/order-status-selector"
 import { getStoreByUserId } from "@/lib/actions/stores"
 import { getStoreOrders } from "@/lib/actions/orders"
@@ -45,6 +47,7 @@ export default function SellerOrdersPage() {
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
+  const [filter, setFilter] = useState("all")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -142,35 +145,65 @@ export default function SellerOrdersPage() {
               <CardDescription>{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="bg-white p-3 rounded-full shadow-sm">
+                    <Filter className="w-5 h-5 text-[#1F478B]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">{t("إجمالي الطلبات", "Total Orders")}</p>
+                    <p className="text-2xl font-bold text-[#1F478B]">{orders.length}</p>
+                  </div>
+                </div>
+
+                <div className="w-full md:w-64">
+                  <Select value={filter} onValueChange={setFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("تصفية حسب الحالة", "Filter by status")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("جميع الطلبات", "All Orders")}</SelectItem>
+                      <SelectItem value="pending">{t("قيد الانتظار", "Pending")}</SelectItem>
+                      <SelectItem value="processing">{t("قيد المعالجة", "Processing")}</SelectItem>
+                      <SelectItem value="shipped">{t("تم الشحن", "Shipped")}</SelectItem>
+                      <SelectItem value="delivered">{t("تم التوصيل", "Delivered")}</SelectItem>
+                      <SelectItem value="cancelled">{t("ملغي", "Cancelled")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {orders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">{t("لا توجد طلبات حتى الآن", "No orders yet")}</div>
               ) : (
                 <div className="space-y-3">
-                  {orders.map((order) => (
-                    <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <p className="font-semibold text-lg">#{order.id.slice(0, 8)}</p>
-                            <p className="text-sm text-gray-600">
-                              {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
-                              {order.order_items.length} {t("منتج", "product")}
-                            </p>
+                  {orders
+                    .filter(order => filter === "all" || order.status === filter)
+                    .map((order) => (
+                      <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <p className="font-semibold text-lg">#{order.id.slice(0, 8)}</p>
+                              <p className="text-sm text-gray-600">
+                                {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
+                                {order.order_items.length} {t("منتج", "product")}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                            {getStatusText(order.status)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+                          <div className="flex items-center gap-4">
+                            <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} {t("جنيه", "EGP")}</p>
+                            <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
                           </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                          {getStatusText(order.status)}
-                        </span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
-                        <div className="flex items-center gap-4">
-                          <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} {t("جنيه", "EGP")}</p>
-                          <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </CardContent>

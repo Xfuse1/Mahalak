@@ -3,16 +3,18 @@
 import type React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Plus, Edit, Trash2, Tag } from "lucide-react"
-import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "@/lib/actions/offers"
-import { getStoreByUserId } from "@/lib/actions/stores"
+import { SellerHeader } from "../../../components/seller-header"
+import { useAuth } from "../../../lib/auth-context"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Button } from "../../../components/ui/button"
+import { Input } from "../../../components/ui/input"
+import { Label } from "../../../components/ui/label"
+import { Textarea } from "../../../components/ui/textarea"
+import { Plus, Edit, Trash2, Tag, Calendar } from "lucide-react"
+import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "../../../lib/actions/offers"
+import { getStoreByUserId } from "../../../lib/actions/stores"
+import { Badge } from "../../../components/ui/badge"
+import { cn } from "../../../lib/utils"
 
 interface Offer {
   id: string
@@ -153,6 +155,24 @@ export default function OffersPage() {
     setIsAdding(true)
   }
 
+  const getOfferStatus = (startDate: string, endDate: string) => {
+    const now = new Date()
+    // Reset hours to compare only dates
+    now.setHours(0, 0, 0, 0)
+    const start = new Date(startDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+
+    if (now < start) {
+      return { label: "قادم", className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+    }
+    if (now > end) {
+      return { label: "منتهي", className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
+    }
+    return { label: "نشط", className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
+  }
+
   const formatDateForInput = (dateString: string) => {
     const date = new Date(dateString)
     return date.toISOString().split("T")[0]
@@ -284,7 +304,12 @@ export default function OffersPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <Tag className="h-5 w-5 text-[#1F478B]" />
-                      <CardTitle className="text-lg">{offer.title}</CardTitle>
+                      <div className="flex flex-col gap-1">
+                        <CardTitle className="text-lg">{offer.title}</CardTitle>
+                        <Badge variant="outline" className={cn("w-fit", getOfferStatus(offer.start_date, offer.end_date).className)}>
+                          {getOfferStatus(offer.start_date, offer.end_date).label}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(offer)}>

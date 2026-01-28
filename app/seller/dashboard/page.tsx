@@ -160,7 +160,7 @@ export default function SellerDashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">{t("إجمالي الطلبات", "Total Orders")}</p>
+                      <p className="text-sm text-gray-600 mb-1">{t("الطلبات المؤكدة", "Confirmed Orders")}</p>
                       <p className="text-2xl font-bold">{analytics.totalOrders}</p>
                     </div>
                     <div className="bg-green-100 p-3 rounded-full">
