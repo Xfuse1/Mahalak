@@ -25,8 +25,24 @@ type SimProduct = {
     pattern?: string;
 };
 
-function normalizeCategory(value?: string) {
-    const raw = (value || '').toLowerCase();
+function normalizeCategory(categoryValue?: string, sectionValue?: string) {
+    // 1. Prioritize explicit simulator section if provided
+    if (sectionValue) {
+        const raw = sectionValue.toLowerCase();
+        // Return matching internal IDs
+        if (raw.includes('produce')) return 'produce';
+        if (raw.includes('bakery')) return 'bakery';
+        if (raw.includes('dairy')) return 'dairy';
+        if (raw.includes('meat')) return 'meat';
+        if (raw.includes('beauty')) return 'beauty';
+        if (raw.includes('drink')) return 'drinks';
+        if (raw.includes('snack')) return 'snacks';
+        if (raw.includes('clean')) return 'cleaning';
+        if (raw.includes('grocery')) return 'grocery';
+    }
+
+    // 2. Fallback to category-based inference
+    const raw = (categoryValue || '').toLowerCase();
     if (raw.includes('produce') || raw.includes('veg') || raw.includes('fruit') || raw.includes('خضار') || raw.includes('فواكه')) {
         return 'produce';
     }
@@ -159,7 +175,7 @@ export default function SupermarketSimulator() {
                 const normalized = Array.isArray(products) ? products.slice(0, 160).map((product: any, index: number) => {
                     const name = product?.name || 'منتج';
                     const id = product?.id || `product_${index}`;
-                    const category = normalizeCategory(product?.category);
+                    const category = normalizeCategory(product?.category, product?.simulator_section);
                     const color = hashToColor(`${id}_${name}`);
 
                     return {

@@ -1,7 +1,7 @@
 "use client"
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateOrderStatus } from "@/lib/actions/orders"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import { updateOrderStatus } from "../lib/actions/orders"
 import { useRouter } from "next/navigation"
 
 type OrderStatusSelectorProps = {
@@ -25,9 +25,11 @@ export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: Order
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
-      pending: "قيد الانتظار",
-      processing: "قيد المعالجة",
+      pending: "قيد الانتظار (تم الطلب)",
+      ordered: "تم الطلب",
+      processing: "قيد التجهيز",
       shipped: "تم الشحن",
+      on_the_way: "في الطريق",
       delivered: "تم التوصيل",
       cancelled: "ملغي",
     }
@@ -44,9 +46,10 @@ export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: Order
         <SelectValue>{getStatusText(currentStatus)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="pending">قيد الانتظار</SelectItem>
-        <SelectItem value="processing">قيد المعالجة</SelectItem>
+        <SelectItem value="ordered">تم الطلب</SelectItem>
+        <SelectItem value="processing">قيد التجهيز</SelectItem>
         <SelectItem value="shipped">تم الشحن</SelectItem>
+        <SelectItem value="on_the_way">في الطريق</SelectItem>
         <SelectItem value="delivered">تم التوصيل</SelectItem>
         <SelectItem value="cancelled">ملغي</SelectItem>
       </SelectContent>

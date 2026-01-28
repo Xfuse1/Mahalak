@@ -9,7 +9,7 @@ export const sections: SectionInfo[] = [
     { id: 'GROCERY', nameAR: 'البقالة', nameEN: 'Grocery', icon: '🛒', color: '#FFCC80' },
     { id: 'DRINKS', nameAR: 'المشروبات والوجبات الخفيفة', nameEN: 'Drinks & Snacks', icon: '🥤', color: '#4A90E2' },
     { id: 'CLEANING', nameAR: 'المنظفات والورقيات', nameEN: 'Cleaning', icon: '🧹', color: '#4CAF50' },
-    { id: 'CHECKOUT', nameAR: 'منطقة المحاسبة', nameEN: 'Checkout', icon: '💳', color: '#FFD54F' },
+    { id: 'OTHER', nameAR: 'أخرى', nameEN: 'Other', icon: '📦', color: '#9E9E9E' },
 ];
 
 export const initialProducts: Product[] = [
@@ -48,4 +48,5 @@ export const initialShelves: Shelf[] = [
     { shelfId: 'DAIRY_FRIDGE_01', sectionEN: 'DAIRY', sectionAR: 'الألبان والأجبان', type: 'open_fridge', position: { x: -28, y: 1.5, z: 0 }, rotation: { x: 0, y: Math.PI / 2, z: 0 }, capacity: 20 },
     { shelfId: 'MEAT_COUNTER_01', sectionEN: 'MEAT', sectionAR: 'اللحوم والأسماك', type: 'glass_counter', position: { x: 0, y: 0.55, z: -45 }, rotation: { x: 0, y: 0, z: 0 }, capacity: 12 },
     { shelfId: 'GROCERY_SHELF_01', sectionEN: 'GROCERY', sectionAR: 'البقالة', type: 'traditional_shelf', position: { x: -10, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, capacity: 30 },
+    { shelfId: 'OTHER_SHELF_01', sectionEN: 'OTHER', sectionAR: 'أخرى', type: 'traditional_shelf', position: { x: 15, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, capacity: 20 },
 ];

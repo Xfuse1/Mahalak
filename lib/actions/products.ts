@@ -94,6 +94,7 @@ export async function createProduct(formData: {
   stock: number
   image_url?: string
   store_id: string
+  simulator_section?: string | null
 }) {
   const db = getAdminDb()
   const docRef = db.collection("products").doc()
@@ -107,6 +108,7 @@ export async function createProduct(formData: {
     stock: formData.stock,
     image_url: formData.image_url || "",
     store_id: formData.store_id,
+    simulator_section: formData.simulator_section || null,
     rating: 0,
     rating_count: 0,
     created_at: now,
@@ -134,6 +136,7 @@ export async function updateProduct(
     stock: number
     image_url: string
     rating: number
+    simulator_section?: string | null
   }>,
 ) {
   const db = getAdminDb()

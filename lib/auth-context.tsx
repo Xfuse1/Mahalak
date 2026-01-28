@@ -13,8 +13,8 @@ import {
 } from "firebase/auth"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
-import { createStore } from "@/lib/actions/stores"
-import { getFirebaseAuth, getFirestoreClient } from "@/lib/firebase/client"
+import { createStore } from "./actions/stores"
+import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 
 interface User {
   id: string
@@ -69,8 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const db = getFirestoreClient()
 
   const loadUserProfile = useCallback(async (currentUser: FirebaseUser) => {
-    if (loadingProfile.current) return
+    // Force reload if requested or if loading is not in progress
     loadingProfile.current = true
+    setIsLoading(true)
 
     try {
       const profileRef = doc(db, "profiles", currentUser.uid)
@@ -89,7 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "",
           role: profile.role || "customer",
           phone: profile.phone,
-          // normalize possible DB column names into the user object
           street: profile.street ?? profile.address_street ?? profile.address ?? undefined,
           city: profile.city ?? profile.address_city ?? undefined,
           state: profile.state ?? profile.address_state ?? undefined,
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       } else {
         console.warn("[v0] No profile found for user:", currentUser.uid)
-        // Set loading to false but keep user null until profile is created by registration process
+        setUser(null)
       }
     } catch (error) {
       console.error("[v0] Error loading user profile:", error)
@@ -130,24 +130,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profileRef = doc(db, "profiles", credential.user.uid)
       const profileSnap = await getDoc(profileRef)
       const profileData = profileSnap.exists() ? profileSnap.data() : null
-      const profileRole = (profileData?.role as "customer" | "seller") || "customer"
 
-      if (profileRole !== role) {
-        await signOut(auth)
-        throw new Error("Invalid role for this account type")
-      }
-
-      if (!profileSnap.exists()) {
+      if (profileSnap.exists()) {
+        const profileRole = (profileData?.role as "customer" | "seller") || "customer"
+        if (profileRole !== role) {
+          await signOut(auth)
+          throw new Error("Invalid role for this account type")
+        }
+      } else {
+        // Create profile if it doesn't exist
         const now = new Date().toISOString()
         await setDoc(profileRef, {
           email,
           full_name: credential.user.displayName || email.split("@")[0],
-          role: profileRole,
+          role: role,
           created_at: now,
           updated_at: now,
         })
       }
 
+      // Manually trigger profile load to ensure state is updated immediately
+      await loadUserProfile(credential.user)
       return true
     } catch (error: any) {
       const code = error?.code as string | undefined
@@ -156,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw error
     }
-  }, [auth, db])
+  }, [auth, db, loadUserProfile])
 
   const register = useCallback(async (
     email: string,
@@ -205,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           description: sellerData.storeDescription || "",
           address: sellerData.address || "",
           phone: sellerData.phone || "",
-          category: sellerData.storeType || "Ø®Ø¯Ù…Ø§Øª Ø£Ø®Ø±Ù‰",
+          category: sellerData.storeType || "خدمات أخرى",
         })
 
         if (!result.success) {
@@ -214,16 +217,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Manually trigger profile load to ensure state is updated immediately
+      await loadUserProfile(credential.user)
       return true
     } catch (error: any) {
       const code = error?.code as string | undefined
       if (code === "auth/email-already-in-use") {
-        setError(t("Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ù…Ø³Ø¬Ù„ Ø¨Ø§Ù„ÙØ¹Ù„", "Email already registered"))
+        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
         throw new Error("already registered")
       }
 
       console.error("[v0] Registration error:", error)
-      setError(t("ÙØ´Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.", "Account creation failed. Please try again."))
+      setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
       throw error
     }
   }, [auth, db, t])

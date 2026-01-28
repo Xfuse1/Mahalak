@@ -1,42 +1,52 @@
 "use server"
 
-import type { FirebaseFirestore } from "firebase-admin/firestore"
+import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
-import { getAdminDb } from "@/lib/firebase/admin"
-import { chunkArray } from "@/lib/firebase/firestore-helpers"
+import { getAdminDb } from "../firebase/admin"
+import { chunkArray } from "../firebase/firestore-helpers"
 
-type RecordMap = Record<string, any>
+type RecordMap = {
+  id: string
+  [key: string]: any
+}
 
-async function fetchDocsMap(db: FirebaseFirestore.Firestore, collection: string, ids: string[]) {
+// Timeline entry type for order tracking
+export type TimelineEntry = {
+  status: string
+  timestamp: string
+  note?: string
+}
+
+async function fetchDocsMap(db: Firestore, collection: string, ids: string[]) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
   if (uniqueIds.length === 0) {
-    return new Map<string, RecordMap>()
+    return new Map<string, any>()
   }
 
   const refs = uniqueIds.map((id) => db.collection(collection).doc(id))
   const docs = await db.getAll(...refs)
-  const map = new Map<string, RecordMap>()
+  const map = new Map<string, any>()
 
-  docs.forEach((doc) => {
+  docs.forEach((doc: DocumentSnapshot) => {
     if (doc.exists) {
-      map.set(doc.id, { id: doc.id, ...(doc.data() as RecordMap) })
+      map.set(doc.id, { ...doc.data(), id: doc.id })
     }
   })
 
   return map
 }
 
-async function getOrderItemsByOrderIds(db: FirebaseFirestore.Firestore, orderIds: string[]) {
+async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
   const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)))
   if (uniqueIds.length === 0) return []
 
-  const items: RecordMap[] = []
+  const items: any[] = []
   const chunks = chunkArray(uniqueIds, 10)
 
   for (const chunk of chunks) {
     const snapshot = await db.collection("order_items").where("order_id", "in", chunk).get()
     snapshot.docs.forEach((doc) => {
-      items.push({ id: doc.id, ...(doc.data() as RecordMap) })
+      items.push({ ...doc.data(), id: doc.id })
     })
   }
 
@@ -46,38 +56,38 @@ async function getOrderItemsByOrderIds(db: FirebaseFirestore.Firestore, orderIds
 export async function getCustomerOrders(customerId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("customer_id", "==", customerId).get()
-  const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as RecordMap) }))
+  const orders = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
 
-  orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
   const storeMap = await fetchDocsMap(
     db,
     "stores",
-    orders.map((order) => order.store_id),
+    orders.map((order: any) => order.store_id),
   )
 
   const orderItems = await getOrderItemsByOrderIds(
     db,
-    orders.map((order) => order.id),
+    orders.map((order: any) => order.id),
   )
 
   const productMap = await fetchDocsMap(
     db,
     "products",
-    orderItems.map((item) => item.product_id),
+    orderItems.map((item: any) => item.product_id),
   )
 
-  const itemsByOrder = new Map<string, RecordMap[]>()
-  orderItems.forEach((item) => {
+  const itemsByOrder = new Map<string, any[]>()
+  orderItems.forEach((item: any) => {
     const product = productMap.get(item.product_id)
     const entry = {
       ...item,
       products: product
         ? {
-            id: product.id,
-            name: product.name,
-            image_url: product.image_url || null,
-          }
+          id: product.id,
+          name: product.name,
+          image_url: product.image_url || null,
+        }
         : null,
     }
 
@@ -87,15 +97,15 @@ export async function getCustomerOrders(customerId: string) {
     itemsByOrder.get(item.order_id)!.push(entry)
   })
 
-  return orders.map((order) => {
+  return orders.map((order: any) => {
     const store = storeMap.get(order.store_id)
     return {
       ...order,
       stores: store
         ? {
-            id: store.id,
-            name: store.name,
-          }
+          id: store.id,
+          name: store.name,
+        }
         : null,
       order_items: itemsByOrder.get(order.id) || [],
     }
@@ -105,9 +115,9 @@ export async function getCustomerOrders(customerId: string) {
 export async function getStoreOrders(storeId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
-  const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as RecordMap) }))
+  const orders = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
 
-  orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
   if (orders.length === 0) {
     return []
@@ -115,32 +125,32 @@ export async function getStoreOrders(storeId: string) {
 
   const orderItems = await getOrderItemsByOrderIds(
     db,
-    orders.map((order) => order.id),
+    orders.map((order: any) => order.id),
   )
 
   const productMap = await fetchDocsMap(
     db,
     "products",
-    orderItems.map((item) => item.product_id),
+    orderItems.map((item: any) => item.product_id),
   )
 
   const customerMap = await fetchDocsMap(
     db,
     "profiles",
-    orders.map((order) => order.customer_id),
+    orders.map((order: any) => order.customer_id),
   )
 
-  const itemsByOrder = new Map<string, RecordMap[]>()
-  orderItems.forEach((item) => {
+  const itemsByOrder = new Map<string, any[]>()
+  orderItems.forEach((item: any) => {
     const product = productMap.get(item.product_id)
     const entry = {
       ...item,
       products: product
         ? {
-            id: product.id,
-            name: product.name,
-            image_url: product.image_url || null,
-          }
+          id: product.id,
+          name: product.name,
+          image_url: product.image_url || null,
+        }
         : null,
     }
 
@@ -150,29 +160,64 @@ export async function getStoreOrders(storeId: string) {
     itemsByOrder.get(item.order_id)!.push(entry)
   })
 
-  return orders.map((order) => {
+  return orders.map((order: any) => {
     const profile = customerMap.get(order.customer_id)
     return {
       ...order,
       profiles: profile
         ? {
-            id: profile.id,
-            full_name: profile.full_name || null,
-            email: profile.email || "",
-            phone: profile.phone || null,
-          }
+          id: profile.id,
+          full_name: profile.full_name || null,
+          email: profile.email || "",
+          phone: profile.phone || null,
+        }
         : null,
       order_items: itemsByOrder.get(order.id) || [],
     }
   })
 }
 
-export async function updateOrderStatus(orderId: string, status: string) {
+export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+
+  // Create new timeline entry
+  const timelineEntry: TimelineEntry = {
+    status,
+    timestamp: now,
+    ...(note && { note }),
+  }
 
   try {
-    await docRef.set({ status, updated_at: new Date().toISOString() }, { merge: true })
+    // Get current order to check if timeline exists
+    const currentOrder = await docRef.get()
+    const currentData = currentOrder.data()
+
+    // Build update payload
+    const updatePayload: Record<string, any> = {
+      status,
+      updated_at: now,
+    }
+
+    // If timeline exists, append to it; otherwise create new array
+    if (currentData?.timeline && Array.isArray(currentData.timeline)) {
+      updatePayload.timeline = [...currentData.timeline, timelineEntry]
+    } else {
+      // Initialize timeline with ordered status if creating fresh timeline
+      const initialTimeline: TimelineEntry[] = []
+      if (status !== "ordered" && status !== "pending") {
+        // Add ordered entry if it doesn't exist
+        initialTimeline.push({
+          status: "ordered",
+          timestamp: currentData?.created_at || now,
+        })
+      }
+      initialTimeline.push(timelineEntry)
+      updatePayload.timeline = initialTimeline
+    }
+
+    await docRef.set(updatePayload, { merge: true })
   } catch (error: any) {
     console.error("[v0] Error updating order status:", error)
     return { success: false, error: error?.message || "Failed to update order status" }
@@ -181,7 +226,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
   const updatedSnap = await docRef.get()
   revalidatePath("/seller/orders")
   revalidatePath("/account")
-  return { success: true, data: updatedSnap.exists ? { id: updatedSnap.id, ...(updatedSnap.data() as RecordMap) } : null }
+  return { success: true, data: updatedSnap.exists ? { ...updatedSnap.data(), id: updatedSnap.id } : null }
 }
 
 export async function createOrder(orderData: {
@@ -203,6 +248,13 @@ export async function createOrder(orderData: {
     status: "pending",
     created_at: now,
     updated_at: now,
+    // Initialize timeline with ordered status
+    timeline: [
+      {
+        status: "ordered",
+        timestamp: now,
+      } as TimelineEntry,
+    ],
   }
 
   try {

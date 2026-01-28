@@ -3,11 +3,11 @@
 import { memo } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Star, MapPin } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import type { Store } from "@/lib/mock-data"
-import { useLanguage } from "@/lib/language-context"
+import { Star, MapPin, Tag } from "lucide-react"
+import { Card, CardContent } from "./ui/card"
+import { Badge } from "./ui/badge"
+import type { Store } from "../lib/mock-data"
+import { useLanguage } from "../lib/language-context"
 
 interface StoreCardProps {
   store: Store
@@ -22,6 +22,14 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
       <Link href={`/store/${store.id}`}>
         <Card className="overflow-hidden hover:shadow-lg transition-all hover:scale-[1.02] h-full">
           <div className="aspect-video relative bg-gray-100">
+            {(store as any).activeOffer && (
+              <div className="absolute top-2 left-2 z-10">
+                <Badge className="bg-green-600 hover:bg-green-700 text-white border-none px-3 py-1 flex items-center gap-1 shadow-md">
+                  <Tag className="h-3 w-3" />
+                  {t("عرض خاص", "Special Offer")} {(store as any).activeOffer.discount_percentage}%
+                </Badge>
+              </div>
+            )}
             <Image
               src={(store as any).image_url || store.logo || "/placeholder.svg"}
               alt={store.name}

@@ -4,7 +4,7 @@ import React from 'react';
 import { useProductStore } from '../../lib/stores/product-store';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Layers, Settings, Plus, Package } from 'lucide-react';
+import { Layers, Settings, Plus, Package, Trash2 } from 'lucide-react';
 import { useLanguage } from '../../lib/language-context';
 import { cn } from '../../lib/utils';
 import { Product, Shelf, Placement } from '../../lib/types/product-management';
@@ -17,7 +17,8 @@ export default function ShelfManager() {
         setSelectedShelf,
         toggleModal,
         toggleAddShelfModal,
-        placements
+        placements,
+        removeShelf
     } = useProductStore();
     const { t } = useLanguage();
 
@@ -86,17 +87,30 @@ export default function ShelfManager() {
                                 </div>
                             </div>
 
-                            <Button
-                                variant="outline"
-                                className="w-full gap-2 border-gray-200 text-gray-600 hover:text-[#1F478B] hover:bg-blue-50"
-                                onClick={() => {
-                                    setSelectedShelf(shelf.shelfId);
-                                    toggleModal(true);
-                                }}
-                            >
-                                <Settings className="w-4 h-4" />
-                                {t("إدارة المنتجات", "Manage Products")}
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="flex-1 gap-2 border-gray-200 text-gray-600 hover:text-[#1F478B] hover:bg-blue-50"
+                                    onClick={() => {
+                                        setSelectedShelf(shelf.shelfId);
+                                        toggleModal(true);
+                                    }}
+                                >
+                                    <Settings className="w-4 h-4" />
+                                    {t("إدارة المنتجات", "Manage Products")}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                    onClick={() => {
+                                        if (confirm(t("هل أنت متأكد من حذف هذا الرف؟", "Are you sure you want to delete this shelf?"))) {
+                                            removeShelf(shelf.shelfId);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
                 ))}

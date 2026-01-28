@@ -28,6 +28,7 @@ interface ProductState {
 
     addProductToShelf: (shelfId: string, productId: string) => void;
     addShelf: (shelf: Omit<Shelf, 'shelfId' | 'position' | 'rotation'>) => void;
+    removeShelf: (shelfId: string) => void;
     removeProductFromShelf: (placementId: string) => void;
     updateProduct: (product: Product) => void;
 }
@@ -82,6 +83,11 @@ export const useProductStore = create<ProductState>((set) => ({
         };
         return { shelves: [...state.shelves, newShelf] };
     }),
+
+    removeShelf: (shelfId) => set((state) => ({
+        shelves: state.shelves.filter((s) => s.shelfId !== shelfId),
+        placements: state.placements.filter((p) => p.shelfId !== shelfId)
+    })),
 
     removeProductFromShelf: (placementId) => set((state) => ({
         placements: state.placements.filter((p) => p.placementId !== placementId)

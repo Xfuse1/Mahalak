@@ -2,8 +2,8 @@
 
 import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
-import { getAdminDb } from "@/lib/firebase/admin"
-import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+import { getAdminDb } from "../firebase/admin"
+import { cleanUndefined } from "../firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
@@ -24,7 +24,30 @@ export async function getStores(category?: string) {
   const stores = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
 
   stores.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
-  return stores
+
+  // Fetch active offers to show on store cards
+  const now = new Date().toISOString()
+  const offersSnapshot = await db.collection("offers")
+    .where("end_date", ">=", now.split('T')[0])
+    .get()
+
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+  const today = new Date().toISOString().split('T')[0]
+
+  return stores.map(store => {
+    const storeOffer = activeOffers.find(offer =>
+      offer.store_id === store.id &&
+      offer.start_date <= today &&
+      offer.end_date >= today
+    )
+    return {
+      ...store,
+      activeOffer: storeOffer ? {
+        discount_percentage: storeOffer.discount_percentage,
+        title: storeOffer.title
+      } : null
+    }
+  })
 }
 
 export async function getStore(id: string) {
@@ -65,12 +88,7 @@ export async function createStore(storeData: {
   const docRef = db.collection("stores").doc()
 
   const payload = {
-    seller_id: storeData.seller_id,
-    name: storeData.name,
-    address: storeData.address,
-    phone: storeData.phone,
-    category: storeData.category,
-    description: storeData.description || "",
+    ...storeData,
     rating: 0,
     created_at: now,
     updated_at: now,

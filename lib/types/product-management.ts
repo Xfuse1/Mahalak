@@ -7,7 +7,8 @@ export type SectionType =
     | 'GROCERY'
     | 'DRINKS'
     | 'CLEANING'
-    | 'CHECKOUT';
+    | 'CHECKOUT'
+    | 'OTHER';
 
 export type ProductShape = 'box' | 'cylinder' | 'sphere' | 'capsule';
 
