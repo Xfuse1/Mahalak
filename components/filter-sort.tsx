@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { SlidersHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { useLanguage } from "@/lib/language-context"
+import { Button } from "./ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import { Label } from "./ui/label"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet"
+import { useLanguage } from "../lib/language-context"
 
 interface FilterSortProps {
   onFilterChange?: (filters: { sortBy: string }) => void
@@ -80,15 +80,15 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
         </Button>
       </SheetTrigger>
 
-      <SheetContent side={isRTL ? "left" : "right"} className="w-[320px] sm:w-[380px]">
-        <SheetHeader className="mb-6">
+      <SheetContent side={isRTL ? "left" : "right"} className="w-full sm:w-[380px] flex flex-col h-full">
+        <SheetHeader className="mb-6 flex-shrink-0">
           <SheetTitle className={isRTL ? "text-right" : "text-left"}>{t("ترتيب المنتجات", "Sort Products")}</SheetTitle>
           <SheetDescription className={isRTL ? "text-right" : "text-left"}>
             {t("اختر طريقة ترتيب المنتجات حسب تفضيلاتك", "Choose how to sort products based on your preferences")}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-8">
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-8 p-1">
           {/* قسم الترتيب */}
           <div className="space-y-4">
             <Label
@@ -141,23 +141,23 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
               <span className="text-sm text-[#1F478B] font-semibold">{getSortLabel()}</span>
             </div>
           </div>
+        </div>
 
-          {/* أزرار الإجراءات */}
-          <div className={`flex gap-3 pt-4 ${isRTL ? "flex-row-reverse" : ""}`}>
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              className="flex-1 h-12 border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 font-medium bg-transparent"
-            >
-              {t("إعادة التعيين", "Reset")}
-            </Button>
-            <Button
-              onClick={handleApply}
-              className="flex-1 h-12 bg-[#1F478B] hover:bg-[#1a3a70] active:bg-[#153267] text-white text-base font-semibold transition-all duration-200 border-2 border-[#1F478B] hover:border-[#1a3a70] shadow-md"
-            >
-              {t("تطبيق الترتيب", "Apply Sort")}
-            </Button>
-          </div>
+        {/* أزرار الإجراءات */}
+        <div className={`flex gap-3 pt-4 pb-2 border-t mt-auto flex-shrink-0 ${isRTL ? "flex-row-reverse" : ""}`}>
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            className="flex-1 h-12 border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 font-medium bg-transparent"
+          >
+            {t("إعادة التعيين", "Reset")}
+          </Button>
+          <Button
+            onClick={handleApply}
+            className="flex-1 h-12 bg-[#1F478B] hover:bg-[#1a3a70] active:bg-[#153267] text-white text-base font-semibold transition-all duration-200 border-2 border-[#1F478B] hover:border-[#1a3a70] shadow-md"
+          >
+            {t("تطبيق الترتيب", "Apply Sort")}
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

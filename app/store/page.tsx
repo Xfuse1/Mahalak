@@ -1,16 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { Card, CardContent } from "@/components/ui/card"
+import { Header } from "../../components/header"
+import { Footer } from "../../components/footer"
+import { Card, CardContent } from "../../components/ui/card"
 import { Star } from "lucide-react"
 import Link from "next/link"
-import { SearchBar } from "@/components/search-bar"
-import { BackButton } from "@/components/back-button"
-import { useLanguage } from "@/lib/language-context"
+import { SearchBar } from "../../components/search-bar"
+import { BackButton } from "../../components/back-button"
+import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
-import { getStores, searchStores } from "@/lib/actions/stores"
+import { getStores, searchStores } from "../../lib/actions/stores"
 
 type Store = {
   id: string

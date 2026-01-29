@@ -4,11 +4,11 @@ import type React from "react"
 
 import { useState } from "react"
 import { Search, Mic } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { Input } from "./ui/input"
+import { Button } from "./ui/button"
+import { Label } from "./ui/label"
 import { useRouter } from "next/navigation"
-import { useLanguage } from "@/lib/language-context"
+import { useLanguage } from "../lib/language-context"
 
 interface SearchBarProps {
   placeholder?: string
@@ -78,20 +78,17 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           type="text"
           placeholder={searchPlaceholder}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={`pr-10 border-3 border-[#1F478B] focus:border-[#1F478B] focus:ring-2 focus:ring-[#1F478B] focus:ring-opacity-30 hover:border-[#1a3a70] transition-all duration-200 h-12 rounded-xl shadow-sm ${
-            isRTL ? 'text-right' : 'text-left'
-          }`}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+          className={`border-3 border-[#1F478B] focus:border-[#1F478B] focus:ring-2 focus:ring-[#1F478B] focus:ring-opacity-30 hover:border-[#1a3a70] transition-all duration-200 h-12 rounded-xl shadow-sm ${isRTL ? 'text-right pl-10 pr-4' : 'text-left pr-10 pl-4'
+            }`}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={`absolute top-1/2 -translate-y-1/2 transition-colors ${
-            isRTL ? 'left-2' : 'right-2'
-          } ${
-            isListening ? "text-red-500 animate-pulse" : "text-gray-500 hover:text-[#1F478B]"
-          }`}
+          className={`absolute top-1/2 -translate-y-1/2 transition-colors ${isRTL ? 'left-2' : 'right-2'
+            } ${isListening ? "text-red-500 animate-pulse" : "text-gray-500 hover:text-[#1F478B]"
+            }`}
           onClick={handleVoiceSearch}
           title={t("البحث الصوتي", "Voice Search")}
           aria-label={t("البحث الصوتي", "Voice Search")}

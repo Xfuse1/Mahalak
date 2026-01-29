@@ -2,14 +2,14 @@
 
 import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
-import { getAdminDb } from "@/lib/firebase/admin"
-import { createAdminClient } from "@/lib/supabase/server"
-import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+import { getAdminDb } from "../firebase/admin"
+import { createAdminClient } from "../supabase/server"
+import { cleanUndefined } from "../firebase/firestore-helpers"
 
 type ProductRecord = Record<string, any>
 type StoreRecord = Record<string, any>
 
-function mapProduct(doc: DocumentSnapshot) {
+function mapProduct(doc: DocumentSnapshot): (ProductRecord & { id: string }) | null {
   if (!doc.exists) return null
   return { id: doc.id, ...(doc.data() as ProductRecord) }
 }
@@ -181,7 +181,7 @@ export async function deleteProduct(id: string) {
 export async function getProductsByStoreId(storeId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
   return products
@@ -206,19 +206,19 @@ export async function searchProducts(query: string) {
 export async function getRelatedProducts(productId: string, category: string, limit = 4) {
   const db = getAdminDb()
   const snapshot = await db.collection("products").where("category", "==", category).get()
-  const products = snapshot.docs.map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   const filtered = products
-    .filter((product) => product.id !== productId)
-    .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+    .filter((product: ProductRecord & { id: string }) => product.id !== productId)
+    .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))
     .slice(0, limit)
 
   const storeMap = await getStoreMap(
     db,
-    filtered.map((product) => product.store_id).filter(Boolean),
+    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
   )
 
-  return filtered.map((product) => attachStore(product, storeMap))
+  return filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap))
 }
 
 export async function uploadProductImage(formData: FormData) {

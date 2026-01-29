@@ -3,11 +3,12 @@
 import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { createAdminClient } from "../supabase/server"
 import { cleanUndefined } from "../firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
-function mapStore(doc: DocumentSnapshot) {
+function mapStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | null {
   if (!doc.exists) return null
   return { id: doc.id, ...(doc.data() as StoreRecord) }
 }
@@ -162,4 +163,42 @@ export async function searchStores(query: string) {
     const description = (store.description || "").toLowerCase()
     return name.includes(q) || description.includes(q)
   })
+}
+
+export async function uploadStoreImage(formData: FormData) {
+  const file = formData.get("file") as File
+  const storeId = formData.get("storeId") as string
+
+  if (!file || !storeId) {
+    return { success: false, error: "Missing file or store ID" }
+  }
+
+  try {
+    const supabase = await createAdminClient()
+    const fileExt = file.name.split(".").pop()
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
+    const filePath = `stores/${storeId}/${fileName}`
+
+    console.log(`[v0] Attempting to upload store image to path: ${filePath}`)
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+    if (error) {
+      console.error("[v0] Storage upload error details:", JSON.stringify(error, null, 2))
+      return { success: false, error: error.message }
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("product-images").getPublicUrl(data.path)
+
+    return { success: true, url: publicUrl }
+  } catch (error: any) {
+    console.error("[v0] Server upload error:", error)
+    return { success: false, error: error?.message || "Internal server error during upload" }
+  }
 }

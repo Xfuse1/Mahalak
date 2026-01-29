@@ -12,8 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getStoreByUserId, updateStore, createStore } from "@/lib/actions/stores"
-import { createClient } from "@/lib/supabase/client"
+import { getStoreByUserId, updateStore, createStore, uploadStoreImage } from "@/lib/actions/stores"
 import Image from "next/image"
 import { Upload } from "lucide-react"
 
@@ -124,22 +123,18 @@ export default function SettingsPage() {
     if (imageFile) {
       setIsUploadingImage(true)
       try {
-        const supabase = createClient()
-        const fileExt = imageFile.name.split(".").pop()
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
-        const filePath = `stores/${store?.id || user.id}/${fileName}`
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", imageFile)
+        uploadFormData.append("storeId", store?.id || user.id)
 
-        const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, imageFile)
+        const uploadResult = await uploadStoreImage(uploadFormData)
 
-        if (uploadError) {
-          throw new Error(uploadError.message)
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.error || "فشل رفع الصورة")
         }
 
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("product-images").getPublicUrl(filePath)
-
-        imageUrl = publicUrl
+        imageUrl = uploadResult.url!
+        console.log("[v0] Store image uploaded successfully")
       } catch (error: any) {
         console.error("Error uploading image:", error)
         alert("فشل رفع الصورة: " + (error.message || "Unknown error"))

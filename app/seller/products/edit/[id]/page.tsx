@@ -12,9 +12,8 @@ import { Label } from "../../../../../components/ui/label"
 import { Textarea } from "../../../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select"
 import { Upload } from "lucide-react"
-import { getProduct, updateProduct } from "../../../../../lib/actions/products"
+import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
-import { createClient } from "../../../../../lib/supabase/client"
 import Image from "next/image"
 import { sections } from "../../../../../lib/mock/supermarket-data"
 
@@ -92,31 +91,23 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
       // Upload new image if selected
       if (imageFile) {
-        const supabase = createClient()
         const store = await getStoreByUserId(user!.id)
 
         if (!store) {
           throw new Error("لم يتم العثور على المتجر")
         }
 
-        // Generate unique filename
-        const fileExt = imageFile.name.split(".").pop()
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
-        const filePath = `${store.id}/${fileName}`
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", imageFile)
+        uploadFormData.append("storeId", store.id)
 
-        // Upload to Supabase storage
-        const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, imageFile)
+        const uploadResult = await uploadProductImage(uploadFormData)
 
-        if (uploadError) {
-          throw new Error(`فشل رفع الصورة: ${uploadError.message}`)
+        if (!uploadResult.success) {
+          throw new Error(`فشل رفع الصورة: ${uploadResult.error}`)
         }
 
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("product-images").getPublicUrl(filePath)
-
-        imageUrl = publicUrl
+        imageUrl = uploadResult.url!
       }
 
       // Update product in database
@@ -245,10 +236,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
                 {isGroceryStore && (
                   <div>
-                    <Label htmlFor="simulator_section">قسم المحاكي (السوبر ماركت)</Label>
+                    <Label htmlFor="simulator_section">قسم العرض</Label>
                     <Select name="simulator_section" defaultValue={product.simulator_section || "GROCERY"}>
                       <SelectTrigger id="simulator_section">
-                        <SelectValue placeholder="اختر قسم المحاكي" />
+                        <SelectValue placeholder="اختر القسم" />
                       </SelectTrigger>
                       <SelectContent>
                         {sections.map((section) => (

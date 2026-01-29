@@ -1,10 +1,10 @@
-import type { FirebaseFirestore } from "firebase-admin/firestore"
+import type { DocumentSnapshot } from "firebase-admin/firestore"
 
 export function cleanUndefined<T extends Record<string, any>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) as Partial<T>
 }
 
-export function mapDoc<T>(doc: FirebaseFirestore.DocumentSnapshot) {
+export function mapDoc<T>(doc: DocumentSnapshot) {
   if (!doc.exists) return null
   return { id: doc.id, ...(doc.data() as object) } as T
 }

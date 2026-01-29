@@ -2121,26 +2121,23 @@ export default function SupermarketSimulator() {
             // Manual Drop Check: Only add to cart if released over the lower half (Cart area)
             // mouse.y range is [-1, 1], -1 is bottom. -0.2 and below is roughly the cart/bottom HUD area.
             if (mouse.y < -0.2) {
-                if (currentTotal + p.price <= currentMoney) {
-                    addItem({
-                        id: p.id,
-                        name: p.name,
-                        price: p.price,
-                        category: p.category,
-                        image_url: p.image_url || null,
-                        store_id: p.store_id,
-                        store_name: p.store_name,
-                        description: p.description
-                    });
-                    setMessage(`+ ${p.name}`);
-                    setTimeout(() => setMessage(''), 1000);
-                    console.log("Product Dropped into Cart:", p.name);
-                } else {
-                    setMessage("! رصيد غير كاف");
-                    setTimeout(() => setMessage(''), 1000);
-                }
+                addItem({
+                    id: p.id,
+                    name: p.name,
+                    price: p.price,
+                    category: p.category,
+                    image_url: p.image_url || null,
+                    store_id: p.store_id,
+                    store_name: p.store_name,
+                    description: p.description
+                });
+                setMessage(`+ ${p.name}`);
+                setTimeout(() => setMessage(''), 1000);
+                console.log("Product Dropped into Cart:", p.name);
             } else {
-                setMessage("تم الإلغاء");
+                // If it was a quick click and we are on mobile or simple mode, add it anyway?
+                // Actually, let's stick to the button for clarity.
+                setMessage("اسحب لأسفل للإضافة");
                 setTimeout(() => setMessage(''), 800);
                 console.log("Product Return/Cancel Drop");
             }
@@ -2452,8 +2449,42 @@ export default function SupermarketSimulator() {
                             }}>
                                 {hoveredProduct.description || 'بدون وصف'}
                             </div>
-                            <div style={{ marginTop: '10px', fontWeight: 'bold', color: '#ffeb3b' }}>
-                                ${hoveredProduct.price.toFixed(2)}
+                            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontWeight: 'bold', color: '#ffeb3b', fontSize: '16px' }}>
+                                    ${hoveredProduct.price.toFixed(2)}
+                                </div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        addItem({
+                                            id: hoveredProduct.id,
+                                            name: hoveredProduct.name,
+                                            price: hoveredProduct.price,
+                                            category: hoveredProduct.category,
+                                            image_url: hoveredProduct.image_url || null,
+                                            store_id: hoveredProduct.store_id,
+                                            store_name: hoveredProduct.store_name,
+                                            description: hoveredProduct.description
+                                        });
+                                        setMessage(`+ ${hoveredProduct.name}`);
+                                        setTimeout(() => setMessage(''), 1000);
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    style={{
+                                        background: '#4caf50',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '6px 14px',
+                                        borderRadius: '8px',
+                                        fontSize: '13px',
+                                        fontWeight: 'bold',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)'
+                                    }}
+                                >
+                                    إضافة للسلة
+                                </button>
                             </div>
                         </div>
                     </div>

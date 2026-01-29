@@ -195,14 +195,12 @@ export default function NewProductPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
                 {isGroceryStore && (
                   <div>
-                    <Label htmlFor="simulator_section">قسم المحاكي (السوبر ماركت)</Label>
-                    <p className="text-sm text-gray-500 mb-2">اختر القسم الذي سيظهر فيه المنتج في المحاكي ثلاثي الأبعاد</p>
+                    <Label htmlFor="simulator_section">قسم العرض</Label>
                     <Select name="simulator_section" defaultValue="GROCERY">
                       <SelectTrigger id="simulator_section">
-                        <SelectValue placeholder="اختر قسم المحاكي" />
+                        <SelectValue placeholder="اختر القسم" />
                       </SelectTrigger>
                       <SelectContent>
                         {sections.map((section) => (

@@ -2,20 +2,20 @@
 
 import { useState, Suspense, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { ProductCard } from "@/components/product-card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent } from "@/components/ui/card"
+import { Header } from "../../components/header"
+import { Footer } from "../../components/footer"
+import { ProductCard } from "../../components/product-card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
+import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
 import { Star } from "lucide-react"
-import { SearchBar } from "@/components/search-bar"
-import { FilterSort } from "@/components/filter-sort"
-import { BackButton } from "@/components/back-button"
-import { useLanguage } from "@/lib/language-context"
+import { SearchBar } from "../../components/search-bar"
+import { FilterSort } from "../../components/filter-sort"
+import { BackButton } from "../../components/back-button"
+import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
-import { searchProducts, getProducts } from "@/lib/actions/products"
-import { searchStores, getStores } from "@/lib/actions/stores"
+import { searchProducts, getProducts } from "../../lib/actions/products"
+import { searchStores, getStores } from "../../lib/actions/stores"
 
 function SearchResults() {
   const searchParams = useSearchParams()
@@ -129,14 +129,14 @@ function SearchResults() {
           </h1>
 
           <div className={`mb-6 flex gap-4 ${isRTL ? "justify-start" : "justify-start"} w-full`}>
-            <div className={`flex gap-4 w-full md:w-4/5 lg:w-3/5 ${isRTL ? "ml-auto" : "mr-auto"}`}>
-              {isRTL && <FilterSort onFilterChange={handleFilterChange} />}
+            <div className={`flex ${isRTL ? "flex-col-reverse" : "flex-col"} md:flex-row gap-4 w-full md:w-4/5 lg:w-3/5 ${isRTL ? "ml-auto" : "mr-auto"}`}>
+              {isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
 
-              <div className="flex-1">
+              <div className="flex-1 w-full">
                 <SearchBar placeholder={t("ابحث عن منتجات، متاجر...", "Search for products, stores...")} />
               </div>
 
-              {!isRTL && <FilterSort onFilterChange={handleFilterChange} />}
+              {!isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
             </div>
           </div>
 

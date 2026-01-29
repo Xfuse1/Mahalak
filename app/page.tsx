@@ -1,18 +1,18 @@
 "use client"
 
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { ProductCard } from "@/components/product-card"
-import { StoreCard } from "@/components/store-card"
-import { BannerCarousel } from "@/components/banner-carousel"
-import { SearchBar } from "@/components/search-bar"
-import { Button } from "@/components/ui/button"
-import { useLanguage } from "@/lib/language-context"
+import { Header } from "../components/header"
+import { Footer } from "../components/footer"
+import { ProductCard } from "../components/product-card"
+import { StoreCard } from "../components/store-card"
+import { BannerCarousel } from "../components/banner-carousel"
+import { SearchBar } from "../components/search-bar"
+import { Button } from "../components/ui/button"
+import { useLanguage } from "../lib/language-context"
 import Link from "next/link"
 import { Package, Store } from "lucide-react"
 import { useEffect, useState, memo } from "react"
-import { getProducts } from "@/lib/actions/products"
-import { getStores } from "@/lib/actions/stores"
+import { getProducts } from "../lib/actions/products"
+import { getStores } from "../lib/actions/stores"
 
 // Memoize heavy components to prevent unnecessary re-renders
 const MemoizedProductCard = memo(ProductCard)
@@ -132,7 +132,7 @@ export default function Home() {
                 </div>
               </Link>
               <Link
-                href="/stores"
+                href="/store"
                 className="bg-gradient-to-br from-[#2d5ba8] to-[#3a6bc5] text-white p-8 rounded-lg hover:shadow-xl transition-all transform hover:scale-105"
               >
                 <div className="flex items-center gap-4">
@@ -154,7 +154,7 @@ export default function Home() {
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-3xl font-bold">{t("متاجر مميزة", "Featured Stores")}</h2>
               <Button variant="outline" asChild>
-                <Link href="/stores">{t("عرض الكل", "View All")}</Link>
+                <Link href="/store">{t("عرض الكل", "View All")}</Link>
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

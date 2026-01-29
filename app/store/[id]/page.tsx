@@ -85,7 +85,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const storeData = await getStore(id)
+        const storeData = (await getStore(id)) as Store | null
 
         if (!storeData) {
           setLoading(false)
@@ -144,7 +144,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
       ; (async () => {
         try {
-          const existing = await getUserStoreReview(store.id, user.id)
+          const existing = (await getUserStoreReview(store.id, user.id)) as { rating: number } | null
           if (!mounted) return
           if (existing && typeof existing.rating === "number") {
             setUserStoreReview(existing.rating)
@@ -238,12 +238,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
       <Header />
 
       {offers.length > 0 && (
-        <div className="bg-green-600 text-white py-3 shadow-md animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
-          <div className="container mx-auto px-4 flex items-center justify-center gap-4 text-center">
-            <div className="flex items-center gap-2 font-bold text-lg md:text-xl">
-              <Tag className="h-6 w-6 animate-bounce" />
+        <div className="bg-green-600 text-white py-2 md:py-3 shadow-md animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
+          <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 text-center">
+            <div className="flex flex-wrap items-center justify-center gap-2 font-bold text-base md:text-xl">
+              <Tag className="h-5 w-5 md:h-6 md:w-6 animate-bounce" />
               <span>{offers[0].title}</span>
-              <span className="bg-yellow-400 text-green-800 px-3 py-0.5 rounded-full text-sm ml-2">
+              <span className="bg-yellow-400 text-green-800 px-2 py-0.5 rounded-full text-xs md:text-sm">
                 {offers[0].discount_percentage}% {t("خصم", "OFF")}
               </span>
             </div>
@@ -254,16 +254,16 @@ export default function StorePage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      <main className="flex-1 py-8">
-        <div className="container mx-auto px-4">
-          <div className="mb-6">
+      <main className="flex-1 py-4 md:py-8">
+        <div className="container mx-auto px-2 md:px-4">
+          <div className="mb-4 md:mb-6">
             <BackButton />
           </div>
 
 
-          <div className="bg-white rounded-lg shadow-sm p-6 md:p-8 mb-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
-              <div className="relative h-64 lg:h-full rounded-lg overflow-hidden bg-gray-100">
+          <div className="bg-white rounded-lg shadow-sm p-3 md:p-8 mb-6 md:mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-6">
+              <div className="relative h-48 sm:h-64 lg:h-full rounded-lg overflow-hidden bg-gray-100">
                 <Image
                   src={store.image_url || "/placeholder.svg"}
                   alt={store.name}
@@ -273,16 +273,16 @@ export default function StorePage({ params }: { params: { id: string } }) {
                 />
               </div>
 
-              <div className="space-y-4">
-                <h1 className="text-3xl md:text-4xl font-bold break-words">{store.name}</h1>
-                <p className="text-gray-600 text-lg leading-relaxed break-words">{store.description}</p>
-                <div className="flex items-center gap-4">
+              <div className="space-y-4 min-w-0">
+                <h1 className="text-2xl md:text-4xl font-bold break-all">{store.name}</h1>
+                <p className="text-gray-600 text-base md:text-lg leading-relaxed break-all">{store.description}</p>
+                <div className="flex flex-wrap items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                     <span className="font-bold text-lg">{store.rating}</span>
                     <span className="text-gray-500">{t("تقييم", "rating")}</span>
                   </div>
-                  <div className="ml-4">
+                  <div className="ml-0 md:ml-4 w-full md:w-auto">
                     <p className="text-sm text-gray-600">{t("قيم المتجر", "Rate this store")}</p>
                     <div className="flex items-center gap-1 mt-1">
                       {[1, 2, 3, 4, 5].map((n) => {
@@ -303,13 +303,17 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
                               try {
                                 setSubmittingReview(true)
-                                const res = await upsertStoreReview(store.id, user.id, n)
-                                if (res && res.average !== undefined && res.average !== null) {
-                                  setStore((s) => (s ? { ...s, rating: res.average } : s))
+                                const res = await upsertStoreReview(store.id, user.id, n) as { success?: boolean, average?: number, error?: string }
+                                if (res && res.success && typeof res.average === "number") {
+                                  const newAvg = res.average
+                                  setStore((s) => (s ? { ...s, rating: newAvg } : s))
                                   setUserStoreReview(n)
+                                } else if (res && res.error) {
+                                  alert(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
                                 }
-                              } catch (err) {
+                              } catch (err: any) {
                                 console.error("[v0] Error submitting store review:", err)
+                                alert(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
                               } finally {
                                 setSubmittingReview(false)
                               }
@@ -322,10 +326,10 @@ export default function StorePage({ params }: { params: { id: string } }) {
                       })}
                     </div>
                   </div>
-                  <span className="bg-secondary px-4 py-2 rounded-full font-medium">{store.category}</span>
+                  <span className="bg-secondary px-3 py-1 text-sm md:px-4 md:py-2 md:text-base rounded-full font-medium">{store.category}</span>
                 </div>
 
-                <div className="flex items-start gap-3 p-4 bg-secondary rounded-lg">
+                <div className="flex items-start gap-3 p-3 md:p-4 bg-secondary rounded-lg">
                   <MapPin className="h-5 w-5 text-[#1F478B] mt-1 flex-shrink-0" />
                   <div>
                     <p className="font-semibold mb-1">{t("العنوان", "Address")}</p>
@@ -333,12 +337,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700 w-full">
                     <MessageCircle className="ml-2 h-5 w-5" />
                     {t("تواصل واتساب", "WhatsApp")}
                   </Button>
-                  <Button onClick={handleCall} variant="outline" className="flex-1 bg-transparent">
+                  <Button onClick={handleCall} variant="outline" className="flex-1 bg-transparent w-full">
                     <Phone className="ml-2 h-5 w-5" />
                     {t("اتصال", "Call")}
                   </Button>
@@ -351,10 +355,10 @@ export default function StorePage({ params }: { params: { id: string } }) {
                     </Button>
                   </SheetTrigger>
                   <SheetContent>
-                    <SheetHeader>
-                      <SheetTitle>{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
+                    <SheetHeader className="pe-10">
+                      <SheetTitle className="text-right">{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
                     </SheetHeader>
-                    <div className="py-4">
+                    <div className="py-4 px-4 overflow-y-auto h-full">
                       {store.return_policy ? (
                         <p className="whitespace-pre-wrap break-words">{store.return_policy}</p>
                       ) : (

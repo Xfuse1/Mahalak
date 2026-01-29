@@ -204,53 +204,70 @@ export default function AccountPage() {
                   ) : orders.length > 0 ? (
                     <div className="space-y-4">
                       {orders.map((order) => (
-                        <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <p className="font-semibold text-lg">
-                                {t("طلب من", "Order from")} {order.stores?.name || t("متجر غير معروف", "Unknown Store")}
-                              </p>
-                              <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {t("رقم الطلب:", "Order ID:")} {order.id.slice(0, 8)}
-                              </p>
+                        <div key={order.id} className="bg-white border rounded-xl overflow-hidden hover:border-[#1F478B]/30 hover:shadow-md transition-all duration-200 group">
+                          {/* Card Header */}
+                          <div className="bg-gray-50/50 border-b p-4 flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-white border shadow-sm flex items-center justify-center flex-shrink-0">
+                                <Store className="h-5 w-5 text-gray-600 group-hover:text-[#1F478B] transition-colors" />
+                              </div>
+                              <div>
+                                <h3 className="font-bold text-gray-900 leading-tight mb-1">
+                                  {order.stores?.name || t("متجر غير معروف", "Unknown Store")}
+                                </h3>
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <span>{formatDate(order.created_at)}</span>
+                                  <span className="w-1 h-1 rounded-full bg-gray-300" />
+                                  <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded border">#{order.id.slice(0, 8)}</span>
+                                </div>
+                              </div>
                             </div>
                             <span
-                              className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}
+                              className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}
                             >
                               {getStatusText(order.status)}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm text-gray-600">
-                              <span>
-                                {order.order_items?.length || 0} {t("منتج", "items")}
-                              </span>
+
+                          {/* Card Body */}
+                          <div className="p-4">
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Package className="h-4 w-4 text-gray-400" />
+                                <span>
+                                  {order.order_items?.length || 0} {t("منتجات", "Items")}
+                                </span>
+                              </div>
                               {order.delivery_address && (
-                                <p className="text-xs mt-1">
-                                  {t("العنوان:", "Address:")} {order.delivery_address}
-                                </p>
+                                <div className="flex items-start gap-2 text-sm text-gray-600">
+                                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                  <span className="line-clamp-1">{order.delivery_address}</span>
+                                </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-[#1F478B] border-[#1F478B] hover:bg-[#1F478B]/10"
-                                onClick={() => {
-                                  setSelectedOrder(order)
-                                  setIsTrackingModalOpen(true)
-                                }}
-                              >
-                                <Eye className="h-4 w-4 ml-1" />
-                                {t("تتبع الطلب", "Track Order")}
-                              </Button>
-                              <div className="text-left">
-                                <p className="text-xl font-bold text-[#1F478B]">
-                                  {Number(order.total).toFixed(2)} {t("جنيه", "EGP")}
-                                </p>
-                              </div>
+                          </div>
+
+                          {/* Card Footer */}
+                          <div className="px-4 pb-4 pt-0 flex flex-row items-center justify-between gap-4 mt-1">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-0.5">{t("الإجمالي", "Total Value")}</p>
+                              <p className="text-lg font-bold text-[#1F478B]">
+                                {Number(order.total).toFixed(2)} <span className="text-sm font-medium text-gray-600">{t("جنيه", "EGP")}</span>
+                              </p>
                             </div>
+
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="bg-white text-[#1F478B] border border-[#1F478B] hover:bg-[#1F478B] hover:text-white transition-all shadow-sm"
+                              onClick={() => {
+                                setSelectedOrder(order)
+                                setIsTrackingModalOpen(true)
+                              }}
+                            >
+                              <Eye className="h-4 w-4 ml-1.5" />
+                              {t("تتبع الطلب", "Track Order")}
+                            </Button>
                           </div>
                         </div>
                       ))}

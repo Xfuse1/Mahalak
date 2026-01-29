@@ -1,8 +1,8 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getAdminDb } from "@/lib/firebase/admin"
-import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+import { getAdminDb } from "../firebase/admin"
+import { cleanUndefined } from "../firebase/firestore-helpers"
 
 type OfferRecord = Record<string, any>
 
@@ -11,7 +11,7 @@ export async function getStoreOffers(storeId: string) {
   const snapshot = await db.collection("offers").where("store_id", "==", storeId).get()
   const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as OfferRecord) }))
 
-  offers.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  offers.sort((a: OfferRecord, b: OfferRecord) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
   return offers
 }
 

@@ -75,15 +75,20 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
     }
 
     return (
-        <div className="relative">
+        <div className="relative pl-2 pr-2">
             {/* Cancelled Banner */}
             {isCancelled && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-center">
-                    <span className="text-red-600 font-medium">{t("تم إلغاء الطلب", "Order Cancelled")}</span>
+                <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2 text-red-600 animate-in fade-in zoom-in duration-300">
+                    <span className="font-bold text-lg">{t("تم إلغاء الطلب", "Order Cancelled")}</span>
                 </div>
             )}
 
-            <div className="space-y-0">
+            <div className="space-y-0 relative">
+                {/* Vertical line background for continuity, obscured by items but helpful for alignment if needed, 
+                     though we draw lines individually per step for logic control. 
+                     Here we just stick to the individual lines approach. 
+                 */}
+
                 {trackingSteps.map((step, index) => {
                     const isCompleted = index <= currentIndex && !isCancelled
                     const isCurrent = index === currentIndex && !isCancelled
@@ -92,58 +97,67 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                     const dateTime = entry ? formatDateTime(entry.timestamp, locale) : null
 
                     return (
-                        <div key={step.id} className="flex gap-4">
+                        <div key={step.id} className="flex gap-4 relative group">
                             {/* Timeline indicator */}
                             <div className="flex flex-col items-center">
                                 {/* Circle */}
                                 <div
                                     className={`
-                    flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all
-                    ${isCompleted
-                                            ? "bg-[#1F478B] border-[#1F478B] text-white"
-                                            : "bg-gray-100 border-gray-300 text-gray-400"
+                                        z-10 flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-500
+                                        ${isCompleted
+                                            ? "bg-[#1F478B] border-[#1F478B] text-white shadow-md shadow-[#1F478B]/20"
+                                            : "bg-white border-gray-200 text-gray-300"
                                         }
-                    ${isCurrent ? "ring-4 ring-[#1F478B]/20" : ""}
-                  `}
+                                        ${isCurrent ? "ring-4 ring-[#1F478B]/20 scale-110" : ""}
+                                    `}
                                 >
-                                    {step.icon}
+                                    {isCurrent && !isCancelled ? (
+                                        <div className="animate-pulse">{step.icon}</div>
+                                    ) : (
+                                        step.icon
+                                    )}
                                 </div>
                                 {/* Line */}
                                 {!isLast && (
                                     <div
-                                        className={`w-0.5 h-16 ${index < currentIndex && !isCancelled
+                                        className={`w-0.5 h-20 transition-colors duration-500 ease-in-out ${index < currentIndex && !isCancelled
                                             ? "bg-[#1F478B]"
-                                            : "bg-gray-200"
+                                            : "bg-gray-100"
                                             }`}
                                     />
                                 )}
                             </div>
 
                             {/* Content */}
-                            <div className={`flex-1 pb-8 ${isLast ? "pb-0" : ""}`}>
-                                <div className="flex items-start justify-between">
+                            <div className={`flex-1 pb-10 ${isLast ? "pb-0" : ""} pt-1`}>
+                                <div className={`
+                                    flex items-start justify-between p-3 rounded-lg transition-colors
+                                    ${isCurrent ? "bg-[#1F478B]/5 border border-[#1F478B]/10" : "hover:bg-gray-50"}
+                                `}>
                                     <div>
                                         <h4
-                                            className={`font-semibold ${isCompleted ? "text-gray-900" : "text-gray-400"
+                                            className={`font-bold text-base ${isCompleted ? "text-gray-900" : "text-gray-400"
                                                 }`}
                                         >
                                             {t(step.labelAr, step.labelEn)}
                                         </h4>
                                         {dateTime && (
-                                            <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-                                                <Clock className="h-3 w-3" />
-                                                <span>{dateTime.date}</span>
-                                                <span>•</span>
-                                                <span>{dateTime.time}</span>
+                                            <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500 font-medium">
+                                                <Clock className="h-3.5 w-3.5 opacity-70" />
+                                                <span dir="ltr">{dateTime.date}</span>
+                                                <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                                <span dir="ltr">{dateTime.time}</span>
                                             </div>
                                         )}
                                         {entry?.note && (
-                                            <p className="mt-1 text-sm text-gray-600 italic">{entry.note}</p>
+                                            <p className="mt-2 text-sm text-gray-600 italic bg-white/50 p-2 rounded border border-gray-100">
+                                                "{entry.note}"
+                                            </p>
                                         )}
                                     </div>
                                     {isCurrent && (
-                                        <span className="px-2 py-1 text-xs font-medium bg-[#1F478B]/10 text-[#1F478B] rounded-full">
-                                            {t("الحالة الحالية", "Current")}
+                                        <span className="px-3 py-1 text-xs font-bold bg-[#1F478B] text-white rounded-full shadow-sm animate-in fade-in slide-in-from-end-4">
+                                            {t("الآن", "Now")}
                                         </span>
                                     )}
                                 </div>
