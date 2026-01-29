@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SellerHeader } from "../../../components/seller-header"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { Filter } from "lucide-react"
-import { OrderStatusSelector } from "@/components/order-status-selector"
-import { getStoreByUserId } from "@/lib/actions/stores"
-import { getStoreOrders } from "@/lib/actions/orders"
-import { useAuth } from "@/lib/auth-context"
-import { useLanguage } from "@/lib/language-context"
+import { OrderStatusSelector } from "../../../components/order-status-selector"
+import { getStoreByUserId } from "../../../lib/actions/stores"
+import { getStoreOrders } from "../../../lib/actions/orders"
+import { useAuth } from "../../../lib/auth-context"
+import { useLanguage } from "../../../lib/language-context"
 
 type OrderItem = {
   id: string
