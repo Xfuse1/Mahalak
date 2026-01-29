@@ -4,16 +4,16 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SellerHeader } from "@/components/seller-header"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { getProductsByStoreId, deleteProduct } from "@/lib/actions/products"
-import { getStoreByUserId } from "@/lib/actions/stores"
+import { SellerHeader } from "../../components/seller-header"
+import { useAuth } from "../../lib/auth-context"
+import { Button } from "../../components/ui/button"
+import { Card, CardContent } from "../../components/ui/card"
+import { getProductsByStoreId, deleteProduct } from "../../lib/actions/products"
+import { getStoreByUserId } from "../../lib/actions/stores"
 import { Edit, Trash2, Plus } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { useLanguage } from "@/lib/language-context"
+import { useLanguage } from "../../lib/language-context"
 
 export default function SellerProductsPage() {
   const { user, isLoading } = useAuth()
