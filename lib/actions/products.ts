@@ -4,14 +4,14 @@ import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestor
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
-import { cleanUndefined } from "../firebase/firestore-helpers"
+import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
 
 type ProductRecord = Record<string, any>
 type StoreRecord = Record<string, any>
 
 function mapProduct(doc: DocumentSnapshot): (ProductRecord & { id: string }) | null {
   if (!doc.exists) return null
-  return { id: doc.id, ...(doc.data() as ProductRecord) }
+  return serializeData({ id: doc.id, ...(doc.data() as ProductRecord) })
 }
 
 async function getStoreMap(db: Firestore, storeIds: string[]) {
@@ -67,7 +67,7 @@ export async function getProducts(category?: string) {
     products.map((product: any) => product.store_id).filter(Boolean),
   )
 
-  return products.map((product: any) => attachStore(product, storeMap))
+  return serializeData(products.map((product: any) => attachStore(product, storeMap)))
 }
 
 export async function getProduct(id: string) {
@@ -83,7 +83,7 @@ export async function getProduct(id: string) {
   if (!product) return null
 
   const storeMap = await getStoreMap(db, [product.store_id])
-  return attachStore(product, storeMap)
+  return serializeData(attachStore(product, storeMap))
 }
 
 export async function createProduct(formData: {
@@ -184,7 +184,7 @@ export async function getProductsByStoreId(storeId: string) {
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
-  return products
+  return serializeData(products)
 }
 
 export async function searchProducts(query: string) {
@@ -218,7 +218,7 @@ export async function getRelatedProducts(productId: string, category: string, li
     filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
   )
 
-  return filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap))
+  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
 }
 
 export async function uploadProductImage(formData: FormData) {

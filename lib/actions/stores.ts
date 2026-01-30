@@ -4,13 +4,13 @@ import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestor
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
-import { cleanUndefined } from "../firebase/firestore-helpers"
+import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
 function mapStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | null {
   if (!doc.exists) return null
-  return { id: doc.id, ...(doc.data() as StoreRecord) }
+  return serializeData({ id: doc.id, ...(doc.data() as StoreRecord) })
 }
 
 export async function getStores(category?: string) {
@@ -41,13 +41,13 @@ export async function getStores(category?: string) {
       offer.start_date <= today &&
       offer.end_date >= today
     )
-    return {
+    return serializeData({
       ...store,
       activeOffer: storeOffer ? {
         discount_percentage: storeOffer.discount_percentage,
         title: storeOffer.title
       } : null
-    }
+    })
   })
 }
 
