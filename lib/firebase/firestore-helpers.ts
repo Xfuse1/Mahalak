@@ -31,3 +31,11 @@ export function serializeData<T>(data: T): T {
 
   return data
 }
+
+export function chunkArray<T>(items: T[], size = 10) {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
