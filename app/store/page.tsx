@@ -92,7 +92,7 @@ export default function StoresPage() {
                       <div className="flex items-center gap-2 mb-4">
                         <div className="flex items-center gap-1">
                           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium">{store.rating.toFixed(1)}</span>
+                          <span className="font-medium">{(store.rating || 0).toFixed(1)}</span>
                         </div>
                         <span className="text-sm text-gray-500">(0 {t("تقييم", "reviews")})</span>
                       </div>
