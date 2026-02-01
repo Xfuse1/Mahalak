@@ -2281,38 +2281,6 @@ export default function SupermarketSimulator() {
                 FPS: {fps}
             </div>
 
-            {/* Back to Site */}
-            <div style={{
-                position: 'absolute',
-                top: 10,
-                left: 10,
-                zIndex: 100
-            }}>
-                <Link
-                    href="/"
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '6px 12px',
-                        borderRadius: '999px',
-                        background: 'rgba(0,0,0,0.65)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        color: '#fff',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        textDecoration: 'none',
-                        backdropFilter: 'blur(6px)',
-                        WebkitBackdropFilter: 'blur(6px)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
-                    }}
-                >
-                    العودة للموقع
-                </Link>
-            </div>
-
             {/* Specialization Badge - Centered and Responsive */}
             <div style={{
                 position: 'absolute',
@@ -2493,54 +2461,88 @@ export default function SupermarketSimulator() {
 
             {/* Cart UI - Floating Button or Glassmorphism Card */}
             {isCartMinimized ? (
-                // Floating Action Button (FAB)
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsCartMinimized(false);
-                    }}
-                    style={{
-                        position: 'absolute',
-                        bottom: 25,
-                        right: 25, // Standard FAB position
-                        width: '56px',
-                        height: '56px',
-                        borderRadius: '50%',
-                        background: 'rgba(229, 57, 53, 0.95)',
-                        color: 'white',
-                        border: '2px solid rgba(255,255,255,0.3)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-                        zIndex: 110,
-                        fontSize: '24px'
-                    }}
-                    title="فتح السلة"
-                >
-                    🛒
-                    {cartCount > 0 && (
-                        <span style={{
-                            position: 'absolute',
-                            top: -5,
-                            right: -5,
-                            background: '#4caf50',
-                            color: 'white',
+                // Floating Action Button (FAB) + Back to Site Button
+                <div style={{
+                    position: 'absolute',
+                    bottom: 25,
+                    right: 25,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    zIndex: 110
+                }}>
+                    {/* Back to Site Button */}
+                    <Link
+                        href="/"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '14px 18px',
+                            borderRadius: '999px',
+                            background: 'rgba(31, 71, 139, 0.95)',
+                            border: '2px solid rgba(255,255,255,0.3)',
+                            color: '#fff',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        🏠 العودة للموقع
+                    </Link>
+
+                    {/* Cart FAB */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCartMinimized(false);
+                        }}
+                        style={{
+                            width: '56px',
+                            height: '56px',
                             borderRadius: '50%',
-                            width: '24px',
-                            height: '24px',
-                            fontSize: '12px',
+                            background: 'rgba(229, 57, 53, 0.95)',
+                            color: 'white',
+                            border: '2px solid rgba(255,255,255,0.3)',
+                            cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontWeight: 'bold',
-                            border: '2px solid #222'
-                        }}>
-                            {cartCount}
-                        </span>
-                    )}
-                </button>
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                            fontSize: '24px',
+                            position: 'relative'
+                        }}
+                        title="فتح السلة"
+                    >
+                        🛒
+                        {cartCount > 0 && (
+                            <span style={{
+                                position: 'absolute',
+                                top: -5,
+                                right: -5,
+                                background: '#4caf50',
+                                color: 'white',
+                                borderRadius: '50%',
+                                width: '24px',
+                                height: '24px',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                border: '2px solid #222'
+                            }}>
+                                {cartCount}
+                            </span>
+                        )}
+                    </button>
+                </div>
             ) : (
                 // Full Cart Card
                 <div style={{

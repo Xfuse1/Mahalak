@@ -53,6 +53,69 @@ async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
   return items
 }
 
+// Get a single order by ID
+export async function getOrderById(orderId: string) {
+  try {
+    const db = getAdminDb()
+    
+    // First try to find by document ID
+    let orderDoc = await db.collection("orders").doc(orderId).get()
+    
+    // If not found, try to find by order_id field
+    if (!orderDoc.exists) {
+      const snapshot = await db
+        .collection("orders")
+        .where("order_id", "==", orderId)
+        .limit(1)
+        .get()
+      
+      if (snapshot.empty) {
+        return null
+      }
+      orderDoc = snapshot.docs[0]
+    }
+
+    const orderData = orderDoc.data()
+    if (!orderData) return null
+
+    // Get order items
+    const itemsSnapshot = await db
+      .collection("order_items")
+      .where("order_id", "==", orderDoc.id)
+      .get()
+
+    const productIds = itemsSnapshot.docs.map((doc) => doc.data().product_id).filter(Boolean)
+    const productMap = await fetchDocsMap(db, "products", productIds)
+
+    const items = itemsSnapshot.docs.map((doc) => {
+      const itemData = doc.data()
+      const product = productMap.get(itemData.product_id)
+      return {
+        ...itemData,
+        id: doc.id,
+        name: product?.name || itemData.name,
+        image_url: product?.image_url || itemData.image_url,
+      }
+    })
+
+    // Convert Timestamps to strings
+    const createdAt = orderData.created_at?.toDate?.()?.toISOString?.() || orderData.created_at
+    const updatedAt = orderData.updated_at?.toDate?.()?.toISOString?.() || orderData.updated_at
+
+    return {
+      id: orderDoc.id,
+      order_id: orderDoc.id,
+      ...orderData,
+      items,
+      created_at: createdAt,
+      updated_at: updatedAt,
+    }
+  } catch (error) {
+    console.error("[v0] Error fetching order:", error)
+    return null
+  }
+}
+
 export async function getCustomerOrders(customerId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("customer_id", "==", customerId).get()
@@ -177,6 +240,8 @@ export async function getStoreOrders(storeId: string) {
   })
 }
 
+import { sendReviewRequestNotification } from "./notifications"
+
 export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
@@ -217,7 +282,21 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
       updatePayload.timeline = initialTimeline
     }
 
+    // If order is delivered, mark delivery timestamp
+    if (status === "delivered") {
+      updatePayload.delivered_at = now
+    }
+
     await docRef.set(updatePayload, { merge: true })
+
+    // Send review request notification when order is delivered
+    if (status === "delivered" && currentData?.customer_id) {
+      await sendReviewRequestNotification({
+        user_id: currentData.customer_id,
+        order_id: orderId,
+        driver_name: currentData.driver_name,
+      })
+    }
   } catch (error: any) {
     console.error("[v0] Error updating order status:", error)
     return { success: false, error: error?.message || "Failed to update order status" }
@@ -234,13 +313,22 @@ export async function createOrder(orderData: {
   store_id: string
   total: number
   delivery_address: string
+  customer_name?: string
+  customer_phone?: string
+  delivery_city?: string
+  delivery_state?: string
+  delivery_latitude?: number
+  delivery_longitude?: number
+  delivery_notes?: string
+  delivery_company?: string
+  delivery_price?: number
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   const db = getAdminDb()
   const now = new Date().toISOString()
   const orderRef = db.collection("orders").doc()
 
-  const orderPayload = {
+  const orderPayload: Record<string, any> = {
     customer_id: orderData.customer_id,
     store_id: orderData.store_id,
     total: Number(orderData.total),
@@ -255,6 +343,21 @@ export async function createOrder(orderData: {
         timestamp: now,
       } as TimelineEntry,
     ],
+  }
+
+  // Add optional delivery details
+  if (orderData.customer_name) orderPayload.customer_name = orderData.customer_name
+  if (orderData.customer_phone) orderPayload.customer_phone = orderData.customer_phone
+  if (orderData.delivery_city) orderPayload.delivery_city = orderData.delivery_city
+  if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
+  if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
+  if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
+  if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
+  
+  // Add coordinates if available
+  if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
+    orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
+    orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
   }
 
   try {

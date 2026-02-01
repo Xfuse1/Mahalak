@@ -5,16 +5,28 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { BackButton } from "@/components/back-button"
-import { ShoppingBag } from "lucide-react"
+import { ShoppingBag, Plus, Minus, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 
 export default function CartPage() {
   const { t } = useLanguage()
-  const { items, decrementItem, removeItem, clear } = useCartStore()
+  const { items, addItem, decrementItem, removeItem, clear } = useCartStore()
+  const { user } = useAuth()
+  const router = useRouter()
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  const handleCheckout = () => {
+    if (!user) {
+      router.push("/auth")
+      return
+    }
+    router.push("/checkout")
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -57,15 +69,37 @@ export default function CartPage() {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <p className="text-lg font-bold text-[#1F478B]">{item.price} {t("جنيه", "EGP")}</p>
-                        <p className="text-sm text-gray-600">x{item.quantity}</p>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => decrementItem(item.id)}>
-                            {t("نقص", "Minus")}
+                        
+                        {/* Quantity Controls */}
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 hover:bg-gray-200"
+                            onClick={() => decrementItem(item.id)}
+                          >
+                            <Minus className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => removeItem(item.id)}>
-                            {t("حذف", "Remove")}
+                          <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 hover:bg-gray-200"
+                            onClick={() => addItem(item)}
+                          >
+                            <Plus className="h-4 w-4" />
                           </Button>
                         </div>
+                        
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => removeItem(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          {t("حذف", "Remove")}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -82,7 +116,7 @@ export default function CartPage() {
                     <Button variant="outline" onClick={clear}>
                       {t("إفراغ السلة", "Clear Cart")}
                     </Button>
-                    <Button className="bg-[#1F478B] hover:bg-[#1a3a70]">
+                    <Button onClick={handleCheckout} className="bg-[#1F478B] hover:bg-[#1a3a70]">
                       {t("إكمال الطلب", "Checkout")}
                     </Button>
                   </div>

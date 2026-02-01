@@ -221,6 +221,46 @@ export async function getRelatedProducts(productId: string, category: string, li
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
 }
 
+// Get products from the same store (excluding current product)
+export async function getProductsFromSameStore(productId: string, storeId: string, limit = 4) {
+  const db = getAdminDb()
+  const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
+  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+
+  const filtered = products
+    .filter((product: ProductRecord & { id: string }) => product.id !== productId)
+    .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))
+    .slice(0, limit)
+
+  const storeMap = await getStoreMap(
+    db,
+    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
+  )
+
+  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
+}
+
+// Get products from other stores (excluding current product and current store)
+export async function getProductsFromOtherStores(productId: string, storeId: string, limit = 4) {
+  const db = getAdminDb()
+  const snapshot = await db.collection("products").get()
+  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+
+  const filtered = products
+    .filter((product: ProductRecord & { id: string }) => 
+      product.id !== productId && product.store_id !== storeId
+    )
+    .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))
+    .slice(0, limit)
+
+  const storeMap = await getStoreMap(
+    db,
+    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
+  )
+
+  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
+}
+
 export async function uploadProductImage(formData: FormData) {
   const file = formData.get("file") as File
   const storeId = formData.get("storeId") as string

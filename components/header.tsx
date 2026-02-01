@@ -1,18 +1,77 @@
 "use client"
 
 import Link from "next/link"
-import { User, LogOut, Cuboid } from "lucide-react"
+import { User, LogOut, Cuboid, ShoppingCart, Bell } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
 import { LanguageSwitcher } from "./language-switcher"
 import { useTranslation } from "react-i18next"
+import { useCartStore } from "@/lib/stores/cart-store"
+import { useEffect, useState } from "react"
+import { getUnreadNotificationsCount, getUserNotifications, markNotificationAsRead, type Notification } from "@/lib/actions/notifications"
 
 export function Header() {
   const { user, logout } = useAuth()
   const router = useRouter()
   const { t } = useTranslation("common")
+  const { items } = useCartStore()
+  const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
+  
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
+
+  // Fetch unread notifications count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (user?.id) {
+        const count = await getUnreadNotificationsCount(user.id)
+        setUnreadCount(count)
+      }
+    }
+
+    fetchUnreadCount()
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [user?.id])
+
+  // Fetch notifications when dropdown opens
+  const handleNotificationClick = async () => {
+    if (!user?.id) {
+      router.push("/auth")
+      return
+    }
+
+    setShowNotifications(!showNotifications)
+    
+    if (!showNotifications) {
+      setLoadingNotifications(true)
+      const notifs = await getUserNotifications(user.id, 10)
+      setNotifications(notifs)
+      setLoadingNotifications(false)
+    }
+  }
+
+  // Handle notification item click
+  const handleNotificationItemClick = async (notification: Notification) => {
+    if (!notification.is_read) {
+      await markNotificationAsRead(notification.id)
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
+      )
+    }
+
+    setShowNotifications(false)
+
+    if (notification.link) {
+      router.push(notification.link)
+    }
+  }
 
   return (
     <header suppressHydrationWarning className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
@@ -41,8 +100,104 @@ export function Header() {
               <LanguageSwitcher />
             </div>
 
+            {/* Cart Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+              onClick={() => router.push("/cart")}
+            >
+              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
+              {cartItemsCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {cartItemsCount > 99 ? "99+" : cartItemsCount}
+                </span>
+              )}
+            </Button>
+
             {user ? (
               <>
+                {/* Notifications Button */}
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+                    onClick={handleNotificationClick}
+                  >
+                    <Bell className="h-4 w-4 md:h-5 md:w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+
+                  {/* Notifications Dropdown */}
+                  {showNotifications && (
+                    <>
+                      {/* Backdrop */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowNotifications(false)}
+                      />
+                      
+                      {/* Dropdown */}
+                      <div className="absolute left-0 md:right-0 md:left-auto top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-lg shadow-xl border z-50">
+                        <div className="p-3 border-b bg-gray-50">
+                          <h3 className="font-semibold text-gray-800">{t("notifications", "الإشعارات")}</h3>
+                        </div>
+                        
+                        {loadingNotifications ? (
+                          <div className="p-4 text-center text-gray-500">
+                            {t("loading", "جاري التحميل...")}
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div className="p-4 text-center text-gray-500">
+                            {t("noNotifications", "لا توجد إشعارات")}
+                          </div>
+                        ) : (
+                          <div>
+                            {notifications.map((notification) => (
+                              <div
+                                key={notification.id}
+                                className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                                  !notification.is_read ? "bg-blue-50" : ""
+                                }`}
+                                onClick={() => handleNotificationItemClick(notification)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  {!notification.is_read && (
+                                    <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-gray-800 truncate">
+                                      {notification.title}
+                                    </p>
+                                    <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                      {notification.message}
+                                    </p>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                      {notification.created_at
+                                        ? new Date(notification.created_at).toLocaleDateString("ar-EG", {
+                                            day: "numeric",
+                                            month: "short",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })
+                                        : ""}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <Button
                   variant="ghost"
                   size="icon"

@@ -4,17 +4,18 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { BackButton } from "@/components/back-button"
-import { Star, MessageCircle, Phone } from "lucide-react"
+import { Star, MessageCircle, Phone, ShoppingCart, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useEffect, useState } from "react"
-import { getProduct, getRelatedProducts, updateProduct } from "@/lib/actions/products"
+import { getProduct, getRelatedProducts, getProductsFromSameStore, getProductsFromOtherStores, updateProduct } from "@/lib/actions/products"
 import { getUserReview, upsertReview } from "@/lib/actions/reviews"
 import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
+import { useCartStore } from "@/lib/stores/cart-store"
 
 type Product = {
   id: string
@@ -42,11 +43,14 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+  const { addItem } = useCartStore()
 
   const [product, setProduct] = useState<Product | null>(null)
   const [userReview, setUserReview] = useState<number | null>(null)
   const [submittingReview, setSubmittingReview] = useState(false)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
+  const [sameStoreProducts, setSameStoreProducts] = useState<Product[]>([])
+  const [otherStoresProducts, setOtherStoresProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -66,6 +70,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
         setProduct(productData as Product)
 
+        // Fetch products from the same store
+        const sameStore = await getProductsFromSameStore(id, productData.store_id, 4)
+        setSameStoreProducts(sameStore as Product[])
+
+        // Fetch products from other stores
+        const otherStores = await getProductsFromOtherStores(id, productData.store_id, 4)
+        setOtherStoresProducts(otherStores as Product[])
+
+        // Keep related products for backwards compatibility
         const related = await getRelatedProducts(id, productData.category, 4)
         console.log("[v0] Related products:")
         setRelatedProducts(related as Product[])
@@ -352,6 +365,57 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 </Button>
               </div>
 
+              {/* Add to Cart and Buy Now Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    if (!user) {
+                      router.push("/auth")
+                      return
+                    }
+                    // Save single product for "Buy Now" - separate from cart
+                    const buyNowItem = {
+                      id: product.id,
+                      name: product.name,
+                      price: product.price,
+                      category: product.category,
+                      image_url: product.image_url,
+                      store_id: product.store_id,
+                      store_name: product.stores?.name,
+                      description: product.description,
+                      quantity: 1,
+                    }
+                    sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
+                    router.push("/checkout?mode=buynow")
+                  }}
+                  className="flex-1 bg-[#1F478B] hover:bg-[#163a6e]"
+                  disabled={product.stock === 0}
+                >
+                  <Zap className="ml-2 h-5 w-5" />
+                  {t("اشتري الآن", "Buy Now")}
+                </Button>
+                <Button
+                  onClick={() => {
+                    addItem({
+                      id: product.id,
+                      name: product.name,
+                      price: product.price,
+                      category: product.category,
+                      image_url: product.image_url,
+                      store_id: product.store_id,
+                      store_name: product.stores?.name,
+                      description: product.description,
+                    })
+                  }}
+                  variant="outline"
+                  className="flex-1 border-[#1F478B] text-[#1F478B] hover:bg-[#1F478B] hover:text-white"
+                  disabled={product.stock === 0}
+                >
+                  <ShoppingCart className="ml-2 h-5 w-5" />
+                  {t("أضف للسلة", "Add to Cart")}
+                </Button>
+              </div>
+
               <div className="bg-secondary p-4 rounded-lg">
                 <p className="text-sm text-gray-600">
                   <span className="font-semibold">{t("الفئة:", "Category:")}</span> {product.category}
@@ -360,35 +424,78 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          {/* Related Products */}
-          {relatedProducts.length > 0 && (
-            <div>
-              <h2 className="text-2xl font-bold mb-6">{t("منتجات مشابهة", "Similar Products")}</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {relatedProducts.map((relatedProduct) => (
-                  <div key={relatedProduct.id}>
-                    <Link href={`/product/${relatedProduct.id}`}>
-                      <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden mb-3">
+          {/* Products from Same Store */}
+          {sameStoreProducts.length > 0 && (
+            <div className="mb-12">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">{t("منتجات أخرى من نفس المتجر", "More from this Store")}</h2>
+                <Link 
+                  href={`/store/${product.store_id}`}
+                  className="text-[#1F478B] hover:underline text-sm font-medium"
+                >
+                  {t("عرض الكل", "View All")}
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                {sameStoreProducts.map((storeProduct) => (
+                  <Link key={storeProduct.id} href={`/product/${storeProduct.id}`} className="group">
+                    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+                      <div className="aspect-square relative bg-gray-100 overflow-hidden">
                         <Image
-                          src={relatedProduct.image_url || "/placeholder.svg"}
-                          alt={relatedProduct.name}
+                          src={storeProduct.image_url || "/placeholder.svg"}
+                          alt={storeProduct.name}
                           fill
-                          className="object-cover"
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       </div>
-                      <h3 className="font-semibold mb-1 line-clamp-2 text-balance">{relatedProduct.name}</h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {relatedProduct.stores?.name || t("المتجر", "Store")}
-                      </p>
-                      <div className="flex items-center gap-1 mb-2">
-                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                        <span className="font-medium text-sm">{relatedProduct.rating}</span>
+                      <div className="p-3">
+                        <h3 className="font-semibold text-sm mb-1 line-clamp-2">{storeProduct.name}</h3>
+                        <div className="flex items-center gap-1 mb-2">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-xs text-gray-600">{storeProduct.rating || 0}</span>
+                        </div>
+                        <p className="font-bold text-[#1F478B]">
+                          {storeProduct.price} {t("جنيه", "EGP")}
+                        </p>
                       </div>
-                      <p className="font-bold text-[#1F478B]">
-                        {relatedProduct.price} {t("جنيه", "EGP")}
-                      </p>
-                    </Link>
-                  </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Products from Other Stores */}
+          {otherStoresProducts.length > 0 && (
+            <div className="mb-12">
+              <h2 className="text-2xl font-bold mb-6">{t("منتجات من متاجر أخرى", "Products from Other Stores")}</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                {otherStoresProducts.map((otherProduct) => (
+                  <Link key={otherProduct.id} href={`/product/${otherProduct.id}`} className="group">
+                    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+                      <div className="aspect-square relative bg-gray-100 overflow-hidden">
+                        <Image
+                          src={otherProduct.image_url || "/placeholder.svg"}
+                          alt={otherProduct.name}
+                          fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                      <div className="p-3">
+                        <h3 className="font-semibold text-sm mb-1 line-clamp-2">{otherProduct.name}</h3>
+                        <p className="text-xs text-gray-500 mb-1">
+                          {otherProduct.stores?.name || t("المتجر", "Store")}
+                        </p>
+                        <div className="flex items-center gap-1 mb-2">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-xs text-gray-600">{otherProduct.rating || 0}</span>
+                        </div>
+                        <p className="font-bold text-[#1F478B]">
+                          {otherProduct.price} {t("جنيه", "EGP")}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </div>
