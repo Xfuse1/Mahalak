@@ -139,7 +139,7 @@ export default function SellerOrdersPage() {
     return (
       <div className="flex min-h-screen bg-secondary">
         <SellerHeader />
-        <main className="flex-1 py-8">
+        <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
             <p className="text-center text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
           </div>
@@ -152,7 +152,7 @@ export default function SellerOrdersPage() {
     <div className="flex min-h-screen bg-secondary">
       <SellerHeader />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <h1 className="text-3xl font-bold mb-8">{t("إدارة الطلبات", "Order Management")}</h1>
 

@@ -44,12 +44,12 @@ export default function DeliveryPage() {
   const { items: cartItems, clear: clearCart } = useCartStore()
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
-  
+
   const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
-  
+
   // Get items based on mode
   const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -145,9 +145,9 @@ export default function DeliveryPage() {
       // Create an order for each store
       for (const [storeId, storeItems] of Object.entries(itemsByStore)) {
         const storeTotal = storeItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-        
+
         const fullAddress = `${checkoutData.street}, ${checkoutData.city}${checkoutData.state ? `, ${checkoutData.state}` : ""}`
-        
+
         const orderData = {
           customer_id: user.id,
           store_id: storeId,
@@ -171,7 +171,7 @@ export default function DeliveryPage() {
         }
 
         const result = await createOrder(orderData)
-        
+
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
         }
@@ -243,105 +243,122 @@ export default function DeliveryPage() {
               </div>
             ) : (
               sortedDrivers.map((driver, index) => (
-              <Card
-                key={driver.id}
-                className={`cursor-pointer transition-all ${
-                  !driver.is_available 
-                    ? "opacity-60 bg-gray-50 border-2 border-red-400" 
-                    : selectedDriver === driver.id
-                    ? "ring-2 ring-[#1F478B] bg-blue-50"
-                    : "hover:shadow-md"
-                }`}
-                onClick={() => driver.is_available && setSelectedDriver(driver.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    {/* Rank Badge */}
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      !driver.is_available ? "bg-gray-200 text-gray-500" :
-                      index === 0 ? "bg-yellow-400 text-yellow-900" :
-                      index === 1 ? "bg-gray-300 text-gray-700" :
-                      index === 2 ? "bg-orange-400 text-orange-900" :
-                      "bg-gray-100 text-gray-600"
-                    }`}>
-                      {index + 1}
-                    </div>
-
-                    {/* Driver Photo */}
-                    <div className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-full ${!driver.is_available ? "grayscale" : ""} bg-gray-100`}>
-                      {driver.photo_url ? (
-                        <Image
-                          src={driver.photo_url}
-                          alt={driver.name}
-                          fill
-                          className="object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement
-                            target.src = "/placeholder.svg"
-                          }}
-                        />
-                      ) : (
-                        <div className={`h-full w-full flex items-center justify-center ${!driver.is_available ? "bg-gray-400" : "bg-[#1F478B]"} text-white text-xl font-bold`}>
-                          {driver.name.charAt(0)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Driver Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-lg">{driver.name}</h3>
-                        {driver.is_available ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                            {t("متاح", "Available")}
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                            {t("غير متاح", "Unavailable")}
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        {/* Rating */}
-                        <div className="flex items-center gap-1">
-                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium text-sm">{driver.rating?.toFixed(1) || "0.0"}</span>
-                          <span className="text-xs text-gray-500">({driver.total_deliveries || 0} {t("توصيلة", "deliveries")})</span>
-                        </div>
-
-                        {/* Vehicle Type */}
-                        {driver.vehicle_type && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Car className="h-4 w-4" />
-                            <span>{driver.vehicle_type}</span>
+                <Card
+                  key={driver.id}
+                  className={`cursor-pointer transition-all ${!driver.is_available
+                      ? "opacity-60 bg-gray-50 border-2 border-red-400"
+                      : selectedDriver === driver.id
+                        ? "ring-2 ring-[#1F478B] bg-blue-50"
+                        : "hover:shadow-md"
+                    }`}
+                  onClick={() => driver.is_available && setSelectedDriver(driver.id)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      {/* Top Row for Mobile (Rank + Photo + Price) */}
+                      <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+                        <div className="flex items-center gap-3">
+                          {/* Rank Badge */}
+                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${!driver.is_available ? "bg-gray-200 text-gray-500" :
+                              index === 0 ? "bg-yellow-400 text-yellow-900" :
+                                index === 1 ? "bg-gray-300 text-gray-700" :
+                                  index === 2 ? "bg-orange-400 text-orange-900" :
+                                    "bg-gray-100 text-gray-600"
+                            }`}>
+                            {index + 1}
                           </div>
+
+                          {/* Driver Photo */}
+                          <div className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-full ${!driver.is_available ? "grayscale" : ""} bg-gray-100`}>
+                            {driver.photo_url ? (
+                              <Image
+                                src={driver.photo_url}
+                                alt={driver.name}
+                                fill
+                                className="object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement
+                                  target.src = "/placeholder.svg"
+                                }}
+                              />
+                            ) : (
+                              <div className={`h-full w-full flex items-center justify-center ${!driver.is_available ? "bg-gray-400" : "bg-[#1F478B]"} text-white text-xl font-bold`}>
+                                {driver.name.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Price for Mobile Only */}
+                        <div className="sm:hidden text-left">
+                          <p className={`text-lg font-bold ${!driver.is_available ? "text-gray-400" : "text-[#1F478B]"}`}>
+                            {driver.price} {t("جنيه", "EGP")}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Driver Info */}
+                      <div className="flex-1 w-full">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <h3 className="font-semibold text-lg">{driver.name}</h3>
+                          {driver.is_available ? (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                              {t("متاح", "Available")}
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                              {t("غير متاح", "Unavailable")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 mt-2">
+                          {/* Rating */}
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="font-medium text-sm">{driver.rating?.toFixed(1) || "0.0"}</span>
+                            <span className="text-xs text-gray-500">({driver.total_deliveries || 0} {t("توصيلة", "deliveries")})</span>
+                          </div>
+
+                          {/* Vehicle Type */}
+                          {driver.vehicle_type && (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Car className="h-4 w-4" />
+                              <span>{driver.vehicle_type}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Areas */}
+                        {driver.areas && driver.areas.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {t("المناطق:", "Areas:")} {driver.areas.join("، ")}
+                          </p>
                         )}
                       </div>
 
-                      {/* Areas */}
-                      {driver.areas && driver.areas.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {t("المناطق:", "Areas:")} {driver.areas.join("، ")}
+                      {/* Price for Tablet/Desktop */}
+                      <div className="hidden sm:block text-left">
+                        <p className={`text-lg font-bold ${!driver.is_available ? "text-gray-400" : "text-[#1F478B]"}`}>
+                          {driver.price} {t("جنيه", "EGP")}
                         </p>
-                      )}
-                    </div>
+                        {selectedDriver === driver.id && (
+                          <CheckCircle className="h-5 w-5 text-green-600 mt-1 mr-auto" />
+                        )}
+                      </div>
 
-                    {/* Price */}
-                    <div className="text-left">
-                      <p className={`text-lg font-bold ${!driver.is_available ? "text-gray-400" : "text-[#1F478B]"}`}>
-                        {driver.price} {t("جنيه", "EGP")}
-                      </p>
+                      {/* Selected Indicator for Mobile */}
                       {selectedDriver === driver.id && (
-                        <CheckCircle className="h-5 w-5 text-green-600 mt-1 mr-auto" />
+                        <div className="sm:hidden absolute top-4 left-4">
+                          <CheckCircle className="h-6 w-6 text-green-600" />
+                        </div>
                       )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              ))
             )}
           </div>
 

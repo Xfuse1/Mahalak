@@ -192,7 +192,7 @@ export default function Supermarket3DPage() {
         return (
             <div className="flex min-h-screen bg-[#F1F5F9]">
                 <SellerHeader />
-                <main className="flex-1 p-8 flex items-center justify-center">
+                <main className="flex-1 pt-16 lg:pt-0 p-8 flex items-center justify-center">
                     <Card className="max-w-md w-full border-none shadow-2xl">
                         <CardHeader className="text-center pb-2">
                             <div className="mx-auto w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-4">
@@ -226,7 +226,7 @@ export default function Supermarket3DPage() {
         <div className="flex min-h-screen bg-[#F8FAFC]">
             <SellerHeader />
 
-            <main className="flex-1 flex flex-col h-screen overflow-hidden">
+            <main className="flex-1 flex flex-col h-screen overflow-hidden pt-16 lg:pt-0">
                 {/* Header */}
                 <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-8 shrink-0">
                     <div className="flex items-center gap-4">

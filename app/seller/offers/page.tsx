@@ -182,7 +182,7 @@ export default function OffersPage() {
     return (
       <div className="flex min-h-screen bg-secondary">
         <SellerHeader />
-        <main className="flex-1 py-8">
+        <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
             <p className="text-center text-gray-500">جاري التحميل...</p>
           </div>
@@ -195,7 +195,7 @@ export default function OffersPage() {
     <div className="flex min-h-screen bg-secondary">
       <SellerHeader />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <div>

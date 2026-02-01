@@ -87,7 +87,7 @@ export default function SellerDashboard() {
     return (
       <div className="flex min-h-screen bg-secondary">
         <SellerHeader />
-        <main className="flex-1 py-8">
+        <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
             <div className="flex items-center justify-center h-64">
               <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
@@ -124,7 +124,7 @@ export default function SellerDashboard() {
     <div className="flex min-h-screen bg-secondary">
       <SellerHeader />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">{t("لوحة التحكم", "Dashboard")}</h1>

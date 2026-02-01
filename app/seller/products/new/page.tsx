@@ -141,7 +141,7 @@ export default function NewProductPage() {
     <div className="flex min-h-screen bg-secondary">
       <SellerHeader />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <h1 className="text-3xl font-bold mb-8">إضافة منتج جديد</h1>
 
