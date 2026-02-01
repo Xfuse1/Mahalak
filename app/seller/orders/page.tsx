@@ -5,12 +5,21 @@ import { useRouter } from "next/navigation"
 import { SellerHeader } from "../../../components/seller-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
-import { Filter } from "lucide-react"
+import { Button } from "../../../components/ui/button"
+import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getStoreOrders } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog"
+import Image from "next/image"
 
 type OrderItem = {
   id: string
@@ -48,6 +57,8 @@ export default function SellerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
   const [filter, setFilter] = useState("all")
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -66,6 +77,12 @@ export default function SellerOrdersPage() {
       if (store) {
         const data = (await getStoreOrders(store.id)) as Order[]
         setOrders(data)
+
+        // Update selectedOrder if it's currently open to show latest status/details
+        setSelectedOrder(prev => {
+          if (!prev) return null
+          return data.find(o => o.id === prev.id) || prev
+        })
       } else {
         setOrders([])
       }
@@ -196,7 +213,20 @@ export default function SellerOrdersPage() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-[#1F478B] border-[#1F478B] hover:bg-[#1F478B] hover:text-white"
+                              onClick={() => {
+                                setSelectedOrder(order)
+                                setIsDetailsOpen(true)
+                              }}
+                            >
+                              <Eye className="w-4 h-4 ml-2" />
+                              {t("عرض التفاصيل", "View Details")}
+                            </Button>
+                          </div>
                           <div className="flex items-center gap-4">
                             <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} {t("جنيه", "EGP")}</p>
                             <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
@@ -208,6 +238,116 @@ export default function SellerOrdersPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Order Details Modal */}
+          <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={t("rtl", "ltr")}>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                  <Package className="w-6 h-6 text-[#1F478B]" />
+                  {t("تفاصيل الطلب", "Order Details")} #{selectedOrder?.id.slice(0, 8)}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedOrder && formatDate(selectedOrder.created_at)}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedOrder && (
+                <div className="space-y-6 mt-4">
+                  {/* Customer Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                      <h3 className="font-bold border-b pb-2 flex items-center gap-2">
+                        <User className="w-4 h-4 text-[#1F478B]" />
+                        {t("بيانات العميل", "Customer Info")}
+                      </h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium text-base">{selectedOrder.profiles?.full_name || t("عميل غير معروف", "Unknown Customer")}</p>
+                        <p className="flex items-center gap-2 text-gray-600">
+                          <PhoneIcon className="w-3 h-3" />
+                          {selectedOrder.profiles?.phone || t("لا يوجد رقم", "No Phone")}
+                        </p>
+                        <p className="flex items-center gap-2 text-gray-600">
+                          <Mail className="w-3 h-3" />
+                          {selectedOrder.profiles?.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                      <h3 className="font-bold border-b pb-2 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-[#1F478B]" />
+                        {t("عنوان التوصيل", "Delivery Address")}
+                      </h3>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        {selectedOrder.delivery_address || t("لم يتم تحديد عنوان", "No address provided")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Products List */}
+                  <div className="space-y-3">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-[#1F478B]" />
+                      {t("المنتجات", "Products")} ({selectedOrder.order_items.length})
+                    </h3>
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 grid grid-cols-4 p-3 text-xs font-bold text-gray-500 border-b">
+                        <div className="col-span-2">{t("المنتج", "Product")}</div>
+                        <div className="text-center">{t("الكمية", "Qty")}</div>
+                        <div className="text-left">{t("الإجمالي", "Total")}</div>
+                      </div>
+                      <div className="divide-y">
+                        {selectedOrder.order_items.map((item) => (
+                          <div key={item.id} className="grid grid-cols-4 p-3 items-center text-sm">
+                            <div className="col-span-2 flex items-center gap-3">
+                              <div className="relative w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-gray-100">
+                                <Image
+                                  src={item.products.image_url || "/placeholder.svg"}
+                                  alt={item.products.name}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                              <p className="font-medium line-clamp-1">{item.products.name}</p>
+                            </div>
+                            <div className="text-center">x{item.quantity}</div>
+                            <div className="text-left font-bold text-[#1F478B]">
+                              {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Order Summary */}
+                  <div className="bg-[#1F478B]/5 p-4 rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="text-sm text-gray-600">{t("حالة الطلب الحالية:", "Current Status:")}</p>
+                      <span className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedOrder.status)}`}>
+                        {getStatusText(selectedOrder.status)}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm text-gray-600">{t("الإجمالي الكلي", "Grand Total")}</p>
+                      <p className="text-2xl font-black text-[#1F478B]">
+                        {Number(selectedOrder.total).toLocaleString()} {t("جنيه", "EGP")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <OrderStatusSelector
+                      orderId={selectedOrder.id}
+                      currentStatus={selectedOrder.status}
+                      onUpdated={loadOrders}
+                    />
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </main>
     </div>
