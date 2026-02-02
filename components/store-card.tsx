@@ -50,7 +50,11 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
 
             <div className={`flex items-center gap-2 ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
               <MapPin className="h-4 w-4 flex-shrink-0" />
-              <span className="line-clamp-1">{(store as any).address}</span>
+              <span className="line-clamp-1">
+                {typeof (store as any).address === 'object' && (store as any).address !== null
+                  ? `${(store as any).address.street || ''} ${(store as any).address.city || ''}`
+                  : (store as any).address}
+              </span>
             </div>
 
             {/* الوصف */}
