@@ -3,13 +3,20 @@
 import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Box } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Box, Menu } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
 import { useTranslation } from "react-i18next"
 import { cn } from "../lib/utils"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./ui/sheet"
 
 export function SellerHeader() {
   const pathname = usePathname()
@@ -31,8 +38,8 @@ export function SellerHeader() {
     router.push("/")
   }
 
-  return (
-    <aside className="w-72 bg-white border-l border-gray-100 min-h-screen flex flex-col shadow-[rgba(0,0,0,0.02)_1px_0_10px] z-50">
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full bg-white">
       <div className="p-8 border-b border-gray-50 flex items-center justify-center">
         <Link href="/" className="block hover:opacity-80 transition-all hover:scale-105 active:scale-95">
           <Logo className="h-12 w-auto" />
@@ -71,7 +78,6 @@ export function SellerHeader() {
       </nav>
 
       <div className="p-6 border-t border-gray-50 bg-gray-50/30 space-y-3">
-
         <Button
           variant="ghost"
           className="w-full justify-start gap-4 px-4 h-12 rounded-xl text-gray-500 hover:text-[#1F478B] hover:bg-blue-50/50 font-black text-sm transition-all"
@@ -89,6 +95,39 @@ export function SellerHeader() {
           <span>{t("logout")}</span>
         </Button>
       </div>
-    </aside>
+    </div>
+  )
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-72 border-l border-gray-100 min-h-screen flex-col shadow-[rgba(0,0,0,0.02)_1px_0_10px] z-50 sticky top-0 h-screen">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 z-[100] shadow-sm">
+        <div className="flex items-center gap-2">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-gray-600">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="p-0 w-72">
+              <SheetHeader className="sr-only">
+                <SheetTitle>{t("القائمة", "Menu")}</SheetTitle>
+              </SheetHeader>
+              <SidebarContent />
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        <Link href="/">
+          <Logo className="h-8 w-auto" />
+        </Link>
+        <div className="w-10"></div> {/* Spacer for balance */}
+      </header>
+    </>
   )
 }
