@@ -5,7 +5,7 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { BackButton } from "@/components/back-button"
-import { ShoppingBag, Plus, Minus, Trash2 } from "lucide-react"
+import { ShoppingBag, Plus, Minus, Trash2, ArrowLeft, ShoppingCart } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
@@ -29,7 +29,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
       <Header />
 
       <main className="flex-1 py-8">
@@ -38,53 +38,66 @@ export default function CartPage() {
             <BackButton />
           </div>
 
-          <h1 className="text-3xl font-bold mb-8">{t("سلة التسوق", "Shopping Cart")}</h1>
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl text-white shadow-lg">
+              <ShoppingCart className="h-6 w-6" />
+            </div>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("سلة التسوق", "Shopping Cart")}</h1>
+          </div>
 
           {items.length === 0 ? (
-            <Card>
-              <CardContent className="py-16 text-center">
-                <ShoppingBag className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                <h2 className="text-2xl font-semibold mb-2">{t("السلة فارغة", "Cart is Empty")}</h2>
-                <p className="text-gray-600 mb-6">
+            <Card className="border-0 shadow-xl bg-white rounded-2xl overflow-hidden">
+              <CardContent className="py-20 text-center">
+                <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                  <ShoppingBag className="h-12 w-12 text-gray-400" />
+                </div>
+                <h2 className="text-2xl font-bold mb-3 text-gray-800">{t("السلة فارغة", "Cart is Empty")}</h2>
+                <p className="text-gray-500 mb-8 max-w-sm mx-auto">
                   {t("لم تقم بإضافة أي منتجات إلى السلة بعد", "You haven't added any products to your cart yet")}
                 </p>
-                <Button asChild className="bg-[#1F478B] hover:bg-[#1a3a70]">
-                  <Link href="/search">{t("تصفح المنتجات", "Browse Products")}</Link>
+                <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
+                  <Link href="/search" className="flex items-center gap-2">
+                    {t("تصفح المنتجات", "Browse Products")}
+                    <ArrowLeft className="h-5 w-5" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-6">
               <div className="space-y-4">
-                {items.map((item) => (
-                  <Card key={item.id}>
-                    <CardContent className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-                      <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                        <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                {items.map((item, index) => (
+                  <Card key={item.id} className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 group" style={{ animationDelay: `${index * 100}ms` }}>
+                    <CardContent className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 group-hover:shadow-lg transition-all">
+                        <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{item.name}</h3>
-                        <p className="text-sm text-gray-600">{item.store_name || t("المتجر", "Store")}</p>
-                        {item.description && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{item.description}</p>}
+                        <h3 className="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition-colors">{item.name}</h3>
+                        <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                          {item.store_name || t("المتجر", "Store")}
+                        </p>
+                        {item.description && <p className="text-sm text-gray-400 mt-2 line-clamp-2">{item.description}</p>}
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <p className="text-lg font-bold text-[#1F478B]">{item.price} {t("جنيه", "EGP")}</p>
+                      <div className="flex flex-col items-end gap-3">
+                        <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{item.price} {t("جنيه", "EGP")}</p>
                         
                         {/* Quantity Controls */}
-                        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-8 w-8 hover:bg-gray-200"
+                            className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-md transition-all"
                             onClick={() => decrementItem(item.id)}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
-                          <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                          <span className="w-10 text-center font-bold text-lg">{item.quantity}</span>
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-8 w-8 hover:bg-gray-200"
+                            className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-md transition-all"
                             onClick={() => addItem(item)}
                           >
                             <Plus className="h-4 w-4" />
@@ -94,7 +107,7 @@ export default function CartPage() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          className="text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all"
                           onClick={() => removeItem(item.id)}
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -106,17 +119,17 @@ export default function CartPage() {
                 ))}
               </div>
 
-              <Card>
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50 rounded-2xl overflow-hidden">
                 <CardContent className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">{t("الإجمالي", "Total")}</p>
-                    <p className="text-2xl font-bold text-[#1F478B]">{total.toFixed(2)} {t("جنيه", "EGP")}</p>
+                    <p className="text-sm text-gray-500 mb-1">{t("الإجمالي", "Total")}</p>
+                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{total.toFixed(2)} <span className="text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={clear}>
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={clear} className="rounded-xl hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all">
                       {t("إفراغ السلة", "Clear Cart")}
                     </Button>
-                    <Button onClick={handleCheckout} className="bg-[#1F478B] hover:bg-[#1a3a70]">
+                    <Button onClick={handleCheckout} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
                       {t("إكمال الطلب", "Checkout")}
                     </Button>
                   </div>

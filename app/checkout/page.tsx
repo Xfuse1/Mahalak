@@ -196,10 +196,11 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8">
+        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
           <div className="container mx-auto px-4">
-            <div className="text-center py-12">
-              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="text-center py-20">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
         </main>
@@ -216,57 +217,66 @@ export default function CheckoutPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
         <div className="container mx-auto px-4 max-w-2xl">
           <div className="mb-6">
             <BackButton />
           </div>
 
-          <h1 className="text-3xl font-bold mb-2 text-center">{t("تأكيد البيانات", "Confirm Details")}</h1>
-          <p className="text-gray-600 text-center mb-8">
-            {t("يرجى مراجعة بياناتك قبل المتابعة", "Please review your information before proceeding")}
-          </p>
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent mb-2">{t("تأكيد البيانات", "Confirm Details")}</h1>
+            <p className="text-gray-500">
+              {t("يرجى مراجعة بياناتك قبل المتابعة", "Please review your information before proceeding")}
+            </p>
+          </div>
 
           {/* Order Summary */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg">{t("ملخص الطلب", "Order Summary")}</CardTitle>
+          <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+              <CardTitle className="text-lg flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-xl">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                </div>
+                {t("ملخص الطلب", "Order Summary")}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-6">
               {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4">
-                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
+                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
                     <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-medium">{item.name}</h3>
-                    <p className="text-sm text-gray-600">x{item.quantity}</p>
+                    <h3 className="font-bold text-gray-800">{item.name}</h3>
+                    <p className="text-sm text-gray-500">x{item.quantity}</p>
                   </div>
-                  <p className="font-bold text-[#1F478B]">
-                    {(item.price * item.quantity).toFixed(2)} {t("جنيه", "EGP")}
+                  <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                    {(item.price * item.quantity).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
                   </p>
                 </div>
               ))}
-              <div className="border-t pt-4 flex justify-between items-center">
-                <span className="font-semibold">{t("الإجمالي", "Total")}</span>
-                <span className="text-xl font-bold text-[#1F478B]">
-                  {total.toFixed(2)} {t("جنيه", "EGP")}
+              <div className="border-t border-dashed pt-4 flex justify-between items-center">
+                <span className="font-bold text-gray-700">{t("الإجمالي", "Total")}</span>
+                <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                  {total.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
                 </span>
               </div>
             </CardContent>
           </Card>
 
           {/* Customer Information Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <User className="h-5 w-5" />
+          <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+              <CardTitle className="text-lg flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-xl">
+                  <User className="h-5 w-5 text-blue-600" />
+                </div>
                 {t("بيانات العميل", "Customer Information")}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5 p-6">
               <div className="space-y-2">
-                <Label htmlFor="fullName" className={`flex items-center gap-2 ${attempted && !formData.fullName ? "text-red-600" : ""}`}>
+                <Label htmlFor="fullName" className={`flex items-center gap-2 font-medium ${attempted && !formData.fullName ? "text-red-600" : "text-gray-700"}`}>
                   <User className="h-4 w-4" />
                   {t("الاسم الكامل", "Full Name")} *
                 </Label>
@@ -277,7 +287,7 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أدخل اسمك الكامل", "Enter your full name")}
                   required
-                  className={attempted && !formData.fullName ? "border-red-500 focus:ring-red-500" : ""}
+                  className={`h-12 rounded-xl ${attempted && !formData.fullName ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
                 />
                 {attempted && !formData.fullName && (
                   <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
@@ -285,7 +295,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className={`flex items-center gap-2 ${attempted && !formData.phone ? "text-red-600" : ""}`}>
+                <Label htmlFor="phone" className={`flex items-center gap-2 font-medium ${attempted && !formData.phone ? "text-red-600" : "text-gray-700"}`}>
                   <Phone className="h-4 w-4" />
                   {t("رقم الهاتف", "Phone Number")} *
                 </Label>
@@ -297,7 +307,7 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أدخل رقم هاتفك", "Enter your phone number")}
                   required
-                  className={attempted && !formData.phone ? "border-red-500 focus:ring-red-500" : ""}
+                  className={`h-12 rounded-xl ${attempted && !formData.phone ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
                 />
                 {attempted && !formData.phone && (
                   <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
@@ -306,7 +316,7 @@ export default function CheckoutPage() {
 
               {/* Location Detection Button - Required */}
               <div className="space-y-2">
-                <Label className={`flex items-center gap-2 ${attempted && (!formData.latitude || !formData.longitude) ? "text-red-600" : ""}`}>
+                <Label className={`flex items-center gap-2 font-medium ${attempted && (!formData.latitude || !formData.longitude) ? "text-red-600" : "text-gray-700"}`}>
                   <Navigation className="h-4 w-4" />
                   {t("تحديد الموقع", "Detect Location")} *
                 </Label>
@@ -315,10 +325,12 @@ export default function CheckoutPage() {
                   variant="outline"
                   onClick={getCurrentLocation}
                   disabled={isGettingLocation}
-                  className={`w-full ${
-                    attempted && (!formData.latitude || !formData.longitude)
-                      ? "border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
-                      : "border-[#1F478B] text-[#1F478B] hover:bg-[#1F478B] hover:text-white"
+                  className={`w-full h-12 rounded-xl transition-all ${
+                    formData.latitude && formData.longitude
+                      ? "border-emerald-500 text-emerald-600 bg-emerald-50"
+                      : attempted && (!formData.latitude || !formData.longitude)
+                      ? "border-red-500 text-red-500 hover:bg-red-50"
+                      : "border-blue-500 text-blue-600 hover:bg-blue-50"
                   }`}
                 >
                   {isGettingLocation ? (
@@ -340,7 +352,7 @@ export default function CheckoutPage() {
                   <p className="text-sm text-red-600">{t("يرجى تحديد موقعك للتوصيل", "Please detect your location for delivery")}</p>
                 )}
                 {formData.latitude && formData.longitude && (
-                  <p className="text-sm text-green-600 flex items-center gap-1">
+                  <p className="text-sm text-emerald-600 flex items-center gap-1 bg-emerald-50 p-2 rounded-lg">
                     <MapPin className="h-4 w-4" />
                     {t("تم تحديد موقعك بنجاح", "Location detected successfully")}
                   </p>
@@ -348,7 +360,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="street" className="flex items-center gap-2">
+                <Label htmlFor="street" className="flex items-center gap-2 font-medium text-gray-700">
                   <MapPin className="h-4 w-4" />
                   {t("العنوان / الشارع", "Street Address")} ({t("اختياري", "Optional")})
                 </Label>
@@ -358,34 +370,37 @@ export default function CheckoutPage() {
                   value={formData.street}
                   onChange={handleInputChange}
                   placeholder={t("أدخل عنوانك التفصيلي", "Enter your detailed address")}
+                  className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="city">{t("المدينة", "City")} ({t("اختياري", "Optional")})</Label>
+                  <Label htmlFor="city" className="font-medium text-gray-700">{t("المدينة", "City")} ({t("اختياري", "Optional")})</Label>
                   <Input
                     id="city"
                     name="city"
                     value={formData.city}
                     onChange={handleInputChange}
                     placeholder={t("المدينة", "City")}
+                    className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="state">{t("المحافظة", "State/Province")}</Label>
+                  <Label htmlFor="state" className="font-medium text-gray-700">{t("المحافظة", "State/Province")}</Label>
                   <Input
                     id="state"
                     name="state"
                     value={formData.state}
                     onChange={handleInputChange}
                     placeholder={t("المحافظة", "State")}
+                    className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="notes" className="flex items-center gap-2">
+                <Label htmlFor="notes" className="flex items-center gap-2 font-medium text-gray-700">
                   <FileText className="h-4 w-4" />
                   {t("ملاحظات إضافية", "Additional Notes")}
                 </Label>
@@ -396,12 +411,13 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أي ملاحظات خاصة بالتوصيل...", "Any special delivery notes...")}
                   rows={3}
+                  className="rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
 
               <Button
                 onClick={handleContinue}
-                className="w-full bg-[#1F478B] hover:bg-[#163a6e] mt-4"
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg mt-4"
                 size="lg"
               >
                 {t("متابعة لاختيار الدليفري", "Continue to Select Delivery")}

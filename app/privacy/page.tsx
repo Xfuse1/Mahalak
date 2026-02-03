@@ -3,140 +3,161 @@
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useLanguage } from "@/lib/language-context"
+import { Shield, Database, Share2, UserCheck, Cookie, RefreshCw, Phone, Lock, Eye, FileText } from "lucide-react"
 
 export default function PrivacyPage() {
   const { t } = useLanguage()
 
+  const sections = [
+    {
+      icon: FileText,
+      color: "from-blue-500 to-blue-600",
+      title: t("مقدمة", "Introduction"),
+      content: t(
+        "نحن في محلك نلتزم بحماية خصوصيتك وأمان معلوماتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية البيانات التي تقدمها لنا عند استخدام منصتنا.",
+        "At Mahalak, we are committed to protecting your privacy and the security of your personal information. This policy explains how we collect, use, and protect the data you provide when using our platform.",
+      )
+    },
+    {
+      icon: Database,
+      color: "from-emerald-500 to-emerald-600",
+      title: t("المعلومات التي نجمعها", "Information We Collect"),
+      content: t("نقوم بجمع الأنواع التالية من المعلومات:", "We collect the following types of information:"),
+      list: [
+        t("معلومات الحساب: الاسم، البريد الإلكتروني، رقم الهاتف", "Account information: name, email, phone number"),
+        t("معلومات الاستخدام: كيفية تفاعلك مع المنصة، المنتجات التي تتصفحها", "Usage information: how you interact with the platform, products you browse"),
+        t("معلومات تقنية: عنوان IP، نوع المتصفح، نظام التشغيل", "Technical information: IP address, browser type, operating system"),
+      ]
+    },
+    {
+      icon: Eye,
+      color: "from-violet-500 to-violet-600",
+      title: t("كيفية استخدام المعلومات", "How We Use Information"),
+      content: t("نستخدم المعلومات التي نجمعها للأغراض التالية:", "We use the information we collect for the following purposes:"),
+      list: [
+        t("معالجة وتنفيذ طلباتك", "Process and fulfill your orders"),
+        t("تحسين تجربة المستخدم وتخصيص المحتوى", "Improve user experience and personalize content"),
+        t("التواصل معك بشأن طلباتك والعروض الخاصة", "Communicate with you about your orders and special offers"),
+        t("حماية المنصة من الاحتيال والأنشطة غير القانونية", "Protect the platform from fraud and illegal activities"),
+        t("تحليل استخدام المنصة لتحسين خدماتنا", "Analyze platform usage to improve our services"),
+      ]
+    },
+    {
+      icon: Share2,
+      color: "from-amber-500 to-amber-600",
+      title: t("مشاركة المعلومات", "Information Sharing"),
+      content: t(
+        "لا نقوم ببيع أو تأجير معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك مع البائعين على المنصة لتنفيذ طلباتك، ومع مزودي الخدمات الذين يساعدوننا في تشغيل المنصة.",
+        "We do not sell or rent your personal information to third parties. We may share your information with sellers on the platform to fulfill your orders, and with service providers who help us operate the platform.",
+      )
+    },
+    {
+      icon: UserCheck,
+      color: "from-rose-500 to-rose-600",
+      title: t("حقوقك", "Your Rights"),
+      content: t("لديك الحق في:", "You have the right to:"),
+      list: [
+        t("الوصول إلى معلوماتك الشخصية وتحديثها", "Access and update your personal information"),
+        t("طلب حذف حسابك ومعلوماتك", "Request deletion of your account and information"),
+        t("الاعتراض على معالجة معلوماتك لأغراض تسويقية", "Object to processing your information for marketing purposes"),
+        t("طلب نسخة من بياناتك", "Request a copy of your data"),
+      ]
+    },
+    {
+      icon: Cookie,
+      color: "from-cyan-500 to-cyan-600",
+      title: t("ملفات تعريف الارتباط (Cookies)", "Cookies"),
+      content: t(
+        "نستخدم ملفات تعريف الارتباط لتحسين تجربتك على المنصة. يمكنك التحكم في ملفات تعريف الارتباط من خلال إعدادات المتصفح الخاص بك.",
+        "We use cookies to improve your experience on the platform. You can control cookies through your browser settings.",
+      )
+    },
+    {
+      icon: RefreshCw,
+      color: "from-indigo-500 to-indigo-600",
+      title: t("التغييرات على السياسة", "Policy Changes"),
+      content: t(
+        "قد نقوم بتحديث سياسة الخصوصية من وقت لآخر. سنقوم بإخطارك بأي تغييرات جوهرية عبر البريد الإلكتروني أو من خلال إشعار على المنصة.",
+        "We may update the privacy policy from time to time. We will notify you of any material changes via email or through a notice on the platform.",
+      )
+    },
+  ]
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
       <Header />
 
-      <main className="flex-1 py-12">
+      <main className="flex-1 py-16">
         <div className="container mx-auto px-4 max-w-4xl">
-          <h1 className="text-4xl font-bold mb-8">{t("سياسة الخصوصية", "Privacy Policy")}</h1>
+          {/* Hero Section */}
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-6 shadow-lg shadow-blue-500/30">
+              <Shield className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
+              {t("سياسة الخصوصية", "Privacy Policy")}
+            </h1>
+            <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
+              <Lock className="w-4 h-4" />
+              {t("آخر تحديث: يناير 2024", "Last updated: January 2024")}
+            </p>
+          </div>
 
-          <div className="prose prose-lg max-w-none space-y-8">
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("مقدمة", "Introduction")}</h2>
-              <p className="text-gray-700 leading-relaxed">
+          {/* Content Sections */}
+          <div className="space-y-6">
+            {sections.map((section, index) => (
+              <div 
+                key={index}
+                className="bg-white rounded-2xl border-0 shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden group"
+              >
+                <div className="p-6 md:p-8">
+                  <div className="flex items-start gap-4">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${section.color} flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                      <section.icon className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-xl md:text-2xl font-bold mb-3 text-gray-800">
+                        {section.title}
+                      </h2>
+                      <p className="text-gray-600 leading-relaxed mb-4">
+                        {section.content}
+                      </p>
+                      {section.list && (
+                        <ul className="space-y-3">
+                          {section.list.map((item, i) => (
+                            <li key={i} className="flex items-start gap-3 text-gray-600">
+                              <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${section.color} mt-2 flex-shrink-0`} />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Contact Section */}
+          <div className="mt-12 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+            
+            <div className="relative p-10 text-center text-white">
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">{t("تواصل معنا", "Contact Us")}</h2>
+              <p className="text-blue-100 mb-6 max-w-md mx-auto">
                 {t(
-                  "نحن في محلك نلتزم بحماية خصوصيتك وأمان معلوماتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية البيانات التي تقدمها لنا عند استخدام منصتنا.",
-                  "At Mahalak, we are committed to protecting your privacy and the security of your personal information. This policy explains how we collect, use, and protect the data you provide when using our platform.",
+                  "إذا كان لديك أي أسئلة حول سياسة الخصوصية، يرجى التواصل معنا",
+                  "If you have any questions about the privacy policy, please contact us",
                 )}
               </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("المعلومات التي نجمعها", "Information We Collect")}</h2>
-              <p className="text-gray-700 leading-relaxed mb-4">
-                {t("نقوم بجمع الأنواع التالية من المعلومات:", "We collect the following types of information:")}
-              </p>
-              <ul className="list-disc pr-6 space-y-2 text-gray-700">
-                <li>
-                  {t(
-                    "معلومات الحساب: الاسم، البريد الإلكتروني، رقم الهاتف",
-                    "Account information: name, email, phone number",
-                  )}
-                </li>
-                <li>
-                  {t(
-                    "معلومات الاستخدام: كيفية تفاعلك مع المنصة، المنتجات التي تتصفحها",
-                    "Usage information: how you interact with the platform, products you browse",
-                  )}
-                </li>
-                <li>
-                  {t(
-                    "معلومات تقنية: عنوان IP، نوع المتصفح، نظام التشغيل",
-                    "Technical information: IP address, browser type, operating system",
-                  )}
-                </li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("كيفية استخدام المعلومات", "How We Use Information")}</h2>
-              <p className="text-gray-700 leading-relaxed mb-4">
-                {t(
-                  "نستخدم المعلومات التي نجمعها للأغراض التالية:",
-                  "We use the information we collect for the following purposes:",
-                )}
-              </p>
-              <ul className="list-disc pr-6 space-y-2 text-gray-700">
-                <li>{t("معالجة وتنفيذ طلباتك", "Process and fulfill your orders")}</li>
-                <li>{t("تحسين تجربة المستخدم وتخصيص المحتوى", "Improve user experience and personalize content")}</li>
-                <li>
-                  {t(
-                    "التواصل معك بشأن طلباتك والعروض الخاصة",
-                    "Communicate with you about your orders and special offers",
-                  )}
-                </li>
-                <li>
-                  {t(
-                    "حماية المنصة من الاحتيال والأنشطة غير القانونية",
-                    "Protect the platform from fraud and illegal activities",
-                  )}
-                </li>
-                <li>{t("تحليل استخدام المنصة لتحسين خدماتنا", "Analyze platform usage to improve our services")}</li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("مشاركة المعلومات", "Information Sharing")}</h2>
-              <p className="text-gray-700 leading-relaxed">
-                {t(
-                  "لا نقوم ببيع أو تأجير معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك مع البائعين على المنصة لتنفيذ طلباتك، ومع مزودي الخدمات الذين يساعدوننا في تشغيل المنصة.",
-                  "We do not sell or rent your personal information to third parties. We may share your information with sellers on the platform to fulfill your orders, and with service providers who help us operate the platform.",
-                )}
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("حقوقك", "Your Rights")}</h2>
-              <p className="text-gray-700 leading-relaxed mb-4">{t("لديك الحق في:", "You have the right to:")}</p>
-              <ul className="list-disc pr-6 space-y-2 text-gray-700">
-                <li>{t("الوصول إلى معلوماتك الشخصية وتحديثها", "Access and update your personal information")}</li>
-                <li>{t("طلب حذف حسابك ومعلوماتك", "Request deletion of your account and information")}</li>
-                <li>
-                  {t(
-                    "الاعتراض على معالجة معلوماتك لأغراض تسويقية",
-                    "Object to processing your information for marketing purposes",
-                  )}
-                </li>
-                <li>{t("طلب نسخة من بياناتك", "Request a copy of your data")}</li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("ملفات تعريف الارتباط (Cookies)", "Cookies")}</h2>
-              <p className="text-gray-700 leading-relaxed">
-                {t(
-                  "نستخدم ملفات تعريف الارتباط لتحسين تجربتك على المنصة. يمكنك التحكم في ملفات تعريف الارتباط من خلال إعدادات المتصفح الخاص بك.",
-                  "We use cookies to improve your experience on the platform. You can control cookies through your browser settings.",
-                )}
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("التغييرات على السياسة", "Policy Changes")}</h2>
-              <p className="text-gray-700 leading-relaxed">
-                {t(
-                  "قد نقوم بتحديث سياسة الخصوصية من وقت لآخر. سنقوم بإخطارك بأي تغييرات جوهرية عبر البريد الإلكتروني أو من خلال إشعار على المنصة.",
-                  "We may update the privacy policy from time to time. We will notify you of any material changes via email or through a notice on the platform.",
-                )}
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-2xl font-bold mb-4">{t("تواصل معنا", "Contact Us")}</h2>
-              <p className="text-gray-700 leading-relaxed">
-                {t(
-                  "إذا كان لديك أي أسئلة حول سياسة الخصوصية، يرجى التواصل معنا على الهاتف: 010 55161600",
-                  "If you have any questions about the privacy policy, please contact us at: 010 55161600",
-                )}
-              </p>
-            </section>
-
-            <p className="text-sm text-gray-600 mt-8">{t("آخر تحديث: يناير 2024", "Last updated: January 2024")}</p>
+              <div className="inline-flex items-center gap-3 bg-white/20 backdrop-blur-sm rounded-full px-6 py-3">
+                <Phone className="w-5 h-5" />
+                <span className="font-semibold text-lg">010 55161600</span>
+              </div>
+            </div>
           </div>
         </div>
       </main>

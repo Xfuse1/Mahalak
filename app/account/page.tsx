@@ -138,28 +138,31 @@ export default function AccountPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8 bg-secondary">
+      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
         <div className="container mx-auto px-4 max-w-5xl">
           <div className="mb-6">
             <BackButton />
           </div>
 
-          <h1 className="text-3xl font-bold mb-8">{t("حسابي", "My Account")}</h1>
+          <div className="mb-10">
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("حسابي", "My Account")}</h1>
+            <p className="text-gray-500 mt-1">{t("إدارة حسابك وطلباتك", "Manage your account and orders")}</p>
+          </div>
 
           {hasStore && (
-            <Card className="mb-8 border-amber-200 bg-amber-50">
-              <CardContent className="pt-6">
+            <Card className="mb-8 border-0 shadow-lg rounded-2xl overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
+              <CardContent className="pt-6 pb-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-amber-100 rounded-full">
-                      <Store className="h-6 w-6 text-amber-600" />
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg">
+                      <Store className="h-7 w-7 text-white" />
                     </div>
                     <div>
-                      <p className="font-bold text-amber-900">{t("أنت تملك متجراً مسجلاً", "You have a registered store")}</p>
+                      <p className="font-bold text-amber-900 text-lg">{t("أنت تملك متجراً مسجلاً", "You have a registered store")}</p>
                       <p className="text-sm text-amber-700">{t("انتقل إلى لوحة التاجر لإدارة منتجاتك وطلباتك", "Go to the merchant dashboard to manage your products and orders")}</p>
                     </div>
                   </div>
-                  <Button asChild className="bg-amber-600 hover:bg-amber-700">
+                  <Button asChild className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                     <Link href="/seller/dashboard">{t("لوحة التاجر", "Seller Dashboard")}</Link>
                   </Button>
                 </div>
@@ -168,48 +171,56 @@ export default function AccountPage() {
           )}
 
           <Tabs defaultValue="orders" className="w-full">
-            <TabsList className="mb-6">
-              <TabsTrigger value="orders" className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white">
+            <TabsList className="mb-6 bg-white shadow-lg rounded-2xl p-2 border-0">
+              <TabsTrigger value="orders" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <Package className="ml-2 h-4 w-4" />
                 {t("طلباتي", "My Orders")}
               </TabsTrigger>
-              <TabsTrigger value="profile" className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white">
+              <TabsTrigger value="profile" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <UserIcon className="ml-2 h-4 w-4" />
                 {t("الملف الشخصي", "Profile")}
               </TabsTrigger>
-              <TabsTrigger value="address" className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white">
+              <TabsTrigger value="address" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <MapPin className="ml-2 h-4 w-4" />
                 {t("العناوين", "Addresses")}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="orders">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("طلباتي", "My Orders")}</CardTitle>
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <Package className="h-5 w-5 text-blue-600" />
+                    </div>
+                    {t("طلباتي", "My Orders")}
+                  </CardTitle>
                   <CardDescription>
                     {t("تتبع جميع طلباتك وحالتها", "Track all your orders and their status")}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   {ordersLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin text-[#1F478B]" />
-                      <span className="mr-2">{t("جاري التحميل...", "Loading...")}</span>
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                      <span className="text-gray-500">{t("جاري التحميل...", "Loading...")}</span>
                     </div>
                   ) : ordersError ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                        <Package className="h-8 w-8 text-red-500" />
+                      </div>
                       <p className="text-red-600">{ordersError}</p>
                     </div>
                   ) : orders.length > 0 ? (
                     <div className="space-y-4">
                       {orders.map((order) => (
-                        <div key={order.id} className="bg-white border rounded-xl overflow-hidden hover:border-[#1F478B]/30 hover:shadow-md transition-all duration-200 group">
+                        <div key={order.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden hover:border-blue-200 hover:shadow-lg transition-all duration-300 group">
                           {/* Card Header */}
-                          <div className="bg-gray-50/50 border-b p-4 flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-white border shadow-sm flex items-center justify-center flex-shrink-0">
-                                <Store className="h-5 w-5 text-gray-600 group-hover:text-[#1F478B] transition-colors" />
+                          <div className="bg-gradient-to-r from-gray-50 to-white border-b p-5 flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 border shadow-sm flex items-center justify-center flex-shrink-0">
+                                <Store className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
                               </div>
                               <div>
                                 <h3 className="font-bold text-gray-900 leading-tight mb-1">
@@ -218,29 +229,29 @@ export default function AccountPage() {
                                 <div className="flex items-center gap-2 text-xs text-gray-500">
                                   <span>{formatDate(order.created_at)}</span>
                                   <span className="w-1 h-1 rounded-full bg-gray-300" />
-                                  <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded border">#{order.id.slice(0, 8)}</span>
+                                  <span className="font-mono bg-gray-100 px-2 py-1 rounded-lg border">#{order.id.slice(0, 8)}</span>
                                 </div>
                               </div>
                             </div>
                             <span
-                              className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold ${getStatusColor(order.status)}`}
                             >
                               {getStatusText(order.status)}
                             </span>
                           </div>
 
                           {/* Card Body */}
-                          <div className="p-4">
-                            <div className="flex flex-col gap-2">
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Package className="h-4 w-4 text-gray-400" />
+                          <div className="p-5">
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-center gap-3 text-sm text-gray-600">
+                                <Package className="h-5 w-5 text-gray-400" />
                                 <span>
                                   {order.order_items?.length || 0} {t("منتجات", "Items")}
                                 </span>
                               </div>
                               {order.delivery_address && (
-                                <div className="flex items-start gap-2 text-sm text-gray-600">
-                                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                <div className="flex items-start gap-3 text-sm text-gray-600">
+                                  <MapPin className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
                                   <span className="line-clamp-1">{order.delivery_address}</span>
                                 </div>
                               )}
@@ -248,24 +259,24 @@ export default function AccountPage() {
                           </div>
 
                           {/* Card Footer */}
-                          <div className="px-4 pb-4 pt-0 flex flex-row items-center justify-between gap-4 mt-1">
+                          <div className="px-5 pb-5 pt-0 flex flex-row items-center justify-between gap-4 border-t border-dashed pt-4">
                             <div>
-                              <p className="text-xs text-gray-500 mb-0.5">{t("الإجمالي", "Total Value")}</p>
-                              <p className="text-lg font-bold text-[#1F478B]">
-                                {Number(order.total).toFixed(2)} <span className="text-sm font-medium text-gray-600">{t("جنيه", "EGP")}</span>
+                              <p className="text-xs text-gray-500 mb-1">{t("الإجمالي", "Total Value")}</p>
+                              <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                                {Number(order.total).toFixed(2)} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
                               </p>
                             </div>
 
                             <Button
                               variant="default"
                               size="sm"
-                              className="bg-white text-[#1F478B] border border-[#1F478B] hover:bg-[#1F478B] hover:text-white transition-all shadow-sm"
+                              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
                               onClick={() => {
                                 setSelectedOrder(order)
                                 setIsTrackingModalOpen(true)
                               }}
                             >
-                              <Eye className="h-4 w-4 ml-1.5" />
+                              <Eye className="h-4 w-4 ml-2" />
                               {t("تتبع الطلب", "Track Order")}
                             </Button>
                           </div>
@@ -273,9 +284,11 @@ export default function AccountPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8">
-                      <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                      <p className="text-gray-600">{t("لا توجد طلبات بعد", "No orders yet")}</p>
+                    <div className="text-center py-16">
+                      <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                        <Package className="h-10 w-10 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 text-lg">{t("لا توجد طلبات بعد", "No orders yet")}</p>
                     </div>
                   )}
                 </CardContent>
@@ -283,14 +296,19 @@ export default function AccountPage() {
             </TabsContent>
 
             <TabsContent value="profile">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("الملف الشخصي", "Profile")}</CardTitle>
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <UserIcon className="h-5 w-5 text-blue-600" />
+                    </div>
+                    {t("الملف الشخصي", "Profile")}
+                  </CardTitle>
                   <CardDescription>{t("إدارة معلوماتك الشخصية", "Manage your personal information")}</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <form
-                    className="space-y-4"
+                    className="space-y-5"
                     onSubmit={async (e) => {
                       e.preventDefault()
                       const form = e.currentTarget as HTMLFormElement
@@ -313,18 +331,18 @@ export default function AccountPage() {
                     }}
                   >
                     <div>
-                      <Label htmlFor="name">{t("الاسم الكامل", "Full Name")}</Label>
-                      <Input id="name" name="name" defaultValue={user.name} />
+                      <Label htmlFor="name" className="text-gray-700 font-medium">{t("الاسم الكامل", "Full Name")}</Label>
+                      <Input id="name" name="name" defaultValue={user.name} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                     </div>
                     <div>
-                      <Label htmlFor="email">{t("البريد الإلكتروني", "Email")}</Label>
-                      <Input id="email" type="email" defaultValue={user.email} disabled />
+                      <Label htmlFor="email" className="text-gray-700 font-medium">{t("البريد الإلكتروني", "Email")}</Label>
+                      <Input id="email" type="email" defaultValue={user.email} disabled className="mt-2 h-12 rounded-xl bg-gray-100" />
                     </div>
                     <div>
-                      <Label htmlFor="phone">{t("رقم الهاتف", "Phone Number")}</Label>
-                      <Input id="phone" name="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} />
+                      <Label htmlFor="phone" className="text-gray-700 font-medium">{t("رقم الهاتف", "Phone Number")}</Label>
+                      <Input id="phone" name="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                     </div>
-                    <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]">
+                    <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
                       {t("حفظ التغييرات", "Save Changes")}
                     </Button>
                   </form>
@@ -333,16 +351,21 @@ export default function AccountPage() {
             </TabsContent>
 
             <TabsContent value="address">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("عناوين التوصيل", "Delivery Addresses")}</CardTitle>
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <MapPin className="h-5 w-5 text-blue-600" />
+                    </div>
+                    {t("عناوين التوصيل", "Delivery Addresses")}
+                  </CardTitle>
                   <CardDescription>
                     {t("إدارة عناوين التوصيل الخاصة بك", "Manage your delivery addresses")}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <form
-                    className="space-y-4"
+                    className="space-y-5"
                     onSubmit={async (e) => {
                       e.preventDefault()
                       if (!user?.id) return
@@ -366,18 +389,18 @@ export default function AccountPage() {
                     }}
                   >
                     <div>
-                      <Label htmlFor="country">{t("الدولة", "Country")}</Label>
-                      <Input id="country" name="country" placeholder={t("مصر", "Egypt")} defaultValue={user.country || ""} />
+                      <Label htmlFor="country" className="text-gray-700 font-medium">{t("الدولة", "Country")}</Label>
+                      <Input id="country" name="country" placeholder={t("مصر", "Egypt")} defaultValue={user.country || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                     </div>
                     <div>
-                      <Label htmlFor="city">{t("المدينة", "City")}</Label>
-                      <Input id="city" name="city" placeholder={t("القاهرة", "Cairo")} defaultValue={user.city || ""} />
+                      <Label htmlFor="city" className="text-gray-700 font-medium">{t("المدينة", "City")}</Label>
+                      <Input id="city" name="city" placeholder={t("القاهرة", "Cairo")} defaultValue={user.city || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                     </div>
                     <div>
-                      <Label htmlFor="street">{t("الشارع", "Street")}</Label>
-                      <Input id="street" name="street" placeholder={t("الشارع، المنطقة", "Street, Area")} defaultValue={user.street || ""} />
+                      <Label htmlFor="street" className="text-gray-700 font-medium">{t("الشارع", "Street")}</Label>
+                      <Input id="street" name="street" placeholder={t("الشارع، المنطقة", "Street, Area")} defaultValue={user.street || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                     </div>
-                    <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]">
+                    <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
                       {t("حفظ العنوان", "Save Address")}
                     </Button>
                   </form>

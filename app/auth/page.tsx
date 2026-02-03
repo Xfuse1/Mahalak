@@ -16,6 +16,7 @@ import Link from "next/link"
 import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
+import Image from "next/image"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -28,9 +29,29 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [storeLogo, setStoreLogo] = useState<File | null>(null)
+  const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null)
 
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
+
+  // Handle store logo upload
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setStoreLogo(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setStoreLogoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeStoreLogo = () => {
+    setStoreLogo(null)
+    setStoreLogoPreview(null)
+  }
 
   // Redirect if already logged in
   useEffect(() => {
@@ -106,7 +127,7 @@ export default function AuthPage() {
         return
       }
 
-      sellerData = { phone, storeName, storeDescription, address, storeType }
+      sellerData = { phone, storeName, storeDescription, address, storeType, storeLogo }
     }
 
     if (password !== confirmPassword) {
@@ -135,30 +156,35 @@ export default function AuthPage() {
   }
 
   return (
-    <div suppressHydrationWarning className="min-h-screen flex flex-col">
+    <div suppressHydrationWarning className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-blue-50">
       <Header />
 
-      <main className="flex-1 py-12 bg-secondary">
+      <main className="flex-1 py-12">
         <div className="container mx-auto px-4 max-w-md">
-          <Card>
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-2xl text-center">{t("مرحباً بك في محلك", "Welcome to Mahalak")}</CardTitle>
-              <CardDescription className="text-center">
+          <Card className="border-0 shadow-2xl rounded-3xl overflow-hidden bg-white">
+            <CardHeader className="space-y-3 pt-8 pb-4 bg-gradient-to-br from-blue-50 to-white">
+              <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <CardTitle className="text-2xl text-center font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("مرحباً بك في محلك", "Welcome to Mahalak")}</CardTitle>
+              <CardDescription className="text-center text-gray-500">
                 {role === "seller"
                   ? t("سجل دخولك كبائع", "Login as a seller")
                   : t("سجل دخولك كعميل", "Login as a customer")}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {/* Role Selection */}
               <div className="mb-8">
-                <Label className="mb-3 block text-base">{t("نوع الحساب", "Account Type")}</Label>
+                <Label className="mb-3 block text-base font-medium text-gray-700">{t("نوع الحساب", "Account Type")}</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     type="button"
                     variant={role === "customer" ? "default" : "outline"}
                     onClick={() => setRole("customer")}
-                    className={`h-12 text-base font-semibold ${role === "customer" ? "bg-[#1F478B] hover:bg-[#1a3a70] shadow-md" : ""}`}
+                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "customer" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300"}`}
                   >
                     {t("عميل", "Customer")}
                   </Button>
@@ -166,7 +192,7 @@ export default function AuthPage() {
                     type="button"
                     variant={role === "seller" ? "default" : "outline"}
                     onClick={() => setRole("seller")}
-                    className={`h-12 text-base font-semibold ${role === "seller" ? "bg-[#1F478B] hover:bg-[#1a3a70] shadow-md" : ""}`}
+                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "seller" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300"}`}
                   >
                     {t("بائع", "Seller")}
                   </Button>
@@ -174,29 +200,34 @@ export default function AuthPage() {
               </div>
 
               <Tabs defaultValue="login" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-gray-200 p-1 rounded-lg">
+                <TabsList className="grid w-full grid-cols-2 mb-8 h-14 bg-gray-100 p-1.5 rounded-2xl">
                   <TabsTrigger
                     value="login"
-                    className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=inactive]:text-gray-600 font-bold text-base transition-all rounded-md"
+                    className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-md data-[state=inactive]:text-gray-500 font-bold text-base transition-all rounded-xl"
                   >
                     {t("تسجيل الدخول", "Login")}
                   </TabsTrigger>
                   <TabsTrigger
                     value="register"
-                    className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=inactive]:text-gray-600 font-bold text-base transition-all rounded-md"
+                    className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-md data-[state=inactive]:text-gray-500 font-bold text-base transition-all rounded-xl"
                   >
                     {t("إنشاء حساب", "Create Account")}
                   </TabsTrigger>
                 </TabsList>
 
                 {error && (
-                  <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg mb-6 text-sm">{error}</div>
+                  <div className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {error}
+                  </div>
                 )}
 
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-6">
                     <div className="space-y-2">
-                      <Label htmlFor="login-email" className="text-base">
+                      <Label htmlFor="login-email" className="text-base font-medium text-gray-700">
                         {t("البريد الإلكتروني", "Email")}
                       </Label>
                       <Input
@@ -205,15 +236,15 @@ export default function AuthPage() {
                         type="email"
                         required
                         placeholder="example@email.com"
-                        className="h-12"
+                        className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
                       />
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="login-password" className="text-base">
+                        <Label htmlFor="login-password" className="text-base font-medium text-gray-700">
                           {t("كلمة المرور", "Password")}
                         </Label>
-                        <Link href="/auth/forgot-password" className="text-sm text-[#1F478B] hover:underline">
+                        <Link href="/auth/forgot-password" className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline transition-colors">
                           {t("هل نسيت كلمة السر؟", "Forgot Password?")}
                         </Link>
                       </div>
@@ -224,11 +255,11 @@ export default function AuthPage() {
                           type={showPassword ? "text" : "password"}
                           required
                           placeholder="••••••••"
-                          className="h-12 pr-10"
+                          className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all pr-12"
                         />
                         <button
                           type="button"
-                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          className="absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-gray-600 transition-colors"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
@@ -237,7 +268,7 @@ export default function AuthPage() {
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 bg-[#1F478B] hover:bg-[#1a3a70] text-base font-semibold"
+                      className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
                       disabled={isLoading}
                     >
                       {isLoading ? t("جاري تسجيل الدخول...", "Logging in...") : t("تسجيل الدخول", "Login")}
@@ -385,6 +416,56 @@ export default function AuthPage() {
                               <SelectItem value="خدمات أخرى">{t("خدمات أخرى", "Other Services")}</SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+                        
+                        {/* Store Logo Upload */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-storeLogo" className="text-base">
+                            {t("لوجو المتجر", "Store Logo")}
+                          </Label>
+                          <div className="flex flex-col items-center gap-4">
+                            {storeLogoPreview ? (
+                              <div className="relative">
+                                <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                  <Image
+                                    src={storeLogoPreview}
+                                    alt="Store Logo Preview"
+                                    width={96}
+                                    height={96}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={removeStoreLogo}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <label
+                                htmlFor="register-storeLogo"
+                                className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع لوجو المتجر", "Click to upload store logo")}</span>
+                                <span className="text-xs text-gray-400 mt-1">{t("PNG, JPG حتى 2MB", "PNG, JPG up to 2MB")}</span>
+                              </label>
+                            )}
+                            <input
+                              id="register-storeLogo"
+                              name="storeLogo"
+                              type="file"
+                              accept="image/png, image/jpeg, image/jpg, image/webp"
+                              onChange={handleLogoChange}
+                              className="hidden"
+                            />
+                          </div>
                         </div>
                       </>
                     )}

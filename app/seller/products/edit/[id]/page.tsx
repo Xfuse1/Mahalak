@@ -154,11 +154,16 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
   if (isLoadingProduct) {
     return (
-      <div className="flex min-h-screen bg-secondary">
+      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4 max-w-3xl">
-            <p className="text-center">جاري التحميل...</p>
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+                <Upload className="w-8 h-8 text-white" />
+              </div>
+              <p className="text-gray-500">جاري التحميل...</p>
+            </div>
           </div>
         </main>
       </div>
@@ -167,14 +172,19 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
   if (error || !product) {
     return (
-      <div className="flex min-h-screen bg-secondary">
+      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4 max-w-3xl">
-            <p className="text-center text-red-500">{error || "المنتج غير موجود"}</p>
-            <Button onClick={() => router.push("/seller/products")} className="mt-4 mx-auto block">
-              العودة للمنتجات
-            </Button>
+            <div className="text-center py-12 bg-white rounded-2xl shadow-lg">
+              <p className="text-red-500 text-lg mb-4">{error || "المنتج غير موجود"}</p>
+              <Button 
+                onClick={() => router.push("/seller/products")} 
+                className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
+              >
+                العودة للمنتجات
+              </Button>
+            </div>
           </div>
         </main>
       </div>
@@ -182,68 +192,101 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   }
 
   return (
-    <div className="flex min-h-screen bg-secondary">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
-          <h1 className="text-3xl font-bold mb-8">تعديل المنتج</h1>
+          <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            تعديل المنتج
+          </h1>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>معلومات المنتج</CardTitle>
+          <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                معلومات المنتج
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <Label htmlFor="name">اسم المنتج</Label>
-                  <Input id="name" name="name" defaultValue={product.name} required />
+                  <Label htmlFor="name" className="text-gray-700 font-medium">اسم المنتج</Label>
+                  <Input 
+                    id="name" 
+                    name="name" 
+                    defaultValue={product.name} 
+                    required
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
                 </div>
 
                 <div>
-                  <Label htmlFor="description">الوصف</Label>
-                  <Textarea id="description" name="description" defaultValue={product.description} rows={4} required />
+                  <Label htmlFor="description" className="text-gray-700 font-medium">الوصف</Label>
+                  <Textarea 
+                    id="description" 
+                    name="description" 
+                    defaultValue={product.description} 
+                    rows={4} 
+                    required
+                    className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="price">السعر (جنيه)</Label>
-                    <Input id="price" name="price" type="number" step="0.01" defaultValue={product.price} required />
+                    <Label htmlFor="price" className="text-gray-700 font-medium">السعر (جنيه)</Label>
+                    <Input 
+                      id="price" 
+                      name="price" 
+                      type="number" 
+                      step="0.01" 
+                      defaultValue={product.price} 
+                      required
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="stock">الكمية المتاحة</Label>
-                    <Input id="stock" name="stock" type="number" defaultValue={product.stock} required />
+                    <Label htmlFor="stock" className="text-gray-700 font-medium">الكمية المتاحة</Label>
+                    <Input 
+                      id="stock" 
+                      name="stock" 
+                      type="number" 
+                      defaultValue={product.stock} 
+                      required
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="category">الفئة</Label>
+                  <Label htmlFor="category" className="text-gray-700 font-medium">الفئة</Label>
                   <Select name="category" defaultValue={product.category}>
-                    <SelectTrigger id="category">
+                    <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="بقالة">بقالة</SelectItem>
-                      <SelectItem value="صحة">صحة</SelectItem>
-                      <SelectItem value="ملابس">ملابس</SelectItem>
-                      <SelectItem value="إلكترونيات">إلكترونيات</SelectItem>
-                      <SelectItem value="أغذية">أغذية</SelectItem>
-                      <SelectItem value="أثاث">أثاث</SelectItem>
-                      <SelectItem value="خدمات أخرى">خدمات أخرى</SelectItem>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="بقالة" className="rounded-lg">بقالة</SelectItem>
+                      <SelectItem value="صحة" className="rounded-lg">صحة</SelectItem>
+                      <SelectItem value="ملابس" className="rounded-lg">ملابس</SelectItem>
+                      <SelectItem value="إلكترونيات" className="rounded-lg">إلكترونيات</SelectItem>
+                      <SelectItem value="أغذية" className="rounded-lg">أغذية</SelectItem>
+                      <SelectItem value="أثاث" className="rounded-lg">أثاث</SelectItem>
+                      <SelectItem value="خدمات أخرى" className="rounded-lg">خدمات أخرى</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {isGroceryStore && (
                   <div>
-                    <Label htmlFor="simulator_section">قسم العرض</Label>
+                    <Label htmlFor="simulator_section" className="text-gray-700 font-medium">قسم العرض</Label>
                     <Select name="simulator_section" defaultValue={product.simulator_section || "GROCERY"}>
-                      <SelectTrigger id="simulator_section">
+                      <SelectTrigger id="simulator_section" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                         <SelectValue placeholder="اختر القسم" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="rounded-xl">
                         {sections.map((section) => (
-                          <SelectItem key={section.id} value={section.id}>
+                          <SelectItem key={section.id} value={section.id} className="rounded-lg">
                             {section.icon} {section.nameAR}
                           </SelectItem>
                         ))}
@@ -253,26 +296,30 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 )}
 
                 <div>
-                  <Label htmlFor="image">صورة المنتج</Label>
+                  <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج</Label>
                   {imagePreview && (
-                    <div className="mt-2 mb-4">
-                      <Image
-                        src={imagePreview || "/placeholder.svg"}
-                        alt="معاينة الصورة"
-                        width={200}
-                        height={200}
-                        className="rounded-lg object-cover"
-                      />
+                    <div className="mt-3 mb-4">
+                      <div className="relative w-48 h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-200">
+                        <Image
+                          src={imagePreview || "/placeholder.svg"}
+                          alt="معاينة الصورة"
+                          width={200}
+                          height={200}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
                     </div>
                   )}
                   <div className="mt-2">
                     <label
                       htmlFor="image"
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#1F478B] transition-colors bg-gray-50"
+                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-all bg-gray-50 group"
                     >
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600">
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-2 shadow-lg group-hover:scale-110 transition-transform">
+                          <Upload className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="text-sm text-gray-600 font-medium">
                           {imageFile ? imageFile.name : "انقر لتغيير صورة المنتج"}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">PNG, JPG, JPEG (حتى 5MB)</p>
@@ -289,13 +336,26 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                   </div>
                 </div>
 
-                {error && <p className="text-red-500 text-sm">{error}</p>}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
+                    <p className="text-sm">{error}</p>
+                  </div>
+                )}
 
-                <div className="flex gap-3">
-                  <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]" disabled={isSaving}>
+                <div className="flex gap-3 pt-2">
+                  <Button 
+                    type="submit" 
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg" 
+                    disabled={isSaving}
+                  >
                     {isSaving ? "جاري الحفظ..." : "حفظ التعديلات"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => router.push("/seller/products")}>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => router.push("/seller/products")}
+                    className="rounded-xl h-12 border-2 hover:bg-gray-50"
+                  >
                     إلغاء
                   </Button>
                 </div>

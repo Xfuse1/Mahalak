@@ -174,29 +174,34 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-secondary">
+    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">الإعدادات</h1>
-            <p className="text-gray-600 mt-1">إدارة معلومات المتجر والإعدادات</p>
+          <div className="mb-10">
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">الإعدادات</h1>
+            <p className="text-gray-500 mt-1">إدارة معلومات المتجر والإعدادات</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Store Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>معلومات المتجر</CardTitle>
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-xl">
+                    <Upload className="h-5 w-5 text-blue-600" />
+                  </div>
+                  معلومات المتجر
+                </CardTitle>
                 <CardDescription>تحديث معلومات المتجر الأساسية</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5 p-6">
                 <div>
-                  <Label htmlFor="storeLogo">شعار المتجر</Label>
-                  <div className="mt-2 flex items-center gap-4">
+                  <Label htmlFor="storeLogo" className="text-gray-700 font-medium">شعار المتجر</Label>
+                  <div className="mt-3 flex items-center gap-4">
                     {imagePreview && (
-                      <div className="relative w-24 h-24 rounded-lg overflow-hidden border-2 border-gray-200">
+                      <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-blue-200 shadow-md">
                         <Image
                           src={imagePreview || "/placeholder.svg"}
                           alt="Store logo preview"
@@ -208,10 +213,10 @@ export default function SettingsPage() {
                     <div className="flex-1">
                       <Label
                         htmlFor="storeLogo"
-                        className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#1F478B] transition-colors"
+                        className="flex items-center justify-center gap-3 px-5 py-4 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all"
                       >
-                        <Upload className="h-5 w-5" />
-                        <span>{imagePreview ? "تغيير الشعار" : "رفع شعار المتجر"}</span>
+                        <Upload className="h-6 w-6 text-blue-600" />
+                        <span className="font-medium text-gray-700">{imagePreview ? "تغيير الشعار" : "رفع شعار المتجر"}</span>
                       </Label>
                       <Input
                         id="storeLogo"
@@ -220,58 +225,59 @@ export default function SettingsPage() {
                         onChange={handleImageChange}
                         className="hidden"
                       />
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF حتى 5MB</p>
+                      <p className="text-xs text-gray-500 mt-2">PNG, JPG, GIF حتى 5MB</p>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="storeName">اسم المتجر</Label>
-                  <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required />
+                  <Label htmlFor="storeName" className="text-gray-700 font-medium">اسم المتجر</Label>
+                  <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <Label htmlFor="storeDescription">وصف المتجر</Label>
+                  <Label htmlFor="storeDescription" className="text-gray-700 font-medium">وصف المتجر</Label>
                   <Textarea
                     id="storeDescription"
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
                     rows={4}
+                    className="mt-2 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="storeCategory">فئة المتجر</Label>
-                  <div className="relative">
+                  <Label htmlFor="storeCategory" className="text-gray-700 font-medium">فئة المتجر</Label>
+                  <div className="relative mt-2">
                     <Input
                       id="storeCategory"
                       value={formData.category}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-gray-100 cursor-not-allowed h-12 rounded-xl"
                     />
                     <p className="text-xs text-gray-500 mt-1">لا يمكن تغيير فئة المتجر بعد الإنشاء</p>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="storeAddress">العنوان</Label>
-                  <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required />
+                  <Label htmlFor="storeAddress" className="text-gray-700 font-medium">العنوان</Label>
+                  <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <Label htmlFor="storePhone">رقم الهاتف</Label>
-                  <Input id="storePhone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} required />
+                  <Label htmlFor="storePhone" className="text-gray-700 font-medium">رقم الهاتف</Label>
+                  <Input id="storePhone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
               </CardContent>
             </Card>
 
             {/* Working Hours */}
-            <Card>
-              <CardHeader>
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <CardTitle>ساعات العمل</CardTitle>
                 <CardDescription>حدد أوقات عمل المتجر</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5 p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="openTime">وقت الفتح</Label>
+                    <Label htmlFor="openTime" className="text-gray-700 font-medium">وقت الفتح</Label>
                     <Input
                       id="openTime"
                       name="open_time"
@@ -279,10 +285,11 @@ export default function SettingsPage() {
                       value={formData.open_time}
                       onChange={handleInputChange}
                       required
+                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="closeTime">وقت الإغلاق</Label>
+                    <Label htmlFor="closeTime" className="text-gray-700 font-medium">وقت الإغلاق</Label>
                     <Input
                       id="closeTime"
                       name="close_time"
@@ -290,31 +297,33 @@ export default function SettingsPage() {
                       value={formData.close_time}
                       onChange={handleInputChange}
                       required
+                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="workingDays">أيام العمل</Label>
+                  <Label htmlFor="workingDays" className="text-gray-700 font-medium">أيام العمل</Label>
                   <Input
                     id="workingDays"
                     name="working_days"
                     value={formData.working_days}
                     onChange={handleInputChange}
                     required
+                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               </CardContent>
             </Card>
 
             {/* Customer Service */}
-            <Card>
-              <CardHeader>
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <CardTitle>خدمة العملاء</CardTitle>
                 <CardDescription>معلومات التواصل مع العملاء</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5 p-6">
                 <div>
-                  <Label htmlFor="supportEmail">البريد الإلكتروني للدعم</Label>
+                  <Label htmlFor="supportEmail" className="text-gray-700 font-medium">البريد الإلكتروني للدعم</Label>
                   <Input
                     id="supportEmail"
                     name="support_email"
@@ -322,10 +331,11 @@ export default function SettingsPage() {
                     value={formData.support_email}
                     onChange={handleInputChange}
                     required
+                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="whatsappNumber">رقم واتساب</Label>
+                  <Label htmlFor="whatsappNumber" className="text-gray-700 font-medium">رقم واتساب</Label>
                   <Input
                     id="whatsappNumber"
                     name="whatsapp_number"
@@ -333,23 +343,25 @@ export default function SettingsPage() {
                     value={formData.whatsapp_number}
                     onChange={handleInputChange}
                     required
+                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="returnPolicy">سياسة الإرجاع</Label>
+                  <Label htmlFor="returnPolicy" className="text-gray-700 font-medium">سياسة الإرجاع</Label>
                   <Textarea
                     id="returnPolicy"
                     name="return_policy"
                     value={formData.return_policy}
                     onChange={handleInputChange}
                     rows={3}
+                    className="mt-2 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               </CardContent>
             </Card>
 
-            <div className="flex justify-end">
-              <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]" disabled={isSaving || isUploadingImage}>
+            <div className="flex justify-end pb-8">
+              <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3 text-lg" disabled={isSaving || isUploadingImage}>
                 {isUploadingImage ? "جاري رفع الصورة..." : isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}
               </Button>
             </div>
