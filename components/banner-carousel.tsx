@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 import Image from "next/image"
+import Link from "next/link"
 
 const BannerCarouselComponent = () => {
   const [currentSlide, setCurrentSlide] = useState(0)
