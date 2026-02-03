@@ -32,9 +32,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [product, setProduct] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
+  const [selectedCategory, setSelectedCategory] = useState<string>("")
 
-  // Check if store is grocery/food type
-  const isGroceryStore = ["بقالة", "أغذية", "grocery", "food", "supermarket"].includes(storeCategory.toLowerCase())
+  // Check if either store or product category is grocery/food type
+  const isGroceryType = (cat: string) => ["بقالة", "أغذية", "grocery", "food", "supermarket"].includes(cat.toLowerCase())
+  const showSimulatorSection = isGroceryType(storeCategory) || isGroceryType(selectedCategory)
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -59,6 +61,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
       setProduct(productData)
       setImagePreview(productData.image_url)
+      setSelectedCategory(productData.category || "")
 
       // Set store category from the store object we already fetched
       if (store) {
@@ -116,8 +119,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         description: formData.get("description") as string,
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
-        category: formData.get("category") as string,
-        simulator_section: isGroceryStore ? (formData.get("simulator_section") as string) : null,
+        category: selectedCategory,
+        simulator_section: showSimulatorSection ? (formData.get("simulator_section") as string) : null,
         image_url: imageUrl,
       })
 
@@ -178,8 +181,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           <div className="container mx-auto px-4 max-w-3xl">
             <div className="text-center py-12 bg-white rounded-2xl shadow-lg">
               <p className="text-red-500 text-lg mb-4">{error || "المنتج غير موجود"}</p>
-              <Button 
-                onClick={() => router.push("/seller/products")} 
+              <Button
+                onClick={() => router.push("/seller/products")}
                 className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
               >
                 العودة للمنتجات
@@ -212,10 +215,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <Label htmlFor="name" className="text-gray-700 font-medium">اسم المنتج</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    defaultValue={product.name} 
+                  <Input
+                    id="name"
+                    name="name"
+                    defaultValue={product.name}
                     required
                     className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -223,11 +226,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
                 <div>
                   <Label htmlFor="description" className="text-gray-700 font-medium">الوصف</Label>
-                  <Textarea 
-                    id="description" 
-                    name="description" 
-                    defaultValue={product.description} 
-                    rows={4} 
+                  <Textarea
+                    id="description"
+                    name="description"
+                    defaultValue={product.description}
+                    rows={4}
                     required
                     className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -236,23 +239,23 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="price" className="text-gray-700 font-medium">السعر (جنيه)</Label>
-                    <Input 
-                      id="price" 
-                      name="price" 
-                      type="number" 
-                      step="0.01" 
-                      defaultValue={product.price} 
+                    <Input
+                      id="price"
+                      name="price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={product.price}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                   <div>
                     <Label htmlFor="stock" className="text-gray-700 font-medium">الكمية المتاحة</Label>
-                    <Input 
-                      id="stock" 
-                      name="stock" 
-                      type="number" 
-                      defaultValue={product.stock} 
+                    <Input
+                      id="stock"
+                      name="stock"
+                      type="number"
+                      defaultValue={product.stock}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
@@ -261,7 +264,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
                 <div>
                   <Label htmlFor="category" className="text-gray-700 font-medium">الفئة</Label>
-                  <Select name="category" defaultValue={product.category}>
+                  <Select
+                    name="category"
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue />
                     </SelectTrigger>
@@ -277,7 +284,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                   </Select>
                 </div>
 
-                {isGroceryStore && (
+                {showSimulatorSection && (
                   <div>
                     <Label htmlFor="simulator_section" className="text-gray-700 font-medium">قسم العرض</Label>
                     <Select name="simulator_section" defaultValue={product.simulator_section || "GROCERY"}>
@@ -343,16 +350,16 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 )}
 
                 <div className="flex gap-3 pt-2">
-                  <Button 
-                    type="submit" 
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg" 
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg"
                     disabled={isSaving}
                   >
                     {isSaving ? "جاري الحفظ..." : "حفظ التعديلات"}
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => router.push("/seller/products")}
                     className="rounded-xl h-12 border-2 hover:bg-gray-50"
                   >

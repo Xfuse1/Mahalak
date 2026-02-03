@@ -27,9 +27,11 @@ export default function NewProductPage() {
   const [error, setError] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
   const [storeData, setStoreData] = useState<any>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>("")
 
-  // Check if store is grocery/food type
-  const isGroceryStore = ['بقالة', 'أغذية', 'grocery', 'food', 'supermarket'].includes(storeCategory.toLowerCase())
+  // Check if either store or product category is grocery/food type
+  const isGroceryType = (cat: string) => ['بقالة', 'أغذية', 'grocery', 'food', 'supermarket'].includes(cat.toLowerCase())
+  const showSimulatorSection = isGroceryType(storeCategory) || isGroceryType(selectedCategory)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -97,8 +99,8 @@ export default function NewProductPage() {
         description: formData.get("description") as string,
         price: Number.parseFloat(formData.get("price") as string),
         stock: Number.parseInt(formData.get("stock") as string),
-        category: formData.get("category") as string,
-        simulator_section: isGroceryStore ? (formData.get("simulator_section") as string || "GROCERY") : null,
+        category: selectedCategory,
+        simulator_section: showSimulatorSection ? (formData.get("simulator_section") as string || "GROCERY") : null,
         image_url: imageUrl,
         store_id: store.id,
       }
@@ -165,22 +167,22 @@ export default function NewProductPage() {
 
                 <div>
                   <Label htmlFor="name" className="text-gray-700 font-medium">اسم المنتج *</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    required 
-                    placeholder="مثال: هاتف ذكي سامسونج" 
+                  <Input
+                    id="name"
+                    name="name"
+                    required
+                    placeholder="مثال: هاتف ذكي سامسونج"
                     className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
                   <Label htmlFor="description" className="text-gray-700 font-medium">الوصف *</Label>
-                  <Textarea 
-                    id="description" 
-                    name="description" 
-                    required 
-                    placeholder="وصف تفصيلي للمنتج..." 
+                  <Textarea
+                    id="description"
+                    name="description"
+                    required
+                    placeholder="وصف تفصيلي للمنتج..."
                     rows={4}
                     className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -189,13 +191,13 @@ export default function NewProductPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="price" className="text-gray-700 font-medium">السعر (جنيه) *</Label>
-                    <Input 
-                      id="price" 
-                      name="price" 
-                      type="number" 
-                      required 
-                      placeholder="0.00" 
-                      min="0" 
+                    <Input
+                      id="price"
+                      name="price"
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      min="0"
                       step="0.01"
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
@@ -203,12 +205,12 @@ export default function NewProductPage() {
 
                   <div>
                     <Label htmlFor="stock" className="text-gray-700 font-medium">الكمية المتاحة *</Label>
-                    <Input 
-                      id="stock" 
-                      name="stock" 
-                      type="number" 
-                      required 
-                      placeholder="0" 
+                    <Input
+                      id="stock"
+                      name="stock"
+                      type="number"
+                      required
+                      placeholder="0"
                       min="0"
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
@@ -217,7 +219,12 @@ export default function NewProductPage() {
 
                 <div>
                   <Label htmlFor="category" className="text-gray-700 font-medium">الفئة *</Label>
-                  <Select name="category" required>
+                  <Select
+                    name="category"
+                    required
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue placeholder="اختر الفئة" />
                     </SelectTrigger>
@@ -230,7 +237,8 @@ export default function NewProductPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {isGroceryStore && (
+
+                {showSimulatorSection && (
                   <div>
                     <Label htmlFor="simulator_section" className="text-gray-700 font-medium">قسم العرض</Label>
                     <Select name="simulator_section" defaultValue="GROCERY">
@@ -300,16 +308,16 @@ export default function NewProductPage() {
                 </div>
 
                 <div className="flex gap-4 pt-4">
-                  <Button 
-                    type="submit" 
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all" 
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? "جاري الإضافة..." : "إضافة المنتج"}
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => router.back()}
                     className="rounded-xl h-12 border-2 hover:bg-gray-50"
                   >
