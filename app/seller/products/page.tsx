@@ -154,6 +154,7 @@ export default function SellerProductsPage() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
