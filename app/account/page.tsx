@@ -19,6 +19,7 @@ import { getCustomerOrders } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
 import { OrderTrackingModal } from "../../components/order-tracking-modal"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
+import { formatAddress } from "../../lib/utils"
 
 type Order = {
   id: string
@@ -252,7 +253,7 @@ export default function AccountPage() {
                               {order.delivery_address && (
                                 <div className="flex items-start gap-3 text-sm text-gray-600">
                                   <MapPin className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                                  <span className="line-clamp-1">{order.delivery_address}</span>
+                                  <span className="line-clamp-1">{formatAddress(order.delivery_address)}</span>
                                 </div>
                               )}
                             </div>

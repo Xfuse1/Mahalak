@@ -8,6 +8,7 @@ import { Card, CardContent } from "./ui/card"
 import { Badge } from "./ui/badge"
 import type { Store } from "../lib/mock-data"
 import { useLanguage } from "../lib/language-context"
+import { formatAddress } from "../lib/utils"
 
 interface StoreCardProps {
   store: Store
@@ -63,9 +64,7 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
                 <MapPin className="h-3.5 w-3.5" />
               </div>
               <span className="line-clamp-1 text-sm">
-                {typeof (store as any).address === 'object' && (store as any).address
-                  ? `${(store as any).address.street ? (store as any).address.street + ' ' : ''}${(store as any).address.city || ''}${(store as any).address.state ? ', ' + (store as any).address.state : ''}`
-                  : (store as any).address || ''}
+                {formatAddress((store as any).address)}
               </span>
             </div>
 

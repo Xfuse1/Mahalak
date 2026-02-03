@@ -21,7 +21,7 @@ import Image from "next/image"
 import { useEffect, useState } from "react"
 import { getStore } from "../../../lib/actions/stores"
 import { getProductsByStoreId } from "../../../lib/actions/products"
-import { trackMetaEvent } from "../../../lib/utils"
+import { trackMetaEvent, formatAddress } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
 
@@ -355,22 +355,22 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   </div>
                   <div>
                     <p className="font-semibold text-gray-800 mb-1">{t("العنوان", "Address")}</p>
-                    <p className="text-gray-600">{store.address}</p>
+                    <p className="text-gray-600">{formatAddress(store.address)}</p>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button 
-                    onClick={handleWhatsApp} 
+                  <Button
+                    onClick={handleWhatsApp}
                     className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
                   >
                     <MessageCircle className="me-2 h-5 w-5" />
                     {t("تواصل واتساب", "WhatsApp")}
                   </Button>
-                  <Button 
-                    onClick={handleCall} 
-                    variant="outline" 
+                  <Button
+                    onClick={handleCall}
+                    variant="outline"
                     className="flex-1 border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 rounded-xl h-12 transition-all"
                   >
                     <Phone className="me-2 h-5 w-5" />
@@ -423,7 +423,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
                 </span>
               )}
             </div>
-            
+
             {products.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {products.map((product) => (

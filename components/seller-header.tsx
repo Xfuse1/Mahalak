@@ -29,7 +29,6 @@ export function SellerHeader() {
     { href: "/seller/products", label: t("products"), icon: Package },
     { href: "/seller/orders", label: t("orders"), icon: ShoppingBag },
     { href: "/seller/offers", label: t("offers"), icon: Tag },
-    { href: "/seller/supermarket-3d", label: t("supermarket3d", "إدارة السوبرماركت 3D"), icon: Box },
     { href: "/seller/settings", label: t("settings"), icon: Settings },
   ]
 

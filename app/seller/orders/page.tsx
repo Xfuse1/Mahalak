@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "../../../components/ui/dialog"
 import Image from "next/image"
+import { formatAddress } from "../../../lib/utils"
 
 type OrderItem = {
   id: string
@@ -304,7 +305,7 @@ export default function SellerOrdersPage() {
                         {t("عنوان التوصيل", "Delivery Address")}
                       </h3>
                       <p className="text-sm text-gray-700 leading-relaxed">
-                        {selectedOrder.delivery_address || t("لم يتم تحديد عنوان", "No address provided")}
+                        {formatAddress(selectedOrder.delivery_address) || t("لم يتم تحديد عنوان", "No address provided")}
                       </p>
                     </div>
                   </div>

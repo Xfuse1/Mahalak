@@ -15,6 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react"
+import { reverseGeocode } from "@/lib/actions/geo"
 
 type CheckoutItem = {
   id: string
@@ -34,12 +35,12 @@ export default function CheckoutPage() {
   const { items: cartItems } = useCartStore()
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
-  
+
   const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
-  
+
   // Get items based on mode
   const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -118,7 +119,7 @@ export default function CheckoutPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords
-        
+
         // Save coordinates
         setFormData((prev) => ({
           ...prev,
@@ -126,16 +127,12 @@ export default function CheckoutPage() {
           longitude: longitude.toString(),
         }))
 
-        // Only fill address fields if they are empty (user hasn't typed anything)
-        // Try to get address from coordinates using reverse geocoding
+        // Try to get address from coordinates using reverse geocoding via Server Action to avoid CORS
         try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ar`
-          )
-          const data = await response.json()
-          
-          if (data && data.address) {
-            const address = data.address
+          const result = await reverseGeocode(latitude, longitude)
+
+          if (result.success && result.data && result.data.address) {
+            const address = result.data.address
             setFormData((prev) => ({
               ...prev,
               // Only fill if empty
@@ -178,7 +175,7 @@ export default function CheckoutPage() {
   const handleContinue = () => {
     // Mark form as attempted to show validation
     setAttempted(true)
-    
+
     // Validate required fields - location is required, address fields are optional
     if (!formData.fullName || !formData.phone || !formData.latitude || !formData.longitude) {
       return
@@ -186,7 +183,7 @@ export default function CheckoutPage() {
 
     // Store checkout data in sessionStorage for the delivery page
     sessionStorage.setItem("checkoutData", JSON.stringify(formData))
-    
+
     // Pass mode to delivery page
     const deliveryUrl = isBuyNowMode ? "/checkout/delivery?mode=buynow" : "/checkout/delivery"
     router.push(deliveryUrl)
@@ -325,13 +322,12 @@ export default function CheckoutPage() {
                   variant="outline"
                   onClick={getCurrentLocation}
                   disabled={isGettingLocation}
-                  className={`w-full h-12 rounded-xl transition-all ${
-                    formData.latitude && formData.longitude
+                  className={`w-full h-12 rounded-xl transition-all ${formData.latitude && formData.longitude
                       ? "border-emerald-500 text-emerald-600 bg-emerald-50"
                       : attempted && (!formData.latitude || !formData.longitude)
-                      ? "border-red-500 text-red-500 hover:bg-red-50"
-                      : "border-blue-500 text-blue-600 hover:bg-blue-50"
-                  }`}
+                        ? "border-red-500 text-red-500 hover:bg-red-50"
+                        : "border-blue-500 text-blue-600 hover:bg-blue-50"
+                    }`}
                 >
                   {isGettingLocation ? (
                     <>
