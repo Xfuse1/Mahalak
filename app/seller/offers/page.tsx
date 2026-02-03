@@ -10,11 +10,20 @@ import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { Label } from "../../../components/ui/label"
 import { Textarea } from "../../../components/ui/textarea"
-import { Plus, Edit, Trash2, Tag, Calendar } from "lucide-react"
+import { Plus, Edit, Trash2, Tag, Calendar, Package } from "lucide-react"
 import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "../../../lib/actions/offers"
 import { getStoreByUserId } from "../../../lib/actions/stores"
+import { getProductsByStoreId } from "../../../lib/actions/products"
 import { Badge } from "../../../components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
+
+interface Product {
+  id: string
+  name: string
+  price: number
+  image_url?: string
+}
 
 interface Offer {
   id: string
@@ -25,17 +34,21 @@ interface Offer {
   end_date: string
   store_id: string
   created_at: string
+  product_id?: string
+  quantity?: number
 }
 
 export default function OffersPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [offers, setOffers] = useState<Offer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [isAdding, setIsAdding] = useState(false)
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
   const [storeId, setStoreId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<string>("")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -63,6 +76,10 @@ export default function OffersPage() {
 
         setStoreId(store.id)
 
+        // Get products for this store
+        const storeProducts = await getProductsByStoreId(store.id)
+        setProducts(storeProducts as Product[])
+
         // Get offers for this store
         const storeOffers = await getStoreOffers(store.id)
         setOffers(storeOffers)
@@ -87,12 +104,17 @@ export default function OffersPage() {
     setSubmitting(true)
     const formData = new FormData(e.currentTarget)
 
+    const productId = formData.get("product") as string
+    const quantity = formData.get("quantity") as string
+    
     const offerData = {
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       discount_percentage: Number(formData.get("discount")),
       start_date: formData.get("startDate") as string,
       end_date: formData.get("endDate") as string,
+      product_id: productId && productId !== "all" ? productId : undefined,
+      quantity: quantity ? Number(quantity) : undefined,
     }
 
     try {
@@ -255,6 +277,43 @@ export default function OffersPage() {
                       className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                     />
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="product" className="text-gray-700 font-medium">المنتج (اختياري)</Label>
+                      <Select 
+                        name="product" 
+                        defaultValue={editingOffer?.product_id || "all"}
+                        onValueChange={setSelectedProduct}
+                      >
+                        <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                          <SelectValue placeholder="اختر منتج" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="all">جميع المنتجات</SelectItem>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-gray-400" />
+                                {product.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="quantity" className="text-gray-700 font-medium">الكمية المتاحة للعرض (اختياري)</Label>
+                      <Input
+                        id="quantity"
+                        name="quantity"
+                        type="number"
+                        min="1"
+                        placeholder="مثال: 100"
+                        defaultValue={editingOffer?.quantity || ""}
+                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <Label htmlFor="discount" className="text-gray-700 font-medium">نسبة الخصم (%)</Label>
                     <Input
@@ -367,6 +426,17 @@ export default function OffersPage() {
                           {offer.discount_percentage}%
                         </span>
                       </div>
+                      {offer.product_id && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-xl p-3">
+                          <Package className="h-4 w-4" />
+                          <span>المنتج: {products.find(p => p.id === offer.product_id)?.name || "منتج محدد"}</span>
+                        </div>
+                      )}
+                      {offer.quantity && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500 bg-orange-50 rounded-xl p-3">
+                          <span className="font-medium text-orange-600">الكمية المتاحة: {offer.quantity}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Calendar className="h-4 w-4" />
                         <span>من: {formatDateForInput(offer.start_date)}</span>

@@ -22,6 +22,8 @@ export async function createOffer(formData: {
   discount_percentage: number
   start_date: string
   end_date: string
+  product_id?: string
+  quantity?: number
 }) {
   const db = getAdminDb()
   const docRef = db.collection("offers").doc()
@@ -49,6 +51,8 @@ export async function updateOffer(
     discount_percentage: number
     start_date: string
     end_date: string
+    product_id?: string
+    quantity?: number
   }>,
 ) {
   const db = getAdminDb()
