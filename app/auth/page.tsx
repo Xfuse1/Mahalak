@@ -16,6 +16,7 @@ import Link from "next/link"
 import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
+import Image from "next/image"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -28,9 +29,29 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [storeLogo, setStoreLogo] = useState<File | null>(null)
+  const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null)
 
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
+
+  // Handle store logo upload
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setStoreLogo(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setStoreLogoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeStoreLogo = () => {
+    setStoreLogo(null)
+    setStoreLogoPreview(null)
+  }
 
   // Redirect if already logged in
   useEffect(() => {
@@ -106,7 +127,7 @@ export default function AuthPage() {
         return
       }
 
-      sellerData = { phone, storeName, storeDescription, address, storeType }
+      sellerData = { phone, storeName, storeDescription, address, storeType, storeLogo }
     }
 
     if (password !== confirmPassword) {
@@ -395,6 +416,56 @@ export default function AuthPage() {
                               <SelectItem value="خدمات أخرى">{t("خدمات أخرى", "Other Services")}</SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+                        
+                        {/* Store Logo Upload */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-storeLogo" className="text-base">
+                            {t("لوجو المتجر", "Store Logo")}
+                          </Label>
+                          <div className="flex flex-col items-center gap-4">
+                            {storeLogoPreview ? (
+                              <div className="relative">
+                                <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                  <Image
+                                    src={storeLogoPreview}
+                                    alt="Store Logo Preview"
+                                    width={96}
+                                    height={96}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={removeStoreLogo}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <label
+                                htmlFor="register-storeLogo"
+                                className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع لوجو المتجر", "Click to upload store logo")}</span>
+                                <span className="text-xs text-gray-400 mt-1">{t("PNG, JPG حتى 2MB", "PNG, JPG up to 2MB")}</span>
+                              </label>
+                            )}
+                            <input
+                              id="register-storeLogo"
+                              name="storeLogo"
+                              type="file"
+                              accept="image/png, image/jpeg, image/jpg, image/webp"
+                              onChange={handleLogoChange}
+                              className="hidden"
+                            />
+                          </div>
                         </div>
                       </>
                     )}
