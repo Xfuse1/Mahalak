@@ -4,43 +4,118 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useTranslation } from "react-i18next"
+import { HelpCircle, MessageCircle, Phone, Mail, ChevronDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function FAQPage() {
   const { t } = useTranslation()
 
   const faqs = [
-    { question: t("faq1Q"), answer: t("faq1A") },
-    { question: t("faq2Q"), answer: t("faq2A") },
-    { question: t("faq5Q"), answer: t("faq5A") },
-    { question: t("faq6Q"), answer: t("faq6A") },
-    { question: t("faq7Q"), answer: t("faq7A") },
-    { question: t("faq8Q"), answer: t("faq8A") },
+    { question: t("faq1Q"), answer: t("faq1A"), icon: "🛒" },
+    { question: t("faq2Q"), answer: t("faq2A"), icon: "📦" },
+    { question: t("faq5Q"), answer: t("faq5A"), icon: "💳" },
+    { question: t("faq6Q"), answer: t("faq6A"), icon: "🚚" },
+    { question: t("faq7Q"), answer: t("faq7A"), icon: "🔄" },
+    { question: t("faq8Q"), answer: t("faq8A"), icon: "🔒" },
   ]
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
       <Header />
 
-      <main className="flex-1 py-12">
+      <main className="flex-1 py-16">
         <div className="container mx-auto px-4 max-w-4xl">
-          <h1 className="text-4xl font-bold mb-4 text-center">{t("faqTitle")}</h1>
-          <p className="text-xl text-gray-600 text-center mb-12 leading-relaxed">{t("faqSubtitle")}</p>
+          {/* Hero Section */}
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 mb-6 shadow-lg shadow-blue-500/30">
+              <HelpCircle className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
+              {t("faqTitle")}
+            </h1>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+              {t("faqSubtitle")}
+            </p>
+          </div>
 
+          {/* FAQ Accordion */}
           <Accordion type="single" collapsible className="w-full space-y-4">
             {faqs.map((faq, index) => (
-              <AccordionItem key={index} value={`item-${index}`} className="bg-white rounded-lg border px-6">
-                <AccordionTrigger className="text-right hover:no-underline py-4">
-                  <span className="font-semibold text-lg">{faq.question}</span>
+              <AccordionItem 
+                key={index} 
+                value={`item-${index}`} 
+                className="bg-white rounded-2xl border-0 shadow-md hover:shadow-lg transition-all duration-300 px-6 overflow-hidden group"
+              >
+                <AccordionTrigger className="hover:no-underline py-5 gap-4">
+                  <div className="flex items-center gap-4 flex-1">
+                    <span className="text-2xl">{faq.icon}</span>
+                    <span className="font-semibold text-lg text-gray-800 text-right flex-1">
+                      {faq.question}
+                    </span>
+                  </div>
                 </AccordionTrigger>
-                <AccordionContent className="text-gray-700 leading-relaxed pb-4">{faq.answer}</AccordionContent>
+                <AccordionContent className="text-gray-600 leading-relaxed pb-6 ps-12">
+                  <div className="bg-gray-50 rounded-xl p-4 border-s-4 border-blue-500">
+                    {faq.answer}
+                  </div>
+                </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
 
-          <div className="mt-12 bg-secondary rounded-lg p-8 text-center">
-            <h2 className="text-2xl font-bold mb-4">{t("faqNotFound")}</h2>
-            <p className="text-gray-700 mb-6 leading-relaxed">{t("faqContactUs")}</p>
-            <p className="text-[#1F478B] font-semibold text-lg">{t("phone")}: 010 55161600</p>
+          {/* Contact Section */}
+          <div className="mt-16 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+            
+            <div className="relative p-10 text-center text-white">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 mb-6">
+                <MessageCircle className="w-8 h-8" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">{t("faqNotFound")}</h2>
+              <p className="text-blue-100 mb-8 max-w-md mx-auto leading-relaxed">
+                {t("faqContactUs")}
+              </p>
+              
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Button 
+                  size="lg" 
+                  className="bg-white text-blue-700 hover:bg-blue-50 rounded-xl px-8 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                >
+                  <Phone className="w-5 h-5 me-2" />
+                  010 55161600
+                </Button>
+                <Button 
+                  size="lg" 
+                  variant="outline"
+                  className="border-2 border-white/30 bg-white/10 text-white hover:bg-white/20 rounded-xl px-8 backdrop-blur-sm"
+                >
+                  <Mail className="w-5 h-5 me-2" />
+                  {t("email") || "راسلنا"}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Categories */}
+          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { icon: "🛍️", label: t("orders") || "الطلبات", color: "from-blue-500 to-blue-600" },
+              { icon: "💰", label: t("payments") || "المدفوعات", color: "from-emerald-500 to-emerald-600" },
+              { icon: "🚚", label: t("delivery") || "التوصيل", color: "from-amber-500 to-amber-600" },
+              { icon: "🔐", label: t("account") || "الحساب", color: "from-violet-500 to-violet-600" },
+            ].map((item, index) => (
+              <div 
+                key={index}
+                className="group bg-white rounded-2xl p-6 text-center border-0 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-2 cursor-pointer"
+              >
+                <div className={`w-14 h-14 mx-auto rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <span className="text-2xl">{item.icon}</span>
+                </div>
+                <span className="font-medium text-gray-700">{item.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </main>

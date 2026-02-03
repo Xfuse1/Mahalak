@@ -74,20 +74,20 @@ export function Header() {
   }
 
   return (
-    <header suppressHydrationWarning className="sticky top-0 z-50 bg-[#1F478B] text-white shadow-md">
+    <header suppressHydrationWarning className="sticky top-0 z-50 bg-gradient-to-r from-[#0f172a] via-[#1e3a5f] to-[#1e40af] text-white shadow-lg backdrop-blur-sm">
       <div className="container mx-auto px-2 md:px-4">
-        <div className="flex items-center justify-between h-16 gap-2">
-          <Link href="/" className="hover:opacity-90 transition-opacity flex-shrink-0">
-            <Logo className="h-8 md:h-12 w-auto" />
+        <div className="flex items-center justify-between h-16 md:h-18 gap-2">
+          <Link href="/" className="hover:opacity-90 transition-all duration-300 flex-shrink-0 hover:scale-105">
+            <Logo className="h-8 md:h-12 w-auto drop-shadow-lg" />
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 md:gap-2">
             {/* 3D Supermarket Link - Icon only on mobile */}
             <Button
               variant="ghost"
               size="sm"
-              className="flex items-center justify-center text-white hover:bg-white/20 h-8 w-8 px-0 md:w-auto md:px-4 md:gap-2"
+              className="flex items-center justify-center text-white hover:bg-white/20 h-9 w-9 px-0 md:w-auto md:px-4 md:gap-2 rounded-xl transition-all duration-300 hover:scale-105"
               onClick={() => router.push("/supermarket")}
               title="3D Market"
             >
@@ -104,12 +104,12 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="relative text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+              className="relative text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
               onClick={() => router.push("/cart")}
             >
               <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
               {cartItemsCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
                   {cartItemsCount > 99 ? "99+" : cartItemsCount}
                 </span>
               )}
@@ -122,12 +122,12 @@ export function Header() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="relative text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+                    className="relative text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
                     onClick={handleNotificationClick}
                   >
                     <Bell className="h-4 w-4 md:h-5 md:w-5" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
                         {unreadCount > 9 ? "9+" : unreadCount}
                       </span>
                     )}
@@ -138,14 +138,14 @@ export function Header() {
                     <>
                       {/* Backdrop */}
                       <div
-                        className="fixed inset-0 z-40"
+                        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
                         onClick={() => setShowNotifications(false)}
                       />
                       
                       {/* Dropdown */}
-                      <div className="absolute left-0 md:right-0 md:left-auto top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-lg shadow-xl border z-50">
-                        <div className="p-3 border-b bg-gray-50">
-                          <h3 className="font-semibold text-gray-800">{t("notifications", "الإشعارات")}</h3>
+                      <div className="absolute left-0 md:right-0 md:left-auto top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
+                          <h3 className="font-bold text-gray-800 text-lg">{t("notifications", "الإشعارات")}</h3>
                         </div>
                         
                         {loadingNotifications ? (
@@ -201,7 +201,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+                  className="text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
                   onClick={() => router.push(user.role === "seller" ? "/seller/dashboard" : "/account")}
                 >
                   <User className="h-4 w-4 md:h-5 md:w-5" />
@@ -209,7 +209,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-white hover:bg-white/30 transition-all h-8 w-8 md:h-10 md:w-10"
+                  className="text-white hover:bg-rose-500/30 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
                   onClick={() => {
                     logout()
                     router.push("/")
@@ -220,7 +220,7 @@ export function Header() {
               </>
             ) : (
               <Button
-                className="bg-white text-[#1F478B] hover:bg-gray-100 hover:scale-105 active:bg-gray-200 active:scale-95 font-bold text-xs md:text-base px-3 md:px-6 h-8 md:h-10 shadow-md transition-all border-2 border-white focus:border-[#1F478B]/40 focus:bg-gray-100"
+                className="bg-white text-[#1e40af] hover:bg-gray-50 hover:scale-105 active:scale-95 font-bold text-xs md:text-sm px-4 md:px-6 h-9 md:h-10 shadow-lg transition-all duration-300 rounded-xl border-2 border-white/50 hover:border-white"
                 onClick={() => router.push("/auth")}
               >
                 {t("login")}

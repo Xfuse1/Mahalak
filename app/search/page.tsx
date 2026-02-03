@@ -117,18 +117,25 @@ function SearchResults() {
     <div className="min-h-screen flex flex-col" dir={isRTL ? "rtl" : "ltr"}>
       <Header />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
         <div className="container mx-auto px-4">
           <BackButton />
 
-          <h1 className={`text-3xl font-bold mb-6 ${isRTL ? "text-right" : "text-left"}`}>
-            {query
-              ? `${t("نتائج البحث عن:", "Search results for:")} `
-              : t("جميع المنتجات", "All Products")}
-            {query && <span className="text-[#1F478B]">{query}</span>}
-          </h1>
+          <div className={`mb-8 ${isRTL ? "text-right" : "text-left"}`}>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              {query
+                ? `${t("نتائج البحث عن:", "Search results for:")} `
+                : t("جميع المنتجات", "All Products")}
+              {query && <span className="text-blue-600">{query}</span>}
+            </h1>
+            {query && (
+              <p className="text-gray-500 mt-2">
+                {t(`تم العثور على ${sortedProducts.length} منتج و ${stores.length} متجر`, `Found ${sortedProducts.length} products and ${stores.length} stores`)}
+              </p>
+            )}
+          </div>
 
-          <div className={`mb-6 flex gap-4 ${isRTL ? "justify-start" : "justify-start"} w-full`}>
+          <div className={`mb-8 flex gap-4 ${isRTL ? "justify-start" : "justify-start"} w-full`}>
             <div className={`flex ${isRTL ? "flex-col-reverse" : "flex-col"} md:flex-row gap-4 w-full md:w-4/5 lg:w-3/5 ${isRTL ? "ml-auto" : "mr-auto"}`}>
               {isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
 
@@ -141,22 +148,22 @@ function SearchResults() {
           </div>
 
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F478B] mx-auto"></div>
-              <p className="mt-4 text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="text-center py-20">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="mt-4 text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           ) : query ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className={`mb-6 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2`}>
+              <TabsList className={`mb-8 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2 bg-white shadow-lg rounded-2xl p-2 border-0`}>
                 <TabsTrigger
                   value="products"
-                  className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
+                  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all"
                 >
                   {t("المنتجات", "Products")} ({sortedProducts.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="stores"
-                  className="data-[state=active]:bg-[#1F478B] data-[state=active]:text-white border-2 border-gray-300 data-[state=active]:border-[#1F478B] transition-all rounded-lg px-4 py-2 text-sm h-auto"
+                  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all"
                 >
                   {t("المتاجر", "Stores")} ({stores.length})
                 </TabsTrigger>
@@ -172,28 +179,29 @@ function SearchResults() {
                   >
                     {stores.map((store) => (
                       <Link key={store.id} href={`/store/${store.id}`}>
-                        <Card className="hover:shadow-lg transition-shadow h-full overflow-hidden border-2 border-gray-200 hover:border-[#1F478B] hover:border-opacity-50">
-                          <div className="relative h-48 bg-gray-100">
+                        <Card className="hover:shadow-2xl transition-all duration-300 h-full overflow-hidden border-0 shadow-lg rounded-2xl hover:-translate-y-2 group">
+                          <div className="relative h-48 bg-gray-100 overflow-hidden">
                             <Image
                               src={store.image_url || "/placeholder.svg"}
                               alt={store.name}
                               fill
-                              className="object-cover"
+                              className="object-cover group-hover:scale-110 transition-transform duration-500"
                             />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                           <CardContent className="p-6">
-                            <h3 className="text-xl font-bold mb-2">{store.name}</h3>
-                            <p className="text-gray-600 mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
+                            <h3 className="text-xl font-bold mb-2 text-gray-800">{store.name}</h3>
+                            <p className="text-gray-500 mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
                             <div
                               className={`flex items-center gap-2 mb-4 ${isRTL ? "flex-row-reverse justify-end" : "justify-start"}`}
                             >
-                              <div className={`flex items-center gap-1 ${isRTL ? "flex-row-reverse" : ""}`}>
-                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                                <span className="font-medium">{store.rating || 0}</span>
+                              <div className={`flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-xl ${isRTL ? "flex-row-reverse" : ""}`}>
+                                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                                <span className="font-bold text-amber-700">{store.rating || 0}</span>
                               </div>
                             </div>
                             <div className={isRTL ? "text-right" : "text-left"}>
-                              <span className="inline-block bg-secondary px-3 py-1 rounded-full text-sm font-medium border border-gray-300">
+                              <span className="inline-block bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-1.5 rounded-xl text-sm font-medium text-blue-700 border border-blue-100">
                                 {store.category}
                               </span>
                             </div>
@@ -203,7 +211,10 @@ function SearchResults() {
                     ))}
                   </div>
                 ) : (
-                  <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
+                  <div className={`text-center py-16 ${isRTL ? "text-right" : "text-left"}`}>
+                    <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                      <Star className="h-10 w-10 text-gray-400" />
+                    </div>
                     <p className="text-gray-500 text-lg">{t("لم يتم العثور على متاجر", "No stores found")}</p>
                   </div>
                 )}
@@ -224,10 +235,10 @@ export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F478B] mx-auto"></div>
-            <p className="mt-4 text-gray-600">جاري التحميل...</p>
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="mt-4 text-gray-500">جاري التحميل...</p>
           </div>
         </div>
       }

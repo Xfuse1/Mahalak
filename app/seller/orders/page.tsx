@@ -120,11 +120,14 @@ export default function SellerOrdersPage() {
 
   if (loadingOrders) {
     return (
-      <div className="flex min-h-screen bg-secondary">
+      <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
         <SellerHeader />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
-            <p className="text-center text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="text-center py-16">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            </div>
           </div>
         </main>
       </div>
@@ -132,36 +135,44 @@ export default function SellerOrdersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-secondary">
+    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <SellerHeader />
 
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-8">{t("إدارة الطلبات", "Order Management")}</h1>
+          <div className="mb-10">
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة الطلبات", "Order Management")}</h1>
+            <p className="text-gray-500 mt-1">{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</p>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("جميع الطلبات", "All Orders")}</CardTitle>
+          <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-xl">
+                  <Filter className="h-5 w-5 text-blue-600" />
+                </div>
+                {t("جميع الطلبات", "All Orders")}
+              </CardTitle>
               <CardDescription>{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center bg-gray-50 p-4 rounded-lg">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row gap-4 mb-8 justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
                 <div className="flex items-center gap-4">
-                  <div className="bg-white p-3 rounded-full shadow-sm">
-                    <Filter className="w-5 h-5 text-[#1F478B]" />
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-2xl shadow-lg">
+                    <Filter className="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t("إجمالي الطلبات", "Total Orders")}</p>
-                    <p className="text-2xl font-bold text-[#1F478B]">{orders.length}</p>
+                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length}</p>
                   </div>
                 </div>
 
                 <div className="w-full md:w-64">
                   <Select value={filter} onValueChange={setFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue placeholder={t("تصفية حسب الحالة", "Filter by status")} />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-xl">
                       <SelectItem value="all">{t("جميع الطلبات", "All Orders")}</SelectItem>
                       <SelectItem value="pending">{t("قيد الانتظار", "Pending")}</SelectItem>
                       <SelectItem value="processing">{t("قيد المعالجة", "Processing")}</SelectItem>
@@ -174,31 +185,39 @@ export default function SellerOrdersPage() {
               </div>
 
               {orders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">{t("لا توجد طلبات حتى الآن", "No orders yet")}</div>
+                <div className="text-center py-16">
+                  <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                    <Filter className="h-10 w-10 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 text-lg">{t("لا توجد طلبات حتى الآن", "No orders yet")}</p>
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {orders
                     .filter(order => filter === "all" || order.status === filter)
                     .map((order) => (
-                      <div key={order.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
+                      <div key={order.id} className="border border-gray-100 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-300 bg-white">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center">
+                              <span className="text-blue-600 font-bold">#{order.id.slice(0, 2)}</span>
+                            </div>
                             <div>
-                              <p className="font-semibold text-lg">#{order.id.slice(0, 8)}</p>
-                              <p className="text-sm text-gray-600">
+                              <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
+                              <p className="text-sm text-gray-500">
                                 {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
                                 {order.order_items.length} {t("منتج", "product")}
                               </p>
                             </div>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                          <span className={`px-4 py-2 rounded-xl text-sm font-bold ${getStatusColor(order.status)}`}>
                             {getStatusText(order.status)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+                        <div className="flex items-center justify-between pt-4 border-t border-dashed">
+                          <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
                           <div className="flex items-center gap-4">
-                            <p className="text-xl font-bold text-[#1F478B]">{Number(order.total).toLocaleString()} {t("جنيه", "EGP")}</p>
+                            <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{Number(order.total).toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span></p>
                             <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
                           </div>
                         </div>

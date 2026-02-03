@@ -322,6 +322,8 @@ export async function createOrder(orderData: {
   delivery_notes?: string
   delivery_company?: string
   delivery_price?: number
+  driver_id?: string
+  driver_name?: string
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   const db = getAdminDb()
@@ -353,6 +355,10 @@ export async function createOrder(orderData: {
   if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
   if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
   if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
+  
+  // Add driver information
+  if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
+  if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
   
   // Add coordinates if available
   if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {

@@ -193,13 +193,15 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#1F478B]" />
-              <p className="text-gray-600 mt-4">{t("جاري التحميل...", "Loading...")}</p>
+              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+                <Star className="w-8 h-8 text-white" />
+              </div>
+              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
         </main>
@@ -210,13 +212,18 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (!order) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4 text-center py-12">
-            <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+            <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
+              <Package className="h-10 w-10 text-gray-400" />
+            </div>
             <h2 className="text-2xl font-semibold mb-2">{t("الطلب غير موجود", "Order not found")}</h2>
-            <Button onClick={() => router.push("/account")} className="mt-4 bg-[#1F478B]">
+            <Button 
+              onClick={() => router.push("/account")} 
+              className="mt-4 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
+            >
               {t("العودة للحساب", "Back to Account")}
             </Button>
           </div>
@@ -228,20 +235,25 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (alreadyReviewed || submitted) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4 max-w-xl text-center py-12">
-            <CheckCircle className="h-20 w-20 mx-auto text-green-500 mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">
+            <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mb-6 shadow-lg shadow-green-500/30">
+              <CheckCircle className="h-12 w-12 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
               {submitted
                 ? t("شكراً لتقييمك! 🎉", "Thank you for your review! 🎉")
                 : t("تم تقييم هذا الطلب مسبقاً", "This order has already been reviewed")}
             </h2>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 mb-8">
               {t("تقييمك يساعدنا في تحسين خدماتنا", "Your feedback helps us improve our services")}
             </p>
-            <Button onClick={() => router.push("/account")} className="bg-[#1F478B]">
+            <Button 
+              onClick={() => router.push("/account")} 
+              className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl px-8 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+            >
               {t("العودة للحساب", "Back to Account")}
             </Button>
           </div>
@@ -252,34 +264,40 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
       <Header />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-10">
         <div className="container mx-auto px-4 max-w-2xl">
-          <h1 className="text-3xl font-bold mb-2 text-center">
-            {t("قيّم تجربتك", "Rate Your Experience")}
-          </h1>
-          <p className="text-gray-600 text-center mb-8">
-            {t("ساعدنا في تحسين خدماتنا من خلال تقييمك", "Help us improve by sharing your feedback")}
-          </p>
+          {/* Header */}
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 mb-4 shadow-lg shadow-yellow-500/30">
+              <Star className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              {t("قيّم تجربتك", "Rate Your Experience")}
+            </h1>
+            <p className="text-gray-600 mt-2">
+              {t("ساعدنا في تحسين خدماتنا من خلال تقييمك", "Help us improve by sharing your feedback")}
+            </p>
+          </div>
 
           {/* Driver Rating Section */}
           {order.driver_id && (
-            <Card className="mb-6">
+            <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardContent className="p-6">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="h-14 w-14 rounded-full bg-[#1F478B] flex items-center justify-center text-white text-xl font-bold">
-                    <Truck className="h-7 w-7" />
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-lg">
+                    <Truck className="h-8 w-8" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg">{t("تقييم السائق", "Rate the Driver")}</h3>
+                    <h3 className="font-semibold text-lg text-gray-800">{t("تقييم السائق", "Rate the Driver")}</h3>
                     <p className="text-sm text-gray-600">{order.driver_name || t("السائق", "Driver")}</p>
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-2">{t("كيف كانت خدمة التوصيل؟", "How was the delivery service?")}</p>
+                <div className="mb-4 bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-600 mb-3">{t("كيف كانت خدمة التوصيل؟", "How was the delivery service?")}</p>
                   <StarRating rating={driverRating} onRate={setDriverRating} size="lg" />
                 </div>
 
@@ -287,7 +305,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                   placeholder={t("أضف تعليقاً (اختياري)...", "Add a comment (optional)...")}
                   value={driverComment}
                   onChange={(e) => setDriverComment(e.target.value)}
-                  className="resize-none"
+                  className="resize-none rounded-xl border-gray-200 focus:border-blue-500"
                   rows={3}
                 />
               </CardContent>
@@ -295,10 +313,12 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           )}
 
           {/* Products Rating Section */}
-          <Card className="mb-6">
+          <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardContent className="p-6">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <Package className="h-5 w-5 text-[#1F478B]" />
+              <h3 className="font-semibold text-lg mb-6 flex items-center gap-3 text-gray-800">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-lg">
+                  <Package className="h-5 w-5 text-white" />
+                </div>
                 {t("تقييم المنتجات", "Rate the Products")}
               </h3>
 
@@ -306,9 +326,9 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                 {order.items?.map((item, index) => {
                   const productId = item.product_id || item.id || `product-${index}`
                   return (
-                  <div key={productId} className="border-b pb-4 last:border-b-0 last:pb-0">
-                    <div className="flex items-center gap-4 mb-3">
-                      <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                  <div key={productId} className="bg-gray-50 rounded-xl p-4">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-md">
                         <Image
                           src={item.image_url || "/placeholder.svg"}
                           alt={item.name || "Product"}
@@ -317,14 +337,14 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                         />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium">{item.name || t("منتج", "Product")}</h4>
+                        <h4 className="font-medium text-gray-800">{item.name || t("منتج", "Product")}</h4>
                         <p className="text-sm text-gray-500">
                           {item.quantity} x {item.price} {t("جنيه", "EGP")}
                         </p>
                       </div>
                     </div>
 
-                    <div className="mb-2">
+                    <div className="mb-3">
                       <StarRating
                         rating={productRatings[productId]?.rating || 0}
                         onRate={(rating) => handleProductRating(productId, rating)}
@@ -335,7 +355,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                       placeholder={t("تعليق على المنتج (اختياري)...", "Comment on product (optional)...")}
                       value={productRatings[productId]?.comment || ""}
                       onChange={(e) => handleProductComment(productId, e.target.value)}
-                      className="resize-none text-sm"
+                      className="resize-none text-sm rounded-xl border-gray-200 focus:border-blue-500 bg-white"
                       rows={2}
                     />
                   </div>
@@ -348,13 +368,13 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           {/* Submit Button */}
           <Button
             onClick={handleSubmit}
-            className="w-full bg-[#1F478B] hover:bg-[#163a6e]"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
             size="lg"
             disabled={submitting}
           >
             {submitting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-5 w-5 animate-spin me-2" />
                 {t("جاري الإرسال...", "Submitting...")}
               </>
             ) : (

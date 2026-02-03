@@ -180,11 +180,16 @@ export default function OffersPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-secondary">
+      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <SellerHeader />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
-            <p className="text-center text-gray-500">جاري التحميل...</p>
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+                <Tag className="w-8 h-8 text-white" />
+              </div>
+              <p className="text-gray-500">جاري التحميل...</p>
+            </div>
           </div>
         </main>
       </div>
@@ -192,14 +197,17 @@ export default function OffersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-secondary">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <SellerHeader />
 
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-3xl font-bold">العروض الترويجية</h1>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                العروض الترويجية
+              </h1>
               <p className="text-gray-600 mt-1">إدارة العروض والخصومات</p>
             </div>
             <Button
@@ -207,42 +215,48 @@ export default function OffersPage() {
                 setEditingOffer(null)
                 setIsAdding(!isAdding)
               }}
-              className="bg-[#1F478B] hover:bg-[#1a3a70]"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
             >
-              <Plus className="ml-2 h-4 w-4" />
+              <Plus className="me-2 h-4 w-4" />
               إضافة عرض جديد
             </Button>
           </div>
 
+          {/* Add/Edit Form */}
           {isAdding && (
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle>{editingOffer ? "تعديل العرض" : "إضافة عرض جديد"}</CardTitle>
+            <Card className="mb-8 border-0 shadow-xl rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Tag className="h-5 w-5" />
+                  {editingOffer ? "تعديل العرض" : "إضافة عرض جديد"}
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
+              <CardContent className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <Label htmlFor="title">عنوان العرض</Label>
+                    <Label htmlFor="title" className="text-gray-700 font-medium">عنوان العرض</Label>
                     <Input
                       id="title"
                       name="title"
                       required
                       placeholder="خصم 20% على جميع المنتجات"
                       defaultValue={editingOffer?.title}
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="description">الوصف</Label>
+                    <Label htmlFor="description" className="text-gray-700 font-medium">الوصف</Label>
                     <Textarea
                       id="description"
                       name="description"
                       required
                       placeholder="عرض خاص لفترة محدودة"
                       defaultValue={editingOffer?.description}
+                      className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="discount">نسبة الخصم (%)</Label>
+                    <Label htmlFor="discount" className="text-gray-700 font-medium">نسبة الخصم (%)</Label>
                     <Input
                       id="discount"
                       name="discount"
@@ -252,32 +266,39 @@ export default function OffersPage() {
                       required
                       placeholder="20"
                       defaultValue={editingOffer?.discount_percentage}
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="startDate">تاريخ البداية</Label>
+                      <Label htmlFor="startDate" className="text-gray-700 font-medium">تاريخ البداية</Label>
                       <Input
                         id="startDate"
                         name="startDate"
                         type="date"
                         required
                         defaultValue={editingOffer ? formatDateForInput(editingOffer.start_date) : ""}
+                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="endDate">تاريخ النهاية</Label>
+                      <Label htmlFor="endDate" className="text-gray-700 font-medium">تاريخ النهاية</Label>
                       <Input
                         id="endDate"
                         name="endDate"
                         type="date"
                         required
                         defaultValue={editingOffer ? formatDateForInput(editingOffer.end_date) : ""}
+                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
                   </div>
-                  <div className="flex gap-3">
-                    <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70]" disabled={submitting}>
+                  <div className="flex gap-3 pt-2">
+                    <Button 
+                      type="submit" 
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 px-8 shadow-lg" 
+                      disabled={submitting}
+                    >
                       {submitting ? "جاري الحفظ..." : editingOffer ? "حفظ التعديلات" : "إضافة العرض"}
                     </Button>
                     <Button
@@ -288,6 +309,7 @@ export default function OffersPage() {
                         setEditingOffer(null)
                       }}
                       disabled={submitting}
+                      className="rounded-xl h-12 px-8 border-2"
                     >
                       إلغاء
                     </Button>
@@ -297,54 +319,82 @@ export default function OffersPage() {
             </Card>
           )}
 
+          {/* Offers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {offers.map((offer) => (
-              <Card key={offer.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <Tag className="h-5 w-5 text-[#1F478B]" />
-                      <div className="flex flex-col gap-1">
-                        <CardTitle className="text-lg">{offer.title}</CardTitle>
-                        <Badge variant="outline" className={cn("w-fit", getOfferStatus(offer.start_date, offer.end_date).className)}>
-                          {getOfferStatus(offer.start_date, offer.end_date).label}
-                        </Badge>
+            {offers.map((offer) => {
+              const status = getOfferStatus(offer.start_date, offer.end_date)
+              return (
+                <Card key={offer.id} className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
+                  <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                          <Tag className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <CardTitle className="text-lg">{offer.title}</CardTitle>
+                          <Badge variant="outline" className={cn("w-fit text-xs px-2.5 py-0.5 rounded-full", status.className)}>
+                            {status.label}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleEdit(offer)}
+                          className="hover:bg-blue-50 rounded-xl"
+                        >
+                          <Edit className="h-4 w-4 text-blue-600" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDelete(offer.id)}
+                          className="hover:bg-red-50 rounded-xl"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(offer)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(offer.id)}>
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
+                    <CardDescription className="mt-2 text-gray-600">{offer.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4">
+                        <span className="text-sm text-gray-600">الخصم:</span>
+                        <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                          {offer.discount_percentage}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="h-4 w-4" />
+                        <span>من: {formatDateForInput(offer.start_date)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="h-4 w-4" />
+                        <span>إلى: {formatDateForInput(offer.end_date)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <CardDescription>{offer.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">الخصم:</span>
-                      <span className="text-2xl font-bold text-[#1F478B]">{offer.discount_percentage}%</span>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      <p>من: {formatDateForInput(offer.start_date)}</p>
-                      <p>إلى: {formatDateForInput(offer.end_date)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
 
+          {/* Empty State */}
           {offers.length === 0 && !isAdding && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Tag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg mb-4">لا توجد عروض حالياً</p>
-                <Button onClick={() => setIsAdding(true)} className="bg-[#1F478B] hover:bg-[#1a3a70]">
-                  <Plus className="ml-2 h-4 w-4" />
+            <Card className="border-0 shadow-lg rounded-2xl">
+              <CardContent className="py-16 text-center">
+                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mb-6">
+                  <Tag className="h-10 w-10 text-gray-400" />
+                </div>
+                <p className="text-gray-500 text-lg mb-6">لا توجد عروض حالياً</p>
+                <Button 
+                  onClick={() => setIsAdding(true)} 
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                >
+                  <Plus className="me-2 h-4 w-4" />
                   إضافة عرض جديد
                 </Button>
               </CardContent>

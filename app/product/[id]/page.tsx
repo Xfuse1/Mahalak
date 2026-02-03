@@ -122,10 +122,11 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8">
+        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
           <div className="container mx-auto px-4">
-            <div className="text-center py-12">
-              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="text-center py-20">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
         </main>
@@ -138,17 +139,20 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8">
+        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
           <div className="container mx-auto px-4">
             <div className="mb-6">
               <BackButton />
             </div>
-            <div className="text-center py-12">
-              <h1 className="text-2xl font-bold mb-4">{t("المنتج غير موجود", "Product Not Found")}</h1>
-              <p className="text-gray-600 mb-6">
+            <div className="text-center py-16">
+              <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                <ShoppingCart className="h-12 w-12 text-gray-400" />
+              </div>
+              <h1 className="text-2xl font-bold mb-4 text-gray-800">{t("المنتج غير موجود", "Product Not Found")}</h1>
+              <p className="text-gray-500 mb-6">
                 {t("عذراً، لم نتمكن من العثور على هذا المنتج", "Sorry, we couldn't find this product")}
               </p>
-              <Button onClick={() => router.push("/")}>{t("العودة للرئيسية", "Back to Home")}</Button>
+              <Button onClick={() => router.push("/")} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg px-6">{t("العودة للرئيسية", "Back to Home")}</Button>
             </div>
           </div>
         </main>
@@ -257,7 +261,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
         <div className="container mx-auto px-4">
           <div className="mb-6">
             <BackButton />
@@ -266,22 +270,24 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           {/* Product Details - Above the Fold */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* Product Image */}
-            <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden">
-              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill className="object-cover" />
+            <div className="aspect-square relative bg-gray-100 rounded-3xl overflow-hidden shadow-xl group">
+              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
 
             {/* Product Info */}
-            <div className="space-y-4">
-              <h1 className="text-3xl font-bold text-balance">{product.name}</h1>
+            <div className="space-y-5">
+              <h1 className="text-4xl font-extrabold text-gray-800 text-balance">{product.name}</h1>
 
-              <Link href={`/store/${product.store_id}`} className="text-[#1F478B] hover:underline block">
+              <Link href={`/store/${product.store_id}`} className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors">
+                <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
                 {product.stores?.name || t("المتجر", "Store")}
               </Link>
 
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                  <span className="font-bold text-lg">{product.rating}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-xl">
+                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  <span className="font-bold text-lg text-amber-700">{product.rating}</span>
                 </div>
                   {/* User review (one per user per product) - interactive stars */}
                 <div className="flex items-center gap-1 mr-3">
@@ -312,33 +318,33 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                             setSubmittingReview(false)
                           }
                         }}
-                        className={`p-1 rounded ${filled ? 'text-yellow-400' : 'text-gray-400'} hover:scale-110 transition-transform`}
+                        className={`p-1.5 rounded-lg ${filled ? 'text-amber-400' : 'text-gray-300'} hover:scale-125 transition-all`}
                       >
-                        <Star className="h-5 w-5" />
+                        <Star className="h-5 w-5" fill={filled ? "currentColor" : "none"} />
                       </button>
                     )
                   })}
                 </div>
               </div>
 
-              <p className="text-4xl font-bold text-[#1F478B]">
-                {product.price} {t("جنيه", "EGP")}
+              <p className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                {product.price} <span className="text-2xl text-gray-500">{t("جنيه", "EGP")}</span>
               </p>
 
-              <p className="text-gray-700 leading-relaxed">{product.description}</p>
+              <p className="text-gray-600 leading-relaxed text-lg">{product.description}</p>
 
               <div>
-                <div className="mb-4">
+                <div className="mb-5">
                   <span
-                    className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${
-                      product.stock > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    className={`inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm ${
+                      product.stock > 0 ? "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200" : "bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border border-red-200"
                     }`}
                   >
                     {product.stock > 0 ? t("🟢 متوفر", "🟢 Available") : t("🔴 غير متوفر", "🔴 Out of Stock")}
                   </span>
                 </div>
 
-                <div className="text-center mb-4">
+                <div className="text-center mb-5 bg-gradient-to-r from-gray-50 to-gray-100 py-3 px-4 rounded-xl">
                   <p className="text-sm text-gray-600 font-medium">
                     {t("لطلب المنتج، تواصل مع البائع", "To order, contact the seller")}
                   </p>
@@ -348,19 +354,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               <div className="flex gap-3">
                 <Button
                   onClick={handleWhatsApp}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <MessageCircle className="ml-2 h-5 w-5" />
+                  <MessageCircle className="ml-2 h-6 w-6" />
                   {t("تواصل واتساب", "WhatsApp")}
                 </Button>
                 <Button
                   onClick={handleCall}
                   variant="outline"
-                  className="flex-1 bg-transparent"
+                  className="flex-1 rounded-xl border-2 hover:bg-gray-50 h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Phone className="ml-2 h-5 w-5" />
+                  <Phone className="ml-2 h-6 w-6" />
                   {t("اتصال", "Call")}
                 </Button>
               </div>
@@ -388,10 +394,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
                     router.push("/checkout?mode=buynow")
                   }}
-                  className="flex-1 bg-[#1F478B] hover:bg-[#163a6e]"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Zap className="ml-2 h-5 w-5" />
+                  <Zap className="ml-2 h-6 w-6" />
                   {t("اشتري الآن", "Buy Now")}
                 </Button>
                 <Button
@@ -408,17 +414,17 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     })
                   }}
                   variant="outline"
-                  className="flex-1 border-[#1F478B] text-[#1F478B] hover:bg-[#1F478B] hover:text-white"
+                  className="flex-1 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl h-14 text-lg transition-all hover:scale-[1.02]"
                   disabled={product.stock === 0}
                 >
-                  <ShoppingCart className="ml-2 h-5 w-5" />
+                  <ShoppingCart className="ml-2 h-6 w-6" />
                   {t("أضف للسلة", "Add to Cart")}
                 </Button>
               </div>
 
-              <div className="bg-secondary p-4 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  <span className="font-semibold">{t("الفئة:", "Category:")}</span> {product.category}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
+                <p className="text-sm text-gray-700">
+                  <span className="font-bold text-blue-700">{t("الفئة:", "Category:")}</span> {product.category}
                 </p>
               </div>
             </div>
@@ -428,34 +434,35 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           {sameStoreProducts.length > 0 && (
             <div className="mb-12">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold">{t("منتجات أخرى من نفس المتجر", "More from this Store")}</h2>
+                <h2 className="text-2xl font-bold text-gray-800">{t("منتجات أخرى من نفس المتجر", "More from this Store")}</h2>
                 <Link 
                   href={`/store/${product.store_id}`}
-                  className="text-[#1F478B] hover:underline text-sm font-medium"
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
                 >
-                  {t("عرض الكل", "View All")}
+                  {t("عرض الكل", "View All")} →
                 </Link>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {sameStoreProducts.map((storeProduct) => (
                   <Link key={storeProduct.id} href={`/product/${storeProduct.id}`} className="group">
-                    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-lg border-0 hover:shadow-xl transition-all duration-300 overflow-hidden hover:-translate-y-2">
                       <div className="aspect-square relative bg-gray-100 overflow-hidden">
                         <Image
                           src={storeProduct.image_url || "/placeholder.svg"}
                           alt={storeProduct.name}
                           fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="object-cover group-hover:scale-110 transition-transform duration-500"
                         />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <div className="p-3">
-                        <h3 className="font-semibold text-sm mb-1 line-clamp-2">{storeProduct.name}</h3>
+                      <div className="p-4">
+                        <h3 className="font-bold text-sm mb-2 line-clamp-2 text-gray-800">{storeProduct.name}</h3>
                         <div className="flex items-center gap-1 mb-2">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-xs text-gray-600">{storeProduct.rating || 0}</span>
+                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                          <span className="text-xs text-gray-600 font-medium">{storeProduct.rating || 0}</span>
                         </div>
-                        <p className="font-bold text-[#1F478B]">
-                          {storeProduct.price} {t("جنيه", "EGP")}
+                        <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                          {storeProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
                         </p>
                       </div>
                     </div>
@@ -468,30 +475,32 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           {/* Products from Other Stores */}
           {otherStoresProducts.length > 0 && (
             <div className="mb-12">
-              <h2 className="text-2xl font-bold mb-6">{t("منتجات من متاجر أخرى", "Products from Other Stores")}</h2>
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">{t("منتجات من متاجر أخرى", "Products from Other Stores")}</h2>
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {otherStoresProducts.map((otherProduct) => (
                   <Link key={otherProduct.id} href={`/product/${otherProduct.id}`} className="group">
-                    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-lg border-0 hover:shadow-xl transition-all duration-300 overflow-hidden hover:-translate-y-2">
                       <div className="aspect-square relative bg-gray-100 overflow-hidden">
                         <Image
                           src={otherProduct.image_url || "/placeholder.svg"}
                           alt={otherProduct.name}
                           fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="object-cover group-hover:scale-110 transition-transform duration-500"
                         />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <div className="p-3">
-                        <h3 className="font-semibold text-sm mb-1 line-clamp-2">{otherProduct.name}</h3>
-                        <p className="text-xs text-gray-500 mb-1">
+                      <div className="p-4">
+                        <h3 className="font-bold text-sm mb-1 line-clamp-2 text-gray-800">{otherProduct.name}</h3>
+                        <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                           {otherProduct.stores?.name || t("المتجر", "Store")}
                         </p>
                         <div className="flex items-center gap-1 mb-2">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-xs text-gray-600">{otherProduct.rating || 0}</span>
+                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                          <span className="text-xs text-gray-600 font-medium">{otherProduct.rating || 0}</span>
                         </div>
-                        <p className="font-bold text-[#1F478B]">
-                          {otherProduct.price} {t("جنيه", "EGP")}
+                        <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                          {otherProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
                         </p>
                       </div>
                     </div>

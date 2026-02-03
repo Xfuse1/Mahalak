@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Search, Mic } from "lucide-react"
+import { Search, Mic, Sparkles } from "lucide-react"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
 import { Label } from "./ui/label"
@@ -19,6 +19,7 @@ interface SearchBarProps {
 export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarProps) {
   const [query, setQuery] = useState("")
   const [isListening, setIsListening] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
   const router = useRouter()
   const { t, language } = useLanguage()
 
@@ -68,26 +69,28 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   }
 
   return (
-    <form onSubmit={handleSearch} className={`flex gap-2 ${className}`} dir={isRTL ? "rtl" : "ltr"}>
-      <div className="flex-1 relative">
+    <form onSubmit={handleSearch} className={`flex gap-3 ${className}`} dir={isRTL ? "rtl" : "ltr"}>
+      <div className={`flex-1 relative transition-all duration-300 ${isFocused ? 'scale-[1.02]' : ''}`}>
         <Label htmlFor="search-input" className="sr-only">
           {searchPlaceholder}
         </Label>
+        <div className={`absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur-xl transition-opacity duration-300 ${isFocused ? 'opacity-100' : 'opacity-0'}`}></div>
         <Input
           id="search-input"
           type="text"
           placeholder={searchPlaceholder}
           value={query}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-          className={`border-3 border-[#1F478B] focus:border-[#1F478B] focus:ring-2 focus:ring-[#1F478B] focus:ring-opacity-30 hover:border-[#1a3a70] transition-all duration-200 h-12 rounded-xl shadow-sm ${isRTL ? 'text-right pl-10 pr-4' : 'text-left pr-10 pl-4'
-            }`}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          className={`relative border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 hover:border-blue-300 transition-all duration-300 h-14 rounded-2xl shadow-sm bg-white ${isRTL ? 'text-right pl-12 pr-5' : 'text-left pr-12 pl-5'} text-base`}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={`absolute top-1/2 -translate-y-1/2 transition-colors ${isRTL ? 'left-2' : 'right-2'
-            } ${isListening ? "text-red-500 animate-pulse" : "text-gray-500 hover:text-[#1F478B]"
+          className={`absolute top-1/2 -translate-y-1/2 transition-all duration-300 rounded-xl ${isRTL ? 'left-2' : 'right-2'
+            } ${isListening ? "text-red-500 animate-pulse bg-red-50" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
             }`}
           onClick={handleVoiceSearch}
           title={t("البحث الصوتي", "Voice Search")}
@@ -96,9 +99,12 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           <Mic className="h-5 w-5" />
         </Button>
       </div>
-      <Button type="submit" className="bg-[#1F478B] hover:bg-[#1a3a70] px-6 h-12 border-3 border-[#1F478B] hover:border-[#1a3a70] text-white font-bold transition-all duration-200 rounded-xl shadow-md">
-        <Search className={`h-4 w-4 ${isRTL ? 'mr-2' : 'ml-2'}`} />
-        {t("بحث", "Search")}
+      <Button 
+        type="submit" 
+        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 px-6 md:px-8 h-14 text-white font-bold transition-all duration-300 rounded-2xl shadow-lg hover:shadow-xl hover:shadow-blue-500/25 hover:scale-105 active:scale-95 flex items-center gap-2"
+      >
+        <Search className="h-5 w-5" />
+        <span className="hidden sm:inline">{t("بحث", "Search")}</span>
       </Button>
     </form>
   )
