@@ -106,9 +106,10 @@ export default function SellerOrdersPage() {
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
-      pending: t("قيد الانتظار", "Pending"),
-      processing: t("قيد المعالجة", "Processing"),
-      shipped: t("تم الشحن", "Shipped"),
+      pending: t("قيد المراجعة", "Under Review"),
+      reviewing: t("قيد المراجعة", "Under Review"),
+      confirmed: t("تم التاكيد", "Confirmed"),
+      on_the_way: t("في الطريق", "On the Way"),
       delivered: t("تم التوصيل", "Delivered"),
       cancelled: t("ملغي", "Cancelled"),
     }
@@ -118,8 +119,9 @@ export default function SellerOrdersPage() {
   const getStatusColor = (status: string) => {
     const colorMap: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
-      processing: "bg-blue-100 text-blue-800",
-      shipped: "bg-purple-100 text-purple-800",
+      reviewing: "bg-yellow-100 text-yellow-800",
+      confirmed: "bg-blue-100 text-blue-800",
+      on_the_way: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
     }
@@ -191,9 +193,9 @@ export default function SellerOrdersPage() {
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
                       <SelectItem value="all">{t("جميع الطلبات", "All Orders")}</SelectItem>
-                      <SelectItem value="pending">{t("قيد الانتظار", "Pending")}</SelectItem>
-                      <SelectItem value="processing">{t("قيد المعالجة", "Processing")}</SelectItem>
-                      <SelectItem value="shipped">{t("تم الشحن", "Shipped")}</SelectItem>
+                      <SelectItem value="reviewing">{t("قيد المراجعة", "Under Review")}</SelectItem>
+                      <SelectItem value="confirmed">{t("تم التاكيد", "Confirmed")}</SelectItem>
+                      <SelectItem value="on_the_way">{t("في الطريق", "On the Way")}</SelectItem>
                       <SelectItem value="delivered">{t("تم التوصيل", "Delivered")}</SelectItem>
                       <SelectItem value="cancelled">{t("ملغي", "Cancelled")}</SelectItem>
                     </SelectContent>

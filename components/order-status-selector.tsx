@@ -25,10 +25,9 @@ export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: Order
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
-      pending: "قيد الانتظار (تم الطلب)",
-      ordered: "تم الطلب",
-      processing: "قيد التجهيز",
-      shipped: "تم الشحن",
+      pending: "قيد المراجعة",
+      reviewing: "قيد المراجعة",
+      confirmed: "تم التاكيد",
       on_the_way: "في الطريق",
       delivered: "تم التوصيل",
       cancelled: "ملغي",
@@ -46,9 +45,8 @@ export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: Order
         <SelectValue>{getStatusText(currentStatus)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="ordered">تم الطلب</SelectItem>
-        <SelectItem value="processing">قيد التجهيز</SelectItem>
-        <SelectItem value="shipped">تم الشحن</SelectItem>
+        <SelectItem value="reviewing">قيد المراجعة</SelectItem>
+        <SelectItem value="confirmed">تم التاكيد</SelectItem>
         <SelectItem value="on_the_way">في الطريق</SelectItem>
         <SelectItem value="delivered">تم التوصيل</SelectItem>
         <SelectItem value="cancelled">ملغي</SelectItem>
