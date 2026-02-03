@@ -51,19 +51,19 @@ const BannerCarouselComponent = () => {
     <div className="relative overflow-hidden">
       {/* Background Blur Effect */}
       <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 to-purple-900/20 backdrop-blur-sm z-0"></div>
-      
+
       <div
         className="flex transition-transform duration-700 ease-out"
         style={{ transform: `translateX(${currentSlide * 100}%)` }}
       >
         {slides.map((slide, index) => (
           <div key={slide.id} className="min-w-full relative h-[350px] md:h-[450px] lg:h-[500px]">
-            <Image 
-              src={slide.image || "/placeholder.svg"} 
-              alt={slide.title} 
-              fill 
-              className="object-cover" 
-              priority={index === 0} 
+            <Image
+              src={slide.image || "/placeholder.svg"}
+              alt={slide.title}
+              fill
+              className="object-cover"
+              priority={index === 0}
               loading={index === 0 ? "eager" : "lazy"}
               sizes="100vw"
               quality={90}
@@ -71,26 +71,28 @@ const BannerCarouselComponent = () => {
             {/* Modern Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-l from-[#0f172a]/95 via-[#1e3a5f]/80 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-            
+
             {/* Content */}
             <div className="absolute inset-0 flex items-center">
               <div className="container mx-auto px-4 md:px-8">
                 <div className="max-w-2xl">
                   {/* Decorative Element */}
                   <div className="w-20 h-1 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full mb-6 animate-pulse"></div>
-                  
+
                   <h2 className="text-3xl md:text-5xl lg:text-6xl font-extrabold mb-4 md:mb-6 text-white text-balance leading-tight drop-shadow-lg">
                     {slide.title}
                   </h2>
                   <p className="text-lg md:text-xl lg:text-2xl text-white/90 leading-relaxed max-w-xl drop-shadow">
                     {slide.description}
                   </p>
-                  
+
                   {/* CTA Button (optional) */}
                   <div className="mt-8">
-                    <Button className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105">
-                      {t("browseProducts", "تصفح المنتجات")}
-                    </Button>
+                    <Link href="/search" className="block w-fit">
+                      <Button className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105">
+                        {t("browseProducts", "تصفح المنتجات")}
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>

@@ -39,11 +39,22 @@ export default function CheckoutPage() {
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
 
-  const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
+  const [buyNowItem, setBuyNowItem] = useState<any>(null)
+  const [quantity, setQuantity] = useState(1)
 
   // Get items based on mode
-  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [{ ...buyNowItem, quantity: quantity }] : cartItems
+  const subtotal = items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0)
+
+  const handleQuantityChange = (newQty: number) => {
+    if (newQty < 1) return
+    setQuantity(newQty)
+    if (buyNowItem) {
+      const updatedItem = { ...buyNowItem, quantity: newQty }
+      sessionStorage.setItem("buyNowItem", JSON.stringify(updatedItem))
+      setBuyNowItem(updatedItem)
+    }
+  }
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -239,30 +250,59 @@ export default function CheckoutPage() {
             </CardHeader>
             <CardContent className="space-y-4 p-6">
               {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
-                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
-                    <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                <div key={item.id} className="flex flex-col gap-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
+                      <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-800">{item.name}</h3>
+                      <p className="text-sm text-gray-500">x{item.quantity || 1}</p>
+                    </div>
+                    <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                      {(item.price * (item.quantity || 1)).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
+                    </p>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-800">{item.name}</h3>
-                    <p className="text-sm text-gray-500">x{item.quantity}</p>
-                  </div>
-                  <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                    {(item.price * item.quantity).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
-                  </p>
+
+                  {isBuyNowMode && (
+                    <div className="flex items-center justify-between py-2 border-t border-gray-100 mt-1">
+                      <span className="text-sm text-gray-600 font-medium">{t("الكمية", "Quantity")}</span>
+                      <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-xl border shadow-sm">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg hover:bg-gray-50 transition-all text-blue-600"
+                          onClick={() => handleQuantityChange(quantity - 1)}
+                          disabled={quantity <= 1}
+                        >
+                          -
+                        </Button>
+                        <span className="font-bold w-6 text-center text-gray-800">{quantity}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg hover:bg-gray-50 transition-all text-blue-600"
+                          onClick={() => handleQuantityChange(quantity + 1)}
+                        >
+                          +
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
+
               <div className="border-t border-dashed pt-4 flex justify-between items-center">
                 <span className="font-bold text-gray-700">{t("الإجمالي", "Total")}</span>
                 <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                  {total.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
+                  {subtotal.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
                 </span>
               </div>
             </CardContent>
           </Card>
 
           {/* Customer Information Form */}
-          <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+          < Card className="border-0 shadow-lg rounded-2xl overflow-hidden" >
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <CardTitle className="text-lg flex items-center gap-3">
                 <div className="p-2 bg-blue-100 rounded-xl">
@@ -323,10 +363,10 @@ export default function CheckoutPage() {
                   onClick={getCurrentLocation}
                   disabled={isGettingLocation}
                   className={`w-full h-12 rounded-xl transition-all ${formData.latitude && formData.longitude
-                      ? "border-emerald-500 text-emerald-600 bg-emerald-50"
-                      : attempted && (!formData.latitude || !formData.longitude)
-                        ? "border-red-500 text-red-500 hover:bg-red-50"
-                        : "border-blue-500 text-blue-600 hover:bg-blue-50"
+                    ? "border-emerald-500 text-emerald-600 bg-emerald-50"
+                    : attempted && (!formData.latitude || !formData.longitude)
+                      ? "border-red-500 text-red-500 hover:bg-red-50"
+                      : "border-blue-500 text-blue-600 hover:bg-blue-50"
                     }`}
                 >
                   {isGettingLocation ? (

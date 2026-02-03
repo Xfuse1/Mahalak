@@ -17,6 +17,7 @@ import { getProductsByStoreId } from "../../../lib/actions/products"
 import { Badge } from "../../../components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
+import { useLanguage } from "../../../lib/language-context"
 
 interface Product {
   id: string
@@ -39,6 +40,7 @@ interface Offer {
 }
 
 export default function OffersPage() {
+  const { t } = useLanguage()
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [offers, setOffers] = useState<Offer[]>([])
@@ -82,7 +84,7 @@ export default function OffersPage() {
 
         // Get offers for this store
         const storeOffers = await getStoreOffers(store.id)
-        setOffers(storeOffers)
+        setOffers(storeOffers as any)
       } catch (error) {
         console.error("[v0] Error fetching data:", error)
       } finally {
@@ -106,13 +108,22 @@ export default function OffersPage() {
 
     const productId = formData.get("product") as string
     const quantity = formData.get("quantity") as string
-    
+
+    const startDate = formData.get("startDate") as string
+    const endDate = formData.get("endDate") as string
+
+    if (new Date(startDate) > new Date(endDate)) {
+      alert(t("تاريخ البداية يجب أن يكون قبل تاريخ النهاية", "Start date must be before end date"))
+      setSubmitting(false)
+      return
+    }
+
     const offerData = {
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       discount_percentage: Number(formData.get("discount")),
-      start_date: formData.get("startDate") as string,
-      end_date: formData.get("endDate") as string,
+      start_date: startDate,
+      end_date: endDate,
       product_id: productId && productId !== "all" ? productId : undefined,
       quantity: quantity ? Number(quantity) : undefined,
     }
@@ -124,7 +135,7 @@ export default function OffersPage() {
         if (result.success) {
           // Refresh offers list
           const updatedOffers = await getStoreOffers(storeId)
-          setOffers(updatedOffers)
+          setOffers(updatedOffers as any)
           setEditingOffer(null)
           setIsAdding(false)
         } else {
@@ -139,7 +150,7 @@ export default function OffersPage() {
         if (result.success) {
           // Refresh offers list
           const updatedOffers = await getStoreOffers(storeId)
-          setOffers(updatedOffers)
+          setOffers(updatedOffers as any)
           setIsAdding(false)
         } else {
           alert(`فشل إضافة العرض: ${result.error}`)
@@ -162,7 +173,7 @@ export default function OffersPage() {
       if (result.success) {
         // Refresh offers list
         const updatedOffers = await getStoreOffers(storeId)
-        setOffers(updatedOffers)
+        setOffers(updatedOffers as any)
       } else {
         alert(`فشل حذف العرض: ${result.error}`)
       }
@@ -280,8 +291,8 @@ export default function OffersPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="product" className="text-gray-700 font-medium">المنتج (اختياري)</Label>
-                      <Select 
-                        name="product" 
+                      <Select
+                        name="product"
                         defaultValue={editingOffer?.product_id || "all"}
                         onValueChange={setSelectedProduct}
                       >
@@ -353,9 +364,9 @@ export default function OffersPage() {
                     </div>
                   </div>
                   <div className="flex gap-3 pt-2">
-                    <Button 
-                      type="submit" 
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 px-8 shadow-lg" 
+                    <Button
+                      type="submit"
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 px-8 shadow-lg"
                       disabled={submitting}
                     >
                       {submitting ? "جاري الحفظ..." : editingOffer ? "حفظ التعديلات" : "إضافة العرض"}
@@ -398,17 +409,17 @@ export default function OffersPage() {
                         </div>
                       </div>
                       <div className="flex gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleEdit(offer)}
                           className="hover:bg-blue-50 rounded-xl"
                         >
                           <Edit className="h-4 w-4 text-blue-600" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleDelete(offer.id)}
                           className="hover:bg-red-50 rounded-xl"
                         >
@@ -460,8 +471,8 @@ export default function OffersPage() {
                   <Tag className="h-10 w-10 text-gray-400" />
                 </div>
                 <p className="text-gray-500 text-lg mb-6">لا توجد عروض حالياً</p>
-                <Button 
-                  onClick={() => setIsAdding(true)} 
+                <Button
+                  onClick={() => setIsAdding(true)}
                   className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
                 >
                   <Plus className="me-2 h-4 w-4" />

@@ -57,10 +57,10 @@ async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
 export async function getOrderById(orderId: string) {
   try {
     const db = getAdminDb()
-    
+
     // First try to find by document ID
     let orderDoc = await db.collection("orders").doc(orderId).get()
-    
+
     // If not found, try to find by order_id field
     if (!orderDoc.exists) {
       const snapshot = await db
@@ -68,7 +68,7 @@ export async function getOrderById(orderId: string) {
         .where("order_id", "==", orderId)
         .limit(1)
         .get()
-      
+
       if (snapshot.empty) {
         return null
       }
@@ -240,7 +240,7 @@ export async function getStoreOrders(storeId: string) {
   })
 }
 
-import { sendReviewRequestNotification } from "./notifications"
+import { sendReviewRequestNotification, createNotification } from "./notifications"
 
 export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
@@ -288,6 +288,17 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
     }
 
     await docRef.set(updatePayload, { merge: true })
+
+    // Notify customer of order status update
+    if (currentData?.customer_id) {
+      await createNotification({
+        user_id: currentData.customer_id,
+        title: "تحديث حالة الطلب",
+        message: `تم تحديث حالة طلبك رقم ${orderId} إلى: ${status}`,
+        type: status === "delivered" ? "order_delivered" : "order_status",
+        data: { related_id: orderId }
+      })
+    }
 
     // Send review request notification when order is delivered
     if (status === "delivered" && currentData?.customer_id) {
@@ -355,11 +366,11 @@ export async function createOrder(orderData: {
   if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
   if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
   if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
-  
+
   // Add driver information
   if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
   if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
-  
+
   // Add coordinates if available
   if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
     orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
@@ -368,6 +379,16 @@ export async function createOrder(orderData: {
 
   try {
     await orderRef.set(orderPayload)
+    // Notify seller of new order
+    if (orderData.store_id) {
+      await createNotification({
+        user_id: orderData.store_id,
+        title: "طلب جديد",
+        message: `لقد استلمت طلباً جديداً برقم ${orderRef.id}`,
+        type: "order_status",
+        data: { related_id: orderRef.id }
+      })
+    }
   } catch (error: any) {
     console.error("[v0] Error creating order:", error)
     return { success: false, error: error?.message || "Failed to create order" }

@@ -57,17 +57,37 @@ export async function getProducts(category?: string) {
     query = query.where("category", "==", category)
   }
 
-  const snapshot = await query.get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+  const snapshot = await db.collection("products").get()
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 
-  products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
+  // Fetch active offers
+  const now = new Date().toISOString()
+  const offersSnapshot = await db.collection("offers")
+    .where("end_date", ">=", now.split('T')[0])
+    .get()
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+  const today = new Date().toISOString().split('T')[0]
 
-  const storeMap = await getStoreMap(
-    db,
-    products.map((product: any) => product.store_id).filter(Boolean),
-  )
+  const storeIds = Array.from(new Set(products.map((p: any) => p.store_id)))
+  const storeMap = await getStoreMap(db, storeIds)
 
-  return serializeData(products.map((product: any) => attachStore(product, storeMap)))
+  return products.map((product: any) => {
+    const store = storeMap.get(product.store_id)
+    const productOffer = activeOffers.find(offer =>
+      (offer.product_id === product.id || (offer.product_id === "all" && offer.store_id === product.store_id)) &&
+      offer.start_date <= today &&
+      offer.end_date >= today
+    )
+
+    return serializeData({
+      ...product,
+      stores: store ? { name: store.name } : null,
+      activeOffer: productOffer ? {
+        discount_percentage: productOffer.discount_percentage,
+        title: productOffer.title
+      } : null
+    })
+  })
 }
 
 export async function getProduct(id: string) {
@@ -247,7 +267,7 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   const filtered = products
-    .filter((product: ProductRecord & { id: string }) => 
+    .filter((product: ProductRecord & { id: string }) =>
       product.id !== productId && product.store_id !== storeId
     )
     .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))

@@ -32,6 +32,17 @@ export interface Product {
   stock: number
   rating: number
   reviewCount: number
+  stores?: {
+    id?: string
+    name: string
+    category?: string
+    phone?: string
+    address?: string
+  }
+  activeOffer?: {
+    discount_percentage: number
+    title: string
+  }
 }
 
 export interface Order {

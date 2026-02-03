@@ -113,7 +113,7 @@ export default function AuthPage() {
     const city = formData.get("city") as string
     const country = formData.get("country") as string
 
-    let sellerData
+    let sellerDataPrepared
     if (role === "seller") {
       const phone = formData.get("phone") as string
       const storeName = formData.get("storeName") as string
@@ -127,7 +127,7 @@ export default function AuthPage() {
         return
       }
 
-      sellerData = { phone, storeName, storeDescription, address, storeType, storeLogo }
+      sellerDataPrepared = { phone, storeName, storeDescription, address, storeType, storeLogo }
     }
 
     if (password !== confirmPassword) {
@@ -138,7 +138,7 @@ export default function AuthPage() {
 
     try {
       setIsLoggingIn(true)
-      const success = await register(email, password, name, role, sellerData, street, city, country)
+      const success = await register(email, password, name, role, sellerDataPrepared, street, city, country)
 
       if (success) {
         router.push(role === "seller" ? "/seller/dashboard" : "/")
@@ -417,7 +417,7 @@ export default function AuthPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        
+
                         {/* Store Logo Upload */}
                         <div className="space-y-2">
                           <Label htmlFor="register-storeLogo" className="text-base">

@@ -171,7 +171,7 @@ export default function SellerDashboard() {
                 <CardContent className="pt-6 pb-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500 mb-2">{t("الطلبات المؤكدة", "Confirmed Orders")}</p>
+                      <p className="text-sm text-gray-500 mb-2">{t("الطلبات التي تم توصيلها", "Delivered Orders")}</p>
                       <p className="text-2xl font-extrabold text-emerald-600">{analytics.totalOrders}</p>
                     </div>
                     <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 rounded-2xl shadow-lg">

@@ -321,13 +321,15 @@ export default function AccountPage() {
                         if (!user?.id) return
                         const res = await updateProfile(user.id, { full_name: name, phone })
                         if (res && res.success) {
-                          // refresh the page so AuthProvider reloads profile and UI reflects changes
+                          alert(t("تم حفظ التعديلات بنجاح", "Changes saved successfully"))
                           router.refresh()
                         } else {
+                          alert(t("فشل في حفظ التعديلات", "Failed to save changes"))
                           console.error("[v0] Failed to update profile:", res?.error)
                         }
                       } catch (err) {
                         console.error("[v0] Error submitting profile form:", err)
+                        alert(t("حدث خطأ أثناء الحفظ", "Error occurred while saving"))
                       }
                     }}
                   >
@@ -380,12 +382,15 @@ export default function AccountPage() {
                       try {
                         const res = await updateProfile(user.id, { street, city, country })
                         if (res && res.success) {
+                          alert(t("تم حفظ العنوان بنجاح", "Address saved successfully"))
                           router.refresh()
                         } else {
+                          alert(t("فشل في حفظ العنوان", "Failed to save address"))
                           console.error("[v0] Failed to update address:", res?.error)
                         }
                       } catch (err) {
                         console.error("[v0] Error saving address:", err)
+                        alert(t("حدث خطأ أثناء الحفظ", "Error occurred while saving"))
                       }
                     }}
                   >

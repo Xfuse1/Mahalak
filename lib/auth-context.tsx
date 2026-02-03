@@ -13,7 +13,7 @@ import {
 } from "firebase/auth"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
-import { createStore } from "./actions/stores"
+import { createStore, uploadStoreImage, updateStore } from "./actions/stores"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 
 interface User {
@@ -45,6 +45,7 @@ interface AuthContextType {
       storeDescription?: string
       address?: string
       storeType?: string
+      storeLogo?: File | null
     },
     street?: string,
     city?: string,
@@ -211,6 +212,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           category: sellerData.storeType || "خدمات أخرى",
         })
 
+        if (result.success && sellerData.storeLogo) {
+          const storeId = result.data.id
+          const formData = new FormData()
+          formData.append("file", sellerData.storeLogo)
+          formData.append("storeId", storeId)
+
+          const uploadRes = await uploadStoreImage(formData)
+          if (uploadRes.success && uploadRes.url) {
+            await updateStore(storeId, { image_url: uploadRes.url })
+          }
+        }
         if (!result.success) {
           await signOut(auth)
           throw new Error("Failed to create store: " + result.error)
