@@ -1,10 +1,13 @@
--- Create users profile table
-CREATE TABLE IF NOT EXISTS public.profiles (
+-- Create users table
+CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   full_name TEXT,
   phone TEXT,
   role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'seller')),
+  street TEXT,
+  city TEXT,
+  country TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -12,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Create stores table
 CREATE TABLE IF NOT EXISTS public.stores (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  seller_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  seller_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   address TEXT,
@@ -42,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.products (
 -- Create orders table
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  customer_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   total DECIMAL(10,2) NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
@@ -65,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.order_items (
 CREATE TABLE IF NOT EXISTS public.reviews (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  customer_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
   comment TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()

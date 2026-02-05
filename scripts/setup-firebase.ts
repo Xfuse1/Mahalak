@@ -61,24 +61,20 @@ const db = getFirestore(app)
 
 // Collection definitions with their structure
 const collections = {
-  // المستخدمون والملفات الشخصية
-  profiles: {
-    description: "ملفات المستخدمين الشخصية",
-    sampleDoc: {
-      _placeholder: true,
-      email: "placeholder@example.com",
-      name: "Placeholder User",
-      role: "customer",
-      created_at: FieldValue.serverTimestamp(),
-    }
-  },
-
+  // المستخدمون
   users: {
-    description: "بيانات المستخدمين الإضافية",
+    description: "بيانات المستخدمين",
     sampleDoc: {
       _placeholder: true,
       email: "placeholder@example.com",
+      full_name: "Placeholder User",
+      role: "customer",
+      phone: null,
+      street: null,
+      city: null,
+      country: null,
       created_at: FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
     }
   },
 

@@ -1,5 +1,5 @@
 -- Enable Row Level Security on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
@@ -7,17 +7,17 @@ ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.offers ENABLE ROW LEVEL SECURITY;
 
--- Profiles policies
+-- Users policies
 CREATE POLICY "Users can view their own profile"
-  ON public.profiles FOR SELECT
+  ON public.users FOR SELECT
   USING (auth.uid() = id);
 
 CREATE POLICY "Users can update their own profile"
-  ON public.profiles FOR UPDATE
+  ON public.users FOR UPDATE
   USING (auth.uid() = id);
 
 CREATE POLICY "Users can insert their own profile"
-  ON public.profiles FOR INSERT
+  ON public.users FOR INSERT
   WITH CHECK (auth.uid() = id);
 
 -- Stores policies

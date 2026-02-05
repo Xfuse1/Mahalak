@@ -124,7 +124,7 @@ export async function getRecentOrders(storeId: string, limit = 3) {
   const limited = orders.slice(0, limit)
   const customerMap = await fetchDocsMap(
     db,
-    "profiles",
+    "users",
     limited.map((order: any) => order.customer_id),
   )
 

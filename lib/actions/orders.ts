@@ -199,7 +199,7 @@ export async function getStoreOrders(storeId: string) {
 
   const customerMap = await fetchDocsMap(
     db,
-    "profiles",
+    "users",
     orders.map((order: any) => order.customer_id),
   )
 
@@ -227,7 +227,7 @@ export async function getStoreOrders(storeId: string) {
     const profile = customerMap.get(order.customer_id)
     return {
       ...order,
-      profiles: profile
+      user: profile
         ? {
           id: profile.id,
           full_name: profile.full_name || null,

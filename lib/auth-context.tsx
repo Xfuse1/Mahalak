@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
 
     try {
-      const profileRef = doc(db, "profiles", currentUser.uid)
+      const profileRef = doc(db, "users", currentUser.uid)
       const profileSnap = await getDoc(profileRef)
 
       if (profileSnap.exists()) {
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     try {
       const credential = await signInWithEmailAndPassword(auth, email, password)
-      const profileRef = doc(db, "profiles", credential.user.uid)
+      const profileRef = doc(db, "users", credential.user.uid)
       const profileSnap = await getDoc(profileRef)
       const profileData = profileSnap.exists() ? profileSnap.data() : null
 
@@ -200,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updated_at: now,
       }
 
-      await setDoc(doc(db, "profiles", credential.user.uid), profileData)
+      await setDoc(doc(db, "users", credential.user.uid), profileData)
 
       if (role === "seller" && credential.user && sellerData?.storeName) {
         const result = await createStore({

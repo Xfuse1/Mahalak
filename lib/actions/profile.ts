@@ -9,7 +9,7 @@ export async function updateProfile(
   data: Partial<{ full_name: string; phone: string; street: string; city: string; country: string }>,
 ) {
   const db = getAdminDb()
-  const docRef = db.collection("profiles").doc(userId)
+  const docRef = db.collection("users").doc(userId)
 
   const updateData = cleanUndefined({
     full_name: data.full_name,
