@@ -30,6 +30,9 @@ const nextConfig = {
   // Enable experimental features for better performance
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'react-i18next'],
+    serverActions: {
+      bodySizeLimit: '5mb',
+    },
   },
   // Compression
   compress: true,
