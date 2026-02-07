@@ -46,6 +46,8 @@ interface AuthContextType {
       address?: string
       storeType?: string
       storeLogo?: File | null
+      latitude?: number
+      longitude?: number
     },
     street?: string,
     city?: string,
@@ -193,6 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: name,
         role,
         phone: sellerData?.phone ?? null,
+        phone_verified: role === "seller" ? true : false, // Seller phone is verified during registration
+        phone_verified_at: role === "seller" ? now : null,
         street: street ?? null,
         city: city ?? null,
         country: country ?? null,
@@ -210,6 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           address: sellerData.address || "",
           phone: sellerData.phone || "",
           category: sellerData.storeType || "خدمات أخرى",
+          latitude: sellerData.latitude,
+          longitude: sellerData.longitude,
         })
 
         if (result.success && sellerData.storeLogo) {

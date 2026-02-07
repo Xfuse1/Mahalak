@@ -1,6 +1,6 @@
 "use server"
 
-import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
+import type { DocumentSnapshot, Query } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
@@ -8,21 +8,45 @@ import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
-function mapStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | null {
+// Helper to extract store from user document
+// Store ID is now the same as User ID (seller_id)
+function extractStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | null {
   if (!doc.exists) return null
-  return serializeData({ id: doc.id, ...(doc.data() as StoreRecord) })
+  const data = doc.data()
+  if (!data?.store) return null
+  
+  return serializeData({
+    id: doc.id, // Store ID = User ID
+    seller_id: doc.id,
+    ...data.store,
+  })
 }
 
 export async function getStores(category?: string) {
   const db = getAdminDb()
-  let query: Query = db.collection("stores")
-
-  if (category) {
-    query = query.where("category", "==", category)
-  }
+  
+  // Query users who are sellers and have store data
+  let query: Query = db.collection("users").where("role", "==", "seller")
 
   const snapshot = await query.get()
-  const stores = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+  
+  // Extract stores from user documents
+  let stores = snapshot.docs
+    .map((doc) => {
+      const data = doc.data()
+      if (!data.store) return null
+      return {
+        id: doc.id, // Store ID = User ID
+        seller_id: doc.id,
+        ...data.store,
+      }
+    })
+    .filter((store): store is NonNullable<typeof store> => store !== null)
+
+  // Filter by category if provided
+  if (category) {
+    stores = stores.filter((store: any) => store.category === category)
+  }
 
   stores.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
 
@@ -53,27 +77,26 @@ export async function getStores(category?: string) {
 
 export async function getStore(id: string) {
   const db = getAdminDb()
-  const docSnap = await db.collection("stores").doc(id).get()
+  // Store ID is now User ID
+  const docSnap = await db.collection("users").doc(id).get()
 
   if (!docSnap.exists) {
-    console.error("[v0] Error fetching store: not found")
+    console.error("[v0] Error fetching store: user not found")
     return null
   }
 
-  return mapStore(docSnap)
+  const store = extractStore(docSnap)
+  if (!store) {
+    console.error("[v0] Error fetching store: no store data for user")
+    return null
+  }
+
+  return store
 }
 
 export async function getStoreByUserId(userId: string) {
-  const db = getAdminDb()
-  const snapshot = await db.collection("stores").where("seller_id", "==", userId).limit(1).get()
-  const docSnap = snapshot.docs[0]
-
-  if (!docSnap) {
-    console.error("[v0] Error fetching user store: not found")
-    return null
-  }
-
-  return mapStore(docSnap)
+  // Since store is embedded in user document, store ID = user ID
+  return getStore(userId)
 }
 
 export async function createStore(storeData: {
@@ -83,27 +106,39 @@ export async function createStore(storeData: {
   phone: string
   category: string
   description?: string
+  latitude?: number
+  longitude?: number
 }) {
   const db = getAdminDb()
   const now = new Date().toISOString()
-  const docRef = db.collection("stores").doc()
-
-  const payload = {
-    ...storeData,
+  
+  // Store data is embedded in user document
+  const userRef = db.collection("users").doc(storeData.seller_id)
+  
+  const storePayload = {
+    name: storeData.name,
+    description: storeData.description || "",
+    address: storeData.address,
+    phone: storeData.phone,
+    category: storeData.category,
+    latitude: storeData.latitude || null,
+    longitude: storeData.longitude || null,
+    is_approved: false,
     rating: 0,
     created_at: now,
     updated_at: now,
   }
 
   try {
-    await docRef.set(payload)
+    await userRef.set({ store: storePayload, updated_at: now }, { merge: true })
   } catch (error: any) {
     console.error("[v0] Error creating store:", error)
     return { success: false, error: error?.message || "Failed to create store" }
   }
 
-  console.log("[v0] Store created successfully:")
-  return { success: true, data: { id: docRef.id, ...payload } }
+  console.log("[v0] Store created successfully for user:", storeData.seller_id)
+  // Return store ID = seller_id
+  return { success: true, data: { id: storeData.seller_id, seller_id: storeData.seller_id, ...storePayload } }
 }
 
 export async function updateStore(
@@ -125,29 +160,40 @@ export async function updateStore(
   }>,
 ) {
   const db = getAdminDb()
-  const docRef = db.collection("stores").doc(id)
+  // Store ID = User ID
+  const userRef = db.collection("users").doc(id)
 
-  const updateData = cleanUndefined({
-    ...formData,
-    updated_at: new Date().toISOString(),
-  })
+  // Build the update object for nested store field
+  const storeUpdates: Record<string, any> = {}
+  for (const [key, value] of Object.entries(formData)) {
+    if (value !== undefined) {
+      storeUpdates[`store.${key}`] = value
+    }
+  }
+  storeUpdates["store.updated_at"] = new Date().toISOString()
+  storeUpdates["updated_at"] = new Date().toISOString()
 
   try {
-    await docRef.set(updateData, { merge: true })
+    await userRef.update(storeUpdates)
   } catch (error: any) {
     console.error("[v0] Error updating store:", error)
     return { success: false, error: error?.message || "Failed to update store" }
   }
 
-  const updatedSnap = await docRef.get()
+  const updatedSnap = await userRef.get()
   if (!updatedSnap.exists) {
-    console.warn("[v0] Update succeeded but returned no rows for store:", id)
+    console.warn("[v0] Update succeeded but user not found:", id)
     return { success: false, error: "Store not found or not permitted" }
+  }
+
+  const store = extractStore(updatedSnap)
+  if (!store) {
+    return { success: false, error: "Store data not found" }
   }
 
   revalidatePath("/seller/settings")
   revalidatePath(`/store/${id}`)
-  return { success: true, data: mapStore(updatedSnap) }
+  return { success: true, data: store }
 }
 
 export async function searchStores(query: string) {

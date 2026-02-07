@@ -21,7 +21,7 @@ import Image from "next/image"
 import { useEffect, useState } from "react"
 import { getStore } from "../../../lib/actions/stores"
 import { getProductsByStoreId } from "../../../lib/actions/products"
-import { trackMetaEvent, formatAddress } from "../../../lib/utils"
+import { trackMetaEvent } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
 
@@ -163,14 +163,11 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
-                <div className="w-8 h-8 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              </div>
               <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
@@ -237,19 +234,16 @@ export default function StorePage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col">
       <Header />
 
       {offers.length > 0 && (
-        <div className="bg-gradient-to-r from-green-600 via-emerald-600 to-green-700 text-white py-3 md:py-4 shadow-lg animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
-          <div className="absolute inset-0 bg-[url('/images/pattern.svg')] opacity-10" />
-          <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 text-center relative">
+        <div className="bg-green-600 text-white py-2 md:py-3 shadow-md animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
+          <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 text-center">
             <div className="flex flex-wrap items-center justify-center gap-2 font-bold text-base md:text-xl">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                <Tag className="h-4 w-4 md:h-5 md:w-5" />
-              </div>
+              <Tag className="h-5 w-5 md:h-6 md:w-6 animate-bounce" />
               <span>{offers[0].title}</span>
-              <span className="bg-gradient-to-r from-yellow-400 to-amber-500 text-green-900 px-3 py-1 rounded-full text-xs md:text-sm font-bold shadow-md">
+              <span className="bg-yellow-400 text-green-800 px-2 py-0.5 rounded-full text-xs md:text-sm">
                 {offers[0].discount_percentage}% {t("خصم", "OFF")}
               </span>
             </div>
@@ -260,146 +254,115 @@ export default function StorePage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      <main className="flex-1 py-6 md:py-10">
-        <div className="container mx-auto px-4">
-          <div className="mb-6">
+      <main className="flex-1 py-4 md:py-8">
+        <div className="container mx-auto px-2 md:px-4">
+          <div className="mb-4 md:mb-6">
             <BackButton />
           </div>
 
-          {/* Store Header Card */}
-          <div className="bg-white rounded-3xl shadow-xl border-0 p-6 md:p-10 mb-8 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Store Image */}
-              <div className="relative h-64 sm:h-80 lg:h-full rounded-2xl overflow-hidden bg-gray-100 shadow-lg group">
+
+          <div className="bg-white rounded-lg shadow-sm p-3 md:p-8 mb-6 md:mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-6">
+              <div className="relative h-48 sm:h-64 lg:h-full rounded-lg overflow-hidden bg-gray-100">
                 <Image
                   src={store.image_url || "/placeholder.svg"}
                   alt={store.name}
                   fill
                   priority
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
               </div>
 
-              {/* Store Info */}
-              <div className="space-y-6 min-w-0">
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent mb-3">
-                    {store.name}
-                  </h1>
-                  <p className="text-gray-600 text-base md:text-lg leading-relaxed">{store.description}</p>
-                </div>
-
-                {/* Rating Section */}
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-50 to-amber-50 px-4 py-2 rounded-xl border border-yellow-200">
-                    <Star className="h-6 w-6 fill-yellow-400 text-yellow-400" />
-                    <span className="font-bold text-xl text-gray-800">{store.rating}</span>
-                    <span className="text-gray-500 text-sm">{t("تقييم", "rating")}</span>
-                  </div>
-                  <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 text-sm rounded-full font-medium shadow-md">
-                    {store.category}
-                  </span>
-                </div>
-
-                {/* User Rating */}
-                <div className="bg-gray-50 rounded-2xl p-4">
-                  <p className="text-sm text-gray-600 mb-2">{t("قيم المتجر", "Rate this store")}</p>
+              <div className="space-y-4 min-w-0">
+                <h1 className="text-2xl md:text-4xl font-bold break-all">{store.name}</h1>
+                <p className="text-gray-600 text-base md:text-lg leading-relaxed break-all">{store.description}</p>
+                <div className="flex flex-wrap items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => {
-                      const filled = (hoverRating ?? userStoreReview ?? 0) >= n
-                      return (
-                        <button
-                          key={n}
-                          aria-label={`${n} star`}
-                          type="button"
-                          disabled={submittingReview}
-                          onMouseEnter={() => setHoverRating(n)}
-                          onMouseLeave={() => setHoverRating(null)}
-                          onClick={async () => {
-                            if (!user) {
-                              router.push("/auth")
-                              return
-                            }
-
-                            try {
-                              setSubmittingReview(true)
-                              const res = await upsertStoreReview(store.id, user.id, n) as { success?: boolean, average?: number, error?: string }
-                              if (res && res.success && typeof res.average === "number") {
-                                const newAvg = res.average
-                                setStore((s) => (s ? { ...s, rating: newAvg } : s))
-                                setUserStoreReview(n)
-                              } else if (res && res.error) {
-                                alert(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
+                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                    <span className="font-bold text-lg">{store.rating}</span>
+                    <span className="text-gray-500">{t("تقييم", "rating")}</span>
+                  </div>
+                  <div className="ml-0 md:ml-4 w-full md:w-auto">
+                    <p className="text-sm text-gray-600">{t("قيم المتجر", "Rate this store")}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const filled = (hoverRating ?? userStoreReview ?? 0) >= n
+                        return (
+                          <button
+                            key={n}
+                            aria-label={`${n} star`}
+                            type="button"
+                            disabled={submittingReview}
+                            onMouseEnter={() => setHoverRating(n)}
+                            onMouseLeave={() => setHoverRating(null)}
+                            onClick={async () => {
+                              if (!user) {
+                                router.push("/auth")
+                                return
                               }
-                            } catch (err: any) {
-                              console.error("[v0] Error submitting store review:", err)
-                              alert(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
-                            } finally {
-                              setSubmittingReview(false)
-                            }
-                          }}
-                          className={`p-1 transition-all duration-200 hover:scale-125 ${filled ? "text-yellow-400" : "text-gray-300"}`}
-                        >
-                          <Star className={`h-7 w-7 ${filled ? "fill-yellow-400 text-yellow-400" : ""}`} />
-                        </button>
-                      )
-                    })}
+
+                              try {
+                                setSubmittingReview(true)
+                                const res = await upsertStoreReview(store.id, user.id, n) as { success?: boolean, average?: number, error?: string }
+                                if (res && res.success && typeof res.average === "number") {
+                                  const newAvg = res.average
+                                  setStore((s) => (s ? { ...s, rating: newAvg } : s))
+                                  setUserStoreReview(n)
+                                } else if (res && res.error) {
+                                  alert(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
+                                }
+                              } catch (err: any) {
+                                console.error("[v0] Error submitting store review:", err)
+                                alert(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
+                              } finally {
+                                setSubmittingReview(false)
+                              }
+                            }}
+                            className={`p-1 ${filled ? "text-yellow-400" : "text-gray-400"}`}
+                          >
+                            <Star className={`h-5 w-5 ${filled ? "fill-yellow-400 text-yellow-400" : ""}`} />
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
+                  <span className="bg-secondary px-3 py-1 text-sm md:px-4 md:py-2 md:text-base rounded-full font-medium">{store.category}</span>
                 </div>
 
-                {/* Address Card */}
-                <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <MapPin className="h-6 w-6 text-white" />
-                  </div>
+                <div className="flex items-start gap-3 p-3 md:p-4 bg-secondary rounded-lg">
+                  <MapPin className="h-5 w-5 text-[#1F478B] mt-1 flex-shrink-0" />
                   <div>
-                    <p className="font-semibold text-gray-800 mb-1">{t("العنوان", "Address")}</p>
-                    <p className="text-gray-600">{formatAddress(store.address)}</p>
+                    <p className="font-semibold mb-1">{t("العنوان", "Address")}</p>
+                    <p className="text-gray-600">{store.address}</p>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    onClick={handleWhatsApp}
-                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
-                  >
-                    <MessageCircle className="me-2 h-5 w-5" />
+                  <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700 w-full">
+                    <MessageCircle className="ml-2 h-5 w-5" />
                     {t("تواصل واتساب", "WhatsApp")}
                   </Button>
-                  <Button
-                    onClick={handleCall}
-                    variant="outline"
-                    className="flex-1 border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 rounded-xl h-12 transition-all"
-                  >
-                    <Phone className="me-2 h-5 w-5" />
+                  <Button onClick={handleCall} variant="outline" className="flex-1 bg-transparent w-full">
+                    <Phone className="ml-2 h-5 w-5" />
                     {t("اتصال", "Call")}
                   </Button>
                 </div>
-
-                {/* Store Policies */}
                 <Sheet open={isPolicySheetOpen} onOpenChange={setIsPolicySheetOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="outline" className="w-full border-2 border-gray-200 hover:border-violet-500 hover:bg-violet-50 rounded-xl h-12 transition-all">
-                      <FileText className="me-2 h-5 w-5" />
+                    <Button variant="outline" className="flex-1 bg-transparent w-full">
+                      <FileText className="ml-2 h-5 w-5" />
                       {t("سياسات المتجر", "Store Policies")}
                     </Button>
                   </SheetTrigger>
-                  <SheetContent className="rounded-s-3xl">
+                  <SheetContent>
                     <SheetHeader className="pe-10">
-                      <SheetTitle className="text-right text-xl">{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
+                      <SheetTitle className="text-right">{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
                     </SheetHeader>
-                    <div className="py-6 px-4 overflow-y-auto h-full">
+                    <div className="py-4 px-4 overflow-y-auto h-full">
                       {store.return_policy ? (
-                        <div className="bg-gray-50 rounded-xl p-4 border-s-4 border-blue-500">
-                          <p className="whitespace-pre-wrap break-words text-gray-600 leading-relaxed">{store.return_policy}</p>
-                        </div>
+                        <p className="whitespace-pre-wrap break-words">{store.return_policy}</p>
                       ) : (
-                        <div className="text-center py-8">
-                          <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                          <p className="text-gray-500">{t("لم يتم تحديد سياسة الإرجاع بعد.", "Return policy not set yet.")}</p>
-                        </div>
+                        <p>{t("لم يتم تحديد سياسة الإرجاع بعد.", "Return policy not set yet.")}</p>
                       )}
                     </div>
                   </SheetContent>
@@ -408,22 +371,9 @@ export default function StorePage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          {/* Products Section */}
-          <div>
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-                <Tag className="w-5 h-5 text-white" />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                {t("منتجات المتجر", "Store Products")}
-              </h2>
-              {products.length > 0 && (
-                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                  {products.length} {t("منتج", "products")}
-                </span>
-              )}
-            </div>
 
+          <div>
+            <h2 className="text-2xl font-bold mb-6">{t("منتجات المتجر", "Store Products")}</h2>
             {products.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {products.map((product) => (
@@ -431,10 +381,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16 bg-white rounded-3xl shadow-md border-0">
-                <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                  <Tag className="w-10 h-10 text-gray-300" />
-                </div>
+              <div className="text-center py-12 bg-secondary rounded-lg">
                 <p className="text-gray-500 text-lg">
                   {t("لا توجد منتجات في هذا المتجر حالياً", "No products available in this store currently")}
                 </p>

@@ -12,7 +12,7 @@ import { Textarea } from "../../../../components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../components/ui/select"
 import { categories } from "../../../../lib/mock-data"
-import { Upload } from "lucide-react"
+import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../lib/actions/stores"
@@ -28,6 +28,7 @@ export default function NewProductPage() {
   const [storeCategory, setStoreCategory] = useState<string>("")
   const [storeData, setStoreData] = useState<any>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
 
   // Check if either store or product category is grocery/food type
   const isGroceryType = (cat: string) => ['بقالة', 'أغذية', 'grocery', 'food', 'supermarket'].includes(cat.toLowerCase())
@@ -48,6 +49,7 @@ export default function NewProductPage() {
         if (store) {
           setStoreData(store)
           setStoreCategory((store as any).category || "")
+          setIsStoreApproved((store as any).is_approved ?? false)
         }
       }
     }
@@ -149,6 +151,26 @@ export default function NewProductPage() {
             إضافة منتج جديد
           </h1>
 
+          {/* تحذير المتجر غير المعتمد */}
+          {!isStoreApproved && (
+            <Card className="mb-6 border-amber-200 bg-amber-50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    <AlertTriangle className="h-8 w-8 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-amber-800 text-lg mb-2">متجرك غير معتمد بعد</h3>
+                    <p className="text-amber-700">
+                      لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة.
+                      يرجى الانتظار حتى يتم مراجعة واعتماد حسابك.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <CardTitle className="flex items-center gap-2">
@@ -159,6 +181,8 @@ export default function NewProductPage() {
             </CardHeader>
             <CardContent className="p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Disable form if store not approved */}
+                <fieldset disabled={!isStoreApproved} className={!isStoreApproved ? "opacity-50 pointer-events-none" : ""}>
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl">
                     <p className="text-sm">{error}</p>
@@ -311,7 +335,7 @@ export default function NewProductPage() {
                   <Button
                     type="submit"
                     className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !isStoreApproved}
                   >
                     {isSubmitting ? "جاري الإضافة..." : "إضافة المنتج"}
                   </Button>
@@ -324,6 +348,7 @@ export default function NewProductPage() {
                     إلغاء
                   </Button>
                 </div>
+                </fieldset>
               </form>
             </CardContent>
           </Card>

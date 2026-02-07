@@ -11,15 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store, Eye } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
-import { getCustomerOrders } from "../../lib/actions/orders"
+import { getCustomerOrders, getRejectedOrdersForCustomer } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
 import { OrderTrackingModal } from "../../components/order-tracking-modal"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
-import { formatAddress } from "../../lib/utils"
 
 type Order = {
   id: string
@@ -28,6 +27,8 @@ type Order = {
   status: string
   delivery_address: string
   timeline?: TimelineEntry[]
+  driver_id?: string
+  driver_name?: string
   order_items: {
     id: string
     quantity: number
@@ -44,11 +45,20 @@ type Order = {
   }
 }
 
+type RejectedOrder = {
+  id: string
+  driver_id?: string
+  driver_name?: string
+  driver_rejection_reason?: string
+  created_at?: string
+}
+
 export default function AccountPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
+  const [rejectedOrders, setRejectedOrders] = useState<RejectedOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
   const [hasStore, setHasStore] = useState(false)
@@ -75,9 +85,15 @@ export default function AccountPage() {
         setOrdersLoading(true)
         setOrdersError(null)
         console.log("[v0] Fetching orders for customer:")
-        const data = await getCustomerOrders(user.id)
+        const [data, rejectedResult] = await Promise.all([
+          getCustomerOrders(user.id),
+          getRejectedOrdersForCustomer(user.id)
+        ])
         console.log("[v0] Fetched orders:")
         setOrders(data as Order[])
+        if (rejectedResult.success) {
+          setRejectedOrders(rejectedResult.orders as RejectedOrder[])
+        }
       } catch (error) {
         console.error("[v0] Error fetching orders:", error)
         setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
@@ -188,6 +204,44 @@ export default function AccountPage() {
             </TabsList>
 
             <TabsContent value="orders">
+              {/* Rejected Orders Alert */}
+              {rejectedOrders.length > 0 && (
+                <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden bg-amber-50 border-l-4 border-l-amber-500">
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-6 w-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-amber-800 mb-1">
+                          {t("لديك طلبات مرفوضة من السائق", "You have orders rejected by driver")}
+                        </h3>
+                        <p className="text-amber-700 text-sm mb-3">
+                          {t("يرجى اختيار سائق آخر لإكمال توصيل طلباتك", "Please select another driver to complete your deliveries")}
+                        </p>
+                        <div className="space-y-2">
+                          {rejectedOrders.map((rejOrder) => (
+                            <div key={rejOrder.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-amber-200">
+                              <div className="flex items-center gap-3">
+                                <Truck className="h-5 w-5 text-amber-600" />
+                                <span className="text-sm text-gray-700">
+                                  {t("طلب رقم", "Order #")} {rejOrder.id.slice(-6)}
+                                </span>
+                              </div>
+                              <Link href={`/account/change-driver?orderId=${rejOrder.id}&currentDriverId=${rejOrder.driver_id || ""}`}>
+                                <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+                                  {t("اختر سائق", "Select Driver")}
+                                </Button>
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                   <CardTitle className="flex items-center gap-3">
@@ -253,7 +307,7 @@ export default function AccountPage() {
                               {order.delivery_address && (
                                 <div className="flex items-start gap-3 text-sm text-gray-600">
                                   <MapPin className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                                  <span className="line-clamp-1">{formatAddress(order.delivery_address)}</span>
+                                  <span className="line-clamp-1">{order.delivery_address}</span>
                                 </div>
                               )}
                             </div>
@@ -297,15 +351,138 @@ export default function AccountPage() {
             </TabsContent>
 
             <TabsContent value="profile">
+              {/* User Stats Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl">
+                        <ShoppingBag className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{orders.length}</p>
+                        <p className="text-xs text-blue-100">{t("إجمالي الطلبات", "Total Orders")}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl">
+                        <CheckCircle className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{orders.filter(o => o.status === 'delivered').length}</p>
+                        <p className="text-xs text-green-100">{t("طلبات مكتملة", "Completed")}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl">
+                        <CreditCard className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{orders.reduce((sum, o) => sum + Number(o.total || 0), 0).toFixed(0)}</p>
+                        <p className="text-xs text-purple-100">{t("إجمالي الإنفاق", "Total Spent")}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-xl">
+                        <Package className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{orders.filter(o => o.status === 'pending' || o.status === 'processing').length}</p>
+                        <p className="text-xs text-amber-100">{t("طلبات نشطة", "Active Orders")}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Profile Info Card */}
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mb-6">
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold">
+                      {user.name?.charAt(0)?.toUpperCase() || "U"}
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl text-white">{user.name || t("مستخدم", "User")}</CardTitle>
+                      <CardDescription className="text-blue-100">{user.role === "seller" ? t("تاجر", "Seller") : t("عميل", "Customer")}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Email */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className="p-3 bg-blue-100 rounded-xl">
+                        <Mail className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">{t("البريد الإلكتروني", "Email")}</p>
+                        <p className="font-medium text-gray-800">{user.email}</p>
+                      </div>
+                    </div>
+
+                    {/* Phone */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className="p-3 bg-green-100 rounded-xl">
+                        <Phone className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">{t("رقم الهاتف", "Phone")}</p>
+                        <p className="font-medium text-gray-800">{user.phone || t("غير محدد", "Not set")}</p>
+                      </div>
+                    </div>
+
+                    {/* Address */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className="p-3 bg-purple-100 rounded-xl">
+                        <MapPin className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">{t("العنوان", "Address")}</p>
+                        <p className="font-medium text-gray-800">
+                          {user.street || user.city || user.country 
+                            ? [user.street, user.city, user.country].filter(Boolean).join(", ")
+                            : t("غير محدد", "Not set")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Role */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className="p-3 bg-amber-100 rounded-xl">
+                        <UserIcon className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">{t("نوع الحساب", "Account Type")}</p>
+                        <p className="font-medium text-gray-800">{user.role === "seller" ? t("تاجر", "Seller") : t("عميل", "Customer")}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Edit Profile Form */}
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                   <CardTitle className="flex items-center gap-3">
                     <div className="p-2 bg-blue-100 rounded-xl">
                       <UserIcon className="h-5 w-5 text-blue-600" />
                     </div>
-                    {t("الملف الشخصي", "Profile")}
+                    {t("تعديل الملف الشخصي", "Edit Profile")}
                   </CardTitle>
-                  <CardDescription>{t("إدارة معلوماتك الشخصية", "Manage your personal information")}</CardDescription>
+                  <CardDescription>{t("تحديث معلوماتك الشخصية", "Update your personal information")}</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
                   <form
@@ -321,15 +498,13 @@ export default function AccountPage() {
                         if (!user?.id) return
                         const res = await updateProfile(user.id, { full_name: name, phone })
                         if (res && res.success) {
-                          alert(t("تم حفظ التعديلات بنجاح", "Changes saved successfully"))
+                          // refresh the page so AuthProvider reloads profile and UI reflects changes
                           router.refresh()
                         } else {
-                          alert(t("فشل في حفظ التعديلات", "Failed to save changes"))
                           console.error("[v0] Failed to update profile:", res?.error)
                         }
                       } catch (err) {
                         console.error("[v0] Error submitting profile form:", err)
-                        alert(t("حدث خطأ أثناء الحفظ", "Error occurred while saving"))
                       }
                     }}
                   >
@@ -382,15 +557,12 @@ export default function AccountPage() {
                       try {
                         const res = await updateProfile(user.id, { street, city, country })
                         if (res && res.success) {
-                          alert(t("تم حفظ العنوان بنجاح", "Address saved successfully"))
                           router.refresh()
                         } else {
-                          alert(t("فشل في حفظ العنوان", "Failed to save address"))
                           console.error("[v0] Failed to update address:", res?.error)
                         }
                       } catch (err) {
                         console.error("[v0] Error saving address:", err)
-                        alert(t("حدث خطأ أثناء الحفظ", "Error occurred while saving"))
                       }
                     }}
                   >

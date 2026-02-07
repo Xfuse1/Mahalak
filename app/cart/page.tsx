@@ -5,7 +5,7 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { BackButton } from "@/components/back-button"
-import { ShoppingBag, Plus, Minus, Trash2, ArrowLeft, ShoppingCart } from "lucide-react"
+import { ShoppingBag, Plus, Minus, Trash2, ArrowLeft, ShoppingCart, Tag } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
@@ -18,7 +18,14 @@ export default function CartPage() {
   const { items, addItem, decrementItem, removeItem, clear } = useCartStore()
   const { user } = useAuth()
   const router = useRouter()
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  
+  // Calculate total with discounts
+  const total = items.reduce((sum, item) => {
+    const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+      ? item.price - (item.price * item.discount_percentage / 100)
+      : item.price
+    return sum + discountedPrice * item.quantity
+  }, 0)
 
   const handleCheckout = () => {
     if (!user) {
@@ -81,7 +88,20 @@ export default function CartPage() {
                         {item.description && <p className="text-sm text-gray-400 mt-2 line-clamp-2">{item.description}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-3">
-                        <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{item.price} {t("جنيه", "EGP")}</p>
+                        {item.discount_percentage && item.discount_percentage > 0 ? (
+                          <div className="flex flex-col items-end">
+                            <div className="inline-flex items-center gap-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold mb-1">
+                              <Tag className="h-3 w-3" />
+                              {item.discount_percentage}%
+                            </div>
+                            <p className="text-sm text-gray-400 line-through">{item.price} {t("جنيه", "EGP")}</p>
+                            <p className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                              {(item.price - (item.price * item.discount_percentage / 100)).toLocaleString()} {t("جنيه", "EGP")}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{item.price} {t("جنيه", "EGP")}</p>
+                        )}
                         
                         {/* Quantity Controls */}
                         <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">

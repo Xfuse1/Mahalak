@@ -87,3 +87,101 @@ export async function deleteOffer(id: string) {
   revalidatePath("/seller/offers")
   return { success: true }
 }
+
+// Get all active offers (for displaying discounts on products)
+export async function getActiveOffers(): Promise<OfferRecord[]> {
+  const db = getAdminDb()
+  const now = new Date()
+  const todayStr = now.toISOString().split("T")[0]
+  
+  try {
+    const snapshot = await db.collection("offers").get()
+    const allOffers: OfferRecord[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    
+    const offers = allOffers.filter((offer: OfferRecord) => {
+      // Check if offer is active (between start and end date)
+      const startDate = String(offer.start_date || "").split("T")[0]
+      const endDate = String(offer.end_date || "").split("T")[0]
+      return startDate <= todayStr && endDate >= todayStr
+    })
+    
+    return offers
+  } catch (error) {
+    console.error("[v0] Error fetching active offers:", error)
+    return []
+  }
+}
+
+// Get active offer for a specific product
+export async function getProductOffer(productId: string): Promise<OfferRecord | null> {
+  const db = getAdminDb()
+  const now = new Date()
+  const todayStr = now.toISOString().split("T")[0]
+  
+  try {
+    // First check for product-specific offers
+    const productSnapshot = await db.collection("offers")
+      .where("product_id", "==", productId)
+      .get()
+    
+    const allOffers: OfferRecord[] = productSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    
+    const productOffers = allOffers.filter((offer: OfferRecord) => {
+      const startDate = String(offer.start_date || "").split("T")[0]
+      const endDate = String(offer.end_date || "").split("T")[0]
+      return startDate <= todayStr && endDate >= todayStr
+    })
+    
+    if (productOffers.length > 0) {
+      // Return the highest discount
+      return productOffers.reduce((max: OfferRecord, offer: OfferRecord) => 
+        (Number(offer.discount_percentage) || 0) > (Number(max.discount_percentage) || 0) ? offer : max
+      )
+    }
+    
+    return null
+  } catch (error) {
+    console.error("[v0] Error fetching product offer:", error)
+    return null
+  }
+}
+
+// Get active offers map for multiple products (more efficient)
+export async function getProductOffersMap(productIds: string[]): Promise<Record<string, { discount_percentage: number; title: string }>> {
+  if (!productIds.length) return {}
+  
+  const db = getAdminDb()
+  const now = new Date()
+  const todayStr = now.toISOString().split("T")[0]
+  
+  try {
+    const snapshot = await db.collection("offers").get()
+    const allOffers: OfferRecord[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    
+    const activeOffers = allOffers.filter((offer: OfferRecord) => {
+      const startDate = String(offer.start_date || "").split("T")[0]
+      const endDate = String(offer.end_date || "").split("T")[0]
+      return startDate <= todayStr && endDate >= todayStr
+    })
+    
+    const offersMap: Record<string, { discount_percentage: number; title: string }> = {}
+    
+    for (const offer of activeOffers) {
+      if (offer.product_id && productIds.includes(String(offer.product_id))) {
+        // Product-specific offer
+        const existing = offersMap[String(offer.product_id)]
+        if (!existing || (Number(offer.discount_percentage) || 0) > existing.discount_percentage) {
+          offersMap[String(offer.product_id)] = {
+            discount_percentage: Number(offer.discount_percentage) || 0,
+            title: String(offer.title) || ""
+          }
+        }
+      }
+    }
+    
+    return offersMap
+  } catch (error) {
+    console.error("[v0] Error fetching product offers map:", error)
+    return {}
+  }
+}

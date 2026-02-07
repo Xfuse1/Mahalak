@@ -16,7 +16,9 @@ import Link from "next/link"
 import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
+import { MapPin, Loader2, CheckCircle } from "lucide-react"
 import Image from "next/image"
+import { PhoneVerification } from "../../components/phone-verification"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -31,6 +33,59 @@ export default function AuthPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [storeLogo, setStoreLogo] = useState<File | null>(null)
   const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null)
+  
+  // Phone verification state for sellers
+  const [sellerPhone, setSellerPhone] = useState("")
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false)
+  const [triggerSendOTP, setTriggerSendOTP] = useState(false)
+  const [phoneStep, setPhoneStep] = useState<"phone" | "otp" | "verified">("phone")
+  
+  // Store type state for "other" option
+  const [selectedStoreType, setSelectedStoreType] = useState("")
+  const [customStoreType, setCustomStoreType] = useState("")
+  
+  // Store location state
+  const [storeLocation, setStoreLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  
+  // Get current location function
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError(t("المتصفح لا يدعم تحديد الموقع", "Browser doesn't support geolocation"))
+      return
+    }
+    
+    setIsGettingLocation(true)
+    setLocationError(null)
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setStoreLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        })
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError(t("تم رفض إذن الموقع. يرجى السماح بالوصول للموقع", "Location permission denied. Please allow location access"))
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError(t("معلومات الموقع غير متاحة", "Location information unavailable"))
+            break
+          case error.TIMEOUT:
+            setLocationError(t("انتهت مهلة طلب الموقع", "Location request timed out"))
+            break
+          default:
+            setLocationError(t("حدث خطأ في تحديد الموقع", "Error getting location"))
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
 
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
@@ -101,7 +156,6 @@ export default function AuthPage() {
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsLoading(true)
     setError("")
 
     const formData = new FormData(e.currentTarget)
@@ -113,32 +167,79 @@ export default function AuthPage() {
     const city = formData.get("city") as string
     const country = formData.get("country") as string
 
-    let sellerDataPrepared
-    if (role === "seller") {
-      const phone = formData.get("phone") as string
-      const storeName = formData.get("storeName") as string
-      const storeDescription = formData.get("storeDescription") as string
-      const address = formData.get("address") as string
-      const storeType = formData.get("storeType") as string
-
-      if (!phone || !storeName || !address || !storeType) {
-        setError(t("يرجى ملء جميع الحقول المطلوبة", "Please fill all required fields"))
-        setIsLoading(false)
-        return
-      }
-
-      sellerDataPrepared = { phone, storeName, storeDescription, address, storeType, storeLogo }
-    }
-
+    // Basic validation first
     if (password !== confirmPassword) {
       setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
-      setIsLoading(false)
       return
     }
 
+    let sellerData
+    if (role === "seller") {
+      const phone = sellerPhone
+      const storeName = formData.get("storeName") as string
+      const storeDescription = formData.get("storeDescription") as string
+      // Use custom store type if "خدمات أخرى" is selected
+      const storeType = selectedStoreType === "خدمات أخرى" ? customStoreType : selectedStoreType
+
+      if (!phone || !storeName || !storeDescription || !storeType) {
+        setError(t("يرجى ملء جميع الحقول المطلوبة", "Please fill all required fields"))
+        return
+      }
+      
+      // Validate phone number
+      if (phone.length < 10) {
+        setError(t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number"))
+        return
+      }
+      
+      // Validate custom store type when "خدمات أخرى" is selected
+      if (selectedStoreType === "خدمات أخرى" && !customStoreType.trim()) {
+        setError(t("يرجى تحديد نوع المتجر", "Please specify the store type"))
+        return
+      }
+
+      // If phone is not verified yet, trigger OTP send and redirect to verify page
+      if (!isPhoneVerified && phoneStep === "phone") {
+        // Save seller data to session storage for later
+        const pendingData = {
+          email,
+          password,
+          name,
+          phone,
+          storeName,
+          storeDescription,
+          storeType,
+          storeLogo,
+          street,
+          city,
+          country,
+          latitude: storeLocation?.latitude,
+          longitude: storeLocation?.longitude,
+        }
+        sessionStorage.setItem("pendingSellerData", JSON.stringify(pendingData))
+        
+        // Format phone and redirect to verify page (OTP will be sent there)
+        const formattedPhone = phone.startsWith("+") ? phone : `+2${phone}`
+        
+        // Redirect to verify page - OTP will be sent from there
+        router.push(`/auth/verify-phone?phone=${encodeURIComponent(formattedPhone)}&role=seller&returnUrl=/seller/dashboard`)
+        return
+      }
+      
+      // If we're in OTP step, wait for verification
+      if (!isPhoneVerified && phoneStep === "otp") {
+        setError(t("يرجى إدخال كود التحقق أولاً", "Please enter the verification code first"))
+        return
+      }
+
+      sellerData = { phone, storeName, storeDescription, storeType, storeLogo, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
+    }
+
+    setIsLoading(true)
+
     try {
       setIsLoggingIn(true)
-      const success = await register(email, password, name, role, sellerDataPrepared, street, city, country)
+      const success = await register(email, password, name, role, sellerData, street, city, country)
 
       if (success) {
         router.push(role === "seller" ? "/seller/dashboard" : "/")
@@ -184,7 +285,7 @@ export default function AuthPage() {
                     type="button"
                     variant={role === "customer" ? "default" : "outline"}
                     onClick={() => setRole("customer")}
-                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "customer" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300"}`}
+                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "customer" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"}`}
                   >
                     {t("عميل", "Customer")}
                   </Button>
@@ -192,7 +293,7 @@ export default function AuthPage() {
                     type="button"
                     variant={role === "seller" ? "default" : "outline"}
                     onClick={() => setRole("seller")}
-                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "seller" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300"}`}
+                    className={`h-14 text-base font-bold rounded-xl transition-all duration-300 ${role === "seller" ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl" : "hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"}`}
                   >
                     {t("بائع", "Seller")}
                   </Button>
@@ -347,19 +448,21 @@ export default function AuthPage() {
 
                     {role === "seller" && (
                       <>
-                        <div className="space-y-2">
-                          <Label htmlFor="register-phone" className="text-base">
-                            {t("رقم الهاتف", "Phone Number")}
-                          </Label>
-                          <Input
-                            id="register-phone"
-                            name="phone"
-                            type="tel"
-                            required
-                            placeholder="01055161600"
-                            className="h-12"
-                          />
-                        </div>
+                        <PhoneVerification
+                          phoneNumber={sellerPhone}
+                          onPhoneChange={setSellerPhone}
+                          onVerified={setIsPhoneVerified}
+                          isVerified={isPhoneVerified}
+                          language={language}
+                          triggerSendOTP={triggerSendOTP}
+                          onOTPSent={(success, error) => {
+                            setTriggerSendOTP(false)
+                            if (!success && error) {
+                              setError(error)
+                            }
+                          }}
+                          onStepChange={setPhoneStep}
+                        />
                         <div className="space-y-2">
                           <Label htmlFor="register-storeName" className="text-base">
                             {t("اسم المتجر", "Store Name")}
@@ -381,20 +484,8 @@ export default function AuthPage() {
                             id="register-storeDescription"
                             name="storeDescription"
                             type="text"
-                            placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
-                            className="h-12"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="register-address" className="text-base">
-                            {t("عنوان المتجر", "Store Address")}
-                          </Label>
-                          <Input
-                            id="register-address"
-                            name="address"
-                            type="text"
                             required
-                            placeholder={t("القاهرة، مصر", "Cairo, Egypt")}
+                            placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
                             className="h-12"
                           />
                         </div>
@@ -402,7 +493,17 @@ export default function AuthPage() {
                           <Label htmlFor="register-storeType" className="text-base">
                             {t("نوع المتجر", "Store Type")}
                           </Label>
-                          <Select name="storeType" required>
+                          <Select 
+                            name="storeType" 
+                            required
+                            value={selectedStoreType}
+                            onValueChange={(value) => {
+                              setSelectedStoreType(value)
+                              if (value !== "خدمات أخرى") {
+                                setCustomStoreType("")
+                              }
+                            }}
+                          >
                             <SelectTrigger id="register-storeType" className="h-12">
                               <SelectValue placeholder={t("اختر نوع المتجر", "Choose store type")} />
                             </SelectTrigger>
@@ -417,7 +518,26 @@ export default function AuthPage() {
                             </SelectContent>
                           </Select>
                         </div>
-
+                        
+                        {/* Custom Store Type - shown when "Other Services" is selected */}
+                        {selectedStoreType === "خدمات أخرى" && (
+                          <div className="space-y-2">
+                            <Label htmlFor="register-customStoreType" className="text-base">
+                              {t("حدد نوع المتجر", "Specify Store Type")} <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="register-customStoreType"
+                              name="customStoreType"
+                              type="text"
+                              required
+                              value={customStoreType}
+                              onChange={(e) => setCustomStoreType(e.target.value)}
+                              placeholder={t("مثال: مستلزمات حيوانات أليفة", "Example: Pet Supplies")}
+                              className="h-12"
+                            />
+                          </div>
+                        )}
+                        
                         {/* Store Logo Upload */}
                         <div className="space-y-2">
                           <Label htmlFor="register-storeLogo" className="text-base">
@@ -465,6 +585,61 @@ export default function AuthPage() {
                               onChange={handleLogoChange}
                               className="hidden"
                             />
+                          </div>
+                        </div>
+                        
+                        {/* Store Location */}
+                        <div className="space-y-2">
+                          <Label className="text-base">
+                            {t("موقع المتجر (اختياري)", "Store Location (Optional)")}
+                          </Label>
+                          <div className="flex flex-col gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={getCurrentLocation}
+                              disabled={isGettingLocation}
+                              className="h-12 w-full flex items-center justify-center gap-2"
+                            >
+                              {isGettingLocation ? (
+                                <>
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                  {t("جاري تحديد الموقع...", "Getting location...")}
+                                </>
+                              ) : storeLocation ? (
+                                <>
+                                  <CheckCircle className="h-5 w-5 text-green-500" />
+                                  {t("تم تحديد الموقع", "Location captured")}
+                                </>
+                              ) : (
+                                <>
+                                  <MapPin className="h-5 w-5" />
+                                  {t("تحديد موقع المتجر الحالي", "Get current store location")}
+                                </>
+                              )}
+                            </Button>
+                            
+                            {storeLocation && (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                                <div className="flex items-center gap-2 text-green-700">
+                                  <MapPin className="h-4 w-4" />
+                                  <span className="font-medium">{t("تم تحديد الموقع بنجاح", "Location captured successfully")}</span>
+                                </div>
+                                <div className="mt-1 text-green-600 text-xs">
+                                  Lat: {storeLocation.latitude.toFixed(6)}, Lng: {storeLocation.longitude.toFixed(6)}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {locationError && (
+                              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+                                {locationError}
+                              </div>
+                            )}
+                            
+                            <p className="text-xs text-gray-500">
+                              {t("يمكنك تحديد الموقع لاحقاً من إعدادات المتجر", "You can set location later from store settings")}
+                            </p>
                           </div>
                         </div>
                       </>

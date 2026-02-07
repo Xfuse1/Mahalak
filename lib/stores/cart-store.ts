@@ -11,6 +11,7 @@ export type CartItem = {
   store_name?: string
   description?: string
   quantity: number
+  discount_percentage?: number
 }
 
 type CartItemInput = Omit<CartItem, "quantity">

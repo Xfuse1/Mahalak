@@ -14,7 +14,8 @@ import { Textarea } from "../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { getStoreByUserId, updateStore, createStore, uploadStoreImage } from "../../../lib/actions/stores"
 import Image from "next/image"
-import { Upload } from "lucide-react"
+import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
+import { PhoneVerification } from "../../../components/phone-verification"
 
 export default function SettingsPage() {
   const { user, isLoading } = useAuth()
@@ -25,6 +26,79 @@ export default function SettingsPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  
+  // Phone verification state
+  const [isChangingPhone, setIsChangingPhone] = useState(false)
+  const [newPhone, setNewPhone] = useState("")
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false)
+  
+  // Location state
+  const [storeLocation, setStoreLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [locationSuccess, setLocationSuccess] = useState(false)
+  
+  // Get current location function
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("المتصفح لا يدعم تحديد الموقع")
+      return
+    }
+    
+    setIsGettingLocation(true)
+    setLocationError(null)
+    setLocationSuccess(false)
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setStoreLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        })
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError("تم رفض إذن الموقع. يرجى السماح بالوصول للموقع")
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError("معلومات الموقع غير متاحة")
+            break
+          case error.TIMEOUT:
+            setLocationError("انتهت مهلة طلب الموقع")
+            break
+          default:
+            setLocationError("حدث خطأ في تحديد الموقع")
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+  
+  // Save location to store
+  const saveLocation = async () => {
+    if (!user?.id || !storeLocation) return
+    
+    setIsSaving(true)
+    try {
+      await updateStore(user.id, {
+        latitude: storeLocation.latitude,
+        longitude: storeLocation.longitude,
+      })
+      setLocationSuccess(true)
+      // Update local store state
+      setStore((prev: any) => ({
+        ...prev,
+        latitude: storeLocation.latitude,
+        longitude: storeLocation.longitude,
+      }))
+    } catch (error) {
+      setLocationError("حدث خطأ في حفظ الموقع")
+    }
+    setIsSaving(false)
+  }
 
   // Controlled form state
   const [formData, setFormData] = useState({
@@ -261,9 +335,161 @@ export default function SettingsPage() {
                   <Label htmlFor="storeAddress" className="text-gray-700 font-medium">العنوان</Label>
                   <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
-                <div>
-                  <Label htmlFor="storePhone" className="text-gray-700 font-medium">رقم الهاتف</Label>
-                  <Input id="storePhone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                
+                {/* Phone with verification */}
+                <div className="space-y-3">
+                  <Label className="text-gray-700 font-medium flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    رقم الهاتف
+                  </Label>
+                  
+                  {!isChangingPhone ? (
+                    <div className="flex items-center gap-3">
+                      <Input 
+                        value={formData.phone} 
+                        disabled 
+                        className="mt-2 h-12 rounded-xl bg-green-50 border-green-200 flex-1" 
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setIsChangingPhone(true)
+                          setNewPhone("")
+                          setIsPhoneVerified(false)
+                        }}
+                        className="h-12 px-4 rounded-xl"
+                      >
+                        تغيير الرقم
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <PhoneVerification
+                        phoneNumber={newPhone}
+                        onPhoneChange={setNewPhone}
+                        onVerified={(verified) => {
+                          setIsPhoneVerified(verified)
+                          if (verified) {
+                            // Update form data with new verified phone
+                            setFormData(prev => ({ ...prev, phone: newPhone }))
+                          }
+                        }}
+                        isVerified={isPhoneVerified}
+                        language="ar"
+                      />
+                      {!isPhoneVerified && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsChangingPhone(false)
+                            setNewPhone("")
+                            setIsPhoneVerified(false)
+                          }}
+                          className="mt-3 text-gray-500"
+                        >
+                          إلغاء التغيير
+                        </Button>
+                      )}
+                      {isPhoneVerified && (
+                        <p className="text-sm text-green-600 mt-2">✓ تم التحقق من الرقم الجديد. اضغط &quot;حفظ التغييرات&quot; لحفظ التعديلات.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Store Location */}
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-green-50 to-white border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-green-600" />
+                  موقع المتجر
+                </CardTitle>
+                <CardDescription>حدد الموقع الجغرافي للمتجر</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-6">
+                {/* Current Location Display */}
+                {store?.latitude && store?.longitude && !storeLocation && (
+                  <div className="bg-gray-50 rounded-lg p-4 border">
+                    <p className="text-sm font-medium text-gray-700 mb-1">الموقع الحالي</p>
+                    <p className="text-xs text-gray-500">
+                      Lat: {store.latitude.toFixed(6)}, Lng: {store.longitude.toFixed(6)}
+                    </p>
+                  </div>
+                )}
+                
+                {/* New Location Capture */}
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={getCurrentLocation}
+                    disabled={isGettingLocation}
+                    className="w-full h-12 flex items-center justify-center gap-2"
+                  >
+                    {isGettingLocation ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        جاري تحديد الموقع...
+                      </>
+                    ) : storeLocation ? (
+                      <>
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        تم تحديد الموقع الجديد
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="h-5 w-5" />
+                        تحديد موقع المتجر من الجهاز
+                      </>
+                    )}
+                  </Button>
+                  
+                  {storeLocation && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-700">الموقع الجديد</p>
+                          <p className="text-xs text-green-600">
+                            Lat: {storeLocation.latitude.toFixed(6)}, Lng: {storeLocation.longitude.toFixed(6)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={saveLocation}
+                          disabled={isSaving}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          {isSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "حفظ الموقع"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {locationSuccess && (
+                    <p className="text-sm text-green-600">✓ تم حفظ الموقع بنجاح</p>
+                  )}
+                  
+                  {locationError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+                      {locationError}
+                    </div>
+                  )}
+                  
+                  {!store?.latitude && !store?.longitude && !storeLocation && (
+                    <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                      ⚠️ لم يتم تحديد موقع المتجر بعد. الموقع مطلوب للموافقة على المتجر.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

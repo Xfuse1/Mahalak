@@ -15,7 +15,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react"
-import { reverseGeocode } from "@/lib/actions/geo"
 
 type CheckoutItem = {
   id: string
@@ -27,6 +26,7 @@ type CheckoutItem = {
   store_name?: string
   description?: string
   quantity: number
+  discount_percentage?: number
 }
 
 export default function CheckoutPage() {
@@ -35,26 +35,22 @@ export default function CheckoutPage() {
   const { items: cartItems } = useCartStore()
   const router = useRouter()
   const searchParams = useSearchParams()
-
+  
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
-
-  const [buyNowItem, setBuyNowItem] = useState<any>(null)
-  const [quantity, setQuantity] = useState(1)
-
+  
+  const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
+  
   // Get items based on mode
-  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [{ ...buyNowItem, quantity: quantity }] : cartItems
-  const subtotal = items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0)
-
-  const handleQuantityChange = (newQty: number) => {
-    if (newQty < 1) return
-    setQuantity(newQty)
-    if (buyNowItem) {
-      const updatedItem = { ...buyNowItem, quantity: newQty }
-      sessionStorage.setItem("buyNowItem", JSON.stringify(updatedItem))
-      setBuyNowItem(updatedItem)
-    }
-  }
+  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
+  
+  // Calculate total with discounts
+  const total = items.reduce((sum, item) => {
+    const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+      ? item.price - (item.price * item.discount_percentage / 100)
+      : item.price
+    return sum + discountedPrice * item.quantity
+  }, 0)
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -130,7 +126,7 @@ export default function CheckoutPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords
-
+        
         // Save coordinates
         setFormData((prev) => ({
           ...prev,
@@ -138,12 +134,16 @@ export default function CheckoutPage() {
           longitude: longitude.toString(),
         }))
 
-        // Try to get address from coordinates using reverse geocoding via Server Action to avoid CORS
+        // Only fill address fields if they are empty (user hasn't typed anything)
+        // Try to get address from coordinates using reverse geocoding
         try {
-          const result = await reverseGeocode(latitude, longitude)
-
-          if (result.success && result.data && result.data.address) {
-            const address = result.data.address
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ar`
+          )
+          const data = await response.json()
+          
+          if (data && data.address) {
+            const address = data.address
             setFormData((prev) => ({
               ...prev,
               // Only fill if empty
@@ -186,7 +186,7 @@ export default function CheckoutPage() {
   const handleContinue = () => {
     // Mark form as attempted to show validation
     setAttempted(true)
-
+    
     // Validate required fields - location is required, address fields are optional
     if (!formData.fullName || !formData.phone || !formData.latitude || !formData.longitude) {
       return
@@ -194,7 +194,7 @@ export default function CheckoutPage() {
 
     // Store checkout data in sessionStorage for the delivery page
     sessionStorage.setItem("checkoutData", JSON.stringify(formData))
-
+    
     // Pass mode to delivery page
     const deliveryUrl = isBuyNowMode ? "/checkout/delivery?mode=buynow" : "/checkout/delivery"
     router.push(deliveryUrl)
@@ -249,60 +249,49 @@ export default function CheckoutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-6">
-              {items.map((item) => (
-                <div key={item.id} className="flex flex-col gap-3 p-3 bg-gray-50 rounded-xl">
-                  <div className="flex items-center gap-4">
+              {items.map((item) => {
+                const hasDiscount = item.discount_percentage && item.discount_percentage > 0
+                const discountedPrice = hasDiscount
+                  ? item.price - (item.price * item.discount_percentage! / 100)
+                  : item.price
+                const itemTotal = discountedPrice * item.quantity
+                
+                return (
+                  <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
                     <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
                       <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                      {hasDiscount && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                          -{item.discount_percentage}%
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-bold text-gray-800">{item.name}</h3>
-                      <p className="text-sm text-gray-500">x{item.quantity || 1}</p>
+                      <p className="text-sm text-gray-500">x{item.quantity}</p>
                     </div>
-                    <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                      {(item.price * (item.quantity || 1)).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
-                    </p>
+                    <div className="text-right">
+                      {hasDiscount && (
+                        <p className="text-xs text-gray-400 line-through">{(item.price * item.quantity).toFixed(2)}</p>
+                      )}
+                      <p className={`font-extrabold bg-gradient-to-r ${hasDiscount ? 'from-emerald-600 to-green-600' : 'from-blue-600 to-blue-800'} bg-clip-text text-transparent`}>
+                        {itemTotal.toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
+                      </p>
+                    </div>
                   </div>
-
-                  {isBuyNowMode && (
-                    <div className="flex items-center justify-between py-2 border-t border-gray-100 mt-1">
-                      <span className="text-sm text-gray-600 font-medium">{t("الكمية", "Quantity")}</span>
-                      <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-xl border shadow-sm">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-lg hover:bg-gray-50 transition-all text-blue-600"
-                          onClick={() => handleQuantityChange(quantity - 1)}
-                          disabled={quantity <= 1}
-                        >
-                          -
-                        </Button>
-                        <span className="font-bold w-6 text-center text-gray-800">{quantity}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-lg hover:bg-gray-50 transition-all text-blue-600"
-                          onClick={() => handleQuantityChange(quantity + 1)}
-                        >
-                          +
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
+                )
+              })}
               <div className="border-t border-dashed pt-4 flex justify-between items-center">
                 <span className="font-bold text-gray-700">{t("الإجمالي", "Total")}</span>
                 <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                  {subtotal.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
+                  {total.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
                 </span>
               </div>
             </CardContent>
           </Card>
 
           {/* Customer Information Form */}
-          < Card className="border-0 shadow-lg rounded-2xl overflow-hidden" >
+          <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <CardTitle className="text-lg flex items-center gap-3">
                 <div className="p-2 bg-blue-100 rounded-xl">
@@ -362,12 +351,13 @@ export default function CheckoutPage() {
                   variant="outline"
                   onClick={getCurrentLocation}
                   disabled={isGettingLocation}
-                  className={`w-full h-12 rounded-xl transition-all ${formData.latitude && formData.longitude
-                    ? "border-emerald-500 text-emerald-600 bg-emerald-50"
-                    : attempted && (!formData.latitude || !formData.longitude)
+                  className={`w-full h-12 rounded-xl transition-all ${
+                    formData.latitude && formData.longitude
+                      ? "border-emerald-500 text-emerald-600 bg-emerald-50"
+                      : attempted && (!formData.latitude || !formData.longitude)
                       ? "border-red-500 text-red-500 hover:bg-red-50"
                       : "border-blue-500 text-blue-600 hover:bg-blue-50"
-                    }`}
+                  }`}
                 >
                   {isGettingLocation ? (
                     <>

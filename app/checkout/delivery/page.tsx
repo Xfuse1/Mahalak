@@ -13,7 +13,7 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, Truck, CheckCircle, MapPin, Loader2, User, Phone, Car } from "lucide-react"
 import { createOrder } from "@/lib/actions/orders"
-import { getDrivers, type Driver } from "@/lib/actions/delivery"
+import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 
 type CheckoutData = {
   fullName: string
@@ -59,22 +59,27 @@ export default function DeliveryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [loadingDrivers, setLoadingDrivers] = useState(true)
+  const [driverCommission, setDriverCommission] = useState<number>(0)
 
-  // Fetch drivers from database
+  // Fetch drivers and commission from database
   useEffect(() => {
-    const fetchDrivers = async () => {
+    const fetchData = async () => {
       setLoadingDrivers(true)
       try {
-        const fetchedDrivers = await getDrivers()
+        const [fetchedDrivers, commission] = await Promise.all([
+          getDrivers(),
+          getDriverCommission()
+        ])
         setDrivers(fetchedDrivers)
+        setDriverCommission(commission)
       } catch (error) {
-        console.error("Error fetching drivers:", error)
+        console.error("Error fetching data:", error)
       } finally {
         setLoadingDrivers(false)
       }
     }
 
-    fetchDrivers()
+    fetchData()
   }, [])
 
   // Sort drivers by rating (highest first) - already sorted from server but ensure client-side too
@@ -121,7 +126,7 @@ export default function DeliveryPage() {
 
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
   const deliveryPrice = selectedDriverData?.price || 0
-  const grandTotal = total + deliveryPrice
+  const grandTotal = total + deliveryPrice + driverCommission
 
   const handleConfirmOrder = async () => {
     if (!selectedDriver || !checkoutData || !user) {
@@ -151,7 +156,7 @@ export default function DeliveryPage() {
         const orderData = {
           customer_id: user.id,
           store_id: storeId,
-          total: storeTotal + deliveryPrice,
+          total: storeTotal + deliveryPrice + driverCommission,
           delivery_address: fullAddress,
           customer_name: checkoutData.fullName,
           customer_phone: checkoutData.phone,
@@ -163,6 +168,7 @@ export default function DeliveryPage() {
           driver_id: selectedDriverData?.id,
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,
+          service_fee: driverCommission,
           items: storeItems.map((item) => ({
             product_id: item.id,
             quantity: item.quantity,
@@ -373,6 +379,12 @@ export default function DeliveryPage() {
                   {selectedDriver ? `${deliveryPrice} ${t("جنيه", "EGP")}` : "-"}
                 </span>
               </div>
+              {driverCommission > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">{t("رسوم الخدمة", "Service Fee")}</span>
+                  <span className="font-medium">{driverCommission} {t("جنيه", "EGP")}</span>
+                </div>
+              )}
               <div className="border-t pt-4 flex justify-between items-center">
                 <span className="font-semibold text-lg">{t("الإجمالي", "Total")}</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">

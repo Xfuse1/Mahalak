@@ -16,6 +16,7 @@ import { getUserReview, upsertReview } from "@/lib/actions/reviews"
 import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { Tag } from "lucide-react"
 
 type Product = {
   id: string
@@ -27,6 +28,8 @@ type Product = {
   image_url: string | null
   store_id: string
   rating: number
+  discount_percentage?: number
+  offer_title?: string
   stores?: {
     id: string
     name: string
@@ -59,7 +62,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         setLoading(true)
         console.log("[v0] Fetching product with ID:")
 
-        const productData = await getProduct(id)
+        const productData = await getProduct(id) as Product | null
         console.log("[v0] Product data received:")
 
         if (!productData) {
@@ -68,7 +71,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           return
         }
 
-        setProduct(productData as Product)
+        setProduct(productData)
 
         // Fetch products from the same store
         const sameStore = await getProductsFromSameStore(id, productData.store_id, 4)
@@ -99,19 +102,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     if (!product || !user) return
 
     let mounted = true
-      ; (async () => {
-        try {
-          const existing = await getUserReview(product.id, user.id)
-          if (!mounted) return
-          if (existing && typeof existing.rating === 'number') {
-            setUserReview(existing.rating)
-          } else {
-            setUserReview(null)
-          }
-        } catch (err) {
-          console.error('[v0] Error fetching user review:', err)
+    ;(async () => {
+      try {
+        const existing = await getUserReview(product.id, user.id) as { rating?: number } | null
+        if (!mounted) return
+        if (existing && typeof existing.rating === 'number') {
+          setUserReview(existing.rating)
+        } else {
+          setUserReview(null)
         }
-      })()
+      } catch (err) {
+        console.error('[v0] Error fetching user review:', err)
+      }
+    })()
 
     return () => {
       mounted = false
@@ -275,8 +278,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
 
-            <div className="space-y-4 md:space-y-5">
-              <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-gray-800 text-balance leading-tight">{product.name}</h1>
+            {/* Product Info */}
+            <div className="space-y-5">
+              <h1 className="text-4xl font-extrabold text-gray-800 text-balance">{product.name}</h1>
 
               <Link href={`/store/${product.store_id}`} className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors">
                 <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
@@ -288,7 +292,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
                   <span className="font-bold text-lg text-amber-700">{product.rating}</span>
                 </div>
-                {/* User review (one per user per product) - interactive stars */}
+                  {/* User review (one per user per product) - interactive stars */}
                 <div className="flex items-center gap-1 mr-3">
                   {[1, 2, 3, 4, 5].map((n) => {
                     const filled = userReview ? n <= userReview : n <= Math.round(product.rating)
@@ -326,17 +330,34 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                {product.price} <span className="text-xl md:text-2xl text-gray-500">{t("جنيه", "EGP")}</span>
-              </p>
+              {/* Price with Discount */}
+              {product.discount_percentage && product.discount_percentage > 0 ? (
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-full px-4 py-2 font-bold shadow-lg">
+                    <Tag className="h-5 w-5" />
+                    <span>{t(`خصم ${product.discount_percentage}%`, `${product.discount_percentage}% OFF`)}</span>
+                  </div>
+                  <p className="text-2xl text-gray-400 line-through">
+                    {product.price.toLocaleString()} {t("جنيه", "EGP")}
+                  </p>
+                  <p className="text-5xl font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                    {(product.price - (product.price * product.discount_percentage / 100)).toLocaleString()} <span className="text-2xl text-gray-500">{t("جنيه", "EGP")}</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                  {product.price} <span className="text-2xl text-gray-500">{t("جنيه", "EGP")}</span>
+                </p>
+              )}
 
               <p className="text-gray-600 leading-relaxed text-lg">{product.description}</p>
 
               <div>
                 <div className="mb-5">
                   <span
-                    className={`inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm ${product.stock > 0 ? "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200" : "bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border border-red-200"
-                      }`}
+                    className={`inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm ${
+                      product.stock > 0 ? "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200" : "bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border border-red-200"
+                    }`}
                   >
                     {product.stock > 0 ? t("🟢 متوفر", "🟢 Available") : t("🔴 غير متوفر", "🔴 Out of Stock")}
                   </span>
@@ -349,28 +370,28 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex gap-3">
                 <Button
                   onClick={handleWhatsApp}
-                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-12 md:h-14 text-base md:text-lg"
+                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <MessageCircle className="ml-2 h-5 w-5 md:h-6 md:w-6" />
+                  <MessageCircle className="ml-2 h-6 w-6" />
                   {t("تواصل واتساب", "WhatsApp")}
                 </Button>
                 <Button
                   onClick={handleCall}
                   variant="outline"
-                  className="flex-1 rounded-xl border-2 hover:bg-gray-50 h-12 md:h-14 text-base md:text-lg"
+                  className="flex-1 rounded-xl border-2 hover:bg-gray-50 h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Phone className="ml-2 h-5 w-5 md:h-6 md:w-6" />
+                  <Phone className="ml-2 h-6 w-6" />
                   {t("اتصال", "Call")}
                 </Button>
               </div>
 
               {/* Add to Cart and Buy Now Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex gap-3">
                 <Button
                   onClick={() => {
                     if (!user) {
@@ -388,14 +409,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       store_name: product.stores?.name,
                       description: product.description,
                       quantity: 1,
+                      discount_percentage: (product as any).discount_percentage || 0,
                     }
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
                     router.push("/checkout?mode=buynow")
                   }}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-12 md:h-14 text-base md:text-lg"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Zap className="ml-2 h-5 w-5 md:h-6 md:w-6" />
+                  <Zap className="ml-2 h-6 w-6" />
                   {t("اشتري الآن", "Buy Now")}
                 </Button>
                 <Button
@@ -409,13 +431,14 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       store_id: product.store_id,
                       store_name: product.stores?.name,
                       description: product.description,
+                      discount_percentage: (product as any).discount_percentage || 0,
                     })
                   }}
                   variant="outline"
-                  className="flex-1 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl h-12 md:h-14 text-base md:text-lg transition-all hover:scale-[1.02]"
+                  className="flex-1 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl h-14 text-lg transition-all hover:scale-[1.02]"
                   disabled={product.stock === 0}
                 >
-                  <ShoppingCart className="ml-2 h-5 w-5 md:h-6 md:w-6" />
+                  <ShoppingCart className="ml-2 h-6 w-6" />
                   {t("أضف للسلة", "Add to Cart")}
                 </Button>
               </div>
@@ -433,7 +456,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             <div className="mb-12">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">{t("منتجات أخرى من نفس المتجر", "More from this Store")}</h2>
-                <Link
+                <Link 
                   href={`/store/${product.store_id}`}
                   className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
                 >
@@ -459,9 +482,18 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                           <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                           <span className="text-xs text-gray-600 font-medium">{storeProduct.rating || 0}</span>
                         </div>
-                        <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                          {storeProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
-                        </p>
+                        {(storeProduct as any).discount_percentage > 0 ? (
+                          <div>
+                            <p className="text-xs text-gray-400 line-through">{storeProduct.price} {t("جنيه", "EGP")}</p>
+                            <p className="font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                              {(storeProduct.price - (storeProduct.price * (storeProduct as any).discount_percentage / 100)).toLocaleString()} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                            {storeProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </Link>
@@ -497,9 +529,18 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                           <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                           <span className="text-xs text-gray-600 font-medium">{otherProduct.rating || 0}</span>
                         </div>
-                        <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                          {otherProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
-                        </p>
+                        {(otherProduct as any).discount_percentage > 0 ? (
+                          <div>
+                            <p className="text-xs text-gray-400 line-through">{otherProduct.price} {t("جنيه", "EGP")}</p>
+                            <p className="font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                              {(otherProduct.price - (otherProduct.price * (otherProduct as any).discount_percentage / 100)).toLocaleString()} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                            {otherProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </Link>

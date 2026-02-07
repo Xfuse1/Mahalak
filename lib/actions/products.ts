@@ -14,19 +14,30 @@ function mapProduct(doc: DocumentSnapshot): (ProductRecord & { id: string }) | n
   return serializeData({ id: doc.id, ...(doc.data() as ProductRecord) })
 }
 
+// Store data is now embedded in users collection
+// store_id = user_id (seller_id)
 async function getStoreMap(db: Firestore, storeIds: string[]) {
   const uniqueIds = Array.from(new Set(storeIds.filter(Boolean)))
   if (uniqueIds.length === 0) {
     return new Map<string, StoreRecord>()
   }
 
-  const refs = uniqueIds.map((id) => db.collection("stores").doc(id))
+  // Store IDs are now User IDs, fetch from users collection
+  const refs = uniqueIds.map((id) => db.collection("users").doc(id))
   const docs = await db.getAll(...refs)
   const map = new Map<string, StoreRecord>()
 
   docs.forEach((doc) => {
     if (doc.exists) {
-      map.set(doc.id, { id: doc.id, ...(doc.data() as StoreRecord) })
+      const data = doc.data()
+      if (data?.store) {
+        // Extract store data from user document
+        map.set(doc.id, {
+          id: doc.id,
+          seller_id: doc.id,
+          ...data.store,
+        })
+      }
     }
   })
 
@@ -74,7 +85,7 @@ export async function getProducts(category?: string) {
   return products.map((product: any) => {
     const store = storeMap.get(product.store_id)
     const productOffer = activeOffers.find(offer =>
-      (offer.product_id === product.id || (offer.product_id === "all" && offer.store_id === product.store_id)) &&
+      (offer.product_id === product.id || (!offer.product_id && offer.store_id === product.store_id)) &&
       offer.start_date <= today &&
       offer.end_date >= today
     )
@@ -82,10 +93,8 @@ export async function getProducts(category?: string) {
     return serializeData({
       ...product,
       stores: store ? { name: store.name } : null,
-      activeOffer: productOffer ? {
-        discount_percentage: productOffer.discount_percentage,
-        title: productOffer.title
-      } : null
+      discount_percentage: productOffer?.discount_percentage || 0,
+      offer_title: productOffer?.title || null
     })
   })
 }
@@ -103,7 +112,49 @@ export async function getProduct(id: string) {
   if (!product) return null
 
   const storeMap = await getStoreMap(db, [product.store_id])
-  return serializeData(attachStore(product, storeMap))
+  const productWithStore = attachStore(product, storeMap)
+  
+  // Fetch active offer for this product
+  const today = new Date().toISOString().split('T')[0]
+  const offersSnapshot = await db.collection("offers")
+    .where("product_id", "==", id)
+    .get()
+  
+  let discount_percentage = 0
+  let offer_title = null
+  
+  for (const doc of offersSnapshot.docs) {
+    const offer = doc.data()
+    if (offer.start_date <= today && offer.end_date >= today) {
+      if ((offer.discount_percentage || 0) > discount_percentage) {
+        discount_percentage = offer.discount_percentage
+        offer_title = offer.title
+      }
+    }
+  }
+  
+  // Also check for store-wide offers (no product_id)
+  if (product.store_id) {
+    const storeOffersSnapshot = await db.collection("offers")
+      .where("store_id", "==", product.store_id)
+      .get()
+    
+    for (const doc of storeOffersSnapshot.docs) {
+      const offer = doc.data()
+      if (!offer.product_id && offer.start_date <= today && offer.end_date >= today) {
+        if ((offer.discount_percentage || 0) > discount_percentage) {
+          discount_percentage = offer.discount_percentage
+          offer_title = offer.title
+        }
+      }
+    }
+  }
+  
+  return serializeData({
+    ...productWithStore,
+    discount_percentage,
+    offer_title
+  })
 }
 
 export async function createProduct(formData: {
@@ -117,6 +168,18 @@ export async function createProduct(formData: {
   simulator_section?: string | null
 }) {
   const db = getAdminDb()
+  
+  // التحقق من اعتماد المتجر قبل إنشاء المنتج
+  const userDoc = await db.collection("users").doc(formData.store_id).get()
+  if (userDoc.exists) {
+    const userData = userDoc.data()
+    const storeData = userData?.store
+    if (!storeData?.is_approved) {
+      console.error("[v0] Store not approved, cannot create product")
+      return { success: false, error: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة." }
+    }
+  }
+  
   const docRef = db.collection("products").doc()
   const now = new Date().toISOString()
 
@@ -257,7 +320,23 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
     filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
   )
 
-  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
+  // Fetch active offers for these products
+  const today = new Date().toISOString().split('T')[0]
+  const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer => 
+    offer.start_date <= today && offer.end_date >= today
+  )
+
+  return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
+    const productWithStore = attachStore(product, storeMap)
+    const productOffer = activeOffers.find(offer =>
+      offer.product_id === product.id || !offer.product_id
+    )
+    return {
+      ...productWithStore,
+      discount_percentage: productOffer?.discount_percentage || 0
+    }
+  }))
 }
 
 // Get products from other stores (excluding current product and current store)
@@ -278,7 +357,24 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
     filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
   )
 
-  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
+  // Fetch all active offers
+  const today = new Date().toISOString().split('T')[0]
+  const offersSnapshot = await db.collection("offers").get()
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer => 
+    offer.start_date <= today && offer.end_date >= today
+  )
+
+  return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
+    const productWithStore = attachStore(product, storeMap)
+    const productOffer = activeOffers.find(offer =>
+      (offer.product_id === product.id) || 
+      (!offer.product_id && offer.store_id === product.store_id)
+    )
+    return {
+      ...productWithStore,
+      discount_percentage: productOffer?.discount_percentage || 0
+    }
+  }))
 }
 
 export async function uploadProductImage(formData: FormData) {

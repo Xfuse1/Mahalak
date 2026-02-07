@@ -31,6 +31,7 @@ export function OrderStatusSelector({ orderId, currentStatus, onUpdated }: Order
       on_the_way: "في الطريق",
       delivered: "تم التوصيل",
       cancelled: "ملغي",
+      driver_rejected: "رفض السائق",
     }
     return statusMap[status] || status
   }

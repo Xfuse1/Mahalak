@@ -20,7 +20,6 @@ import {
   DialogTitle,
 } from "../../../components/ui/dialog"
 import Image from "next/image"
-import { formatAddress } from "../../../lib/utils"
 
 type OrderItem = {
   id: string
@@ -42,7 +41,7 @@ type Order = {
   delivery_address: string
   created_at: string
   updated_at: string
-  user: {
+  profiles: {
     id: string
     full_name: string | null
     email: string
@@ -225,7 +224,7 @@ export default function SellerOrdersPage() {
                             <div>
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
                               <p className="text-sm text-gray-500">
-                                {order.user?.full_name || order.user?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
+                                {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
                                 {order.order_items.length} {t("منتج", "product")}
                               </p>
                             </div>
@@ -287,14 +286,14 @@ export default function SellerOrdersPage() {
                         {t("بيانات العميل", "Customer Info")}
                       </h3>
                       <div className="space-y-1 text-sm">
-                        <p className="font-medium text-base">{selectedOrder.user?.full_name || t("عميل غير معروف", "Unknown Customer")}</p>
+                        <p className="font-medium text-base">{selectedOrder.profiles?.full_name || t("عميل غير معروف", "Unknown Customer")}</p>
                         <p className="flex items-center gap-2 text-gray-600">
                           <PhoneIcon className="w-3 h-3" />
-                          {selectedOrder.user?.phone || t("لا يوجد رقم", "No Phone")}
+                          {selectedOrder.profiles?.phone || t("لا يوجد رقم", "No Phone")}
                         </p>
                         <p className="flex items-center gap-2 text-gray-600">
                           <Mail className="w-3 h-3" />
-                          {selectedOrder.user?.email}
+                          {selectedOrder.profiles?.email}
                         </p>
                       </div>
                     </div>
@@ -305,7 +304,7 @@ export default function SellerOrdersPage() {
                         {t("عنوان التوصيل", "Delivery Address")}
                       </h3>
                       <p className="text-sm text-gray-700 leading-relaxed">
-                        {formatAddress(selectedOrder.delivery_address) || t("لم يتم تحديد عنوان", "No address provided")}
+                        {selectedOrder.delivery_address || t("لم يتم تحديد عنوان", "No address provided")}
                       </p>
                     </div>
                   </div>

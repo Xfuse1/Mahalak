@@ -7,7 +7,7 @@ import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
-import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor } from "lucide-react"
+import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin } from "lucide-react"
 import Link from "next/link"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getDashboardAnalytics, getRecentOrders } from "../../../lib/actions/dashboard"
@@ -30,6 +30,7 @@ export default function SellerDashboard() {
   })
   const [recentOrders, setRecentOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [store, setStore] = useState<any>(null)
 
   useEffect(() => {
     if (isLoading) return
@@ -61,6 +62,7 @@ export default function SellerDashboard() {
         const store = await getStoreByUserId(user.id)
 
         if (store) {
+          setStore(store)
           const analyticsData = await getDashboardAnalytics(store.id)
           const ordersData = await getRecentOrders(store.id, 3)
 
@@ -131,7 +133,13 @@ export default function SellerDashboard() {
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("لوحة التحكم", "Dashboard")}</h1>
               <p className="text-gray-500 mt-1">{t("مرحباً بك في لوحة التحكم", "Welcome to your dashboard")}</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <Button asChild variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 hover:border-orange-300 rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 px-6">
+                <Link href="/seller/my-orders">
+                  <ShoppingCart className="ml-2 h-4 w-4" />
+                  {t("طلباتي كمشتري", "My Orders")}
+                </Link>
+              </Button>
               <Button asChild className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/pos/qpos">
                   <Monitor className="ml-2 h-4 w-4" />
@@ -146,6 +154,32 @@ export default function SellerDashboard() {
               </Button>
             </div>
           </div>
+
+          {/* Location Warning Banner */}
+          {store && !store.latitude && !store.longitude && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-4 shadow-md">
+              <div className="bg-amber-100 p-3 rounded-xl">
+                <MapPin className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-amber-800 text-lg">
+                  {t("الموقع الجغرافي للمتجر غير محدد", "Store location not set")}
+                </h3>
+                <p className="text-amber-700 text-sm mt-1">
+                  {t(
+                    "يجب تحديد الموقع الجغرافي للمتجر حتى يتمكن الأدمن من الموافقة على متجرك. يرجى الذهاب للإعدادات وتحديد موقع المتجر.",
+                    "You must set your store's geographic location for admin approval. Please go to settings and set your store location."
+                  )}
+                </p>
+                <Button asChild size="sm" className="mt-3 bg-amber-600 hover:bg-amber-700">
+                  <Link href="/seller/settings">
+                    <MapPin className="ml-2 h-4 w-4" />
+                    {t("تحديد الموقع الآن", "Set Location Now")}
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Financial Performance */}
           <div className="mb-10">
@@ -171,7 +205,7 @@ export default function SellerDashboard() {
                 <CardContent className="pt-6 pb-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500 mb-2">{t("الطلبات التي تم توصيلها", "Delivered Orders")}</p>
+                      <p className="text-sm text-gray-500 mb-2">{t("الطلبات المؤكدة", "Confirmed Orders")}</p>
                       <p className="text-2xl font-extrabold text-emerald-600">{analytics.totalOrders}</p>
                     </div>
                     <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 rounded-2xl shadow-lg">

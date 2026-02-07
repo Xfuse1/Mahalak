@@ -11,13 +11,14 @@ export type Driver = {
   rating: number
   total_deliveries: number
   is_available: boolean
+  is_approved: boolean // تم التأكيد من الأدمن
   price: number
   areas?: string[] // المناطق التي يغطيها
   created_at?: string
   updated_at?: string
 }
 
-// Get all drivers sorted by rating (available first, then by rating)
+// Get all approved drivers sorted by rating (available first, then by rating)
 export async function getDrivers(): Promise<Driver[]> {
   try {
     const db = getAdminDb()
@@ -36,6 +37,7 @@ export async function getDrivers(): Promise<Driver[]> {
         rating: data.rating || 0,
         total_deliveries: data.totalDeliveries || data.total_deliveries || 0,
         is_available: data.isActive ?? data.is_available ?? true,
+        is_approved: data.isApproved ?? data.is_approved ?? false,
         price: data.price || 0,
         areas: data.areas,
         // Convert Timestamps to strings
@@ -44,8 +46,11 @@ export async function getDrivers(): Promise<Driver[]> {
       }
     }) as Driver[]
 
+    // Filter only approved drivers
+    const approvedDrivers = drivers.filter(d => d.is_approved)
+
     // Sort: available first, then by rating descending
-    drivers.sort((a, b) => {
+    approvedDrivers.sort((a, b) => {
       // First, sort by availability (available first)
       if (a.is_available !== b.is_available) {
         return a.is_available ? -1 : 1
@@ -54,7 +59,7 @@ export async function getDrivers(): Promise<Driver[]> {
       return (b.rating || 0) - (a.rating || 0)
     })
 
-    return drivers
+    return approvedDrivers
   } catch (error) {
     console.error("[v0] Error fetching drivers:", error)
     return []
@@ -115,5 +120,43 @@ export async function getDriverById(id: string): Promise<Driver | null> {
   } catch (error) {
     console.error("[v0] Error fetching driver:", error)
     return null
+  }
+}
+
+// Get driver commission rate from settings
+export async function getDriverCommission(): Promise<number> {
+  try {
+    const db = getAdminDb()
+    const doc = await db.collection("settings").doc("driverCommission").get()
+    
+    if (!doc.exists) {
+      console.log("[v0] Driver commission settings not found, using default 0")
+      return 0
+    }
+
+    const data = doc.data()
+    return data?.rate || 0
+  } catch (error) {
+    console.error("[v0] Error fetching driver commission:", error)
+    return 0
+  }
+}
+
+// Check if simulator is enabled from settings
+export async function isSimulatorEnabled(): Promise<boolean> {
+  try {
+    const db = getAdminDb()
+    const doc = await db.collection("settings").doc("simulator").get()
+    
+    if (!doc.exists) {
+      console.log("[v0] Simulator settings not found, defaulting to false")
+      return false
+    }
+
+    const data = doc.data()
+    return data?.enabled === true
+  } catch (error) {
+    console.error("[v0] Error fetching simulator settings:", error)
+    return false
   }
 }

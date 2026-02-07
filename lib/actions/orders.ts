@@ -36,6 +36,34 @@ async function fetchDocsMap(db: Firestore, collection: string, ids: string[]) {
   return map
 }
 
+// Fetch store data from users collection (stores are now embedded in users)
+async function fetchStoresMap(db: Firestore, storeIds: string[]) {
+  const uniqueIds = Array.from(new Set(storeIds.filter(Boolean)))
+  if (uniqueIds.length === 0) {
+    return new Map<string, any>()
+  }
+
+  // Store IDs are now User IDs
+  const refs = uniqueIds.map((id) => db.collection("users").doc(id))
+  const docs = await db.getAll(...refs)
+  const map = new Map<string, any>()
+
+  docs.forEach((doc: DocumentSnapshot) => {
+    if (doc.exists) {
+      const data = doc.data()
+      if (data?.store) {
+        map.set(doc.id, {
+          id: doc.id,
+          seller_id: doc.id,
+          ...data.store,
+        })
+      }
+    }
+  })
+
+  return map
+}
+
 async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
   const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)))
   if (uniqueIds.length === 0) return []
@@ -57,10 +85,10 @@ async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
 export async function getOrderById(orderId: string) {
   try {
     const db = getAdminDb()
-
+    
     // First try to find by document ID
     let orderDoc = await db.collection("orders").doc(orderId).get()
-
+    
     // If not found, try to find by order_id field
     if (!orderDoc.exists) {
       const snapshot = await db
@@ -68,7 +96,7 @@ export async function getOrderById(orderId: string) {
         .where("order_id", "==", orderId)
         .limit(1)
         .get()
-
+      
       if (snapshot.empty) {
         return null
       }
@@ -123,9 +151,9 @@ export async function getCustomerOrders(customerId: string) {
 
   orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
-  const storeMap = await fetchDocsMap(
+  // Use fetchStoresMap for stores (now embedded in users collection)
+  const storeMap = await fetchStoresMap(
     db,
-    "stores",
     orders.map((order: any) => order.store_id),
   )
 
@@ -199,7 +227,7 @@ export async function getStoreOrders(storeId: string) {
 
   const customerMap = await fetchDocsMap(
     db,
-    "users",
+    "profiles",
     orders.map((order: any) => order.customer_id),
   )
 
@@ -227,7 +255,7 @@ export async function getStoreOrders(storeId: string) {
     const profile = customerMap.get(order.customer_id)
     return {
       ...order,
-      user: profile
+      profiles: profile
         ? {
           id: profile.id,
           full_name: profile.full_name || null,
@@ -240,7 +268,7 @@ export async function getStoreOrders(storeId: string) {
   })
 }
 
-import { sendReviewRequestNotification, createNotification } from "./notifications"
+import { sendReviewRequestNotification } from "./notifications"
 
 export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
@@ -288,17 +316,6 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
     }
 
     await docRef.set(updatePayload, { merge: true })
-
-    // Notify customer of order status update
-    if (currentData?.customer_id) {
-      await createNotification({
-        user_id: currentData.customer_id,
-        title: "تحديث حالة الطلب",
-        message: `تم تحديث حالة طلبك رقم ${orderId} إلى: ${status}`,
-        type: status === "delivered" ? "order_delivered" : "order_status",
-        data: { related_id: orderId }
-      })
-    }
 
     // Send review request notification when order is delivered
     if (status === "delivered" && currentData?.customer_id) {
@@ -366,11 +383,11 @@ export async function createOrder(orderData: {
   if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
   if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
   if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
-
+  
   // Add driver information
   if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
   if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
-
+  
   // Add coordinates if available
   if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
     orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
@@ -379,16 +396,6 @@ export async function createOrder(orderData: {
 
   try {
     await orderRef.set(orderPayload)
-    // Notify seller of new order
-    if (orderData.store_id) {
-      await createNotification({
-        user_id: orderData.store_id,
-        title: "طلب جديد",
-        message: `لقد استلمت طلباً جديداً برقم ${orderRef.id}`,
-        type: "order_status",
-        data: { related_id: orderRef.id }
-      })
-    }
   } catch (error: any) {
     console.error("[v0] Error creating order:", error)
     return { success: false, error: error?.message || "Failed to create order" }
@@ -463,4 +470,206 @@ export async function createContactInquiry(inquiryData: {
   revalidatePath("/account")
   revalidatePath("/seller/orders")
   return { success: true, data: { id: orderRef.id, ...orderPayload } }
+}
+
+// Driver rejects an order
+export async function driverRejectOrder(orderId: string, driverId: string, reason?: string) {
+  const db = getAdminDb()
+  const docRef = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+
+  try {
+    const orderDoc = await docRef.get()
+    if (!orderDoc.exists) {
+      return { success: false, error: "الطلب غير موجود" }
+    }
+
+    const orderData = orderDoc.data()
+    
+    // Verify that the driver is assigned to this order
+    if (orderData?.driver_id !== driverId) {
+      return { success: false, error: "لا يمكنك رفض هذا الطلب" }
+    }
+
+    // Create timeline entry
+    const timelineEntry: TimelineEntry = {
+      status: "driver_rejected",
+      timestamp: now,
+      note: reason || "تم رفض الطلب من السائق",
+    }
+
+    // Build update payload
+    const updatePayload: Record<string, any> = {
+      status: "driver_rejected",
+      driver_rejected_at: now,
+      driver_rejection_reason: reason || "السائق غير متاح",
+      updated_at: now,
+    }
+
+    // Add to timeline
+    if (orderData?.timeline && Array.isArray(orderData.timeline)) {
+      updatePayload.timeline = [...orderData.timeline, timelineEntry]
+    } else {
+      updatePayload.timeline = [timelineEntry]
+    }
+
+    await docRef.set(updatePayload, { merge: true })
+
+    // Create notification for customer
+    await db.collection("notifications").add({
+      user_id: orderData.customer_id,
+      type: "driver_rejected",
+      title: "تم رفض الطلب من السائق",
+      message: `السائق ${orderData.driver_name || "المحدد"} رفض توصيل طلبك. يرجى اختيار سائق آخر.`,
+      order_id: orderId,
+      is_read: false,
+      created_at: now,
+    })
+
+    revalidatePath("/account")
+    revalidatePath("/seller/orders")
+    
+    return { success: true }
+  } catch (error: any) {
+    console.error("[v0] Error rejecting order:", error)
+    return { success: false, error: error?.message || "فشل رفض الطلب" }
+  }
+}
+
+// Change driver for an order (after rejection or customer request)
+export async function changeOrderDriver(
+  orderId: string, 
+  customerId: string, 
+  newDriverId: string, 
+  newDriverName: string,
+  newDeliveryPrice: number
+) {
+  const db = getAdminDb()
+  const docRef = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+
+  try {
+    const orderDoc = await docRef.get()
+    if (!orderDoc.exists) {
+      return { success: false, error: "الطلب غير موجود" }
+    }
+
+    const orderData = orderDoc.data()
+    
+    // Verify the customer owns this order
+    if (orderData?.customer_id !== customerId) {
+      return { success: false, error: "لا يمكنك تعديل هذا الطلب" }
+    }
+
+    // Only allow driver change if status is driver_rejected or pending
+    if (orderData?.status !== "driver_rejected" && orderData?.status !== "pending") {
+      return { success: false, error: "لا يمكن تغيير السائق في هذه المرحلة" }
+    }
+
+    // Calculate new total (subtract old delivery price, add new)
+    const oldDeliveryPrice = orderData.delivery_price || 0
+    const productTotal = (orderData.total || 0) - oldDeliveryPrice
+    const newTotal = productTotal + newDeliveryPrice
+
+    // Create timeline entry
+    const timelineEntry: TimelineEntry = {
+      status: "driver_changed",
+      timestamp: now,
+      note: `تم تغيير السائق إلى ${newDriverName}`,
+    }
+
+    // Build update payload
+    const updatePayload: Record<string, any> = {
+      status: "pending", // Reset to pending for new driver to accept
+      driver_id: newDriverId,
+      driver_name: newDriverName,
+      delivery_price: newDeliveryPrice,
+      total: newTotal,
+      driver_rejected_at: null,
+      driver_rejection_reason: null,
+      updated_at: now,
+    }
+
+    // Add to timeline
+    if (orderData?.timeline && Array.isArray(orderData.timeline)) {
+      updatePayload.timeline = [...orderData.timeline, timelineEntry]
+    } else {
+      updatePayload.timeline = [timelineEntry]
+    }
+
+    await docRef.set(updatePayload, { merge: true })
+
+    revalidatePath("/account")
+    revalidatePath("/seller/orders")
+    
+    return { success: true }
+  } catch (error: any) {
+    console.error("[v0] Error changing driver:", error)
+    return { success: false, error: error?.message || "فشل تغيير السائق" }
+  }
+}
+
+// Get orders with driver_rejected status for a customer
+export async function getRejectedOrdersForCustomer(customerId: string) {
+  const db = getAdminDb()
+  
+  try {
+    const snapshot = await db
+      .collection("orders")
+      .where("customer_id", "==", customerId)
+      .where("status", "==", "driver_rejected")
+      .get()
+
+    const orders = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+
+    return { success: true, orders }
+  } catch (error: any) {
+    console.error("[v0] Error fetching rejected orders:", error)
+    return { success: false, error: error?.message, orders: [] }
+  }
+}
+
+// Get unread notifications for a user
+export async function getUnreadNotifications(userId: string) {
+  const db = getAdminDb()
+  
+  try {
+    const snapshot = await db
+      .collection("notifications")
+      .where("user_id", "==", userId)
+      .where("is_read", "==", false)
+      .orderBy("created_at", "desc")
+      .limit(20)
+      .get()
+
+    const notifications = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+
+    return { success: true, notifications }
+  } catch (error: any) {
+    console.error("[v0] Error fetching notifications:", error)
+    return { success: false, error: error?.message, notifications: [] }
+  }
+}
+
+// Mark notification as read
+export async function markNotificationAsRead(notificationId: string) {
+  const db = getAdminDb()
+  
+  try {
+    await db.collection("notifications").doc(notificationId).update({
+      is_read: true,
+      read_at: new Date().toISOString(),
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    console.error("[v0] Error marking notification as read:", error)
+    return { success: false, error: error?.message }
+  }
 }
