@@ -126,8 +126,8 @@ export default function DeliveryPage() {
   }, [user, authLoading, router])
 
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
-  const deliveryPrice = selectedDriverData?.price || 0
-  const grandTotal = total + deliveryPrice + driverCommission
+  const deliveryPrice = driverCommission
+  const grandTotal = total + deliveryPrice
 
   const handleConfirmOrder = async () => {
     if (!selectedDriver || !checkoutData || !user) {
@@ -418,15 +418,9 @@ export default function DeliveryPage() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">{t("التوصيل", "Delivery")}</span>
                 <span className="font-medium">
-                  {selectedDriver ? `${deliveryPrice} ${t("جنيه", "EGP")}` : "-"}
+                  {deliveryPrice > 0 ? `${deliveryPrice.toFixed(2)} ${t("جنيه", "EGP")}` : "-"}
                 </span>
               </div>
-              {driverCommission > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">{t("رسوم الخدمة", "Service Fee")}</span>
-                  <span className="font-medium">{driverCommission} {t("جنيه", "EGP")}</span>
-                </div>
-              )}
               <div className="border-t pt-4 flex justify-between items-center">
                 <span className="font-semibold text-lg">{t("الإجمالي", "Total")}</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
