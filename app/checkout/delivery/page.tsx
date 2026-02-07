@@ -237,7 +237,7 @@ export default function DeliveryPage() {
       sessionStorage.removeItem("checkoutData")
 
       alert(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
-      router.push("/account")
+      router.push("/")
     } catch (error) {
       console.error("Error creating order:", error)
       alert(t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
