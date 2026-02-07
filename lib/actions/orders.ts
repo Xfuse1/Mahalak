@@ -85,10 +85,10 @@ async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
 export async function getOrderById(orderId: string) {
   try {
     const db = getAdminDb()
-    
+
     // First try to find by document ID
     let orderDoc = await db.collection("orders").doc(orderId).get()
-    
+
     // If not found, try to find by order_id field
     if (!orderDoc.exists) {
       const snapshot = await db
@@ -96,7 +96,7 @@ export async function getOrderById(orderId: string) {
         .where("order_id", "==", orderId)
         .limit(1)
         .get()
-      
+
       if (snapshot.empty) {
         return null
       }
@@ -268,7 +268,7 @@ export async function getStoreOrders(storeId: string) {
   })
 }
 
-import { sendReviewRequestNotification } from "./notifications"
+import { createNotification, sendReviewRequestNotification } from "./notifications"
 
 export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
@@ -323,6 +323,31 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         user_id: currentData.customer_id,
         order_id: orderId,
         driver_name: currentData.driver_name,
+      })
+    } else if (currentData?.customer_id && status !== "pending" && status !== "ordered") {
+      // Send general status update notification
+      const statusMessages: Record<string, { ar: string, en: string }> = {
+        confirmed: { ar: "تم تأكيد طلبك بنجاح", en: "Your order has been confirmed" },
+        processing: { ar: "طلبك قيد التجهيز الآن", en: "Your order is being processed" },
+        shipped: { ar: "تم شحن طلبك", en: "Your order has been shipped" },
+        on_the_way: { ar: "طلبك في الطريق إليك", en: "Your order is on the way" },
+        cancelled: { ar: "تم إلغاء طلبك", en: "Your order has been cancelled" },
+      }
+
+      const message = statusMessages[status] || {
+        ar: `تم تحديث حالة طلبك إلى: ${status}`,
+        en: `Your order status has been updated to: ${status}`
+      }
+
+      await createNotification({
+        user_id: currentData.customer_id,
+        title: "تحديث حالة الطلب",
+        title_en: "Order Status Update",
+        message: message.ar,
+        message_en: message.en,
+        type: "order_status",
+        link: `/account`,
+        data: { order_id: orderId, status }
       })
     }
   } catch (error: any) {
@@ -383,11 +408,11 @@ export async function createOrder(orderData: {
   if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
   if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
   if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
-  
+
   // Add driver information
   if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
   if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
-  
+
   // Add coordinates if available
   if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
     orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
@@ -485,7 +510,7 @@ export async function driverRejectOrder(orderId: string, driverId: string, reaso
     }
 
     const orderData = orderDoc.data()
-    
+
     // Verify that the driver is assigned to this order
     if (orderData?.driver_id !== driverId) {
       return { success: false, error: "لا يمكنك رفض هذا الطلب" }
@@ -528,7 +553,7 @@ export async function driverRejectOrder(orderId: string, driverId: string, reaso
 
     revalidatePath("/account")
     revalidatePath("/seller/orders")
-    
+
     return { success: true }
   } catch (error: any) {
     console.error("[v0] Error rejecting order:", error)
@@ -538,9 +563,9 @@ export async function driverRejectOrder(orderId: string, driverId: string, reaso
 
 // Change driver for an order (after rejection or customer request)
 export async function changeOrderDriver(
-  orderId: string, 
-  customerId: string, 
-  newDriverId: string, 
+  orderId: string,
+  customerId: string,
+  newDriverId: string,
   newDriverName: string,
   newDeliveryPrice: number
 ) {
@@ -555,7 +580,7 @@ export async function changeOrderDriver(
     }
 
     const orderData = orderDoc.data()
-    
+
     // Verify the customer owns this order
     if (orderData?.customer_id !== customerId) {
       return { success: false, error: "لا يمكنك تعديل هذا الطلب" }
@@ -601,7 +626,7 @@ export async function changeOrderDriver(
 
     revalidatePath("/account")
     revalidatePath("/seller/orders")
-    
+
     return { success: true }
   } catch (error: any) {
     console.error("[v0] Error changing driver:", error)
@@ -612,7 +637,7 @@ export async function changeOrderDriver(
 // Get orders with driver_rejected status for a customer
 export async function getRejectedOrdersForCustomer(customerId: string) {
   const db = getAdminDb()
-  
+
   try {
     const snapshot = await db
       .collection("orders")
@@ -635,7 +660,7 @@ export async function getRejectedOrdersForCustomer(customerId: string) {
 // Get unread notifications for a user
 export async function getUnreadNotifications(userId: string) {
   const db = getAdminDb()
-  
+
   try {
     const snapshot = await db
       .collection("notifications")
@@ -660,7 +685,7 @@ export async function getUnreadNotifications(userId: string) {
 // Mark notification as read
 export async function markNotificationAsRead(notificationId: string) {
   const db = getAdminDb()
-  
+
   try {
     await db.collection("notifications").doc(notificationId).update({
       is_read: true,
