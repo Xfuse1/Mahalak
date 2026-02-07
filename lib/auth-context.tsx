@@ -176,6 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeDescription?: string
       address?: string
       storeType?: string
+      storeLogo?: File | null
+      latitude?: number
+      longitude?: number
     },
     street?: string,
     city?: string,
