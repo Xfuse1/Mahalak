@@ -34,6 +34,9 @@ export default function AuthPage() {
   const [storeLogo, setStoreLogo] = useState<File | null>(null)
   const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null)
   
+  // Customer phone state
+  const [customerPhone, setCustomerPhone] = useState("")
+  
   // Phone verification state for sellers
   const [sellerPhone, setSellerPhone] = useState("")
   const [isPhoneVerified, setIsPhoneVerified] = useState(false)
@@ -167,7 +170,53 @@ export default function AuthPage() {
     const city = formData.get("city") as string
     const country = formData.get("country") as string
 
-    // Basic validation first
+    // ======= Comprehensive Validation =======
+
+    // Name validation
+    if (!name || name.trim().length < 3) {
+      setError(t("الاسم يجب أن يكون 3 أحرف على الأقل", "Name must be at least 3 characters"))
+      return
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!email || !emailRegex.test(email)) {
+      setError(t("يرجى إدخال بريد إلكتروني صحيح", "Please enter a valid email address"))
+      return
+    }
+
+    // Customer phone validation
+    if (role === "customer") {
+      const phoneRegex = /^(01[0125])\d{8}$/
+      if (!customerPhone || !phoneRegex.test(customerPhone)) {
+        setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
+        return
+      }
+    }
+
+    // Address validation
+    if (!street || street.trim().length < 2) {
+      setError(t("يرجى إدخال عنوان الشارع", "Please enter the street address"))
+      return
+    }
+    if (!city || city.trim().length < 2) {
+      setError(t("يرجى إدخال اسم المدينة", "Please enter the city name"))
+      return
+    }
+    if (!country || country.trim().length < 2) {
+      setError(t("يرجى إدخال اسم الدولة", "Please enter the country name"))
+      return
+    }
+
+    // Password validation
+    if (!password || password.length < 6) {
+      setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+      return
+    }
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setError(t("كلمة المرور يجب أن تحتوي على حرف ورقم على الأقل", "Password must contain at least one letter and one number"))
+      return
+    }
     if (password !== confirmPassword) {
       setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
       return
@@ -181,14 +230,34 @@ export default function AuthPage() {
       // Use custom store type if "خدمات أخرى" is selected
       const storeType = selectedStoreType === "خدمات أخرى" ? customStoreType : selectedStoreType
 
-      if (!phone || !storeName || !storeDescription || !storeType) {
-        setError(t("يرجى ملء جميع الحقول المطلوبة", "Please fill all required fields"))
+      // Seller phone validation
+      const sellerPhoneRegex = /^(01[0125])\d{8}$/
+      if (!phone || !sellerPhoneRegex.test(phone)) {
+        setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
+        return
+      }
+
+      // Store name validation
+      if (!storeName || storeName.trim().length < 3) {
+        setError(t("اسم المتجر يجب أن يكون 3 أحرف على الأقل", "Store name must be at least 3 characters"))
+        return
+      }
+
+      // Store description validation
+      if (!storeDescription || storeDescription.trim().length < 10) {
+        setError(t("وصف المتجر يجب أن يكون 10 أحرف على الأقل", "Store description must be at least 10 characters"))
+        return
+      }
+
+      // Store type validation
+      if (!storeType) {
+        setError(t("يرجى اختيار نوع المتجر", "Please select a store type"))
         return
       }
       
-      // Validate phone number
-      if (phone.length < 10) {
-        setError(t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number"))
+      // التحقق من رفع لوجو المتجر
+      if (!storeLogo) {
+        setError(t("يرجى رفع لوجو المتجر", "Please upload a store logo"))
         return
       }
       
@@ -239,7 +308,7 @@ export default function AuthPage() {
 
     try {
       setIsLoggingIn(true)
-      const success = await register(email, password, name, role, sellerData, street, city, country)
+      const success = await register(email, password, name, role, sellerData, street, city, country, role === "customer" ? customerPhone : undefined)
 
       if (success) {
         router.push(role === "seller" ? "/seller/dashboard" : "/")
@@ -381,7 +450,7 @@ export default function AuthPage() {
                   <form onSubmit={handleRegister} className="space-y-5">
                     <div className="space-y-2">
                       <Label htmlFor="register-name" className="text-base">
-                        {t("الاسم الكامل", "Full Name")}
+                        {t("الاسم الكامل", "Full Name")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="register-name"
@@ -394,7 +463,7 @@ export default function AuthPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-email" className="text-base">
-                        {t("البريد الإلكتروني", "Email")}
+                        {t("البريد الإلكتروني", "Email")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="register-email"
@@ -406,9 +475,35 @@ export default function AuthPage() {
                       />
                     </div>
 
+                    {role === "customer" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="register-phone" className="text-base">
+                          {t("رقم الهاتف", "Phone Number")} <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="register-phone"
+                          name="customerPhone"
+                          type="tel"
+                          required
+                          dir="ltr"
+                          value={customerPhone}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "")
+                            setCustomerPhone(val)
+                          }}
+                          placeholder="01012345678"
+                          className="h-12"
+                          maxLength={11}
+                        />
+                        <p className="text-xs text-gray-500">
+                          {t("أدخل رقم هاتف مصري صحيح (11 رقم يبدأ بـ 01)", "Enter a valid Egyptian phone number (11 digits starting with 01)")}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label htmlFor="register-street" className="text-base">
-                        {t("الشارع", "Street")}
+                        {t("الشارع", "Street")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="register-street"
@@ -421,7 +516,7 @@ export default function AuthPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-city" className="text-base">
-                        {t("المدينة", "City")}
+                        {t("المدينة", "City")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="register-city"
@@ -434,7 +529,7 @@ export default function AuthPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-country" className="text-base">
-                        {t("الدولة", "Country")}
+                        {t("الدولة", "Country")} <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="register-country"
@@ -465,7 +560,7 @@ export default function AuthPage() {
                         />
                         <div className="space-y-2">
                           <Label htmlFor="register-storeName" className="text-base">
-                            {t("اسم المتجر", "Store Name")}
+                            {t("اسم المتجر", "Store Name")} <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="register-storeName"
@@ -478,7 +573,7 @@ export default function AuthPage() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="register-storeDescription" className="text-base">
-                            {t("وصف المتجر", "Store Description")}
+                            {t("وصف المتجر", "Store Description")} <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="register-storeDescription"
@@ -491,7 +586,7 @@ export default function AuthPage() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="register-storeType" className="text-base">
-                            {t("نوع المتجر", "Store Type")}
+                            {t("نوع المتجر", "Store Type")} <span className="text-red-500">*</span>
                           </Label>
                           <Select 
                             name="storeType" 
@@ -541,7 +636,7 @@ export default function AuthPage() {
                         {/* Store Logo Upload */}
                         <div className="space-y-2">
                           <Label htmlFor="register-storeLogo" className="text-base">
-                            {t("لوجو المتجر", "Store Logo")}
+                            {t("لوجو المتجر", "Store Logo")} <span className="text-red-500">*</span>
                           </Label>
                           <div className="flex flex-col items-center gap-4">
                             {storeLogoPreview ? (
@@ -647,7 +742,7 @@ export default function AuthPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="register-password" className="text-base">
-                        {t("كلمة المرور", "Password")}
+                        {t("كلمة المرور", "Password")} <span className="text-red-500">*</span>
                       </Label>
                       <div className="relative group">
                         <Input
@@ -669,7 +764,7 @@ export default function AuthPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-confirm" className="text-base">
-                        {t("تأكيد كلمة المرور", "Confirm Password")}
+                        {t("تأكيد كلمة المرور", "Confirm Password")} <span className="text-red-500">*</span>
                       </Label>
                       <div className="relative group">
                         <Input

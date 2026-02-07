@@ -70,6 +70,23 @@ export default function NewProductPage() {
     try {
       const formData = new FormData(e.currentTarget)
 
+      // التحقق من صحة السعر والكمية
+      const price = Number.parseFloat(formData.get("price") as string)
+      const stock = Number.parseInt(formData.get("stock") as string)
+      
+      if (!price || price <= 0) {
+        throw new Error("السعر يجب أن يكون أكبر من صفر")
+      }
+      if (!stock || stock <= 0) {
+        throw new Error("الكمية يجب أن تكون أكبر من صفر")
+      }
+      if (!selectedCategory) {
+        throw new Error("يرجى اختيار فئة المنتج")
+      }
+      if (!imageFile) {
+        throw new Error("يرجى رفع صورة المنتج")
+      }
+
       // Get seller's store
       const store = await getStoreByUserId(user.id)
       if (!store) {
@@ -221,7 +238,7 @@ export default function NewProductPage() {
                       type="number"
                       required
                       placeholder="0.00"
-                      min="0"
+                      min="0.01"
                       step="0.01"
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
@@ -234,8 +251,8 @@ export default function NewProductPage() {
                       name="stock"
                       type="number"
                       required
-                      placeholder="0"
-                      min="0"
+                      placeholder="1"
+                      min="1"
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>

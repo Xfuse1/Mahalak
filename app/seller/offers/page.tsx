@@ -10,10 +10,11 @@ import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { Label } from "../../../components/ui/label"
 import { Textarea } from "../../../components/ui/textarea"
-import { Plus, Edit, Trash2, Tag, Calendar, Package } from "lucide-react"
+import { Plus, Edit, Trash2, Tag, Calendar, Package, Layers } from "lucide-react"
 import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "../../../lib/actions/offers"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getProductsByStoreId } from "../../../lib/actions/products"
+import { categories } from "../../../lib/mock-data"
 import { Badge } from "../../../components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
@@ -22,6 +23,7 @@ interface Product {
   id: string
   name: string
   price: number
+  category?: string
   image_url?: string
 }
 
@@ -35,6 +37,7 @@ interface Offer {
   store_id: string
   created_at: string
   product_id?: string
+  category?: string
   quantity?: number
 }
 
@@ -49,6 +52,8 @@ export default function OffersPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<string>("")
+  const [offerTarget, setOfferTarget] = useState<"all" | "product" | "category">("all")
+  const [selectedCategory, setSelectedCategory] = useState<string>("")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -82,7 +87,7 @@ export default function OffersPage() {
 
         // Get offers for this store
         const storeOffers = await getStoreOffers(store.id)
-        setOffers(storeOffers)
+        setOffers(storeOffers as Offer[])
       } catch (error) {
         console.error("[v0] Error fetching data:", error)
       } finally {
@@ -113,7 +118,8 @@ export default function OffersPage() {
       discount_percentage: Number(formData.get("discount")),
       start_date: formData.get("startDate") as string,
       end_date: formData.get("endDate") as string,
-      product_id: productId && productId !== "all" ? productId : undefined,
+      product_id: offerTarget === "product" && productId ? productId : undefined,
+      category: offerTarget === "category" && selectedCategory ? selectedCategory : undefined,
       quantity: quantity ? Number(quantity) : undefined,
     }
 
@@ -124,7 +130,7 @@ export default function OffersPage() {
         if (result.success) {
           // Refresh offers list
           const updatedOffers = await getStoreOffers(storeId)
-          setOffers(updatedOffers)
+          setOffers(updatedOffers as Offer[])
           setEditingOffer(null)
           setIsAdding(false)
         } else {
@@ -139,7 +145,7 @@ export default function OffersPage() {
         if (result.success) {
           // Refresh offers list
           const updatedOffers = await getStoreOffers(storeId)
-          setOffers(updatedOffers)
+          setOffers(updatedOffers as Offer[])
           setIsAdding(false)
         } else {
           alert(`فشل إضافة العرض: ${result.error}`)
@@ -162,7 +168,7 @@ export default function OffersPage() {
       if (result.success) {
         // Refresh offers list
         const updatedOffers = await getStoreOffers(storeId)
-        setOffers(updatedOffers)
+        setOffers(updatedOffers as Offer[])
       } else {
         alert(`فشل حذف العرض: ${result.error}`)
       }
@@ -174,6 +180,16 @@ export default function OffersPage() {
 
   const handleEdit = (offer: Offer) => {
     setEditingOffer(offer)
+    // Set the correct target type
+    if (offer.product_id) {
+      setOfferTarget("product")
+      setSelectedProduct(offer.product_id)
+    } else if (offer.category) {
+      setOfferTarget("category")
+      setSelectedCategory(offer.category)
+    } else {
+      setOfferTarget("all")
+    }
     setIsAdding(true)
   }
 
@@ -235,6 +251,9 @@ export default function OffersPage() {
             <Button
               onClick={() => {
                 setEditingOffer(null)
+                setOfferTarget("all")
+                setSelectedProduct("")
+                setSelectedCategory("")
                 setIsAdding(!isAdding)
               }}
               className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
@@ -279,40 +298,122 @@ export default function OffersPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="product" className="text-gray-700 font-medium">المنتج (اختياري)</Label>
-                      <Select 
-                        name="product" 
-                        defaultValue={editingOffer?.product_id || "all"}
-                        onValueChange={setSelectedProduct}
-                      >
-                        <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                          <SelectValue placeholder="اختر منتج" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl">
-                          <SelectItem value="all">جميع المنتجات</SelectItem>
-                          {products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              <div className="flex items-center gap-2">
-                                <Package className="h-4 w-4 text-gray-400" />
-                                {product.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label className="text-gray-700 font-medium">تطبيق العرض على</Label>
+                      <div className="flex gap-2 mt-1.5">
+                        <Button
+                          type="button"
+                          variant={offerTarget === "all" ? "default" : "outline"}
+                          size="sm"
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "all" && "bg-blue-600 hover:bg-blue-700")}
+                          onClick={() => { setOfferTarget("all"); setSelectedProduct(""); setSelectedCategory("") }}
+                        >
+                          جميع المنتجات
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={offerTarget === "product" ? "default" : "outline"}
+                          size="sm"
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "product" && "bg-blue-600 hover:bg-blue-700")}
+                          onClick={() => { setOfferTarget("product"); setSelectedCategory("") }}
+                        >
+                          <Package className="h-4 w-4 me-1" />
+                          منتج محدد
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={offerTarget === "category" ? "default" : "outline"}
+                          size="sm"
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "category" && "bg-blue-600 hover:bg-blue-700")}
+                          onClick={() => { setOfferTarget("category"); setSelectedProduct("") }}
+                        >
+                          <Layers className="h-4 w-4 me-1" />
+                          قسم كامل
+                        </Button>
+                      </div>
                     </div>
                     <div>
-                      <Label htmlFor="quantity" className="text-gray-700 font-medium">الكمية المتاحة للعرض (اختياري)</Label>
-                      <Input
-                        id="quantity"
-                        name="quantity"
-                        type="number"
-                        min="1"
-                        placeholder="مثال: 100"
-                        defaultValue={editingOffer?.quantity || ""}
-                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                      />
+                      {offerTarget === "product" && (
+                        <>
+                          <Label htmlFor="product" className="text-gray-700 font-medium">اختر المنتج</Label>
+                          <Select
+                            name="product"
+                            defaultValue={editingOffer?.product_id || ""}
+                            onValueChange={setSelectedProduct}
+                          >
+                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                              <SelectValue placeholder="اختر منتج" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-gray-400" />
+                                    {product.name}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      )}
+                      {offerTarget === "category" && (
+                        <>
+                          <Label className="text-gray-700 font-medium">اختر القسم</Label>
+                          <Select
+                            value={selectedCategory}
+                            onValueChange={setSelectedCategory}
+                          >
+                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                              <SelectValue placeholder="اختر قسم" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              {/* Show categories that have products in this store */}
+                              {Array.from(new Set(products.map((p) => p.category).filter(Boolean))).map((cat) => (
+                                <SelectItem key={cat} value={cat!}>
+                                  <div className="flex items-center gap-2">
+                                    <Layers className="h-4 w-4 text-gray-400" />
+                                    {cat} ({products.filter((p) => p.category === cat).length} منتج)
+                                  </div>
+                                </SelectItem>
+                              ))}
+                              {/* Also show all categories */}
+                              {categories.filter(c => !products.some(p => p.category === c)).map((cat) => (
+                                <SelectItem key={cat} value={cat}>
+                                  <div className="flex items-center gap-2">
+                                    <Layers className="h-4 w-4 text-gray-300" />
+                                    {cat}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedCategory && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              سيتم تطبيق الخصم على {products.filter(p => p.category === selectedCategory).length} منتج في هذا القسم
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {offerTarget === "all" && (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3 mt-6 text-center w-full">
+                            سيتم تطبيق الخصم على جميع منتجات متجرك
+                          </p>
+                        </div>
+                      )}
                     </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="quantity" className="text-gray-700 font-medium">الكمية المتاحة للعرض (اختياري)</Label>
+                    <Input
+                      id="quantity"
+                      name="quantity"
+                      type="number"
+                      min="1"
+                      placeholder="مثال: 100"
+                      defaultValue={editingOffer?.quantity || ""}
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
                   </div>
                   <div>
                     <Label htmlFor="discount" className="text-gray-700 font-medium">نسبة الخصم (%)</Label>
@@ -430,6 +531,19 @@ export default function OffersPage() {
                         <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-xl p-3">
                           <Package className="h-4 w-4" />
                           <span>المنتج: {products.find(p => p.id === offer.product_id)?.name || "منتج محدد"}</span>
+                        </div>
+                      )}
+                      {(offer as any).category && !(offer as any).product_id && (
+                        <div className="flex items-center gap-2 text-sm bg-purple-50 rounded-xl p-3">
+                          <Layers className="h-4 w-4 text-purple-600" />
+                          <span className="font-medium text-purple-700">القسم: {(offer as any).category}</span>
+                          <span className="text-purple-500 text-xs">({products.filter(p => p.category === (offer as any).category).length} منتج)</span>
+                        </div>
+                      )}
+                      {!offer.product_id && !(offer as any).category && (
+                        <div className="flex items-center gap-2 text-sm text-gray-500 bg-blue-50 rounded-xl p-3">
+                          <Package className="h-4 w-4 text-blue-500" />
+                          <span className="text-blue-600 font-medium">جميع المنتجات</span>
                         </div>
                       )}
                       {offer.quantity && (

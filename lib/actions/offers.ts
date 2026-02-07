@@ -23,6 +23,7 @@ export async function createOffer(formData: {
   start_date: string
   end_date: string
   product_id?: string
+  category?: string
   quantity?: number
 }) {
   const db = getAdminDb()
@@ -52,6 +53,7 @@ export async function updateOffer(
     start_date: string
     end_date: string
     product_id?: string
+    category?: string
     quantity?: number
   }>,
 ) {

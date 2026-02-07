@@ -6,10 +6,11 @@ import { SellerHeader } from "../../../components/seller-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { Button } from "../../../components/ui/button"
-import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart } from "lucide-react"
+import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, CheckCircle, XCircle, Store } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getStoreOrders } from "../../../lib/actions/orders"
+import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup } from "../../../lib/actions/orders"
+import type { PickupStop } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import {
@@ -55,10 +56,14 @@ export default function SellerOrdersPage() {
   const router = useRouter()
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
+  const [multiOrders, setMultiOrders] = useState<any[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
   const [filter, setFilter] = useState("all")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [selectedMultiOrder, setSelectedMultiOrder] = useState<any | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isMultiDetailsOpen, setIsMultiDetailsOpen] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -75,20 +80,31 @@ export default function SellerOrdersPage() {
       setLoadingOrders(true)
       const store = await getStoreByUserId(user.id)
       if (store) {
-        const data = (await getStoreOrders(store.id)) as Order[]
+        const [data, multiData] = await Promise.all([
+          getStoreOrders(store.id) as Promise<Order[]>,
+          getMultiStoreOrdersForStore(store.id),
+        ])
         setOrders(data)
+        if (multiData.success) {
+          setMultiOrders(multiData.orders)
+        }
 
-        // Update selectedOrder if it's currently open to show latest status/details
         setSelectedOrder(prev => {
           if (!prev) return null
           return data.find(o => o.id === prev.id) || prev
         })
+        setSelectedMultiOrder((prev: any) => {
+          if (!prev) return null
+          return multiData.orders?.find((o: any) => o.id === prev.id) || prev
+        })
       } else {
         setOrders([])
+        setMultiOrders([])
       }
     } catch (error) {
       console.error("Error fetching orders:", error)
       setOrders([])
+      setMultiOrders([])
     } finally {
       setLoadingOrders(false)
     }
@@ -124,8 +140,54 @@ export default function SellerOrdersPage() {
       on_the_way: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
+      picked_up: "bg-indigo-100 text-indigo-800",
+      rejected: "bg-red-100 text-red-800",
+      picking_up: "bg-purple-100 text-purple-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
+  }
+
+  const getStopStatusText = (status: string) => {
+    const map: Record<string, string> = {
+      pending: t("في الانتظار", "Pending"),
+      confirmed: t("تم التأكيد", "Confirmed"),
+      rejected: t("مرفوض", "Rejected"),
+      picked_up: t("تم الاستلام", "Picked Up"),
+    }
+    return map[status] || status
+  }
+
+  const handleConfirmMultiOrder = async (orderId: string) => {
+    if (!user?.id) return
+    setActionLoading(orderId)
+    try {
+      const result = await confirmStorePickup(orderId, user.id)
+      if (result.success) {
+        await loadOrders()
+      } else {
+        alert(result.error || t("حدث خطأ", "An error occurred"))
+      }
+    } catch (error) {
+      console.error("Error confirming:", error)
+    }
+    setActionLoading(null)
+  }
+
+  const handleRejectMultiOrder = async (orderId: string) => {
+    if (!user?.id) return
+    const reason = prompt(t("سبب الرفض (اختياري):", "Reason for rejection (optional):"))
+    setActionLoading(orderId)
+    try {
+      const result = await rejectStorePickup(orderId, user.id, reason || undefined)
+      if (result.success) {
+        await loadOrders()
+      } else {
+        alert(result.error || t("حدث خطأ", "An error occurred"))
+      }
+    } catch (error) {
+      console.error("Error rejecting:", error)
+    }
+    setActionLoading(null)
   }
 
   const formatDate = (dateString: string) => {
@@ -262,6 +324,122 @@ export default function SellerOrdersPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Multi-Store Orders Section */}
+          {multiOrders.length > 0 && (
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-8">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b">
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-xl">
+                    <Store className="h-5 w-5 text-purple-600" />
+                  </div>
+                  {t("طلبات متعددة المتاجر", "Multi-Store Orders")}
+                </CardTitle>
+                <CardDescription>{t("طلبات تشمل متجرك مع متاجر أخرى", "Orders that include your store with other stores")}</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  {multiOrders.map((order: any) => {
+                    const myStop: PickupStop = order.my_stop
+                    return (
+                      <div key={order.id} className="border border-purple-100 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 bg-white">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center">
+                              <Store className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
+                              <p className="text-sm text-gray-500">
+                                {order.customer_name || t("عميل", "Customer")} • {myStop.items.length} {t("منتج", "product")} • {t("المجموع:", "Subtotal:")} {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {t("السائق:", "Driver:")} {order.driver_name || "-"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <span className={`px-4 py-2 rounded-xl text-sm font-bold ${getStatusColor(myStop.status)}`}>
+                              {getStopStatusText(myStop.status)}
+                            </span>
+                            <span className={`px-3 py-1 rounded-lg text-xs ${getStatusColor(order.status)}`}>
+                              {t("الطلب:", "Order:")} {getStatusText(order.status)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Items preview */}
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {myStop.items.map((item: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
+                              {item.image_url && (
+                                <div className="relative w-6 h-6 rounded overflow-hidden">
+                                  <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                </div>
+                              )}
+                              <span className="font-medium">{item.name}</span>
+                              <span className="text-gray-500">x{item.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Action buttons for pending orders */}
+                        {myStop.status === "pending" && (
+                          <div className="flex gap-3 pt-4 border-t border-dashed">
+                            <Button
+                              onClick={() => handleConfirmMultiOrder(order.id)}
+                              disabled={actionLoading === order.id}
+                              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-xl"
+                            >
+                              <CheckCircle className="w-4 h-4 ml-2" />
+                              {actionLoading === order.id ? t("جاري...", "Processing...") : t("تأكيد الطلب", "Confirm Order")}
+                            </Button>
+                            <Button
+                              onClick={() => handleRejectMultiOrder(order.id)}
+                              disabled={actionLoading === order.id}
+                              variant="outline"
+                              className="flex-1 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
+                            >
+                              <XCircle className="w-4 h-4 ml-2" />
+                              {t("رفض", "Reject")}
+                            </Button>
+                          </div>
+                        )}
+
+                        {myStop.status === "confirmed" && (
+                          <div className="pt-4 border-t border-dashed">
+                            <p className="text-sm text-green-600 font-medium flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4" />
+                              {t("تم التأكيد - في انتظار السائق للاستلام", "Confirmed - Waiting for driver pickup")}
+                            </p>
+                          </div>
+                        )}
+
+                        {myStop.status === "picked_up" && (
+                          <div className="pt-4 border-t border-dashed">
+                            <p className="text-sm text-indigo-600 font-medium flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4" />
+                              {t("تم الاستلام من السائق", "Picked up by driver")}
+                            </p>
+                          </div>
+                        )}
+
+                        {myStop.status === "rejected" && (
+                          <div className="pt-4 border-t border-dashed">
+                            <p className="text-sm text-red-600 font-medium flex items-center gap-2">
+                              <XCircle className="w-4 h-4" />
+                              {t("تم الرفض", "Rejected")}
+                              {myStop.rejection_reason && ` - ${myStop.rejection_reason}`}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Order Details Modal */}
           <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

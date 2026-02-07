@@ -92,6 +92,17 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       const formData = new FormData(e.currentTarget)
       let imageUrl = product.image_url
 
+      // التحقق من صحة السعر والكمية
+      const price = Number(formData.get("price"))
+      const stock = Number(formData.get("stock"))
+      
+      if (!price || price <= 0) {
+        throw new Error("السعر يجب أن يكون أكبر من صفر")
+      }
+      if (!stock || stock <= 0) {
+        throw new Error("الكمية يجب أن تكون أكبر من صفر")
+      }
+
       // Upload new image if selected
       if (imageFile) {
         const store = await getStoreByUserId(user!.id)
@@ -244,6 +255,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       name="price"
                       type="number"
                       step="0.01"
+                      min="0.01"
                       defaultValue={product.price}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -255,6 +267,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       id="stock"
                       name="stock"
                       type="number"
+                      min="1"
                       defaultValue={product.stock}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"

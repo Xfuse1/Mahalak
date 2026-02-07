@@ -11,6 +11,7 @@ export type CartItem = {
   store_name?: string
   description?: string
   quantity: number
+  stock: number
   discount_percentage?: number
 }
 
@@ -32,11 +33,19 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           const existing = state.items.find((entry) => entry.id === item.id)
           if (existing) {
+            // لا تتجاوز الكمية المتاحة في المخزون
+            if (existing.quantity >= existing.stock) {
+              return state
+            }
             return {
               items: state.items.map((entry) =>
-                entry.id === item.id ? { ...entry, quantity: entry.quantity + 1 } : entry,
+                entry.id === item.id ? { ...entry, quantity: entry.quantity + 1, stock: item.stock } : entry,
               ),
             }
+          }
+          // لا تسمح بإضافة منتج غير متوفر
+          if (item.stock <= 0) {
+            return state
           }
           return { items: [...state.items, { ...item, quantity: 1 }] }
         }),

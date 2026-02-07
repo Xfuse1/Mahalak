@@ -89,10 +89,15 @@ export default function SellerMyOrdersPage() {
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
       pending: { ar: "قيد الانتظار", en: "Pending" },
+      reviewing: { ar: "قيد المراجعة", en: "Reviewing" },
       processing: { ar: "قيد المعالجة", en: "Processing" },
+      confirmed: { ar: "تم التأكيد", en: "Confirmed" },
       shipped: { ar: "تم الشحن", en: "Shipped" },
+      on_the_way: { ar: "في الطريق", en: "On The Way" },
       delivered: { ar: "تم التوصيل", en: "Delivered" },
       cancelled: { ar: "ملغي", en: "Cancelled" },
+      driver_rejected: { ar: "رفض السائق", en: "Driver Rejected" },
+      driver_changed: { ar: "تم تغيير السائق", en: "Driver Changed" },
     }
     return statusMap[status] ? t(statusMap[status].ar, statusMap[status].en) : status
   }
@@ -100,10 +105,15 @@ export default function SellerMyOrdersPage() {
   const getStatusColor = (status: string) => {
     const colorMap: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
+      reviewing: "bg-yellow-100 text-yellow-800",
       processing: "bg-blue-100 text-blue-800",
+      confirmed: "bg-green-100 text-green-800",
       shipped: "bg-purple-100 text-purple-800",
+      on_the_way: "bg-indigo-100 text-indigo-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
+      driver_rejected: "bg-orange-100 text-orange-800",
+      driver_changed: "bg-sky-100 text-sky-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
   }

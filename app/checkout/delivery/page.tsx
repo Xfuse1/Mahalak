@@ -12,7 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, Truck, CheckCircle, MapPin, Loader2, User, Phone, Car } from "lucide-react"
-import { createOrder } from "@/lib/actions/orders"
+import { createOrder, createMultiStoreOrder } from "@/lib/actions/orders"
+import type { PickupStop } from "@/lib/actions/orders"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 
 type CheckoutData = {
@@ -141,19 +142,66 @@ export default function DeliveryPage() {
       const itemsByStore = items.reduce((acc, item) => {
         const storeId = item.store_id || "default"
         if (!acc[storeId]) {
-          acc[storeId] = []
+          acc[storeId] = { items: [], store_name: item.store_name || storeId }
         }
-        acc[storeId].push(item)
+        acc[storeId].items.push(item)
         return acc
-      }, {} as Record<string, typeof items>)
+      }, {} as Record<string, { items: typeof items; store_name: string }>)
 
-      // Create an order for each store
-      for (const [storeId, storeItems] of Object.entries(itemsByStore)) {
+      const storeIds = Object.keys(itemsByStore)
+      const fullAddress = `${checkoutData.street}, ${checkoutData.city}${checkoutData.state ? `, ${checkoutData.state}` : ""}`
+
+      if (storeIds.length > 1) {
+        // Multi-store order: create one order with pickup stops
+        const pickupStops: PickupStop[] = storeIds.map((storeId) => {
+          const storeGroup = itemsByStore[storeId]
+          const subtotal = storeGroup.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+          return {
+            store_id: storeId,
+            store_name: storeGroup.store_name,
+            items: storeGroup.items.map((item) => ({
+              product_id: item.id,
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              image_url: item.image_url,
+            })),
+            subtotal,
+            status: "pending" as const,
+            confirmed_at: null,
+            picked_up_at: null,
+            rejected_at: null,
+            rejection_reason: null,
+          }
+        })
+
+        const result = await createMultiStoreOrder({
+          customer_id: user.id,
+          customer_name: checkoutData.fullName,
+          customer_phone: checkoutData.phone,
+          delivery_address: fullAddress,
+          delivery_city: checkoutData.city,
+          delivery_state: checkoutData.state,
+          delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
+          delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
+          delivery_notes: checkoutData.notes,
+          driver_id: selectedDriverData!.id,
+          driver_name: selectedDriverData!.name,
+          delivery_price: deliveryPrice,
+          driver_commission: driverCommission,
+          pickup_stops: pickupStops,
+        })
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to create order")
+        }
+      } else {
+        // Single store order: use legacy createOrder
+        const [storeId] = storeIds
+        const storeItems = itemsByStore[storeId].items
         const storeTotal = storeItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
-        const fullAddress = `${checkoutData.street}, ${checkoutData.city}${checkoutData.state ? `, ${checkoutData.state}` : ""}`
-
-        const orderData = {
+        const result = await createOrder({
           customer_id: user.id,
           store_id: storeId,
           total: storeTotal + deliveryPrice + driverCommission,
@@ -168,15 +216,12 @@ export default function DeliveryPage() {
           driver_id: selectedDriverData?.id,
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,
-          service_fee: driverCommission,
           items: storeItems.map((item) => ({
             product_id: item.id,
             quantity: item.quantity,
             price: item.price,
           })),
-        }
-
-        const result = await createOrder(orderData)
+        })
 
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
@@ -185,15 +230,12 @@ export default function DeliveryPage() {
 
       // Clear data based on mode
       if (isBuyNowMode) {
-        // Only clear buy now item, keep cart intact
         sessionStorage.removeItem("buyNowItem")
       } else {
-        // Clear cart
         clearCart()
       }
       sessionStorage.removeItem("checkoutData")
 
-      // Redirect to success page or orders page
       alert(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
       router.push("/account")
     } catch (error) {

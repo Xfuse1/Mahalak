@@ -52,6 +52,7 @@ interface AuthContextType {
     street?: string,
     city?: string,
     country?: string,
+    phone?: string,
   ) => Promise<boolean>
   logout: () => void
   isLoading: boolean
@@ -179,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     street?: string,
     city?: string,
     country?: string,
+    phone?: string,
   ): Promise<boolean> => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password)
@@ -194,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         full_name: name,
         role,
-        phone: sellerData?.phone ?? null,
+        phone: sellerData?.phone ?? phone ?? null,
         phone_verified: role === "seller" ? true : false, // Seller phone is verified during registration
         phone_verified_at: role === "seller" ? now : null,
         street: street ?? null,

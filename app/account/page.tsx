@@ -11,11 +11,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, Pencil } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
-import { getCustomerOrders, getRejectedOrdersForCustomer } from "../../lib/actions/orders"
+import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreOrders } from "../../lib/actions/orders"
+import type { PickupStop } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
 import { OrderTrackingModal } from "../../components/order-tracking-modal"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
@@ -58,6 +59,7 @@ export default function AccountPage() {
   const router = useRouter()
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
+  const [multiOrders, setMultiOrders] = useState<any[]>([])
   const [rejectedOrders, setRejectedOrders] = useState<RejectedOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
@@ -85,14 +87,18 @@ export default function AccountPage() {
         setOrdersLoading(true)
         setOrdersError(null)
         console.log("[v0] Fetching orders for customer:")
-        const [data, rejectedResult] = await Promise.all([
+        const [data, rejectedResult, multiResult] = await Promise.all([
           getCustomerOrders(user.id),
-          getRejectedOrdersForCustomer(user.id)
+          getRejectedOrdersForCustomer(user.id),
+          getCustomerMultiStoreOrders(user.id),
         ])
         console.log("[v0] Fetched orders:")
         setOrders(data as Order[])
         if (rejectedResult.success) {
           setRejectedOrders(rejectedResult.orders as RejectedOrder[])
+        }
+        if (multiResult.success) {
+          setMultiOrders(multiResult.orders)
         }
       } catch (error) {
         console.error("[v0] Error fetching orders:", error)
@@ -123,10 +129,15 @@ export default function AccountPage() {
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
       pending: { ar: "قيد الانتظار", en: "Pending" },
+      reviewing: { ar: "قيد المراجعة", en: "Reviewing" },
       processing: { ar: "قيد المعالجة", en: "Processing" },
+      confirmed: { ar: "تم التأكيد", en: "Confirmed" },
       shipped: { ar: "تم الشحن", en: "Shipped" },
+      on_the_way: { ar: "في الطريق", en: "On The Way" },
       delivered: { ar: "تم التوصيل", en: "Delivered" },
       cancelled: { ar: "ملغي", en: "Cancelled" },
+      driver_rejected: { ar: "رفض السائق", en: "Driver Rejected" },
+      driver_changed: { ar: "تم تغيير السائق", en: "Driver Changed" },
     }
     return statusMap[status] ? t(statusMap[status].ar, statusMap[status].en) : status
   }
@@ -134,10 +145,15 @@ export default function AccountPage() {
   const getStatusColor = (status: string) => {
     const colorMap: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
+      reviewing: "bg-yellow-100 text-yellow-800",
       processing: "bg-blue-100 text-blue-800",
+      confirmed: "bg-green-100 text-green-800",
       shipped: "bg-purple-100 text-purple-800",
+      on_the_way: "bg-indigo-100 text-indigo-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
+      driver_rejected: "bg-orange-100 text-orange-800",
+      driver_changed: "bg-sky-100 text-sky-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
   }
@@ -348,6 +364,157 @@ export default function AccountPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Multi-Store Orders */}
+              {multiOrders.length > 0 && (
+                <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-6">
+                  <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b">
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="p-2 bg-purple-100 rounded-xl">
+                        <Store className="h-5 w-5 text-purple-600" />
+                      </div>
+                      {t("طلبات متعددة المتاجر", "Multi-Store Orders")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      {multiOrders.map((order: any) => {
+                        const stops: PickupStop[] = order.pickup_stops || []
+                        const activeStops = stops.filter((s: PickupStop) => s.status !== "rejected")
+                        const confirmedCount = stops.filter((s: PickupStop) => s.status === "confirmed" || s.status === "picked_up").length
+                        const pickedCount = stops.filter((s: PickupStop) => s.status === "picked_up").length
+                        
+                        return (
+                          <div key={order.id} className="bg-white border border-purple-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-purple-50 to-white border-b p-5 flex items-start justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
+                                  <Store className="h-6 w-6 text-purple-600" />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-gray-800">
+                                    {t("طلب رقم", "Order #")} {order.id.slice(0, 8)}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {stops.length} {t("متاجر", "stores")} • {t("السائق:", "Driver:")} {order.driver_name || "-"}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className={`px-4 py-2 rounded-xl text-xs font-bold ${getStatusColor(order.status)}`}>
+                                {getStatusText(order.status)}
+                              </span>
+                            </div>
+
+                            {/* Stops */}
+                            <div className="p-5 space-y-3">
+                              {stops.map((stop: PickupStop, idx: number) => (
+                                <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${
+                                  stop.status === "confirmed" ? "bg-green-50 border-green-200" :
+                                  stop.status === "picked_up" ? "bg-indigo-50 border-indigo-200" :
+                                  stop.status === "rejected" ? "bg-red-50 border-red-200 opacity-60" :
+                                  "bg-yellow-50 border-yellow-200"
+                                }`}>
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                      stop.status === "confirmed" ? "bg-green-500 text-white" :
+                                      stop.status === "picked_up" ? "bg-indigo-500 text-white" :
+                                      stop.status === "rejected" ? "bg-red-500 text-white" :
+                                      "bg-yellow-500 text-white"
+                                    }`}>
+                                      {idx + 1}
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-sm">{stop.store_name}</p>
+                                      <p className="text-xs text-gray-500">
+                                        {stop.items.length} {t("منتج", "items")} • {stop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                                    stop.status === "confirmed" ? "bg-green-100 text-green-700" :
+                                    stop.status === "picked_up" ? "bg-indigo-100 text-indigo-700" :
+                                    stop.status === "rejected" ? "bg-red-100 text-red-700" :
+                                    "bg-yellow-100 text-yellow-700"
+                                  }`}>
+                                    {stop.status === "pending" ? t("في الانتظار", "Pending") :
+                                     stop.status === "confirmed" ? t("تم التأكيد", "Confirmed") :
+                                     stop.status === "picked_up" ? t("تم الاستلام", "Picked Up") :
+                                     t("مرفوض", "Rejected")}
+                                  </span>
+                                </div>
+                              ))}
+
+                              {/* Progress bar */}
+                              {order.status !== "cancelled" && order.status !== "delivered" && (
+                                <div className="mt-4">
+                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>{t("تقدم الاستلام", "Pickup Progress")}</span>
+                                    <span>{pickedCount}/{activeStops.length}</span>
+                                  </div>
+                                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
+                                      style={{ width: `${activeStops.length > 0 ? (pickedCount / activeStops.length) * 100 : 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-5 pb-5 flex items-center justify-between border-t border-dashed pt-4">
+                              <div>
+                                <p className="text-xs text-gray-500">{t("الإجمالي", "Total")}</p>
+                                <p className="text-xl font-extrabold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                                  {Number(order.total).toLocaleString()} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {stops.some((s: PickupStop) => s.status === "rejected") && order.status !== "delivered" && order.status !== "cancelled" && (
+                                  <Link href={`/account/edit-order/${order.id}`}>
+                                    <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5">
+                                      <Pencil className="h-4 w-4 ml-2" />
+                                      {t("تعديل الطلب", "Edit Order")}
+                                    </Button>
+                                  </Link>
+                                )}
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
+                                  onClick={() => {
+                                    setSelectedOrder({
+                                      id: order.id,
+                                      created_at: order.created_at,
+                                      total: order.total,
+                                      status: order.status,
+                                      delivery_address: order.delivery_address || "",
+                                      timeline: order.timeline,
+                                      order_items: (order.pickup_stops || []).flatMap((stop: PickupStop) => stop.items.map((item: any) => ({
+                                        id: item.product_id,
+                                        quantity: item.quantity,
+                                        price: item.price,
+                                        products: { id: item.product_id, name: item.name, image_url: item.image_url || "" },
+                                      }))),
+                                      stores: { id: "multi", name: stops.map((s: PickupStop) => s.store_name).join(" + ") },
+                                    })
+                                    setIsTrackingModalOpen(true)
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 ml-2" />
+                                  {t("تتبع الطلب", "Track Order")}
+                                </Button>
+                                <p className="text-xs text-gray-400">{formatDate(order.created_at)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="profile">

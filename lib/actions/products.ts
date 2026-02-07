@@ -84,17 +84,31 @@ export async function getProducts(category?: string) {
 
   return products.map((product: any) => {
     const store = storeMap.get(product.store_id)
-    const productOffer = activeOffers.find(offer =>
-      (offer.product_id === product.id || (!offer.product_id && offer.store_id === product.store_id)) &&
-      offer.start_date <= today &&
-      offer.end_date >= today
-    )
+
+    // Find best offer: product-specific > category-specific > store-wide
+    let bestDiscount = 0
+    let offerTitle: string | null = null
+
+    for (const offer of activeOffers) {
+      if (offer.start_date > today || offer.end_date < today) continue
+      const discount = Number(offer.discount_percentage) || 0
+      if (discount <= bestDiscount) continue
+
+      if (offer.product_id === product.id && offer.store_id === product.store_id) {
+        bestDiscount = discount
+        offerTitle = offer.title || null
+      } else if (offer.category && offer.category === product.category && !offer.product_id && offer.store_id === product.store_id) {
+        if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
+      } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
+        if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
+      }
+    }
 
     return serializeData({
       ...product,
       stores: store ? { name: store.name } : null,
-      discount_percentage: productOffer?.discount_percentage || 0,
-      offer_title: productOffer?.title || null
+      discount_percentage: bestDiscount,
+      offer_title: offerTitle
     })
   })
 }
@@ -133,7 +147,7 @@ export async function getProduct(id: string) {
     }
   }
   
-  // Also check for store-wide offers (no product_id)
+  // Also check for store-wide and category-wide offers
   if (product.store_id) {
     const storeOffersSnapshot = await db.collection("offers")
       .where("store_id", "==", product.store_id)
@@ -141,11 +155,19 @@ export async function getProduct(id: string) {
     
     for (const doc of storeOffersSnapshot.docs) {
       const offer = doc.data()
-      if (!offer.product_id && offer.start_date <= today && offer.end_date >= today) {
-        if ((offer.discount_percentage || 0) > discount_percentage) {
-          discount_percentage = offer.discount_percentage
-          offer_title = offer.title
-        }
+      if (offer.start_date > today || offer.end_date < today) continue
+      const d = Number(offer.discount_percentage) || 0
+      if (d <= discount_percentage) continue
+
+      // Category-specific offer
+      if (!offer.product_id && offer.category && offer.category === product.category) {
+        discount_percentage = d
+        offer_title = offer.title
+      }
+      // Store-wide offer (no product_id, no category)
+      else if (!offer.product_id && !offer.category) {
+        discount_percentage = d
+        offer_title = offer.title
       }
     }
   }
@@ -168,6 +190,14 @@ export async function createProduct(formData: {
   simulator_section?: string | null
 }) {
   const db = getAdminDb()
+  
+  // التحقق من صحة السعر والكمية على السيرفر
+  if (!formData.price || formData.price <= 0) {
+    return { success: false, error: "السعر يجب أن يكون أكبر من صفر" }
+  }
+  if (!formData.stock || formData.stock <= 0) {
+    return { success: false, error: "الكمية يجب أن تكون أكبر من صفر" }
+  }
   
   // التحقق من اعتماد المتجر قبل إنشاء المنتج
   const userDoc = await db.collection("users").doc(formData.store_id).get()
@@ -223,6 +253,15 @@ export async function updateProduct(
   }>,
 ) {
   const db = getAdminDb()
+  
+  // التحقق من صحة السعر والكمية على السيرفر
+  if (formData.price !== undefined && formData.price <= 0) {
+    return { success: false, error: "السعر يجب أن يكون أكبر من صفر" }
+  }
+  if (formData.stock !== undefined && formData.stock <= 0) {
+    return { success: false, error: "الكمية يجب أن تكون أكبر من صفر" }
+  }
+
   const docRef = db.collection("products").doc(id)
 
   const updateData = cleanUndefined({
@@ -266,8 +305,47 @@ export async function getProductsByStoreId(storeId: string) {
   const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
-  products.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
-  return serializeData(products)
+  // Fetch active offers for this store
+  const today = new Date().toISOString().split('T')[0]
+  const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer =>
+    offer.start_date <= today && offer.end_date >= today
+  )
+
+  const enriched = products.map((product: any) => {
+    // Find best offer: product-specific > category-specific > store-wide
+    let bestDiscount = 0
+    let offerTitle: string | null = null
+
+    for (const offer of activeOffers) {
+      const discount = Number(offer.discount_percentage) || 0
+      if (discount <= bestDiscount) continue
+
+      if (offer.product_id === product.id) {
+        bestDiscount = discount
+        offerTitle = offer.title || null
+      } else if (offer.category && offer.category === product.category && !offer.product_id) {
+        if (discount > bestDiscount) {
+          bestDiscount = discount
+          offerTitle = offer.title || null
+        }
+      } else if (!offer.product_id && !offer.category) {
+        if (discount > bestDiscount) {
+          bestDiscount = discount
+          offerTitle = offer.title || null
+        }
+      }
+    }
+
+    return {
+      ...product,
+      discount_percentage: bestDiscount,
+      offer_title: offerTitle,
+    }
+  })
+
+  enriched.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
+  return serializeData(enriched)
 }
 
 export async function searchProducts(query: string) {
@@ -329,12 +407,17 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
 
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
     const productWithStore = attachStore(product, storeMap)
-    const productOffer = activeOffers.find(offer =>
-      offer.product_id === product.id || !offer.product_id
-    )
+    let bestDiscount = 0
+    for (const offer of activeOffers) {
+      const d = Number(offer.discount_percentage) || 0
+      if (d <= bestDiscount) continue
+      if (offer.product_id === product.id) { bestDiscount = d }
+      else if (!offer.product_id && offer.category && offer.category === product.category) { bestDiscount = d }
+      else if (!offer.product_id && !offer.category) { bestDiscount = d }
+    }
     return {
       ...productWithStore,
-      discount_percentage: productOffer?.discount_percentage || 0
+      discount_percentage: bestDiscount
     }
   }))
 }
@@ -366,13 +449,17 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
 
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
     const productWithStore = attachStore(product, storeMap)
-    const productOffer = activeOffers.find(offer =>
-      (offer.product_id === product.id) || 
-      (!offer.product_id && offer.store_id === product.store_id)
-    )
+    let bestDiscount = 0
+    for (const offer of activeOffers) {
+      const d = Number(offer.discount_percentage) || 0
+      if (d <= bestDiscount) continue
+      if (offer.product_id === product.id && offer.store_id === product.store_id) { bestDiscount = d }
+      else if (!offer.product_id && offer.category && offer.category === product.category && offer.store_id === product.store_id) { bestDiscount = d }
+      else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) { bestDiscount = d }
+    }
     return {
       ...productWithStore,
-      discount_percentage: productOffer?.discount_percentage || 0
+      discount_percentage: bestDiscount
     }
   }))
 }

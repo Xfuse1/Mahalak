@@ -102,6 +102,11 @@ export default function CartPage() {
                         ) : (
                           <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{item.price} {t("جنيه", "EGP")}</p>
                         )}
+
+                        {/* Stock info */}
+                        <p className="text-xs text-gray-400">
+                          {t(`المتاح: ${item.stock}`, `Available: ${item.stock}`)}
+                        </p>
                         
                         {/* Quantity Controls */}
                         <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
@@ -117,12 +122,18 @@ export default function CartPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-md transition-all"
+                            className={`h-9 w-9 rounded-lg transition-all ${item.quantity >= item.stock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:shadow-md'}`}
                             onClick={() => addItem(item)}
+                            disabled={item.quantity >= item.stock}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
                         </div>
+                        {item.quantity >= item.stock && (
+                          <p className="text-xs text-amber-600 font-medium">
+                            {t("الحد الأقصى", "Max quantity")}
+                          </p>
+                        )}
                         
                         <Button 
                           variant="ghost" 

@@ -359,7 +359,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       product.stock > 0 ? "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200" : "bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border border-red-200"
                     }`}
                   >
-                    {product.stock > 0 ? t("🟢 متوفر", "🟢 Available") : t("🔴 غير متوفر", "🔴 Out of Stock")}
+                    {product.stock > 0 
+                      ? t(`🟢 متوفر (${product.stock} قطعة)`, `🟢 Available (${product.stock} in stock)`) 
+                      : t("🔴 غير متوفر", "🔴 Out of Stock")}
                   </span>
                 </div>
 
@@ -409,6 +411,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       store_name: product.stores?.name,
                       description: product.description,
                       quantity: 1,
+                      stock: product.stock,
                       discount_percentage: (product as any).discount_percentage || 0,
                     }
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
@@ -432,6 +435,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       store_name: product.stores?.name,
                       description: product.description,
                       discount_percentage: (product as any).discount_percentage || 0,
+                      stock: product.stock,
                     })
                   }}
                   variant="outline"
