@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { User, LogOut, Cuboid, ShoppingCart, Bell } from "lucide-react"
+import { User, LogOut, Cuboid, ShoppingCart, Bell, X } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -19,7 +19,7 @@ export function Header() {
   const { t } = useTranslation("common")
   const { items } = useCartStore()
   const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
-  
+
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -58,7 +58,7 @@ export function Header() {
     }
 
     setShowNotifications(!showNotifications)
-    
+
     if (!showNotifications) {
       setLoadingNotifications(true)
       const notifs = await getUserNotifications(user.id, 10)
@@ -150,60 +150,103 @@ export function Header() {
                   {showNotifications && (
                     <>
                       {/* Backdrop */}
+                      {/* Backdrop */}
                       <div
-                        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+                        className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[2px]"
                         onClick={() => setShowNotifications(false)}
                       />
-                      
+
                       {/* Dropdown */}
-                      <div className="absolute left-0 md:right-0 md:left-auto top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 animate-in fade-in slide-in-from-top-2">
-                        <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
-                          <h3 className="font-bold text-gray-800 text-lg">{t("notifications", "الإشعارات")}</h3>
+                      <div className="absolute left-0 top-full mt-3 w-[calc(100vw-2rem)] sm:w-96 max-h-[32rem] overflow-hidden bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] border border-white/40 z-50 animate-in fade-in zoom-in-95 duration-300 origin-top-left">
+                        <div className="p-6 border-b border-gray-100/50 bg-gradient-to-br from-blue-50/80 via-white to-purple-50/30 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
+                              <Bell className="h-5 w-5 text-white" />
+                            </div>
+                            <h3 className="font-extrabold text-gray-900 text-xl">
+                              {t("notifications", "الإشعارات")}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() => setShowNotifications(false)}
+                            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
                         </div>
-                        
-                        {loadingNotifications ? (
-                          <div className="p-4 text-center text-gray-500">
-                            {t("loading", "جاري التحميل...")}
-                          </div>
-                        ) : notifications.length === 0 ? (
-                          <div className="p-4 text-center text-gray-500">
-                            {t("noNotifications", "لا توجد إشعارات")}
-                          </div>
-                        ) : (
-                          <div>
-                            {notifications.map((notification) => (
-                              <div
-                                key={notification.id}
-                                className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                                  !notification.is_read ? "bg-blue-50" : ""
-                                }`}
-                                onClick={() => handleNotificationItemClick(notification)}
-                              >
-                                <div className="flex items-start gap-2">
-                                  {!notification.is_read && (
-                                    <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm text-gray-800 truncate">
-                                      {notification.title}
-                                    </p>
-                                    <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                      {notification.message}
-                                    </p>
-                                    <p className="text-xs text-gray-400 mt-1">
-                                      {notification.created_at
-                                        ? new Date(notification.created_at).toLocaleDateString("ar-EG", {
-                                            day: "numeric",
-                                            month: "short",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })
-                                        : ""}
-                                    </p>
+                        <div className="overflow-y-auto max-h-[25rem] scrollbar-thin scrollbar-thumb-gray-200">
+                          {loadingNotifications ? (
+                            <div className="p-10 text-center">
+                              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                              <p className="text-gray-500 font-medium">{t("loading", "جاري التحميل...")}</p>
+                            </div>
+                          ) : notifications.length === 0 ? (
+                            <div className="p-12 text-center">
+                              <div className="bg-gray-50 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Bell className="h-8 w-8 text-gray-300" />
+                              </div>
+                              <p className="text-gray-500 font-medium">{t("noNotifications", "لا توجد إشعارات حالياً")}</p>
+                              <p className="text-gray-400 text-sm mt-1">{t("stayTuned", "سنوافيك بكل جديد هنا")}</p>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-gray-50">
+                              {notifications.map((notification) => (
+                                <div
+                                  key={notification.id}
+                                  className={`p-4 cursor-pointer hover:bg-blue-50/30 transition-all duration-200 group relative ${!notification.is_read ? "bg-blue-50/50" : ""
+                                    }`}
+                                  onClick={() => handleNotificationItemClick(notification)}
+                                >
+                                  <div className="flex items-start gap-4">
+                                    <div className={`mt-1 h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${notification.type === 'order_status' ? 'bg-orange-100 text-orange-600' :
+                                      notification.type === 'review_request' ? 'bg-purple-100 text-purple-600' :
+                                        'bg-blue-100 text-blue-600'
+                                      }`}>
+                                      <Bell className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <p className={`font-bold text-sm truncate ${!notification.is_read ? "text-blue-900" : "text-gray-700"}`}>
+                                          {notification.title}
+                                        </p>
+                                        {!notification.is_read && (
+                                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-pulse flex-shrink-0 ml-2" />
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
+                                        {notification.message}
+                                      </p>
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                                          {notification.created_at
+                                            ? new Date(notification.created_at).toLocaleDateString("ar-EG", {
+                                              day: "numeric",
+                                              month: "short",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            })
+                                            : ""}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {notifications.length > 0 && (
+                          <div className="p-3 bg-gray-50/50 border-t border-gray-100 text-center">
+                            <button
+                              className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-4 rounded-xl hover:bg-blue-100/50"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Logic for view all or mark all read
+                              }}
+                            >
+                              {t("viewAll", "عرض جميع الإشعارات")}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -242,6 +285,6 @@ export function Header() {
           </nav>
         </div>
       </div>
-    </header>
+    </header >
   )
 }
