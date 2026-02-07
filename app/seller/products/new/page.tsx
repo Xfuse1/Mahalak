@@ -16,7 +16,7 @@ import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../lib/actions/stores"
-import { sections } from "../../../../lib/mock/supermarket-data"
+
 
 export default function NewProductPage() {
   const { user, isLoading } = useAuth()
@@ -30,9 +30,7 @@ export default function NewProductPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("")
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
 
-  // Check if either store or product category is grocery/food type
-  const isGroceryType = (cat: string) => ['بقالة', 'أغذية', 'grocery', 'food', 'supermarket'].includes(cat.toLowerCase())
-  const showSimulatorSection = isGroceryType(storeCategory) || isGroceryType(selectedCategory)
+
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -119,7 +117,7 @@ export default function NewProductPage() {
         price: Number.parseFloat(formData.get("price") as string),
         stock: Number.parseInt(formData.get("stock") as string),
         category: selectedCategory,
-        simulator_section: showSimulatorSection ? (formData.get("simulator_section") as string || "GROCERY") : null,
+
         image_url: imageUrl,
         store_id: store.id,
       }
@@ -147,14 +145,60 @@ export default function NewProductPage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
-      setImageFile(file)
 
-      // Create preview URL
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
+      // Compress image if larger than 1MB
+      if (file.size > 1 * 1024 * 1024) {
+        const img = document.createElement("img")
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          img.onload = () => {
+            const canvas = document.createElement("canvas")
+            let width = img.width
+            let height = img.height
+
+            // Resize if too large
+            const MAX_SIZE = 1200
+            if (width > MAX_SIZE || height > MAX_SIZE) {
+              if (width > height) {
+                height = Math.round((height * MAX_SIZE) / width)
+                width = MAX_SIZE
+              } else {
+                width = Math.round((width * MAX_SIZE) / height)
+                height = MAX_SIZE
+              }
+            }
+
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext("2d")!
+            ctx.drawImage(img, 0, 0, width, height)
+
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  const compressedFile = new File([blob], file.name, {
+                    type: "image/jpeg",
+                    lastModified: Date.now(),
+                  })
+                  setImageFile(compressedFile)
+                  setImagePreview(canvas.toDataURL("image/jpeg", 0.8))
+                }
+              },
+              "image/jpeg",
+              0.8
+            )
+          }
+          img.src = ev.target?.result as string
+        }
+        reader.readAsDataURL(file)
+      } else {
+        setImageFile(file)
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string)
+        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
     }
   }
 
@@ -270,32 +314,14 @@ export default function NewProductPage() {
                       <SelectValue placeholder="اختر الفئة" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {categories.map((category: string) => (
-                        <SelectItem key={category} value={category} className="rounded-lg">
-                          {category}
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
+                          {cat.icon} {cat.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {showSimulatorSection && (
-                  <div>
-                    <Label htmlFor="simulator_section" className="text-gray-700 font-medium">قسم العرض</Label>
-                    <Select name="simulator_section" defaultValue="GROCERY">
-                      <SelectTrigger id="simulator_section" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="اختر القسم" />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-xl">
-                        {sections.map((section) => (
-                          <SelectItem key={section.id} value={section.id} className="rounded-lg">
-                            {section.icon} {section.nameAR}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 <div>
                   <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج *</Label>

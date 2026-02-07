@@ -377,11 +377,11 @@ export default function OffersPage() {
                                 </SelectItem>
                               ))}
                               {/* Also show all categories */}
-                              {categories.filter(c => !products.some(p => p.category === c)).map((cat) => (
-                                <SelectItem key={cat} value={cat}>
+                              {categories.filter(c => !products.some(p => p.category === c.name)).map((cat) => (
+                                <SelectItem key={cat.id} value={cat.name}>
                                   <div className="flex items-center gap-2">
-                                    <Layers className="h-4 w-4 text-gray-300" />
-                                    {cat}
+                                    <span>{cat.icon}</span>
+                                    {cat.name}
                                   </div>
                                 </SelectItem>
                               ))}

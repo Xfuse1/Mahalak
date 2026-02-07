@@ -54,7 +54,19 @@ export interface Order {
   createdAt: string
 }
 
-export const categories = ["بقالة", "صحة", "ملابس", "إلكترونيات", "أغذية", "أثاث", "خدمات أخرى"]
+export const categories = [
+  { id: "bakery", name: "المخبز", icon: "🥖" },
+  { id: "produce", name: "الخضروات والفواكه", icon: "🥬" },
+  { id: "dairy", name: "الألبان والأجبان", icon: "🥛" },
+  { id: "meat", name: "اللحوم والأسماك", icon: "🥩" },
+  { id: "beauty", name: "الصحة والجمال", icon: "💄" },
+  { id: "grocery", name: "البقالة", icon: "🛒" },
+  { id: "drinks", name: "المشروبات والوجبات الخفيفة", icon: "🥤" },
+  { id: "cleaning", name: "المنظفات والورقيات", icon: "🧹" },
+  { id: "other", name: "أخرى", icon: "📦" },
+]
+
+export const categoryNames = categories.map(c => c.name)
 
 export const mockStores: Store[] = [
   {
