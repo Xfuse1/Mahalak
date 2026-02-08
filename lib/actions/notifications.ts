@@ -49,18 +49,41 @@ export async function createNotification(data: {
 export async function getUserNotifications(userId: string, limit: number = 20): Promise<Notification[]> {
   try {
     const db = getAdminDb()
-    const snapshot = await db
-      .collection("notifications")
-      .where("user_id", "==", userId)
-      .orderBy("created_at", "desc")
-      .limit(limit)
-      .get()
+    console.log("[v0] Fetching notifications for user:", userId)
+    
+    // Try with orderBy first (requires composite index)
+    let snapshot
+    try {
+      snapshot = await db
+        .collection("notifications")
+        .where("user_id", "==", userId)
+        .orderBy("created_at", "desc")
+        .limit(limit)
+        .get()
+    } catch (indexError: any) {
+      // If index error, fallback to simple query and sort in memory
+      console.warn("[v0] Index not found for notifications, falling back to simple query:", indexError?.message)
+      snapshot = await db
+        .collection("notifications")
+        .where("user_id", "==", userId)
+        .limit(limit * 2) // Get more to have room for sorting
+        .get()
+    }
 
-    return snapshot.docs.map((doc) => ({
+    console.log("[v0] Found notifications count:", snapshot.size)
+
+    const notifications = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       created_at: doc.data().created_at?.toDate?.()?.toISOString?.() || doc.data().created_at,
     })) as Notification[]
+    
+    // Sort by created_at desc and limit
+    notifications.sort((a, b) => 
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    )
+    
+    return notifications.slice(0, limit)
   } catch (error) {
     console.error("[v0] Error fetching notifications:", error)
     return []

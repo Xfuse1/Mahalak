@@ -249,7 +249,7 @@ export async function getStoreOrders(storeId: string) {
 
   const customerMap = await fetchDocsMap(
     db,
-    "profiles",
+    "users",
     orders.map((order: any) => order.customer_id),
   )
 

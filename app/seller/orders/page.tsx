@@ -42,6 +42,8 @@ type Order = {
   delivery_address: string
   created_at: string
   updated_at: string
+  customer_name?: string
+  customer_phone?: string
   profiles: {
     id: string
     full_name: string | null
@@ -286,7 +288,7 @@ export default function SellerOrdersPage() {
                             <div>
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
                               <p className="text-sm text-gray-500">
-                                {order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
+                                {order.customer_name || order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
                                 {order.order_items.length} {t("منتج", "product")}
                               </p>
                             </div>
@@ -464,14 +466,14 @@ export default function SellerOrdersPage() {
                         {t("بيانات العميل", "Customer Info")}
                       </h3>
                       <div className="space-y-1 text-sm">
-                        <p className="font-medium text-base">{selectedOrder.profiles?.full_name || t("عميل غير معروف", "Unknown Customer")}</p>
+                        <p className="font-medium text-base">{selectedOrder.customer_name || selectedOrder.profiles?.full_name || t("عميل غير معروف", "Unknown Customer")}</p>
                         <p className="flex items-center gap-2 text-gray-600">
                           <PhoneIcon className="w-3 h-3" />
-                          {selectedOrder.profiles?.phone || t("لا يوجد رقم", "No Phone")}
+                          {selectedOrder.customer_phone || selectedOrder.profiles?.phone || t("لا يوجد رقم", "No Phone")}
                         </p>
                         <p className="flex items-center gap-2 text-gray-600">
                           <Mail className="w-3 h-3" />
-                          {selectedOrder.profiles?.email}
+                          {selectedOrder.profiles?.email || t("لا يوجد بريد", "No Email")}
                         </p>
                       </div>
                     </div>

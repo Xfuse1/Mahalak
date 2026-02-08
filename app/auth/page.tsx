@@ -301,7 +301,10 @@ export default function AuthPage() {
         return
       }
 
-      sellerData = { phone, storeName, storeDescription, storeType, storeLogo, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
+      // Combine address fields for the store
+      const storeAddress = [street, city, country].filter(Boolean).join(", ")
+      
+      sellerData = { phone, storeName, storeDescription, storeType, storeLogo, address: storeAddress, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
     }
 
     setIsLoading(true)

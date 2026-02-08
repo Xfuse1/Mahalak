@@ -130,6 +130,14 @@ export default function SettingsPage() {
 
       setIsLoadingStore(true)
       const storeData = await getStoreByUserId(user.id)
+      console.log("[v0] Settings: Loaded store data:", {
+        id: storeData?.id,
+        name: storeData?.name,
+        address: storeData?.address,
+        phone: storeData?.phone,
+        image_url: storeData?.image_url,
+        hasStore: !!storeData
+      })
       if (storeData) {
         setStore(storeData)
         if (storeData.image_url) {

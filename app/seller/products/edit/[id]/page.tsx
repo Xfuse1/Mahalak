@@ -15,7 +15,7 @@ import { Upload } from "lucide-react"
 import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import Image from "next/image"
-import { categories } from "../../../../../lib/mock-data"
+import { grocerySubcategories } from "../../../../../lib/mock-data"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   // Next.js 14+: params may be a Promise, unwrap with React.use()
@@ -33,6 +33,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [error, setError] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [customCategory, setCustomCategory] = useState<string>("")
 
 
 
@@ -59,7 +60,16 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
       setProduct(productData)
       setImagePreview(productData.image_url)
-      setSelectedCategory(productData.category || "")
+      
+      // Check if category is in predefined list
+      const predefinedCategories = grocerySubcategories.map(c => c.name)
+      if (productData.category && predefinedCategories.includes(productData.category)) {
+        setSelectedCategory(productData.category)
+      } else if (productData.category) {
+        // Custom category - set to "أخرى" and fill custom input
+        setSelectedCategory("أخرى")
+        setCustomCategory(productData.category)
+      }
 
       // Set store category from the store object we already fetched
       if (store) {
@@ -122,13 +132,19 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         imageUrl = uploadResult.url!
       }
 
+      // Determine final category
+      let finalCategory = selectedCategory
+      if (selectedCategory === "أخرى" && customCategory.trim()) {
+        finalCategory = customCategory.trim()
+      }
+
       // Update product in database
       const result = await updateProduct(id, {
         name: formData.get("name") as string,
         description: formData.get("description") as string,
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
-        category: selectedCategory,
+        category: finalCategory,
         image_url: imageUrl,
       })
 
@@ -318,24 +334,45 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </div>
 
                 <div>
-                  <Label htmlFor="category" className="text-gray-700 font-medium">الفئة</Label>
+                  <Label htmlFor="category" className="text-gray-700 font-medium">قسم المنتج</Label>
                   <Select
                     name="category"
                     value={selectedCategory}
-                    onValueChange={setSelectedCategory}
+                    onValueChange={(value) => {
+                      setSelectedCategory(value)
+                      if (value !== "أخرى") {
+                        setCustomCategory("")
+                      }
+                    }}
                   >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {categories.map((cat) => (
+                      {grocerySubcategories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
                           {cat.icon} {cat.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-500 mt-1">اختر القسم المناسب لمنتجك</p>
                 </div>
+
+                {/* Custom category input when "أخرى" is selected */}
+                {selectedCategory === "أخرى" && (
+                  <div>
+                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">اسم القسم</Label>
+                    <Input
+                      id="customCategory"
+                      name="customCategory"
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="أدخل اسم القسم"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج</Label>

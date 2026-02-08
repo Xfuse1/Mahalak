@@ -54,6 +54,31 @@ export interface Order {
   createdAt: string
 }
 
+// Main store categories (displayed on homepage)
+export const mainCategories = [
+  { id: "grocery", name: "بقالة", icon: "🛒", color: "from-emerald-400 to-green-500" },
+  { id: "health", name: "صحة", icon: "💊", color: "from-rose-400 to-pink-500" },
+  { id: "clothing", name: "ملابس", icon: "👕", color: "from-violet-400 to-purple-500" },
+  { id: "electronics", name: "إلكترونيات", icon: "📱", color: "from-blue-400 to-indigo-500" },
+  { id: "food", name: "أغذية", icon: "🍔", color: "from-amber-400 to-orange-500" },
+  { id: "furniture", name: "أثاث", icon: "🛋️", color: "from-amber-600 to-yellow-600" },
+  { id: "other", name: "أخرى", icon: "🔥", color: "from-slate-500 to-gray-600" },
+]
+
+// Subcategories for grocery and food stores
+export const grocerySubcategories = [
+  { id: "bakery", name: "المخبز", icon: "🥖" },
+  { id: "produce", name: "الخضروات والفواكه", icon: "🥬" },
+  { id: "dairy", name: "الألبان والأجبان", icon: "🥛" },
+  { id: "meat", name: "اللحوم والأسماك", icon: "🥩" },
+  { id: "beauty", name: "الصحة والجمال", icon: "💄" },
+  { id: "grocery", name: "البقالة", icon: "🛒" },
+  { id: "drinks", name: "المشروبات والوجبات الخفيفة", icon: "🥤" },
+  { id: "cleaning", name: "المنظفات والورقيات", icon: "🧹" },
+  { id: "other", name: "أخرى", icon: "📦" },
+]
+
+// Legacy categories (keeping for backward compatibility)
 export const categories = [
   { id: "bakery", name: "المخبز", icon: "🥖" },
   { id: "produce", name: "الخضروات والفواكه", icon: "🥬" },
@@ -67,6 +92,7 @@ export const categories = [
 ]
 
 export const categoryNames = categories.map(c => c.name)
+export const mainCategoryNames = mainCategories.map(c => c.name)
 
 export const mockStores: Store[] = [
   {

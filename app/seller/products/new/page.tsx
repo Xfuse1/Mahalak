@@ -11,7 +11,7 @@ import { Label } from "../../../../components/ui/label"
 import { Textarea } from "../../../../components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../components/ui/select"
-import { categories } from "../../../../lib/mock-data"
+import { grocerySubcategories } from "../../../../lib/mock-data"
 import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
@@ -28,6 +28,7 @@ export default function NewProductPage() {
   const [storeCategory, setStoreCategory] = useState<string>("")
   const [storeData, setStoreData] = useState<any>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [customCategory, setCustomCategory] = useState<string>("")
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
 
 
@@ -78,8 +79,15 @@ export default function NewProductPage() {
       if (!stock || stock <= 0) {
         throw new Error("الكمية يجب أن تكون أكبر من صفر")
       }
-      if (!selectedCategory) {
-        throw new Error("يرجى اختيار فئة المنتج")
+      
+      // Determine final category
+      let finalCategory = selectedCategory
+      if (selectedCategory === "أخرى" && customCategory.trim()) {
+        finalCategory = customCategory.trim()
+      }
+      
+      if (!finalCategory) {
+        throw new Error("يرجى اختيار قسم المنتج")
       }
       if (!imageFile) {
         throw new Error("يرجى رفع صورة المنتج")
@@ -116,7 +124,7 @@ export default function NewProductPage() {
         description: formData.get("description") as string,
         price: Number.parseFloat(formData.get("price") as string),
         stock: Number.parseInt(formData.get("stock") as string),
-        category: selectedCategory,
+        category: finalCategory,
 
         image_url: imageUrl,
         store_id: store.id,
@@ -303,25 +311,47 @@ export default function NewProductPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="category" className="text-gray-700 font-medium">الفئة *</Label>
+                  <Label htmlFor="category" className="text-gray-700 font-medium">قسم المنتج *</Label>
                   <Select
                     name="category"
                     required
                     value={selectedCategory}
-                    onValueChange={setSelectedCategory}
+                    onValueChange={(value) => {
+                      setSelectedCategory(value)
+                      if (value !== "أخرى") {
+                        setCustomCategory("")
+                      }
+                    }}
                   >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue placeholder="اختر الفئة" />
+                      <SelectValue placeholder="اختر القسم" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {categories.map((cat) => (
+                      {grocerySubcategories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
                           {cat.icon} {cat.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-500 mt-1">اختر القسم المناسب لمنتجك</p>
                 </div>
+
+                {/* Custom category input when "أخرى" is selected */}
+                {selectedCategory === "أخرى" && (
+                  <div>
+                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">اسم القسم *</Label>
+                    <Input
+                      id="customCategory"
+                      name="customCategory"
+                      required
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="أدخل اسم القسم"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج *</Label>
