@@ -11,6 +11,12 @@ function initAdminApp() {
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL
   let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
 
+  console.log("[v0] Firebase Admin initialization starting...")
+  console.log("[v0] Project ID present:", !!projectId)
+  console.log("[v0] Client Email present:", !!clientEmail)
+  console.log("[v0] Private Key present:", !!privateKey)
+  console.log("[v0] Private Key length:", privateKey?.length || 0)
+
   if (privateKey) {
     // Replace literal \n with real newline characters
     privateKey = privateKey.replace(/\\n/g, "\n")
@@ -19,6 +25,9 @@ function initAdminApp() {
     if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
       privateKey = privateKey.substring(1, privateKey.length - 1)
     }
+    
+    console.log("[v0] Private Key after processing - starts with BEGIN:", privateKey.startsWith("-----BEGIN"))
+    console.log("[v0] Private Key after processing - ends with END:", privateKey.includes("-----END"))
   }
 
   if (clientEmail && privateKey) {

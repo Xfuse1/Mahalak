@@ -32,10 +32,10 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'react-i18next'],
     serverActions: {
       bodySizeLimit: '5mb',
-      // Use a custom prefix to avoid ad blocker detection
-      allowedOrigins: ['localhost:3000', 'localhost:3001'],
     },
   },
+  // Server external packages - required for firebase-admin to work properly
+  serverExternalPackages: ['firebase-admin'],
   // Compression
   compress: true,
   // Power pack for static optimization
