@@ -25,6 +25,7 @@ export async function createOffer(formData: {
   product_id?: string
   category?: string
   quantity?: number
+  duration_hours?: number
 }) {
   const db = getAdminDb()
   const docRef = db.collection("offers").doc()
@@ -55,6 +56,7 @@ export async function updateOffer(
     product_id?: string
     category?: string
     quantity?: number
+    duration_hours?: number
   }>,
 ) {
   const db = getAdminDb()
@@ -104,7 +106,17 @@ export async function getActiveOffers(): Promise<OfferRecord[]> {
       // Check if offer is active (between start and end date)
       const startDate = String(offer.start_date || "").split("T")[0]
       const endDate = String(offer.end_date || "").split("T")[0]
-      return startDate <= todayStr && endDate >= todayStr
+      if (startDate > todayStr || endDate < todayStr) return false
+
+      // For same-day offers with duration_hours, check if current time is within the hours window
+      if (startDate === endDate && offer.duration_hours) {
+        const hours = Number(offer.duration_hours)
+        const offerEnd = new Date(startDate + "T00:00:00")
+        offerEnd.setHours(hours, 0, 0, 0)
+        if (now > offerEnd) return false
+      }
+
+      return true
     })
     
     return offers
@@ -131,7 +143,17 @@ export async function getProductOffer(productId: string): Promise<OfferRecord | 
     const productOffers = allOffers.filter((offer: OfferRecord) => {
       const startDate = String(offer.start_date || "").split("T")[0]
       const endDate = String(offer.end_date || "").split("T")[0]
-      return startDate <= todayStr && endDate >= todayStr
+      if (startDate > todayStr || endDate < todayStr) return false
+
+      // For same-day offers with duration_hours, check if current time is within the hours window
+      if (startDate === endDate && offer.duration_hours) {
+        const hours = Number(offer.duration_hours)
+        const offerEnd = new Date(startDate + "T00:00:00")
+        offerEnd.setHours(hours, 0, 0, 0)
+        if (now > offerEnd) return false
+      }
+
+      return true
     })
     
     if (productOffers.length > 0) {
@@ -163,7 +185,17 @@ export async function getProductOffersMap(productIds: string[]): Promise<Record<
     const activeOffers = allOffers.filter((offer: OfferRecord) => {
       const startDate = String(offer.start_date || "").split("T")[0]
       const endDate = String(offer.end_date || "").split("T")[0]
-      return startDate <= todayStr && endDate >= todayStr
+      if (startDate > todayStr || endDate < todayStr) return false
+
+      // For same-day offers with duration_hours, check if current time is within the hours window
+      if (startDate === endDate && offer.duration_hours) {
+        const hours = Number(offer.duration_hours)
+        const offerEnd = new Date(startDate + "T00:00:00")
+        offerEnd.setHours(hours, 0, 0, 0)
+        if (now > offerEnd) return false
+      }
+
+      return true
     })
     
     const offersMap: Record<string, { discount_percentage: number; title: string }> = {}

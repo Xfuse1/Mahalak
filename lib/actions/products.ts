@@ -68,7 +68,7 @@ export async function getProducts(category?: string) {
     query = query.where("category", "==", category)
   }
 
-  const snapshot = await db.collection("products").get()
+  const snapshot = await query.get()
   const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 
   // Fetch active offers

@@ -11,7 +11,7 @@ import { Label } from "../../../../components/ui/label"
 import { Textarea } from "../../../../components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../components/ui/select"
-import { grocerySubcategories } from "../../../../lib/mock-data"
+import { getSubcategoriesForStore } from "../../../../lib/mock-data"
 import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
@@ -327,7 +327,7 @@ export default function NewProductPage() {
                       <SelectValue placeholder="اختر القسم" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {grocerySubcategories.map((cat) => (
+                      {getSubcategoriesForStore(storeCategory).map((cat) => (
                         <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
                           {cat.icon} {cat.name}
                         </SelectItem>

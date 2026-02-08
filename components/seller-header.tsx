@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Box, Menu } from "lucide-react"
@@ -17,12 +17,34 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "./ui/sheet"
+import { getStoreByUserId } from "../lib/actions/stores"
+import { getPendingOrdersCount } from "../lib/actions/orders"
 
 export function SellerHeader() {
   const pathname = usePathname()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const router = useRouter()
   const { t } = useTranslation("common")
+  const [pendingCount, setPendingCount] = useState(0)
+
+  const fetchPendingCount = useCallback(async () => {
+    if (!user?.id) return
+    try {
+      const store = await getStoreByUserId(user.id)
+      if (store) {
+        const count = await getPendingOrdersCount(store.id)
+        setPendingCount(count)
+      }
+    } catch (e) {
+      console.error("Error fetching pending count:", e)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    fetchPendingCount()
+    const interval = setInterval(fetchPendingCount, 30000) // refresh every 30s
+    return () => clearInterval(interval)
+  }, [fetchPendingCount])
 
   const navItems = [
     { href: "/seller/dashboard", label: t("dashboard"), icon: LayoutDashboard },
@@ -68,6 +90,11 @@ export function SellerHeader() {
                     )}
                     <Icon className={cn("h-5 w-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-white" : "text-gray-400 group-hover:text-[#1F478B]")} />
                     <span className="font-black text-[14px]">{item.label}</span>
+                    {item.href === "/seller/orders" && pendingCount > 0 && (
+                      <span className="mr-auto ml-2 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-black px-1.5 animate-pulse shadow-lg shadow-red-500/30">
+                        {pendingCount > 99 ? "99+" : pendingCount}
+                      </span>
+                    )}
                   </Link>
                 </li>
               )

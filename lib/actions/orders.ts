@@ -226,6 +226,39 @@ export async function getCustomerOrders(customerId: string) {
   })
 }
 
+export async function getPendingOrdersCount(storeId: string): Promise<number> {
+  const db = getAdminDb()
+  try {
+    // Count single-store pending orders
+    const singleSnap = await db.collection("orders")
+      .where("store_id", "==", storeId)
+      .get()
+    let count = 0
+    singleSnap.docs.forEach((doc) => {
+      if (doc.data().status === "pending") {
+        count++
+      }
+    })
+
+    // Count multi-store orders where this store's stop is pending
+    const multiSnap = await db.collection("orders")
+      .where("order_type", "==", "multi_store")
+      .get()
+    multiSnap.docs.forEach((doc) => {
+      const stops: any[] = doc.data().pickup_stops || []
+      const myStop = stops.find((s) => s.store_id === storeId)
+      if (myStop && myStop.status === "pending") {
+        count++
+      }
+    })
+
+    return count
+  } catch (error) {
+    console.error("[getPendingOrdersCount] Error:", error)
+    return 0
+  }
+}
+
 export async function getStoreOrders(storeId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
@@ -369,7 +402,7 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         message: message.ar,
         message_en: message.en,
         type: "order_status",
-        link: `/account`,
+        link: `/account/edit-order/${orderId}`,
         data: { order_id: orderId, status }
       })
     }
@@ -867,6 +900,7 @@ export async function createMultiStoreOrder(orderData: {
         title_en: "New Order 🛒",
         message: `لديك طلب جديد يحتوي على ${stop.items.length} منتج بقيمة ${stop.subtotal} جنيه`,
         message_en: `You have a new order with ${stop.items.length} items worth ${stop.subtotal} EGP`,
+        link: "/seller/orders",
         data: { order_id: orderRef.id, store_id: stop.store_id },
         is_read: false,
         created_at: now,
@@ -882,6 +916,7 @@ export async function createMultiStoreOrder(orderData: {
       title_en: "New Delivery Order 🚗",
       message: `لديك طلب جديد من ${stops.length} متجر. في انتظار تأكيد المتاجر.`,
       message_en: `New order from ${stops.length} stores. Waiting for store confirmations.`,
+      link: `/driver/orders?driverId=${orderData.driver_id}`,
       data: { order_id: orderRef.id },
       is_read: false,
       created_at: now,
@@ -984,6 +1019,7 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
       message_en: allConfirmed && hasAnyConfirmed
         ? "All stores confirmed! Driver will start pickup."
         : `Waiting for other stores to confirm...`,
+      link: `/account/edit-order/${orderId}`,
       data: { order_id: orderId, store_id: storeId },
       is_read: false,
       created_at: now,
@@ -1002,6 +1038,7 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
       message_en: allConfirmed && hasAnyConfirmed
         ? "All stores confirmed. You can start pickup."
         : `Waiting for other stores...`,
+      link: `/driver/orders?driverId=${orderData.driver_id}`,
       data: { order_id: orderId },
       is_read: false,
       created_at: now,
@@ -1112,6 +1149,7 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
       message_en: allRejected
         ? "All stores rejected. Order cancelled."
         : `${reason || "Store unavailable"}. Amount deducted.`,
+      link: `/account/edit-order/${orderId}`,
       data: { order_id: orderId, store_id: storeId },
       is_read: false,
       created_at: now,
@@ -1129,6 +1167,7 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
       message_en: allRejected
         ? "All stores rejected. Order cancelled."
         : `Store rejected. Order continues with others.`,
+      link: `/driver/orders?driverId=${orderData.driver_id}`,
       data: { order_id: orderId },
       is_read: false,
       created_at: now,
@@ -1228,6 +1267,7 @@ export async function markStorePickedUp(orderId: string, driverId: string, store
       message_en: allPickedUp
         ? "Driver is on the way to you!"
         : `Driver picked up from ${stops[stopIndex].store_name}`,
+      link: `/account/edit-order/${orderId}`,
       data: { order_id: orderId, store_id: storeId },
       is_read: false,
       created_at: now,
@@ -1249,7 +1289,6 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
     const snapshot = await db
       .collection("orders")
       .where("order_type", "==", "multi_store")
-      .orderBy("created_at", "desc")
       .get()
 
     // Filter orders that contain this store in pickup_stops
@@ -1268,6 +1307,9 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
         }
       })
 
+    // Sort by created_at descending in JS
+    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+
     return { success: true, orders }
   } catch (error: any) {
     console.error("[v0] Error fetching multi-store orders:", error)
@@ -1282,12 +1324,16 @@ export async function getMultiStoreOrdersForDriver(driverId: string) {
   try {
     const snapshot = await db
       .collection("orders")
-      .where("order_type", "==", "multi_store")
       .where("driver_id", "==", driverId)
-      .orderBy("created_at", "desc")
       .get()
 
-    const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const orders = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((order: any) => order.order_type === "multi_store")
+
+    // Sort by created_at descending in JS
+    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+
     return { success: true, orders }
   } catch (error: any) {
     console.error("[v0] Error fetching driver multi-store orders:", error)
@@ -1302,12 +1348,16 @@ export async function getCustomerMultiStoreOrders(customerId: string) {
   try {
     const snapshot = await db
       .collection("orders")
-      .where("order_type", "==", "multi_store")
       .where("customer_id", "==", customerId)
-      .orderBy("created_at", "desc")
       .get()
 
-    const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const orders = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((order: any) => order.order_type === "multi_store")
+
+    // Sort by created_at descending in JS
+    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+
     return { success: true, orders }
   } catch (error: any) {
     console.error("[v0] Error fetching customer multi-store orders:", error)
@@ -1547,6 +1597,7 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
         title_en: "New Order 🛒",
         message: `لديك طلب جديد يحتوي على ${stop.items.length} منتج بقيمة ${stop.subtotal} جنيه`,
         message_en: `You have a new order with ${stop.items.length} items worth ${stop.subtotal} EGP`,
+        link: "/seller/orders",
         data: { order_id: orderId, store_id: stop.store_id },
         is_read: false,
         created_at: now,
@@ -1563,6 +1614,7 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
         title_en: "Order Updated 📝",
         message: `تم إضافة متاجر جديدة للطلب. يرجى مراجعة تفاصيل الطلب.`,
         message_en: `New stores added to the order. Please review order details.`,
+        link: `/driver/orders?driverId=${orderData.driver_id}`,
         data: { order_id: orderId },
         is_read: false,
         created_at: now,

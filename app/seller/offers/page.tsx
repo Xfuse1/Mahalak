@@ -14,7 +14,7 @@ import { Plus, Edit, Trash2, Tag, Calendar, Package, Layers } from "lucide-react
 import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "../../../lib/actions/offers"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getProductsByStoreId } from "../../../lib/actions/products"
-import { categories } from "../../../lib/mock-data"
+import { getSubcategoriesForStore } from "../../../lib/mock-data"
 import { Badge } from "../../../components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
@@ -49,11 +49,14 @@ export default function OffersPage() {
   const [isAdding, setIsAdding] = useState(false)
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
   const [storeId, setStoreId] = useState<string | null>(null)
+  const [storeCategory, setStoreCategory] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<string>("")
   const [offerTarget, setOfferTarget] = useState<"all" | "product" | "category">("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [isSameDay, setIsSameDay] = useState(false)
+  const [durationHours, setDurationHours] = useState<number>(1)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -80,6 +83,7 @@ export default function OffersPage() {
         }
 
         setStoreId(store.id)
+        setStoreCategory((store as any).category || "")
 
         // Get products for this store
         const storeProducts = await getProductsByStoreId(store.id)
@@ -113,6 +117,7 @@ export default function OffersPage() {
     const discountPercentage = Number(formData.get("discount"))
     const startDate = formData.get("startDate") as string
     const endDate = formData.get("endDate") as string
+    const hours = isSameDay ? durationHours : undefined
     
     // Validation
     if (discountPercentage <= 0 || discountPercentage > 100) {
@@ -151,6 +156,7 @@ export default function OffersPage() {
       product_id: offerTarget === "product" && (selectedProduct || productId) ? (selectedProduct || productId) : undefined,
       category: offerTarget === "category" && selectedCategory ? selectedCategory : undefined,
       quantity: quantity ? Number(quantity) : undefined,
+      duration_hours: hours,
     }
 
     try {
@@ -220,19 +226,48 @@ export default function OffersPage() {
     } else {
       setOfferTarget("all")
     }
+    // Check same day & hours
+    const startD = offer.start_date ? offer.start_date.split("T")[0] : ""
+    const endD = offer.end_date ? offer.end_date.split("T")[0] : ""
+    if (startD && endD && startD === endD) {
+      setIsSameDay(true)
+      setDurationHours((offer as any).duration_hours || 1)
+    } else {
+      setIsSameDay(false)
+      setDurationHours(1)
+    }
     setIsAdding(true)
   }
 
-  const getOfferStatus = (startDate: string, endDate: string) => {
+  const getOfferStatus = (startDate: string, endDate: string, durationH?: number) => {
     const now = new Date()
-    // Reset hours to compare only dates
-    now.setHours(0, 0, 0, 0)
     const start = new Date(startDate)
     start.setHours(0, 0, 0, 0)
     const end = new Date(endDate)
+
+    // For same-day offers with duration_hours, calculate exact end time
+    const startDay = startDate.split("T")[0]
+    const endDay = endDate.split("T")[0]
+    if (startDay === endDay && durationH) {
+      const offerEnd = new Date(start)
+      offerEnd.setHours(durationH, 0, 0, 0)
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      if (todayDate.getTime() < start.getTime()) {
+        return { label: "قادم", className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+      }
+      if (now > offerEnd) {
+        return { label: "منتهي", className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
+      }
+      return { label: "نشط", className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
+    }
+
+    // Normal multi-day logic
+    const nowDate = new Date()
+    nowDate.setHours(0, 0, 0, 0)
     end.setHours(23, 59, 59, 999)
 
-    if (now < start) {
+    if (nowDate < start) {
       return { label: "قادم", className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
     }
     if (now > end) {
@@ -284,6 +319,8 @@ export default function OffersPage() {
                 setOfferTarget("all")
                 setSelectedProduct("")
                 setSelectedCategory("")
+                setIsSameDay(false)
+                setDurationHours(1)
                 setIsAdding(!isAdding)
               }}
               className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
@@ -406,11 +443,11 @@ export default function OffersPage() {
                                   </div>
                                 </SelectItem>
                               ))}
-                              {/* Also show all categories */}
-                              {categories.filter(c => !products.some(p => p.category === c.name)).map((cat) => (
+                              {/* Also show all categories based on store type */}
+                              {getSubcategoriesForStore(storeCategory).filter(c => !products.some(p => p.category === c.name)).map((cat) => (
                                 <SelectItem key={cat.id} value={cat.name}>
                                   <div className="flex items-center gap-2">
-                                    <span>{cat.icon}</span>
+                                    <Layers className="h-4 w-4 text-gray-400" />
                                     {cat.name}
                                   </div>
                                 </SelectItem>
@@ -470,6 +507,12 @@ export default function OffersPage() {
                         required
                         defaultValue={editingOffer ? formatDateForInput(editingOffer.start_date) : ""}
                         className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(e) => {
+                          const endEl = document.getElementById("endDate") as HTMLInputElement
+                          const endVal = endEl?.value
+                          const startVal = e.target.value
+                          setIsSameDay(!!startVal && !!endVal && startVal === endVal)
+                        }}
                       />
                     </div>
                     <div>
@@ -481,9 +524,41 @@ export default function OffersPage() {
                         required
                         defaultValue={editingOffer ? formatDateForInput(editingOffer.end_date) : ""}
                         className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(e) => {
+                          const startEl = document.getElementById("startDate") as HTMLInputElement
+                          const startVal = startEl?.value
+                          const endVal = e.target.value
+                          setIsSameDay(!!startVal && !!endVal && startVal === endVal)
+                        }}
                       />
                     </div>
                   </div>
+                  {/* Same-day offer: hours input */}
+                  {isSameDay && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <Label htmlFor="durationHours" className="text-amber-800 font-medium flex items-center gap-2">
+                        ⏰ عدد ساعات العرض
+                      </Label>
+                      <p className="text-xs text-amber-600 mt-1 mb-2">العرض في نفس اليوم — حدد عدد الساعات (من 1 إلى 24 ساعة)</p>
+                      <Input
+                        id="durationHours"
+                        name="durationHours"
+                        type="number"
+                        min="1"
+                        max="24"
+                        required
+                        value={durationHours}
+                        onChange={(e) => {
+                          let v = Number(e.target.value)
+                          if (v < 1) v = 1
+                          if (v > 24) v = 24
+                          setDurationHours(v)
+                        }}
+                        className="mt-1 h-12 rounded-xl border-amber-300 focus:border-amber-500 focus:ring-amber-500 bg-white w-full md:w-48"
+                      />
+                      <p className="text-xs text-amber-500 mt-1.5">العرض سيبدأ من الساعة 12:00 صباحاً ويستمر لمدة {durationHours} {durationHours === 1 ? "ساعة" : "ساعات"}</p>
+                    </div>
+                  )}
                   <div className="flex gap-3 pt-2">
                     <Button 
                       type="submit" 
@@ -513,7 +588,7 @@ export default function OffersPage() {
           {/* Offers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {offers.map((offer) => {
-              const status = getOfferStatus(offer.start_date, offer.end_date)
+              const status = getOfferStatus(offer.start_date, offer.end_date, (offer as any).duration_hours)
               return (
                 <Card key={offer.id} className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
                   <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
@@ -590,6 +665,12 @@ export default function OffersPage() {
                         <Calendar className="h-4 w-4" />
                         <span>إلى: {formatDateForInput(offer.end_date)}</span>
                       </div>
+                      {(offer as any).duration_hours && formatDateForInput(offer.start_date) === formatDateForInput(offer.end_date) && (
+                        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-xl p-2">
+                          <span>⏰</span>
+                          <span>مدة العرض: {(offer as any).duration_hours} {(offer as any).duration_hours === 1 ? "ساعة" : "ساعات"}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

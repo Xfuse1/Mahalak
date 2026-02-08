@@ -67,6 +67,32 @@ export function Header() {
     }
   }
 
+  const getNotificationFallbackLink = (notification: Notification) => {
+    const orderId = notification.data?.order_id as string | undefined
+    const orderLink = orderId ? `/account/edit-order/${orderId}` : "/account"
+
+    switch (notification.type) {
+      case "review_request":
+        return orderId ? `/review/${orderId}` : "/account"
+      case "new_order":
+      case "new_multi_order":
+        return user?.role === "seller" ? "/seller/orders" : orderLink
+      case "order_status":
+      case "store_confirmed":
+      case "store_rejected":
+      case "all_items_picked":
+      case "driver_picked_from_store":
+      case "order_delivered":
+      case "order_updated":
+        return orderLink
+      case "promotion":
+      case "general":
+        return "/"
+      default:
+        return null
+    }
+  }
+
   // Handle notification item click
   const handleNotificationItemClick = async (notification: Notification) => {
     if (!notification.is_read) {
@@ -79,8 +105,9 @@ export function Header() {
 
     setShowNotifications(false)
 
-    if (notification.link) {
-      router.push(notification.link)
+    const targetLink = notification.link || getNotificationFallbackLink(notification)
+    if (targetLink) {
+      router.push(targetLink)
     }
   }
 

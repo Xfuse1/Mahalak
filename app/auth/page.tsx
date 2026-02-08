@@ -19,6 +19,7 @@ import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
 import { MapPin, Loader2, CheckCircle } from "lucide-react"
 import Image from "next/image"
 import { PhoneVerification } from "../../components/phone-verification"
+import { getUserByPhone } from "../../lib/actions/profile"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -124,10 +125,26 @@ export default function AuthPage() {
     setError("")
 
     const formData = new FormData(e.currentTarget)
-    const email = formData.get("email") as string
+    const emailOrPhone = (formData.get("emailOrPhone") as string).trim()
     const password = formData.get("password") as string
 
+    // Detect if input is a phone number (Egyptian: starts with 01, 11 digits)
+    const isPhone = /^(01[0125])\d{8}$/.test(emailOrPhone)
+
+    let email = emailOrPhone
+
     try {
+      if (isPhone) {
+        // Look up the email associated with this phone number
+        const result = await getUserByPhone(emailOrPhone)
+        if (!result.success || !result.data?.email) {
+          setIsLoading(false)
+          setError(t("لا يوجد حساب مرتبط برقم الهاتف هذا", "No account found with this phone number"))
+          return
+        }
+        email = result.data.email
+      }
+
       setIsLoggingIn(true)
       const success = await login(email, password, role)
 
@@ -400,15 +417,15 @@ export default function AuthPage() {
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-6">
                     <div className="space-y-2">
-                      <Label htmlFor="login-email" className="text-base font-medium text-gray-700">
-                        {t("البريد الإلكتروني", "Email")}
+                      <Label htmlFor="login-emailOrPhone" className="text-base font-medium text-gray-700">
+                        {t("البريد الإلكتروني أو رقم الهاتف", "Email or Phone Number")}
                       </Label>
                       <Input
-                        id="login-email"
-                        name="email"
-                        type="email"
+                        id="login-emailOrPhone"
+                        name="emailOrPhone"
+                        type="text"
                         required
-                        placeholder="example@email.com"
+                        placeholder={t("example@email.com أو 01012345678", "example@email.com or 01012345678")}
                         className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
                       />
                     </div>

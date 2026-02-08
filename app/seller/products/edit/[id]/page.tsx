@@ -15,7 +15,7 @@ import { Upload } from "lucide-react"
 import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import Image from "next/image"
-import { grocerySubcategories } from "../../../../../lib/mock-data"
+import { getSubcategoriesForStore } from "../../../../../lib/mock-data"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   // Next.js 14+: params may be a Promise, unwrap with React.use()
@@ -61,19 +61,20 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       setProduct(productData)
       setImagePreview(productData.image_url)
       
-      // Check if category is in predefined list
-      const predefinedCategories = grocerySubcategories.map(c => c.name)
+      // Set store category from the store object we already fetched
+      const currentStoreCategory = (store as any)?.category || ""
+      if (store) {
+        setStoreCategory(currentStoreCategory)
+      }
+
+      // Check if category is in predefined list for this store type
+      const predefinedCategories = getSubcategoriesForStore(currentStoreCategory).map(c => c.name)
       if (productData.category && predefinedCategories.includes(productData.category)) {
         setSelectedCategory(productData.category)
       } else if (productData.category) {
         // Custom category - set to "أخرى" and fill custom input
         setSelectedCategory("أخرى")
         setCustomCategory(productData.category)
-      }
-
-      // Set store category from the store object we already fetched
-      if (store) {
-        setStoreCategory((store as any).category || "")
       }
 
       setIsLoadingProduct(false)
@@ -349,7 +350,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {grocerySubcategories.map((cat) => (
+                      {getSubcategoriesForStore(storeCategory).map((cat) => (
                         <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
                           {cat.icon} {cat.name}
                         </SelectItem>

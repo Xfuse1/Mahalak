@@ -35,11 +35,11 @@ export async function getStores(category?: string) {
     .map((doc) => {
       const data = doc.data()
       if (!data.store) return null
-      return {
+      return serializeData({
         id: doc.id, // Store ID = User ID
         seller_id: doc.id,
         ...data.store,
-      }
+      })
     })
     .filter((store): store is NonNullable<typeof store> => store !== null)
 
