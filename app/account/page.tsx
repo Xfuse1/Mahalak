@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, Pencil } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, Pencil, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
@@ -68,6 +68,34 @@ export default function AccountPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false)
 
+  const fetchOrders = async () => {
+    if (!user?.id) return
+
+    try {
+      setOrdersLoading(true)
+      setOrdersError(null)
+      console.log("[v0] Fetching orders for customer:")
+      const [data, rejectedResult, multiResult] = await Promise.all([
+        getCustomerOrders(user.id),
+        getRejectedOrdersForCustomer(user.id),
+        getCustomerMultiStoreOrders(user.id),
+      ])
+      console.log("[v0] Fetched orders:")
+      setOrders(data as Order[])
+      if (rejectedResult.success) {
+        setRejectedOrders(rejectedResult.orders as RejectedOrder[])
+      }
+      if (multiResult.success) {
+        setMultiOrders(multiResult.orders)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching orders:", error)
+      setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/auth")
@@ -80,34 +108,6 @@ export default function AccountPage() {
   }, [user, isLoading, router])
 
   useEffect(() => {
-    async function fetchOrders() {
-      if (!user?.id) return
-
-      try {
-        setOrdersLoading(true)
-        setOrdersError(null)
-        console.log("[v0] Fetching orders for customer:")
-        const [data, rejectedResult, multiResult] = await Promise.all([
-          getCustomerOrders(user.id),
-          getRejectedOrdersForCustomer(user.id),
-          getCustomerMultiStoreOrders(user.id),
-        ])
-        console.log("[v0] Fetched orders:")
-        setOrders(data as Order[])
-        if (rejectedResult.success) {
-          setRejectedOrders(rejectedResult.orders as RejectedOrder[])
-        }
-        if (multiResult.success) {
-          setMultiOrders(multiResult.orders)
-        }
-      } catch (error) {
-        console.error("[v0] Error fetching orders:", error)
-        setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
-      } finally {
-        setOrdersLoading(false)
-      }
-    }
-
     fetchOrders()
 
     async function checkStore() {
@@ -260,12 +260,24 @@ export default function AccountPage() {
 
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-xl">
-                      <Package className="h-5 w-5 text-blue-600" />
-                    </div>
-                    {t("طلباتي", "My Orders")}
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-xl">
+                        <Package className="h-5 w-5 text-blue-600" />
+                      </div>
+                      {t("طلباتي", "My Orders")}
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchOrders}
+                      disabled={ordersLoading}
+                      className="rounded-xl"
+                    >
+                      <RefreshCw className={`h-4 w-4 ml-2 ${ordersLoading ? 'animate-spin' : ''}`} />
+                      {t("تحديث", "Refresh")}
+                    </Button>
+                  </div>
                   <CardDescription>
                     {t("تتبع جميع طلباتك وحالتها", "Track all your orders and their status")}
                   </CardDescription>

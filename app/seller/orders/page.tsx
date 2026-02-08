@@ -6,7 +6,7 @@ import { SellerHeader } from "../../../components/seller-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { Button } from "../../../components/ui/button"
-import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, CheckCircle, XCircle, Store } from "lucide-react"
+import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup } from "../../../lib/actions/orders"
@@ -230,12 +230,24 @@ export default function SellerOrdersPage() {
 
           <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-xl">
-                  <Filter className="h-5 w-5 text-blue-600" />
-                </div>
-                {t("جميع الطلبات", "All Orders")}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-xl">
+                    <Filter className="h-5 w-5 text-blue-600" />
+                  </div>
+                  {t("جميع الطلبات", "All Orders")}
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadOrders}
+                  disabled={loadingOrders}
+                  className="rounded-xl"
+                >
+                  <RefreshCw className={`h-4 w-4 ml-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                  {t("تحديث", "Refresh")}
+                </Button>
+              </div>
               <CardDescription>{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</CardDescription>
             </CardHeader>
             <CardContent className="p-6">

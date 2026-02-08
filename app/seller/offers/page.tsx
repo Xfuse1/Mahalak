@@ -106,19 +106,49 @@ export default function OffersPage() {
     e.preventDefault()
     if (!storeId) return
 
-    setSubmitting(true)
     const formData = new FormData(e.currentTarget)
 
     const productId = formData.get("product") as string
     const quantity = formData.get("quantity") as string
+    const discountPercentage = Number(formData.get("discount"))
+    const startDate = formData.get("startDate") as string
+    const endDate = formData.get("endDate") as string
+    
+    // Validation
+    if (discountPercentage <= 0 || discountPercentage > 100) {
+      alert("نسبة الخصم يجب أن تكون بين 1 و 100")
+      return
+    }
+    
+    if (offerTarget === "product" && !selectedProduct && !productId) {
+      alert("يجب اختيار منتج للعرض")
+      return
+    }
+    
+    if (offerTarget === "category" && !selectedCategory) {
+      alert("يجب اختيار قسم للعرض")
+      return
+    }
+    
+    // Validate dates
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      if (end < start) {
+        alert("تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+        return
+      }
+    }
+
+    setSubmitting(true)
     
     const offerData = {
       title: formData.get("title") as string,
       description: formData.get("description") as string,
-      discount_percentage: Number(formData.get("discount")),
-      start_date: formData.get("startDate") as string,
-      end_date: formData.get("endDate") as string,
-      product_id: offerTarget === "product" && productId ? productId : undefined,
+      discount_percentage: discountPercentage,
+      start_date: startDate,
+      end_date: endDate,
+      product_id: offerTarget === "product" && (selectedProduct || productId) ? (selectedProduct || productId) : undefined,
       category: offerTarget === "category" && selectedCategory ? selectedCategory : undefined,
       quantity: quantity ? Number(quantity) : undefined,
     }
@@ -421,13 +451,14 @@ export default function OffersPage() {
                       id="discount"
                       name="discount"
                       type="number"
-                      min="0"
+                      min="1"
                       max="100"
                       required
                       placeholder="20"
                       defaultValue={editingOffer?.discount_percentage}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
+                    <p className="text-xs text-gray-500 mt-1">يجب أن تكون نسبة الخصم بين 1% و 100%</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

@@ -7,7 +7,7 @@ import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
-import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin } from "lucide-react"
+import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getDashboardAnalytics, getRecentOrders } from "../../../lib/actions/dashboard"
@@ -31,6 +31,7 @@ export default function SellerDashboard() {
   const [recentOrders, setRecentOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [store, setStore] = useState<any>(null)
+  const [storeApproved, setStoreApproved] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (isLoading) return
@@ -63,6 +64,9 @@ export default function SellerDashboard() {
 
         if (store) {
           setStore(store)
+          // Check if store is approved
+          setStoreApproved(store.is_approved === true)
+          
           const analyticsData = await getDashboardAnalytics(store.id)
           const ordersData = await getRecentOrders(store.id, 3)
 
@@ -177,6 +181,46 @@ export default function SellerDashboard() {
                     {t("تحديد الموقع الآن", "Set Location Now")}
                   </Link>
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Store Approval Status Banner */}
+          {store && storeApproved === false && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-4 shadow-md">
+              <div className="bg-blue-100 p-3 rounded-xl">
+                <Clock className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-blue-800 text-lg">
+                  {t("متجرك قيد المراجعة", "Your store is under review")}
+                </h3>
+                <p className="text-blue-700 text-sm mt-1">
+                  {t(
+                    "متجرك في انتظار موافقة المسؤول. يمكنك إضافة المنتجات والإعدادات، لكن متجرك لن يظهر للعملاء حتى تتم الموافقة عليه.",
+                    "Your store is pending admin approval. You can add products and settings, but your store won't be visible to customers until approved."
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Store Approved Banner */}
+          {store && storeApproved === true && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-2xl p-4 flex items-start gap-4 shadow-md">
+              <div className="bg-green-100 p-3 rounded-xl">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-green-800 text-lg">
+                  {t("متجرك موافق عليه", "Your store is approved")}
+                </h3>
+                <p className="text-green-700 text-sm mt-1">
+                  {t(
+                    "متجرك ظاهر للعملاء ويمكنهم الشراء منه.",
+                    "Your store is visible to customers and they can purchase from it."
+                  )}
+                </p>
               </div>
             </div>
           )}

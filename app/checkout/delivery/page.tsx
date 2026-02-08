@@ -83,8 +83,15 @@ export default function DeliveryPage() {
     fetchData()
   }, [])
 
-  // Sort drivers by rating (highest first) - already sorted from server but ensure client-side too
-  const sortedDrivers = [...drivers].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+  // Sort drivers by rating (highest first) - available drivers first, then unavailable
+  const sortedDrivers = [...drivers].sort((a, b) => {
+    // First sort by availability (available first)
+    if (a.is_available !== b.is_available) {
+      return a.is_available ? -1 : 1
+    }
+    // Then by rating
+    return (b.rating || 0) - (a.rating || 0)
+  })
 
   // Load buy now item from sessionStorage
   useEffect(() => {
@@ -306,11 +313,11 @@ export default function DeliveryPage() {
               sortedDrivers.map((driver, index) => (
                 <Card
                   key={driver.id}
-                  className={`cursor-pointer transition-all duration-300 border-0 rounded-2xl overflow-hidden ${!driver.is_available
-                    ? "opacity-60 bg-gray-50 ring-2 ring-red-200"
+                  className={`transition-all duration-300 border-0 rounded-2xl overflow-hidden ${!driver.is_available
+                    ? "opacity-60 bg-gray-50 ring-2 ring-red-200 cursor-not-allowed"
                     : selectedDriver === driver.id
-                      ? "ring-2 ring-blue-500 shadow-lg shadow-blue-500/20 bg-blue-50"
-                      : "hover:shadow-lg hover:-translate-y-1 bg-white shadow-md"
+                      ? "ring-2 ring-blue-500 shadow-lg shadow-blue-500/20 bg-blue-50 cursor-pointer"
+                      : "hover:shadow-lg hover:-translate-y-1 bg-white shadow-md cursor-pointer"
                     }`}
                   onClick={() => driver.is_available && setSelectedDriver(driver.id)}
                 >

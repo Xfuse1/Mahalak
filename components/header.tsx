@@ -157,7 +157,7 @@ export function Header() {
                       />
 
                       {/* Dropdown */}
-                      <div className="absolute left-0 top-full mt-3 w-[calc(100vw-2rem)] sm:w-96 max-h-[32rem] overflow-hidden bg-white/95 backdrop-blur-2xl rounded-[2rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] border border-white/40 z-50 animate-in fade-in zoom-in-95 duration-300 origin-top-left">
+                      <div className="fixed left-2 right-2 top-16 md:absolute md:left-0 md:right-auto md:top-full md:mt-3 md:w-96 max-h-[70vh] md:max-h-[32rem] overflow-hidden bg-white/95 backdrop-blur-2xl rounded-2xl md:rounded-[2rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] border border-white/40 z-50 animate-in fade-in zoom-in-95 duration-300 origin-top md:origin-top-left">
                         <div className="p-6 border-b border-gray-100/50 bg-gradient-to-br from-blue-50/80 via-white to-purple-50/30 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">

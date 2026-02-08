@@ -88,7 +88,10 @@ const BannerCarouselComponent = () => {
                   
                   {/* CTA Button (optional) */}
                   <div className="mt-8">
-                    <Button className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105">
+                    <Button 
+                      className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105"
+                      onClick={() => window.location.href = '/search'}
+                    >
                       {t("browseProducts", "تصفح المنتجات")}
                     </Button>
                   </div>
