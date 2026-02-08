@@ -14,8 +14,10 @@ export async function GET() {
     FIREBASE_ADMIN_PRIVATE_KEY: !!process.env.FIREBASE_ADMIN_PRIVATE_KEY,
     FIREBASE_ADMIN_PRIVATE_KEY_LENGTH: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.length || 0,
     FIREBASE_ADMIN_PRIVATE_KEY_STARTS_WITH: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.substring(0, 30) || "NOT SET",
-    NEXT_PUBLIC_SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "NOT SET",
     SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_ROLE_KEY_LENGTH: process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0,
+    SUPABASE_SERVICE_ROLE_KEY_STARTS_WITH: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20) || "NOT SET",
   }
 
   // Check 2: Private key format
@@ -70,17 +72,50 @@ export async function GET() {
       initialized: true,
     }
 
+    // List all buckets
+    try {
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+      diagnostics.checks.supabaseBuckets = {
+        success: !listError,
+        buckets: buckets?.map(b => ({ id: b.id, name: b.name, public: b.public })) || [],
+        error: listError?.message || null,
+      }
+    } catch (listBucketsError: any) {
+      diagnostics.checks.supabaseBuckets = {
+        success: false,
+        error: listBucketsError.message,
+      }
+    }
+
     // Check storage bucket
     try {
       const { data, error } = await supabase.storage.getBucket("product-images")
       diagnostics.checks.supabaseStorage = {
         bucketExists: !!data,
+        bucketData: data ? { id: data.id, name: data.name, public: data.public } : null,
         error: error?.message || null,
       }
     } catch (storageError: any) {
       diagnostics.checks.supabaseStorage = {
         bucketExists: false,
         error: storageError.message,
+      }
+    }
+
+    // Try to list files in bucket
+    try {
+      const { data: files, error: filesError } = await supabase.storage
+        .from("product-images")
+        .list("", { limit: 1 })
+      diagnostics.checks.supabaseListFiles = {
+        success: !filesError,
+        fileCount: files?.length || 0,
+        error: filesError?.message || null,
+      }
+    } catch (filesError: any) {
+      diagnostics.checks.supabaseListFiles = {
+        success: false,
+        error: filesError.message,
       }
     }
   } catch (supabaseError: any) {
