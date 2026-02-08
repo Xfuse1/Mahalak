@@ -32,6 +32,8 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'react-i18next'],
     serverActions: {
       bodySizeLimit: '5mb',
+      // Use a custom prefix to avoid ad blocker detection
+      allowedOrigins: ['localhost:3000', 'localhost:3001'],
     },
   },
   // Compression

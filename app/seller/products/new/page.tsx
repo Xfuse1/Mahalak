@@ -367,7 +367,6 @@ export default function NewProductPage() {
                           className="hidden"
                           accept="image/*"
                           onChange={handleImageChange}
-                          required
                         />
                       </label>
                     )}
