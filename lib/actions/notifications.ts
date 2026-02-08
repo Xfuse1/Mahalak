@@ -10,7 +10,7 @@ export type Notification = {
   message: string
   message_en?: string
   type: "order_delivered" | "order_status" | "review_request" | "promotion" | "general" 
-    | "new_multi_order" | "store_confirmed" | "store_rejected" | "all_items_picked" | "driver_picked_from_store"
+    | "new_order" | "new_multi_order" | "store_confirmed" | "store_rejected" | "all_items_picked" | "driver_picked_from_store"
   link?: string
   is_read: boolean
   data?: Record<string, any>

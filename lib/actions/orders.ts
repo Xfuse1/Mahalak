@@ -4,6 +4,7 @@ import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { chunkArray } from "../firebase/firestore-helpers"
+import { createNotification } from "./notifications"
 
 type RecordMap = {
   id: string
@@ -482,6 +483,21 @@ export async function createOrder(orderData: {
   } catch (error: any) {
     console.error("[v0] Error creating order items:", error)
     return { success: false, error: error?.message || "Failed to create order items" }
+  }
+
+  try {
+    await createNotification({
+      user_id: orderData.store_id,
+      title: "طلب جديد",
+      title_en: "New Order",
+      message: `لديك طلب جديد برقم ${orderRef.id}`,
+      message_en: `You have a new order: ${orderRef.id}`,
+      type: "new_order",
+      link: "/seller/orders",
+      data: { order_id: orderRef.id, store_id: orderData.store_id },
+    })
+  } catch (error: any) {
+    console.error("[v0] Error creating seller notification:", error)
   }
 
   // خصم الكمية من المخزون بعد إنشاء الطلب بنجاح

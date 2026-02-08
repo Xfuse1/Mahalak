@@ -368,6 +368,17 @@ export default function DeliveryPage() {
                               {t("غير متاح", "Unavailable")}
                             </span>
                           )}
+                          {driver.is_online ? (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full flex items-center gap-1 font-medium">
+                              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                              {t("متصل", "Online")}
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full flex items-center gap-1 font-medium">
+                              <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                              {t("غير متصل", "Offline")}
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 mt-2">

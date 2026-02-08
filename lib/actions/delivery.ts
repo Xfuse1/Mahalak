@@ -11,6 +11,7 @@ export type Driver = {
   rating: number
   total_deliveries: number
   is_available: boolean
+  is_online?: boolean
   is_approved: boolean // تم التأكيد من الأدمن
   price: number
   areas?: string[] // المناطق التي يغطيها
@@ -37,6 +38,7 @@ export async function getDrivers(): Promise<Driver[]> {
         rating: data.rating || 0,
         total_deliveries: data.totalDeliveries || data.total_deliveries || 0,
         is_available: data.isActive ?? data.is_available ?? true,
+        is_online: data.isOnline ?? data.is_online ?? false,
         is_approved: data.isApproved ?? data.is_approved ?? false,
         price: data.price || 0,
         areas: data.areas,
