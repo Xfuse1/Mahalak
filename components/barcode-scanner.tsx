@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Camera, X, Zap, RotateCcw, CheckCircle2 } from "lucide-react"
 
 interface BarcodeScannerProps {
@@ -17,6 +17,13 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [showFlash, setShowFlash] = useState(false)
   const scannerRef = useRef<any>(null)
   const cooldownMap = useRef<Map<string, number>>(new Map())
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onScanRef = useRef(onScan)
+
+  // Keep onScan ref fresh to avoid stale closure in scanner callback
+  useEffect(() => {
+    onScanRef.current = onScan
+  }, [onScan])
 
   const stopScanner = async () => {
     try {
@@ -35,14 +42,25 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     await stopScanner()
 
     try {
-      const { Html5Qrcode } = await import("html5-qrcode")
-      const html5QrCode = new Html5Qrcode("barcode-reader")
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode")
+
+      // Only scan product barcode formats — skipping QR/DataMatrix etc. saves major CPU
+      const formatsToSupport = [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+      ]
+
+      const html5QrCode = new Html5Qrcode("barcode-reader", { formatsToSupport, verbose: false })
       scannerRef.current = html5QrCode
 
       await html5QrCode.start(
         { facingMode: "environment" },
         {
-          fps: 10,
+          fps: 5,
           qrbox: { width: 280, height: 160 },
           aspectRatio: 1.5,
         },
@@ -53,16 +71,22 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           // Skip if same barcode scanned within cooldown period
           if (now - lastTime < COOLDOWN_MS) return
 
-          // Record this scan time
+          // Record this scan time & clean up old entries
           cooldownMap.current.set(decodedText, now)
+          if (cooldownMap.current.size > 50) {
+            for (const [key, time] of cooldownMap.current) {
+              if (now - time > COOLDOWN_MS * 2) cooldownMap.current.delete(key)
+            }
+          }
 
-          // Show flash feedback
+          // Show flash feedback (clear previous timeout first)
           setLastScanned(decodedText)
           setShowFlash(true)
-          setTimeout(() => setShowFlash(false), 600)
+          if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current)
+          flashTimeoutRef.current = setTimeout(() => setShowFlash(false), 600)
 
-          // Send to parent
-          onScan(decodedText)
+          // Send to parent via ref to avoid stale closure
+          onScanRef.current(decodedText)
         },
         () => {}
       )
@@ -83,7 +107,10 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
   useEffect(() => {
     initScanner()
-    return () => { stopScanner() }
+    return () => {
+      stopScanner()
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClose = async () => {
