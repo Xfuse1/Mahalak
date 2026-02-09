@@ -82,6 +82,8 @@ export default function QPOSPage() {
   const [salesHistory, setSalesHistory] = useState<Sale[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [loadingSummary, setLoadingSummary] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
@@ -321,24 +323,46 @@ export default function QPOSPage() {
   // ===================== Load History =====================
 
   const loadHistory = async () => {
-    if (!store) return
+    if (!store) {
+      setError("لم يتم العثور على بيانات المتجر")
+      return
+    }
+    setLoadingHistory(true)
+    setError("")
     try {
       const history = await getPOSSales(store.id, 50)
       setSalesHistory(history as Sale[])
       setShowHistory(true)
+      if (history.length === 0) {
+        setSuccess("لا توجد مبيعات مسجلة بعد")
+      }
     } catch (err) {
       console.error("[POS] Error loading history:", err)
+      setError("حدث خطأ أثناء تحميل سجل المبيعات")
+    } finally {
+      setLoadingHistory(false)
     }
   }
 
   const loadDailySummary = async () => {
-    if (!store) return
+    if (!store) {
+      setError("لم يتم العثور على بيانات المتجر")
+      return
+    }
+    setLoadingSummary(true)
+    setError("")
     try {
       const summary = await getPOSDailySummary(store.id)
       setDailySummary(summary)
       setShowSummary(true)
+      if (summary.totalSales === 0) {
+        setSuccess("لا توجد مبيعات لهذا اليوم")
+      }
     } catch (err) {
       console.error("[POS] Error loading summary:", err)
+      setError("حدث خطأ أثناء تحميل ملخص اليوم")
+    } finally {
+      setLoadingSummary(false)
     }
   }
 
@@ -432,22 +456,42 @@ export default function QPOSPage() {
           <span className="text-gray-500 text-sm">| نظام الكاشير</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={loadDailySummary}
-            className="flex items-center gap-1.5 text-sm bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition"
+            disabled={loadingSummary}
+            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">ملخص اليوم</span>
+            {loadingSummary ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                <span>جاري التحميل...</span>
+              </>
+            ) : (
+              <>
+                <BarChart3 className="h-5 w-5" />
+                <span>ملخص اليوم</span>
+              </>
+            )}
           </button>
           <button
             onClick={loadHistory}
-            className="flex items-center gap-1.5 text-sm bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition"
+            disabled={loadingHistory}
+            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            <Clock className="h-4 w-4" />
-            <span className="hidden sm:inline">سجل المبيعات</span>
+            {loadingHistory ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                <span>جاري التحميل...</span>
+              </>
+            ) : (
+              <>
+                <Clock className="h-5 w-5" />
+                <span>سجل المبيعات</span>
+              </>
+            )}
           </button>
-          <div className="text-gray-500 text-xs mr-2">
+          <div className="text-gray-500 text-xs mr-2 hidden lg:block">
             F2: بحث | F4: مسح | F9: دفع
           </div>
         </div>
