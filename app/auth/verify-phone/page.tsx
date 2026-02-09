@@ -127,6 +127,36 @@ export default function VerifyPhonePage() {
     try {
       const result = await verifyPhoneOTP(code)
       if (result.success) {
+        // If registering as customer, complete registration
+        if (mode === "register" && role === "customer") {
+          const pendingDataStr = sessionStorage.getItem("pendingCustomerData")
+          if (pendingDataStr) {
+            setRegistering(true)
+            const pendingData = JSON.parse(pendingDataStr)
+            
+            const success = await register(
+              pendingData.email,
+              pendingData.password,
+              pendingData.name,
+              "customer",
+              undefined,
+              pendingData.street,
+              pendingData.city,
+              pendingData.country,
+              pendingData.phone
+            )
+            
+            if (success) {
+              sessionStorage.removeItem("pendingCustomerData")
+              router.push(returnUrl)
+            } else {
+              setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
+            }
+            setRegistering(false)
+            return
+          }
+        }
+
         // If registering as seller, complete registration
         if (mode === "register" && role === "seller") {
           const pendingDataStr = sessionStorage.getItem("pendingSellerData")

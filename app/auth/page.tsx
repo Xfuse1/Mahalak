@@ -38,6 +38,9 @@ export default function AuthPage() {
   
   // Customer phone state
   const [customerPhone, setCustomerPhone] = useState("")
+  const [isCustomerPhoneVerified, setIsCustomerPhoneVerified] = useState(false)
+  const [triggerCustomerSendOTP, setTriggerCustomerSendOTP] = useState(false)
+  const [customerPhoneStep, setCustomerPhoneStep] = useState<"phone" | "otp" | "verified">("phone")
   
   // Phone verification state for sellers
   const [sellerPhone, setSellerPhone] = useState("")
@@ -250,6 +253,36 @@ export default function AuthPage() {
       const phoneCheck = await getUserByPhone(customerPhone)
       if (phoneCheck.success) {
         setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        return
+      }
+
+      // If phone is not verified yet, redirect to verify page
+      if (!isCustomerPhoneVerified && customerPhoneStep === "phone") {
+        setIsLoading(true)
+        
+        // Save customer data to session storage for later
+        const pendingData = {
+          email,
+          password,
+          name,
+          phone: customerPhone,
+          street,
+          city,
+          country,
+          role: "customer",
+        }
+        sessionStorage.setItem("pendingCustomerData", JSON.stringify(pendingData))
+        
+        // Format phone and redirect to verify page
+        const formattedPhone = customerPhone.startsWith("+") ? customerPhone : `+2${customerPhone}`
+        
+        router.push(`/auth/verify-phone?phone=${encodeURIComponent(formattedPhone)}&role=customer&returnUrl=/`)
+        return
+      }
+      
+      // If we're in OTP step, wait for verification
+      if (!isCustomerPhoneVerified && customerPhoneStep === "otp") {
+        setError(t("يرجى إدخال كود التحقق أولاً", "Please enter the verification code first"))
         return
       }
     }
@@ -594,29 +627,21 @@ export default function AuthPage() {
                     </div>
 
                     {role === "customer" && (
-                      <div className="space-y-2">
-                        <Label htmlFor="register-phone" className="text-base">
-                          {t("رقم الهاتف", "Phone Number")} <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          id="register-phone"
-                          name="customerPhone"
-                          type="tel"
-                          required
-                          dir="ltr"
-                          value={customerPhone}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "")
-                            setCustomerPhone(val)
-                          }}
-                          placeholder="01012345678"
-                          className="h-12"
-                          maxLength={11}
-                        />
-                        <p className="text-xs text-gray-500">
-                          {t("أدخل رقم هاتف مصري صحيح (11 رقم يبدأ بـ 01)", "Enter a valid Egyptian phone number (11 digits starting with 01)")}
-                        </p>
-                      </div>
+                      <PhoneVerification
+                        phoneNumber={customerPhone}
+                        onPhoneChange={setCustomerPhone}
+                        onVerified={setIsCustomerPhoneVerified}
+                        isVerified={isCustomerPhoneVerified}
+                        language={language}
+                        triggerSendOTP={triggerCustomerSendOTP}
+                        onOTPSent={(success, error) => {
+                          setTriggerCustomerSendOTP(false)
+                          if (!success && error) {
+                            setError(error)
+                          }
+                        }}
+                        onStepChange={setCustomerPhoneStep}
+                      />
                     )}
 
                     <div className="space-y-2">

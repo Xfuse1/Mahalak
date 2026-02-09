@@ -12,6 +12,7 @@ import {
   User, StickyNote, Tag, Grid3X3, Store, MessageCircle, Camera, ScanLine
 } from "lucide-react"
 import { BarcodeScanner } from "@/components/barcode-scanner"
+import { QRCodeSVG } from "qrcode.react"
 
 // ===================== Types =====================
 
@@ -95,6 +96,7 @@ export default function QPOSPage() {
   const [quickAddStock, setQuickAddStock] = useState("1")
   const [quickAddCategory, setQuickAddCategory] = useState("")
   const [quickAddLoading, setQuickAddLoading] = useState(false)
+  const [showMobileCart, setShowMobileCart] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   // ===================== Load Data =====================
@@ -552,8 +554,8 @@ export default function QPOSPage() {
   return (
     <div className="h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col overflow-hidden print:bg-white" dir="rtl">
       {/* ===== Top Bar ===== */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between print:hidden shadow-sm">
-        <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-gray-200 px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between print:hidden shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => router.push("/seller/dashboard")}
             className="text-gray-500 hover:text-emerald-600 transition p-1.5 hover:bg-gray-100 rounded-lg"
@@ -561,57 +563,69 @@ export default function QPOSPage() {
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {store.logo_url ? (
               <img
                 src={store.logo_url}
                 alt={store.name}
-                className="w-10 h-10 rounded-lg object-cover shadow-sm border border-gray-200"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-cover shadow-sm border border-gray-200"
               />
             ) : (
-              <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 p-2 rounded-lg shadow-sm">
-                <Store className="h-6 w-6 text-white" />
+              <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 p-1.5 sm:p-2 rounded-lg shadow-sm">
+                <Store className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
             )}
             <div>
-              <h1 className="text-gray-800 font-bold text-lg leading-tight">{store.name}</h1>
-              <span className="text-gray-500 text-xs">نظام الكاشير</span>
+              <h1 className="text-gray-800 font-bold text-sm sm:text-lg leading-tight truncate max-w-[120px] sm:max-w-none">{store.name}</h1>
+              <span className="text-gray-500 text-[10px] sm:text-xs">نظام الكاشير</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* Mobile cart toggle */}
+          <button
+            onClick={() => setShowMobileCart(!showMobileCart)}
+            className="lg:hidden relative flex items-center gap-1.5 text-sm font-medium bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-3 py-2 rounded-xl transition-all"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {cartItemsCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {cartItemsCount}
+              </span>
+            )}
+          </button>
           <button
             onClick={loadDailySummary}
             disabled={loadingSummary}
-            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-violet-500 to-violet-600 text-white hover:shadow-xl hover:shadow-violet-500/30 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium bg-gradient-to-r from-violet-500 to-violet-600 text-white hover:shadow-xl hover:shadow-violet-500/30 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {loadingSummary ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                <span>جاري التحميل...</span>
+                <span className="hidden sm:inline">جاري التحميل...</span>
               </>
             ) : (
               <>
-                <BarChart3 className="h-5 w-5" />
-                <span>ملخص اليوم</span>
+                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">ملخص اليوم</span>
               </>
             )}
           </button>
           <button
             onClick={loadHistory}
             disabled={loadingHistory}
-            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-rose-500 to-rose-600 text-white hover:shadow-xl hover:shadow-rose-500/30 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium bg-gradient-to-r from-rose-500 to-rose-600 text-white hover:shadow-xl hover:shadow-rose-500/30 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {loadingHistory ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                <span>جاري التحميل...</span>
+                <span className="hidden sm:inline">جاري التحميل...</span>
               </>
             ) : (
               <>
-                <Clock className="h-5 w-5" />
-                <span>سجل المبيعات</span>
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">سجل المبيعات</span>
               </>
             )}
           </button>
@@ -634,10 +648,28 @@ export default function QPOSPage() {
         </div>
       )}
 
+      {/* ===== Mobile Cart Overlay ===== */}
+      {showMobileCart && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setShowMobileCart(false)} />
+      )}
+
       {/* ===== Main Layout ===== */}
-      <div className="flex-1 flex overflow-hidden print:hidden">
+      <div className="flex-1 flex flex-col-reverse lg:flex-row overflow-hidden print:hidden relative">
         {/* ===== Left: Cart Panel ===== */}
-        <div className="w-[380px] bg-white flex flex-col border-l border-gray-200 shadow-lg">
+        <div className={`
+          fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto
+          w-[85vw] sm:w-[380px] bg-white flex flex-col border-l border-gray-200 shadow-lg
+          transform transition-transform duration-300 ease-in-out
+          ${showMobileCart ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+          lg:transform-none
+        `}>
+          {/* Mobile cart close button */}
+          <button
+            onClick={() => setShowMobileCart(false)}
+            className="lg:hidden absolute top-3 left-3 z-10 bg-gray-100 hover:bg-gray-200 p-1.5 rounded-lg transition"
+          >
+            <X className="h-4 w-4 text-gray-600" />
+          </button>
           {/* Cart Header */}
           <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
             <div className="flex items-center gap-2">
@@ -787,9 +819,12 @@ export default function QPOSPage() {
           {/* Pay Button */}
           <div className="p-3 border-t border-gray-200 bg-white">
             <button
-              onClick={() => cart.length > 0 && setShowPayment(true)}
+              onClick={() => {
+                cart.length > 0 && setShowPayment(true)
+                setShowMobileCart(false)
+              }}
               disabled={cart.length === 0}
-              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-base sm:text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
             >
               <DollarSign className="h-5 w-5" />
               دفع (F9)
@@ -800,17 +835,17 @@ export default function QPOSPage() {
         {/* ===== Right: Products Panel ===== */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Search & Filters */}
-          <div className="p-3 bg-white border-b border-gray-200 space-y-2 shadow-sm">
-            <div className="flex gap-2">
+          <div className="p-2 sm:p-3 bg-white border-b border-gray-200 space-y-2 shadow-sm">
+            <div className="flex gap-1.5 sm:gap-2">
               <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                 <input
                   ref={searchRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="بحث بالاسم أو الباركود... (F2)"
-                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl pr-11 pl-4 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
+                  className="w-full h-9 sm:h-11 bg-gray-50 text-gray-800 rounded-xl pr-9 sm:pr-11 pl-4 text-xs sm:text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
                 />
                 {searchQuery && (
                   <button
@@ -823,18 +858,18 @@ export default function QPOSPage() {
               </div>
               <button
                 onClick={() => setShowScanner(true)}
-                className="h-11 px-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
+                className="h-9 sm:h-11 px-2 sm:px-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
                 title="مسح الباركود بالكاميرا"
               >
-                <Camera className="h-5 w-5" />
+                <Camera className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="text-sm font-medium hidden sm:inline">مسح</span>
               </button>
               <button
                 onClick={() => setShowQuickAdd(true)}
-                className="h-11 px-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
+                className="h-9 sm:h-11 px-2 sm:px-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
                 title="إضافة منتج سريع"
               >
-                <Plus className="h-5 w-5" />
+                <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="text-sm font-medium hidden sm:inline">منتج</span>
               </button>
             </div>
@@ -881,7 +916,7 @@ export default function QPOSPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">
+              <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 sm:gap-2.5">
                 {filteredProducts.map((product) => {
                   const inCart = cart.find((item) => item.id === product.id)
                   const outOfStock = product.stock <= 0
@@ -1198,14 +1233,48 @@ export default function QPOSPage() {
 
               <div className="border-t border-dashed border-gray-300 my-3" />
 
-              <p className="text-gray-400 text-xs">شكراً لتسوقكم معنا</p>
+              <p className="text-gray-400 text-xs mb-4">شكراً لتسوقكم معنا</p>
+
+              {/* QR Code for invoice */}
+              <div className="flex flex-col items-center gap-2 mb-2">
+                <div className="bg-white p-3 rounded-xl border-2 border-gray-200 shadow-sm">
+                  <QRCodeSVG
+                    value={(() => {
+                      const receiptData = {
+                        store: store.name,
+                        address: store.address || "",
+                        phone: store.phone || "",
+                        sale_number: lastSale.sale_number,
+                        date: lastSale.created_at,
+                        items: lastSale.items.map((item: any) => ({
+                          name: item.name,
+                          qty: item.quantity,
+                          price: item.price,
+                          total: item.total,
+                        })),
+                        subtotal: lastSale.subtotal,
+                        discount: lastSale.discount,
+                        total: lastSale.total,
+                        payment_method: lastSale.payment_method,
+                        amount_paid: lastSale.amount_paid,
+                        change: lastSale.change,
+                      }
+                      return `${typeof window !== "undefined" ? window.location.origin : ""}/pos/receipt?data=${encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(receiptData)))))}`
+                    })()}
+                    size={140}
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
+                <p className="text-gray-500 text-[11px]">امسح الكود لعرض الفاتورة</p>
+              </div>
             </div>
 
             {/* Actions */}
-            <div className="p-4 border-t flex gap-2">
+            <div className="p-3 sm:p-4 border-t flex gap-2">
               <button
                 onClick={sendWhatsApp}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
                 title="إرسال عبر واتساب"
               >
                 <MessageCircle className="h-4 w-4" />
@@ -1213,14 +1282,14 @@ export default function QPOSPage() {
               </button>
               <button
                 onClick={printReceipt}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition"
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
               >
                 <Printer className="h-4 w-4" />
                 طباعة
               </button>
               <button
                 onClick={() => setShowReceipt(false)}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 تم
