@@ -63,25 +63,82 @@ function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>)
 
 export async function getProducts(category?: string) {
   const db = getAdminDb()
-  let query: Query = db.collection("products")
 
-  if (category) {
-    // Check if this is a main store category (e.g., "بقالة", "صحة", "ملابس")
-    const subcategories = storeCategorySubcategories[category]
-    if (subcategories) {
-      // It's a main category — get all subcategory names and query with "in"
-      const subcategoryNames = subcategories.map((s) => s.name)
-      // Also include the main category name itself for backward compatibility
-      const allCategoryNames = Array.from(new Set([category, ...subcategoryNames]))
-      // Firestore "in" supports up to 30 values — should be fine
-      query = query.where("category", "in", allCategoryNames)
-    } else {
-      query = query.where("category", "==", category)
+  if (category && storeCategorySubcategories[category]) {
+    // Main category (e.g., "بقالة", "صحة", "ملابس")
+    // Step 1: Get all stores that belong to this main category
+    const sellersSnapshot = await db.collection("users").where("role", "==", "seller").get()
+    const storeIds = sellersSnapshot.docs
+      .filter((doc) => {
+        const data = doc.data()
+        return data.store && data.store.category === category
+      })
+      .map((doc) => doc.id)
+
+    if (storeIds.length === 0) return []
+
+    // Step 2: Get all products belonging to those stores (batch in chunks of 30 for Firestore "in" limit)
+    const chunks = chunkArray(storeIds, 30)
+    let products: any[] = []
+    for (const chunk of chunks) {
+      const snap = await db.collection("products").where("store_id", "in", chunk).get()
+      products.push(...snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
     }
+
+    // Build store map from already fetched sellers
+    const storeMap = new Map<string, any>()
+    sellersSnapshot.docs.forEach((doc) => {
+      const data = doc.data()
+      if (data.store && data.store.category === category) {
+        storeMap.set(doc.id, { id: doc.id, seller_id: doc.id, ...data.store })
+      }
+    })
+
+    // Fetch active offers
+    const now = new Date().toISOString()
+    const offersSnapshot = await db.collection("offers")
+      .where("end_date", ">=", now.split('T')[0])
+      .get()
+    const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+    const today = new Date().toISOString().split('T')[0]
+
+    return products.map((product: any) => {
+      const store = storeMap.get(product.store_id)
+      let bestDiscount = 0
+      let offerTitle: string | null = null
+
+      for (const offer of activeOffers) {
+        if (offer.start_date > today || offer.end_date < today) continue
+        const discount = Number(offer.discount_percentage) || 0
+        if (discount <= bestDiscount) continue
+
+        if (offer.product_id === product.id && offer.store_id === product.store_id) {
+          bestDiscount = discount
+          offerTitle = offer.title || null
+        } else if (offer.category && offer.category === product.category && !offer.product_id && offer.store_id === product.store_id) {
+          if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
+        } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
+          if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
+        }
+      }
+
+      return serializeData({
+        ...product,
+        stores: store ? { name: store.name } : null,
+        discount_percentage: bestDiscount,
+        offer_title: offerTitle
+      })
+    })
+  }
+
+  // Subcategory or no category — original logic
+  let query: Query = db.collection("products")
+  if (category) {
+    query = query.where("category", "==", category)
   }
 
   const snapshot = await query.get()
-  let products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 
   // Fetch active offers
   const now = new Date().toISOString()
@@ -93,16 +150,6 @@ export async function getProducts(category?: string) {
 
   const storeIds = Array.from(new Set(products.map((p: any) => p.store_id)))
   const storeMap = await getStoreMap(db, storeIds)
-
-  // If filtering by a main category, also filter products by store category
-  // This prevents products with shared subcategory names (e.g., "أخرى") from leaking across categories
-  if (category && storeCategorySubcategories[category]) {
-    products = products.filter((product: any) => {
-      const store = storeMap.get(product.store_id)
-      if (!store) return false
-      return store.category === category
-    })
-  }
 
   return products.map((product: any) => {
     const store = storeMap.get(product.store_id)
