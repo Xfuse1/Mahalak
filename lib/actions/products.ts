@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
+import { storeCategorySubcategories } from "../mock-data"
 
 type ProductRecord = Record<string, any>
 type StoreRecord = Record<string, any>
@@ -65,7 +66,18 @@ export async function getProducts(category?: string) {
   let query: Query = db.collection("products")
 
   if (category) {
-    query = query.where("category", "==", category)
+    // Check if this is a main store category (e.g., "بقالة", "صحة", "ملابس")
+    const subcategories = storeCategorySubcategories[category]
+    if (subcategories) {
+      // It's a main category — get all subcategory names and query with "in"
+      const subcategoryNames = subcategories.map((s) => s.name)
+      // Also include the main category name itself for backward compatibility
+      const allCategoryNames = Array.from(new Set([category, ...subcategoryNames]))
+      // Firestore "in" supports up to 30 values — should be fine
+      query = query.where("category", "in", allCategoryNames)
+    } else {
+      query = query.where("category", "==", category)
+    }
   }
 
   const snapshot = await query.get()
