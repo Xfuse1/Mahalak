@@ -4,7 +4,7 @@ import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { chunkArray } from "../firebase/firestore-helpers"
-import { createNotification } from "./notifications"
+import { createNotification, sendReviewRequestNotification } from "./notifications"
 
 type RecordMap = {
   id: string
@@ -323,8 +323,6 @@ export async function getStoreOrders(storeId: string) {
     }
   })
 }
-
-import { createNotification, sendReviewRequestNotification } from "./notifications"
 
 export async function updateOrderStatus(orderId: string, status: string, note?: string) {
   const db = getAdminDb()
