@@ -33,11 +33,15 @@ export default function VerifyPhonePage() {
   const [otpSent, setOtpSent] = useState(false)
   const [sendingOtp, setSendingOtp] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  // useRef guard survives React StrictMode remount (unlike useState which resets)
+  const otpSendingRef = useRef(false)
 
   // Send OTP when page loads (if not already sent)
   useEffect(() => {
     const sendInitialOTP = async () => {
-      if (!phone || otpSent || sendingOtp) return
+      // useRef-based guard prevents double-send in React StrictMode
+      if (!phone || otpSendingRef.current) return
+      otpSendingRef.current = true
       
       setSendingOtp(true)
       try {
@@ -47,9 +51,11 @@ export default function VerifyPhonePage() {
           console.log("[v0] OTP sent from verify-phone page")
         } else {
           setError(result.error || "فشل إرسال كود التحقق")
+          otpSendingRef.current = false // Allow retry on error
         }
       } catch (err) {
         setError("حدث خطأ أثناء إرسال الكود")
+        otpSendingRef.current = false // Allow retry on error
       } finally {
         setSendingOtp(false)
       }
@@ -194,6 +200,8 @@ export default function VerifyPhonePage() {
     try {
       // Format phone number
       const formattedPhone = phone.startsWith("+") ? phone : `+2${phone}`
+      // Reset the ref guard so sendPhoneOTP can proceed
+      otpSendingRef.current = false
       const result = await sendPhoneOTP(formattedPhone)
       
       if (result.success) {
