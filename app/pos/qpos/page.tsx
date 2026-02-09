@@ -9,7 +9,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Receipt, DollarSign,
   BarChart3, Printer, Package, ChevronLeft,
   CreditCard, Banknote, Wallet, AlertTriangle, CheckCircle2, Clock,
-  User, StickyNote, Tag, Grid3X3, Store
+  User, StickyNote, Tag, Grid3X3, Store, MessageCircle
 } from "lucide-react"
 
 // ===================== Types =====================
@@ -372,6 +372,45 @@ export default function QPOSPage() {
 
   const printReceipt = () => {
     window.print()
+  }
+
+  // ===================== Send WhatsApp =====================
+
+  const sendWhatsApp = () => {
+    if (!lastSale) return
+    
+    // Format receipt message
+    let message = `🧾 *${store.name}*\n`
+    if (store.address) message += `📍 ${store.address}\n`
+    if (store.phone) message += `📞 ${store.phone}\n`
+    message += `\n━━━━━━━━━━━━━━━━\n\n`
+    message += `📅 ${new Date(lastSale.created_at).toLocaleDateString("ar-SA")}\n`
+    message += `🔢 رقم الفاتورة: #${lastSale.sale_number}\n\n`
+    message += `📦 *المنتجات:*\n`
+    
+    lastSale.items.forEach((item: any) => {
+      message += `• ${item.name} × ${item.quantity} = ${item.total.toFixed(2)} ر.س\n`
+    })
+    
+    message += `\n━━━━━━━━━━━━━━━━\n\n`
+    message += `المجموع: ${lastSale.subtotal.toFixed(2)} ر.س\n`
+    
+    if (lastSale.discount > 0) {
+      message += `الخصم: -${lastSale.discount.toFixed(2)} ر.س\n`
+    }
+    
+    message += `\n💰 *الإجمالي: ${lastSale.total.toFixed(2)} ر.س*\n\n`
+    
+    if (lastSale.payment_method === "cash") {
+      message += `المدفوع: ${lastSale.amount_paid.toFixed(2)} ر.س\n`
+      message += `الباقي: ${lastSale.change.toFixed(2)} ر.س\n\n`
+    }
+    
+    message += `🙏 شكراً لتسوقكم معنا`
+    
+    // Open WhatsApp with message
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`
+    window.open(whatsappUrl, "_blank")
   }
 
   // ===================== Keyboard Shortcut =====================
@@ -1059,6 +1098,14 @@ export default function QPOSPage() {
 
             {/* Actions */}
             <div className="p-4 border-t flex gap-2">
+              <button
+                onClick={sendWhatsApp}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition"
+                title="إرسال عبر واتساب"
+              >
+                <MessageCircle className="h-4 w-4" />
+                واتساب
+              </button>
               <button
                 onClick={printReceipt}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition"
