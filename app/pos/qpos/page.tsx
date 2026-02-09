@@ -3,14 +3,15 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, type POSSaleItem } from "@/lib/actions/pos"
+import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, createPOSQuickProduct, type POSSaleItem } from "@/lib/actions/pos"
 import { getStoreByUserId } from "@/lib/actions/stores"
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Receipt, DollarSign,
   BarChart3, Printer, Package, ChevronLeft,
   CreditCard, Banknote, Wallet, AlertTriangle, CheckCircle2, Clock,
-  User, StickyNote, Tag, Grid3X3, Store, MessageCircle
+  User, StickyNote, Tag, Grid3X3, Store, MessageCircle, Camera, ScanLine
 } from "lucide-react"
+import { BarcodeScanner } from "@/components/barcode-scanner"
 
 // ===================== Types =====================
 
@@ -86,6 +87,14 @@ export default function QPOSPage() {
   const [loadingSummary, setLoadingSummary] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [showScanner, setShowScanner] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [quickAddBarcode, setQuickAddBarcode] = useState("")
+  const [quickAddName, setQuickAddName] = useState("")
+  const [quickAddPrice, setQuickAddPrice] = useState("")
+  const [quickAddStock, setQuickAddStock] = useState("1")
+  const [quickAddCategory, setQuickAddCategory] = useState("")
+  const [quickAddLoading, setQuickAddLoading] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   // ===================== Load Data =====================
@@ -413,6 +422,66 @@ export default function QPOSPage() {
     window.open(whatsappUrl, "_blank")
   }
 
+  // ===================== Barcode Scanner =====================
+
+  const handleBarcodeScan = (code: string) => {
+    const product = products.find((p) => p.barcode === code)
+    if (product) {
+      addToCart(product)
+      setSuccess(`تم إضافة "${product.name}" للسلة`)
+      setTimeout(() => setSuccess(""), 2000)
+    } else {
+      setShowScanner(false)
+      setQuickAddBarcode(code)
+      setShowQuickAdd(true)
+      setError(`لا يوجد منتج بالباركود: ${code}`)
+      setTimeout(() => setError(""), 3000)
+    }
+  }
+
+  // ===================== Quick Add Product =====================
+
+  const handleQuickAddProduct = async () => {
+    if (!quickAddName.trim() || !quickAddPrice || Number(quickAddPrice) <= 0) {
+      setError("يرجى إدخال اسم المنتج والسعر")
+      return
+    }
+
+    setQuickAddLoading(true)
+    setError("")
+
+    try {
+      const result = await createPOSQuickProduct({
+        name: quickAddName.trim(),
+        price: Number(quickAddPrice),
+        stock: Number(quickAddStock) || 1,
+        category: quickAddCategory.trim() || "عام",
+        barcode: quickAddBarcode.trim() || undefined,
+        store_id: store.id,
+      })
+
+      if (result.success && result.data) {
+        const newProduct = result.data as Product
+        setProducts((prev) => [...prev, newProduct])
+        addToCart(newProduct)
+        setSuccess(`تم إضافة "${newProduct.name}" وإضافته للسلة`)
+        setTimeout(() => setSuccess(""), 3000)
+        setShowQuickAdd(false)
+        setQuickAddBarcode("")
+        setQuickAddName("")
+        setQuickAddPrice("")
+        setQuickAddStock("1")
+        setQuickAddCategory("")
+      } else {
+        setError(result.error || "فشل في إضافة المنتج")
+      }
+    } catch (err: any) {
+      setError(err?.message || "حدث خطأ غير متوقع")
+    } finally {
+      setQuickAddLoading(false)
+    }
+  }
+
   // ===================== Keyboard Shortcut =====================
 
   useEffect(() => {
@@ -434,6 +503,8 @@ export default function QPOSPage() {
         setShowReceipt(false)
         setShowHistory(false)
         setShowSummary(false)
+        setShowScanner(false)
+        setShowQuickAdd(false)
       }
       // F4 = Clear cart
       if (e.key === "F4") {
@@ -730,24 +801,42 @@ export default function QPOSPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Search & Filters */}
           <div className="p-3 bg-white border-b border-gray-200 space-y-2 shadow-sm">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="بحث بالاسم أو الباركود... (F2)"
-                className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl pr-11 pl-4 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-lg transition"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="بحث بالاسم أو الباركود... (F2)"
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl pr-11 pl-4 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-lg transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setShowScanner(true)}
+                className="h-11 px-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
+                title="مسح الباركود بالكاميرا"
+              >
+                <Camera className="h-5 w-5" />
+                <span className="text-sm font-medium hidden sm:inline">مسح</span>
+              </button>
+              <button
+                onClick={() => setShowQuickAdd(true)}
+                className="h-11 px-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
+                title="إضافة منتج سريع"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-sm font-medium hidden sm:inline">منتج</span>
+              </button>
             </div>
 
             {/* Category Filters */}
@@ -1336,6 +1425,153 @@ export default function QPOSPage() {
           )}
           <div className="border-t border-dashed my-3" />
           <p className="text-center text-xs text-gray-400">شكراً لتسوقكم معنا</p>
+        </div>
+      )}
+
+      {/* ===== Barcode Scanner Modal ===== */}
+      {showScanner && (
+        <BarcodeScanner
+          onScan={handleBarcodeScan}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      {/* ===== Quick Add Product Modal ===== */}
+      {showQuickAdd && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-1.5 rounded-lg">
+                  <Plus className="h-4 w-4 text-white" />
+                </div>
+                إضافة منتج سريع
+              </h2>
+              <button
+                onClick={() => {
+                  setShowQuickAdd(false)
+                  setQuickAddBarcode("")
+                  setQuickAddName("")
+                  setQuickAddPrice("")
+                  setQuickAddStock("1")
+                  setQuickAddCategory("")
+                }}
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {quickAddBarcode && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+                  <ScanLine className="h-5 w-5 text-emerald-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">الباركود</p>
+                    <p className="text-emerald-700 font-bold font-mono">{quickAddBarcode}</p>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">اسم المنتج *</label>
+                <input
+                  type="text"
+                  value={quickAddName}
+                  onChange={(e) => setQuickAddName(e.target.value)}
+                  placeholder="مثال: بيبسي 330 مل"
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">السعر *</label>
+                  <input
+                    type="number"
+                    value={quickAddPrice}
+                    onChange={(e) => setQuickAddPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0.01"
+                    step="0.01"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">الكمية</label>
+                  <input
+                    type="number"
+                    value={quickAddStock}
+                    onChange={(e) => setQuickAddStock(e.target.value)}
+                    placeholder="1"
+                    min="1"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">القسم</label>
+                <select
+                  value={quickAddCategory}
+                  onChange={(e) => setQuickAddCategory(e.target.value)}
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">عام</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {!quickAddBarcode && (
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">الباركود (اختياري)</label>
+                  <input
+                    type="text"
+                    value={quickAddBarcode}
+                    onChange={(e) => setQuickAddBarcode(e.target.value)}
+                    placeholder="رقم الباركود"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={handleQuickAddProduct}
+                disabled={quickAddLoading || !quickAddName.trim() || !quickAddPrice}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2"
+              >
+                {quickAddLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    جاري الإضافة...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    إضافة وإضافة للسلة
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowQuickAdd(false)
+                  setQuickAddBarcode("")
+                  setQuickAddName("")
+                  setQuickAddPrice("")
+                  setQuickAddStock("1")
+                  setQuickAddCategory("")
+                }}
+                className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

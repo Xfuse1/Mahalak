@@ -125,7 +125,7 @@ export default function NewProductPage() {
         price: Number.parseFloat(formData.get("price") as string),
         stock: Number.parseInt(formData.get("stock") as string),
         category: finalCategory,
-
+        barcode: (formData.get("barcode") as string)?.trim() || "",
         image_url: imageUrl,
         store_id: store.id,
       }
@@ -308,6 +308,17 @@ export default function NewProductPage() {
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="barcode" className="text-gray-700 font-medium">الباركود (اختياري)</Label>
+                  <Input
+                    id="barcode"
+                    name="barcode"
+                    placeholder="مثال: 6221507001016 - الرقم المطبوع على العلبة"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">أدخل رقم الباركود المطبوع على المنتج (إن وجد) لتسريع البحث في نظام الكاشير</p>
                 </div>
 
                 <div>

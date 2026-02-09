@@ -256,6 +256,7 @@ export async function createProduct(formData: {
   stock: number
   image_url?: string
   store_id: string
+  barcode?: string
   simulator_section?: string | null
 }) {
   try {
@@ -296,6 +297,7 @@ export async function createProduct(formData: {
       stock: formData.stock,
       image_url: formData.image_url || "",
       store_id: formData.store_id,
+      barcode: formData.barcode || "",
       simulator_section: formData.simulator_section || null,
       rating: 0,
       rating_count: 0,

@@ -146,6 +146,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
         category: finalCategory,
+        barcode: (formData.get("barcode") as string)?.trim() || "",
         image_url: imageUrl,
       })
 
@@ -332,6 +333,18 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="barcode" className="text-gray-700 font-medium">الباركود (اختياري)</Label>
+                  <Input
+                    id="barcode"
+                    name="barcode"
+                    defaultValue={product.barcode || ""}
+                    placeholder="مثال: 6221507001016"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">رقم الباركود المطبوع على المنتج (إن وجد)</p>
                 </div>
 
                 <div>

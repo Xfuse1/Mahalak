@@ -150,6 +150,62 @@ export async function createPOSSale(saleData: POSSaleData) {
   }
 }
 
+// ==================== POS Quick Add Product ====================
+
+export async function createPOSQuickProduct(data: {
+  name: string
+  price: number
+  stock: number
+  category: string
+  barcode?: string
+  store_id: string
+}) {
+  try {
+    const db = getAdminDb()
+    const now = new Date().toISOString()
+
+    // Check if barcode already exists for this store
+    if (data.barcode) {
+      const existing = await db
+        .collection("products")
+        .where("store_id", "==", data.store_id)
+        .where("barcode", "==", data.barcode)
+        .get()
+      
+      if (!existing.empty) {
+        return { success: false, error: `يوجد منتج بنفس الباركود: ${existing.docs[0].data().name}` }
+      }
+    }
+
+    const docRef = db.collection("products").doc()
+    const payload = {
+      name: data.name,
+      description: "",
+      price: data.price,
+      stock: data.stock,
+      category: data.category,
+      barcode: data.barcode || "",
+      image_url: "",
+      store_id: data.store_id,
+      rating: 0,
+      rating_count: 0,
+      created_at: now,
+      updated_at: now,
+    }
+
+    await docRef.set(payload)
+    revalidatePath("/seller/products")
+
+    return {
+      success: true,
+      data: serializeData({ id: docRef.id, ...payload }),
+    }
+  } catch (error: any) {
+    console.error("[POS] Error creating quick product:", error)
+    return { success: false, error: error?.message || "فشل في إضافة المنتج" }
+  }
+}
+
 // ==================== POS Sales History ====================
 
 export async function getPOSSales(storeId: string, limit: number = 50) {
