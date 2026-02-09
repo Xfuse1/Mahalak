@@ -153,17 +153,31 @@ export async function createPOSSale(saleData: POSSaleData) {
 // ==================== POS Sales History ====================
 
 export async function getPOSSales(storeId: string, limit: number = 50) {
-  const db = getAdminDb()
-  const snapshot = await db
-    .collection("pos_sales")
-    .where("store_id", "==", storeId)
-    .orderBy("created_at", "desc")
-    .limit(limit)
-    .get()
+  try {
+    const db = getAdminDb()
+    const snapshot = await db
+      .collection("pos_sales")
+      .where("store_id", "==", storeId)
+      .get()
 
-  return snapshot.docs.map((doc) =>
-    serializeData({ id: doc.id, ...doc.data() })
-  )
+    // Sort in memory and limit
+    const sales = snapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a: any, b: any) => {
+        const dateA = new Date(a.created_at || 0).getTime()
+        const dateB = new Date(b.created_at || 0).getTime()
+        return dateB - dateA
+      })
+      .slice(0, limit)
+
+    return sales.map(sale => serializeData(sale))
+  } catch (error: any) {
+    console.error("[getPOSSales] Error:", error)
+    throw new Error(`فشل في تحميل سجل المبيعات: ${error?.message || "خطأ غير معروف"}`)
+  }
 }
 
 export async function getPOSSaleById(saleId: string) {
@@ -176,43 +190,53 @@ export async function getPOSSaleById(saleId: string) {
 // ==================== POS Daily Summary ====================
 
 export async function getPOSDailySummary(storeId: string, date?: string) {
-  const db = getAdminDb()
-  const targetDate = date || new Date().toISOString().split("T")[0]
-  const startOfDay = `${targetDate}T00:00:00.000Z`
-  const endOfDay = `${targetDate}T23:59:59.999Z`
+  try {
+    const db = getAdminDb()
+    const targetDate = date || new Date().toISOString().split("T")[0]
+    const startOfDay = new Date(`${targetDate}T00:00:00.000Z`).getTime()
+    const endOfDay = new Date(`${targetDate}T23:59:59.999Z`).getTime()
 
-  const snapshot = await db
-    .collection("pos_sales")
-    .where("store_id", "==", storeId)
-    .where("created_at", ">=", startOfDay)
-    .where("created_at", "<=", endOfDay)
-    .get()
+    // Get all sales for store (simple query)
+    const snapshot = await db
+      .collection("pos_sales")
+      .where("store_id", "==", storeId)
+      .get()
 
-  let totalSales = 0
-  let totalRevenue = 0
-  let totalItems = 0
-  let cashSales = 0
-  let cardSales = 0
+    let totalSales = 0
+    let totalRevenue = 0
+    let totalItems = 0
+    let cashSales = 0
+    let cardSales = 0
 
-  snapshot.docs.forEach((doc) => {
-    const data = doc.data()
-    totalSales++
-    totalRevenue += Number(data.total) || 0
-    totalItems += (data.items || []).reduce(
-      (sum: number, item: any) => sum + (Number(item.quantity) || 0),
-      0
-    )
-    if (data.payment_method === "cash") cashSales++
-    else cardSales++
-  })
+    // Filter by date in memory
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data()
+      const saleDate = new Date(data.created_at || 0).getTime()
+      
+      // Check if sale is within target date range
+      if (saleDate >= startOfDay && saleDate <= endOfDay) {
+        totalSales++
+        totalRevenue += Number(data.total) || 0
+        totalItems += (data.items || []).reduce(
+          (sum: number, item: any) => sum + (Number(item.quantity) || 0),
+          0
+        )
+        if (data.payment_method === "cash") cashSales++
+        else if (data.payment_method === "card") cardSales++
+      }
+    })
 
-  return {
-    date: targetDate,
-    totalSales,
-    totalRevenue,
-    totalItems,
-    cashSales,
-    cardSales,
-    averageOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
+    return {
+      date: targetDate,
+      totalSales,
+      totalRevenue,
+      totalItems,
+      cashSales,
+      cardSales,
+      averageOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
+    }
+  } catch (error: any) {
+    console.error("[getPOSDailySummary] Error:", error)
+    throw new Error(`فشل في تحميل ملخص اليوم: ${error?.message || "خطأ غير معروف"}`)
   }
 }

@@ -336,9 +336,10 @@ export default function QPOSPage() {
       if (history.length === 0) {
         setSuccess("لا توجد مبيعات مسجلة بعد")
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("[POS] Error loading history:", err)
-      setError("حدث خطأ أثناء تحميل سجل المبيعات")
+      const errorMsg = err?.message || "حدث خطأ أثناء تحميل سجل المبيعات"
+      setError(errorMsg)
     } finally {
       setLoadingHistory(false)
     }
@@ -358,9 +359,10 @@ export default function QPOSPage() {
       if (summary.totalSales === 0) {
         setSuccess("لا توجد مبيعات لهذا اليوم")
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("[POS] Error loading summary:", err)
-      setError("حدث خطأ أثناء تحميل ملخص اليوم")
+      const errorMsg = err?.message || "حدث خطأ أثناء تحميل ملخص اليوم"
+      setError(errorMsg)
     } finally {
       setLoadingSummary(false)
     }
