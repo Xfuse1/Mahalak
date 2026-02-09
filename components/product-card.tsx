@@ -60,6 +60,11 @@ function ProductCardComponent({ product }: ProductCardProps) {
           </div>
           <CardContent className="p-4 space-y-2.5">
             <h3 className="font-bold text-base line-clamp-2 leading-snug text-gray-800 group-hover:text-blue-600 transition-colors">{product.name}</h3>
+            {product.category && (
+              <span className="inline-block text-xs font-medium bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full w-fit">
+                {product.category}
+              </span>
+            )}
             {product.storeName && (
               <p className="text-sm text-gray-500 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
