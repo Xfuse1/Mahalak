@@ -490,13 +490,23 @@ export default function QPOSPage() {
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 p-1.5 rounded-lg">
-              <Store className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-3">
+            {store.logo_url ? (
+              <img
+                src={store.logo_url}
+                alt={store.name}
+                className="w-10 h-10 rounded-lg object-cover shadow-sm border border-gray-200"
+              />
+            ) : (
+              <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 p-2 rounded-lg shadow-sm">
+                <Store className="h-6 w-6 text-white" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-gray-800 font-bold text-lg leading-tight">{store.name}</h1>
+              <span className="text-gray-500 text-xs">نظام الكاشير</span>
             </div>
-            <h1 className="text-gray-800 font-bold text-lg">{store.name}</h1>
           </div>
-          <span className="text-gray-400 text-sm">| نظام الكاشير</span>
         </div>
 
         <div className="flex items-center gap-3">
