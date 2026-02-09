@@ -110,6 +110,10 @@ export async function createStore(storeData: {
   longitude?: number
   whatsapp_number?: string
   support_email?: string
+  owner_id_number?: string
+  id_card_image_url?: string
+  commercial_register_image_url?: string
+  tax_card_image_url?: string
 }) {
   const db = getAdminDb()
   const now = new Date().toISOString()
@@ -127,6 +131,10 @@ export async function createStore(storeData: {
     longitude: storeData.longitude || null,
     whatsapp_number: storeData.whatsapp_number || storeData.phone,
     support_email: storeData.support_email || "",
+    owner_id_number: storeData.owner_id_number || "",
+    id_card_image_url: storeData.id_card_image_url || null,
+    commercial_register_image_url: storeData.commercial_register_image_url || null,
+    tax_card_image_url: storeData.tax_card_image_url || null,
     is_approved: false,
     rating: 0,
     created_at: now,

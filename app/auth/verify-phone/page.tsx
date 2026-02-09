@@ -147,6 +147,10 @@ export default function VerifyPhonePage() {
               address: storeAddress,
               latitude: pendingData.latitude,
               longitude: pendingData.longitude,
+              ownerIdNumber: pendingData.ownerIdNumber || "",
+              idCardImageUrl: pendingData.idCardImageUrl || null,
+              commercialRegisterImageUrl: pendingData.commercialRegisterImageUrl || null,
+              taxCardImageUrl: pendingData.taxCardImageUrl || null,
             }
             
             const success = await register(

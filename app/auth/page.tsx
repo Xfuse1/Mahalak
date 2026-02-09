@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Header } from "../../components/header"
 import { Footer } from "../../components/footer"
@@ -48,6 +48,18 @@ export default function AuthPage() {
   // Store type state for "other" option
   const [selectedStoreType, setSelectedStoreType] = useState("")
   const [customStoreType, setCustomStoreType] = useState("")
+  
+  // Seller document fields
+  const [ownerIdNumber, setOwnerIdNumber] = useState("")
+  const [idCardImage, setIdCardImage] = useState<File | null>(null)
+  const [idCardImagePreview, setIdCardImagePreview] = useState<string | null>(null)
+  const [commercialRegisterImage, setCommercialRegisterImage] = useState<File | null>(null)
+  const [commercialRegisterImagePreview, setCommercialRegisterImagePreview] = useState<string | null>(null)
+  const [taxCardImage, setTaxCardImage] = useState<File | null>(null)
+  const [taxCardImagePreview, setTaxCardImagePreview] = useState<string | null>(null)
+  
+  // Error scroll ref
+  const errorRef = useRef<HTMLDivElement>(null)
   
   // Store location state
   const [storeLocation, setStoreLocation] = useState<{ latitude: number; longitude: number } | null>(null)
@@ -112,6 +124,22 @@ export default function AuthPage() {
     setStoreLogo(null)
     setStoreLogoPreview(null)
   }
+  
+  // Handle document image uploads
+  const handleDocImageChange = (setter: (f: File | null) => void, previewSetter: (s: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setter(file)
+      const reader = new FileReader()
+      reader.onloadend = () => previewSetter(reader.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+  
+  const removeDocImage = (setter: (f: File | null) => void, previewSetter: (s: string | null) => void) => () => {
+    setter(null)
+    previewSetter(null)
+  }
 
   // Redirect if already logged in
   useEffect(() => {
@@ -119,6 +147,13 @@ export default function AuthPage() {
       router.push(user.role === "seller" ? "/seller/dashboard" : "/")
     }
   }, [user, router, isLoggingIn])
+
+  // Scroll to error when it appears
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [error])
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -210,6 +245,13 @@ export default function AuthPage() {
         setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
         return
       }
+      
+      // Check if phone is already registered
+      const phoneCheck = await getUserByPhone(customerPhone)
+      if (phoneCheck.success) {
+        setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        return
+      }
     }
 
     // Address validation
@@ -254,6 +296,31 @@ export default function AuthPage() {
         setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
         return
       }
+      
+      // Check if seller phone is already registered
+      const sellerPhoneCheck = await getUserByPhone(phone)
+      if (sellerPhoneCheck.success) {
+        setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        return
+      }
+      
+      // Seller document validations
+      if (!ownerIdNumber || ownerIdNumber.trim().length < 10) {
+        setError(t("يرجى إدخال رقم بطاقة صاحب المتجر (14 رقم)", "Please enter the store owner's ID card number (14 digits)"))
+        return
+      }
+      if (!idCardImage) {
+        setError(t("يرجى رفع صورة البطاقة", "Please upload the ID card image"))
+        return
+      }
+      if (!commercialRegisterImage) {
+        setError(t("يرجى رفع صورة السجل التجاري", "Please upload the commercial register image"))
+        return
+      }
+      if (!taxCardImage) {
+        setError(t("يرجى رفع صورة البطاقة الضريبية", "Please upload the tax card image"))
+        return
+      }
 
       // Store name validation
       if (!storeName || storeName.trim().length < 3) {
@@ -289,22 +356,29 @@ export default function AuthPage() {
       if (!isPhoneVerified && phoneStep === "phone") {
         setIsLoading(true)
         
-        // Upload logo to Supabase first (base64 is too large for sessionStorage)
-        let storeLogoUrl: string | null = null
-        if (storeLogo) {
+        // Upload logo and document images to Supabase first (base64 is too large for sessionStorage)
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
+        
+        const uploadFile = async (file: File | null, prefix: string): Promise<string | null> => {
+          if (!file) return null
           try {
-            const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
-            const uploadFormData = new FormData()
-            uploadFormData.append("file", storeLogo)
-            uploadFormData.append("storeId", tempId)
-            const uploadRes = await uploadStoreImage(uploadFormData)
-            if (uploadRes.success && uploadRes.url) {
-              storeLogoUrl = uploadRes.url
-            }
+            const fd = new FormData()
+            fd.append("file", file)
+            fd.append("storeId", `${tempId}/${prefix}`)
+            const res = await uploadStoreImage(fd)
+            return res.success && res.url ? res.url : null
           } catch (err) {
-            console.error("[v0] Failed to pre-upload logo:", err)
+            console.error(`[v0] Failed to pre-upload ${prefix}:`, err)
+            return null
           }
         }
+        
+        const [storeLogoUrl, idCardImageUrl, commercialRegisterImageUrl, taxCardImageUrl] = await Promise.all([
+          uploadFile(storeLogo, "logo"),
+          uploadFile(idCardImage, "id-card"),
+          uploadFile(commercialRegisterImage, "commercial-register"),
+          uploadFile(taxCardImage, "tax-card"),
+        ])
         
         // Save seller data to session storage for later
         const pendingData = {
@@ -316,6 +390,10 @@ export default function AuthPage() {
           storeDescription,
           storeType,
           storeLogoUrl,
+          ownerIdNumber,
+          idCardImageUrl,
+          commercialRegisterImageUrl,
+          taxCardImageUrl,
           street,
           city,
           country,
@@ -426,7 +504,7 @@ export default function AuthPage() {
                 </TabsList>
 
                 {error && (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2">
+                  <div ref={errorRef} className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -720,6 +798,106 @@ export default function AuthPage() {
                               onChange={handleLogoChange}
                               className="hidden"
                             />
+                          </div>
+                        </div>
+                        
+                        {/* Owner ID Card Number */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-ownerIdNumber" className="text-base">
+                            {t("رقم بطاقة صاحب المتجر", "Store Owner ID Card Number")} <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="register-ownerIdNumber"
+                            name="ownerIdNumber"
+                            type="text"
+                            dir="ltr"
+                            required
+                            value={ownerIdNumber}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "")
+                              setOwnerIdNumber(val)
+                            }}
+                            placeholder="12345678901234"
+                            className="h-12"
+                            maxLength={14}
+                          />
+                          <p className="text-xs text-gray-500">
+                            {t("أدخل الرقم القومي المكون من 14 رقم", "Enter the 14-digit national ID number")}
+                          </p>
+                        </div>
+                        
+                        {/* ID Card Image */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-idCardImage" className="text-base">
+                            {t("صورة البطاقة", "ID Card Image")} <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="flex flex-col items-center gap-3">
+                            {idCardImagePreview ? (
+                              <div className="relative w-full">
+                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                  <Image src={idCardImagePreview} alt="ID Card" width={300} height={128} className="w-full h-full object-cover" />
+                                </div>
+                                <button type="button" onClick={removeDocImage(setIdCardImage, setIdCardImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <label htmlFor="register-idCardImage" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة البطاقة", "Click to upload ID card image")}</span>
+                              </label>
+                            )}
+                            <input id="register-idCardImage" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setIdCardImage, setIdCardImagePreview)} className="hidden" />
+                          </div>
+                        </div>
+                        
+                        {/* Commercial Register Image */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-commercialRegister" className="text-base">
+                            {t("صورة السجل التجاري", "Commercial Register Image")} <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="flex flex-col items-center gap-3">
+                            {commercialRegisterImagePreview ? (
+                              <div className="relative w-full">
+                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                  <Image src={commercialRegisterImagePreview} alt="Commercial Register" width={300} height={128} className="w-full h-full object-cover" />
+                                </div>
+                                <button type="button" onClick={removeDocImage(setCommercialRegisterImage, setCommercialRegisterImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <label htmlFor="register-commercialRegister" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة السجل التجاري", "Click to upload commercial register image")}</span>
+                              </label>
+                            )}
+                            <input id="register-commercialRegister" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setCommercialRegisterImage, setCommercialRegisterImagePreview)} className="hidden" />
+                          </div>
+                        </div>
+                        
+                        {/* Tax Card Image */}
+                        <div className="space-y-2">
+                          <Label htmlFor="register-taxCard" className="text-base">
+                            {t("صورة البطاقة الضريبية", "Tax Card Image")} <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="flex flex-col items-center gap-3">
+                            {taxCardImagePreview ? (
+                              <div className="relative w-full">
+                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                  <Image src={taxCardImagePreview} alt="Tax Card" width={300} height={128} className="w-full h-full object-cover" />
+                                </div>
+                                <button type="button" onClick={removeDocImage(setTaxCardImage, setTaxCardImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <label htmlFor="register-taxCard" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة البطاقة الضريبية", "Click to upload tax card image")}</span>
+                              </label>
+                            )}
+                            <input id="register-taxCard" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setTaxCardImage, setTaxCardImagePreview)} className="hidden" />
                           </div>
                         </div>
                         

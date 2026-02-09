@@ -49,6 +49,10 @@ interface AuthContextType {
       storeLogoUrl?: string | null
       latitude?: number
       longitude?: number
+      ownerIdNumber?: string
+      idCardImageUrl?: string | null
+      commercialRegisterImageUrl?: string | null
+      taxCardImageUrl?: string | null
     },
     street?: string,
     city?: string,
@@ -181,6 +185,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeLogoUrl?: string | null
       latitude?: number
       longitude?: number
+      ownerIdNumber?: string
+      idCardImageUrl?: string | null
+      commercialRegisterImageUrl?: string | null
+      taxCardImageUrl?: string | null
     },
     street?: string,
     city?: string,
@@ -233,6 +241,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           longitude: sellerData.longitude,
           whatsapp_number: sellerData.phone || "",
           support_email: email,
+          owner_id_number: sellerData.ownerIdNumber || "",
+          id_card_image_url: sellerData.idCardImageUrl || undefined,
+          commercial_register_image_url: sellerData.commercialRegisterImageUrl || undefined,
+          tax_card_image_url: sellerData.taxCardImageUrl || undefined,
         })
 
         if (!result.success) {
