@@ -4,7 +4,7 @@ import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestor
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
-import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
+import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
 
 type ProductRecord = Record<string, any>
