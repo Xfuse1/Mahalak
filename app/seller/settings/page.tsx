@@ -152,8 +152,8 @@ export default function SettingsPage() {
           open_time: storeData.open_time || "09:00",
           close_time: storeData.close_time || "22:00",
           working_days: storeData.working_days || "السبت - الخميس",
-          support_email: storeData.support_email || "",
-          whatsapp_number: storeData.whatsapp_number || "",
+          support_email: storeData.support_email || user?.email || "",
+          whatsapp_number: storeData.phone || "",
           return_policy: storeData.return_policy || "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"
         })
       }
@@ -229,6 +229,7 @@ export default function SettingsPage() {
 
     const updateData = {
       ...formData,
+      whatsapp_number: formData.phone,
       image_url: imageUrl,
     }
 
@@ -379,8 +380,8 @@ export default function SettingsPage() {
                         onVerified={(verified) => {
                           setIsPhoneVerified(verified)
                           if (verified) {
-                            // Update form data with new verified phone
-                            setFormData(prev => ({ ...prev, phone: newPhone }))
+                            // Update form data with new verified phone + whatsapp
+                            setFormData(prev => ({ ...prev, phone: newPhone, whatsapp_number: newPhone }))
                           }
                         }}
                         isVerified={isPhoneVerified}
@@ -574,11 +575,11 @@ export default function SettingsPage() {
                     id="whatsappNumber"
                     name="whatsapp_number"
                     type="tel"
-                    value={formData.whatsapp_number}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    value={formData.phone}
+                    disabled
+                    className="mt-2 h-12 rounded-xl bg-gray-100 border-gray-200 cursor-not-allowed"
                   />
+                  <p className="text-xs text-gray-500 mt-1">رقم الواتساب هو نفس رقم الهاتف</p>
                 </div>
                 <div>
                   <Label htmlFor="returnPolicy" className="text-gray-700 font-medium">سياسة الإرجاع</Label>

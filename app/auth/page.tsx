@@ -286,6 +286,18 @@ export default function AuthPage() {
 
       // If phone is not verified yet, trigger OTP send and redirect to verify page
       if (!isPhoneVerified && phoneStep === "phone") {
+        setIsLoading(true)
+        
+        // Convert storeLogo to base64 so it survives sessionStorage
+        let storeLogoBase64: string | null = null
+        if (storeLogo) {
+          storeLogoBase64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.readAsDataURL(storeLogo)
+          })
+        }
+        
         // Save seller data to session storage for later
         const pendingData = {
           email,
@@ -295,7 +307,7 @@ export default function AuthPage() {
           storeName,
           storeDescription,
           storeType,
-          storeLogo,
+          storeLogoBase64,
           street,
           city,
           country,

@@ -108,6 +108,8 @@ export async function createStore(storeData: {
   description?: string
   latitude?: number
   longitude?: number
+  whatsapp_number?: string
+  support_email?: string
 }) {
   const db = getAdminDb()
   const now = new Date().toISOString()
@@ -123,6 +125,8 @@ export async function createStore(storeData: {
     category: storeData.category,
     latitude: storeData.latitude || null,
     longitude: storeData.longitude || null,
+    whatsapp_number: storeData.whatsapp_number || storeData.phone,
+    support_email: storeData.support_email || "",
     is_approved: false,
     rating: 0,
     created_at: now,

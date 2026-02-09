@@ -229,6 +229,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           category: sellerData.storeType || "خدمات أخرى",
           latitude: sellerData.latitude,
           longitude: sellerData.longitude,
+          whatsapp_number: sellerData.phone || "",
+          support_email: email,
         })
 
         if (!result.success) {
