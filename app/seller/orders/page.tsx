@@ -258,7 +258,7 @@ export default function SellerOrdersPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t("إجمالي الطلبات", "Total Orders")}</p>
-                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length}</p>
+                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length + multiOrders.length}</p>
                   </div>
                 </div>
 
@@ -269,6 +269,7 @@ export default function SellerOrdersPage() {
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
                       <SelectItem value="all">{t("جميع الطلبات", "All Orders")}</SelectItem>
+                      <SelectItem value="pending">{t("في الانتظار", "Pending")}</SelectItem>
                       <SelectItem value="reviewing">{t("قيد المراجعة", "Under Review")}</SelectItem>
                       <SelectItem value="confirmed">{t("تم التاكيد", "Confirmed")}</SelectItem>
                       <SelectItem value="on_the_way">{t("في الطريق", "On the Way")}</SelectItem>
@@ -279,14 +280,14 @@ export default function SellerOrdersPage() {
                 </div>
               </div>
 
-              {orders.length === 0 ? (
+              {orders.length === 0 && multiOrders.length === 0 ? (
                 <div className="text-center py-16">
                   <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
                     <Filter className="h-10 w-10 text-gray-400" />
                   </div>
                   <p className="text-gray-500 text-lg">{t("لا توجد طلبات حتى الآن", "No orders yet")}</p>
                 </div>
-              ) : (
+              ) : orders.length === 0 ? null : (
                 <div className="space-y-4">
                   {orders
                     .filter(order => filter === "all" || order.status === filter)
