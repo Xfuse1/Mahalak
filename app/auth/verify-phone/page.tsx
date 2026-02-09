@@ -88,18 +88,18 @@ export default function VerifyPhonePage() {
     newOtp[index] = value.slice(-1)
     setOtp(newOtp)
 
-    // Auto-focus previous input (RTL direction)
-    if (value && index > 0) {
+    // Auto-focus next input (LTR: left to right)
+    if (value && index < 5) {
       setTimeout(() => {
-        inputRefs.current[index - 1]?.focus()
-        inputRefs.current[index - 1]?.select()
+        inputRefs.current[index + 1]?.focus()
+        inputRefs.current[index + 1]?.select()
       }, 0)
     }
   }
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !otp[index] && index < 5) {
-      inputRefs.current[index + 1]?.focus()
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus()
     }
   }
 
@@ -254,7 +254,7 @@ export default function VerifyPhonePage() {
                 value={digit}
                 onChange={(e) => handleOtpChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
-                autoFocus={index === 5}
+                autoFocus={index === 0}
                 className="w-12 h-14 text-center text-2xl font-bold border-2 rounded-xl focus:border-blue-500 focus:ring-blue-500"
                 disabled={loading || attempts <= 0}
               />
