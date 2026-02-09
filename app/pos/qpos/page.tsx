@@ -450,10 +450,10 @@ export default function QPOSPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">جاري تحميل نظام الكاشير...</p>
+          <p className="text-gray-600 text-lg font-medium">جاري تحميل نظام الكاشير...</p>
         </div>
       </div>
     )
@@ -461,13 +461,13 @@ export default function QPOSPage() {
 
   if (!user || !store) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center text-white">
+      <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 flex items-center justify-center">
+        <div className="text-center">
           <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <p className="text-xl mb-4">لا يمكن الوصول لنظام الكاشير</p>
+          <p className="text-xl mb-4 text-gray-800 font-bold">لا يمكن الوصول لنظام الكاشير</p>
           <button
             onClick={() => router.push("/seller/dashboard")}
-            className="bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700"
+            className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-3 rounded-xl hover:shadow-lg hover:scale-105 transition-all font-medium"
           >
             العودة للوحة التحكم
           </button>
@@ -479,29 +479,31 @@ export default function QPOSPage() {
   // ===================== Render =====================
 
   return (
-    <div className="h-screen bg-gray-900 flex flex-col overflow-hidden print:bg-white" dir="rtl">
+    <div className="h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col overflow-hidden print:bg-white" dir="rtl">
       {/* ===== Top Bar ===== */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between print:hidden">
+      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between print:hidden shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/seller/dashboard")}
-            className="text-gray-400 hover:text-white transition p-1"
+            className="text-gray-500 hover:text-emerald-600 transition p-1.5 hover:bg-gray-100 rounded-lg"
             title="العودة للوحة التحكم"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
-            <Store className="h-5 w-5 text-emerald-400" />
-            <h1 className="text-white font-bold text-lg">{store.name}</h1>
+            <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 p-1.5 rounded-lg">
+              <Store className="h-5 w-5 text-white" />
+            </div>
+            <h1 className="text-gray-800 font-bold text-lg">{store.name}</h1>
           </div>
-          <span className="text-gray-500 text-sm">| نظام الكاشير</span>
+          <span className="text-gray-400 text-sm">| نظام الكاشير</span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={loadDailySummary}
             disabled={loadingSummary}
-            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-violet-500 to-violet-600 text-white hover:shadow-xl hover:shadow-violet-500/30 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {loadingSummary ? (
               <>
@@ -518,7 +520,7 @@ export default function QPOSPage() {
           <button
             onClick={loadHistory}
             disabled={loadingHistory}
-            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="flex items-center gap-2 text-sm font-medium bg-gradient-to-r from-rose-500 to-rose-600 text-white hover:shadow-xl hover:shadow-rose-500/30 px-4 py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {loadingHistory ? (
               <>
@@ -554,19 +556,21 @@ export default function QPOSPage() {
       {/* ===== Main Layout ===== */}
       <div className="flex-1 flex overflow-hidden print:hidden">
         {/* ===== Left: Cart Panel ===== */}
-        <div className="w-[380px] bg-gray-800 flex flex-col border-l border-gray-700">
+        <div className="w-[380px] bg-white flex flex-col border-l border-gray-200 shadow-lg">
           {/* Cart Header */}
-          <div className="p-3 border-b border-gray-700 flex items-center justify-between">
+          <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-emerald-400" />
-              <span className="text-white font-semibold">
+              <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-1.5 rounded-lg">
+                <ShoppingCart className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-gray-800 font-bold">
                 السلة ({cartItemsCount})
               </span>
             </div>
             {cart.length > 0 && (
               <button
                 onClick={clearCart}
-                className="text-red-400 hover:text-red-300 text-xs flex items-center gap-1"
+                className="text-red-500 hover:text-red-600 text-xs flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded-lg transition"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 مسح الكل
@@ -575,18 +579,18 @@ export default function QPOSPage() {
           </div>
 
           {/* Cart Items */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-gray-50">
             {cart.length === 0 ? (
-              <div className="text-center text-gray-500 py-16">
+              <div className="text-center text-gray-400 py-16">
                 <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>السلة فارغة</p>
+                <p className="text-gray-600 font-medium">السلة فارغة</p>
                 <p className="text-xs mt-1">اضغط على المنتج لإضافته</p>
               </div>
             ) : (
               cart.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-gray-700/50 rounded-lg p-2.5 flex items-center gap-2"
+                  className="bg-white rounded-xl p-2.5 flex items-center gap-2 shadow-sm hover:shadow-md transition"
                 >
                   {/* Product image */}
                   {item.image_url ? (
@@ -603,10 +607,10 @@ export default function QPOSPage() {
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">
+                    <p className="text-gray-800 text-sm font-semibold truncate">
                       {item.name}
                     </p>
-                    <p className="text-emerald-400 text-xs">
+                    <p className="text-emerald-600 text-xs font-medium">
                       {item.price.toFixed(2)} ر.س
                     </p>
                   </div>
@@ -615,7 +619,7 @@ export default function QPOSPage() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="w-7 h-7 rounded-md bg-gray-600 hover:bg-gray-500 text-white flex items-center justify-center transition"
+                      className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
@@ -625,11 +629,11 @@ export default function QPOSPage() {
                       onChange={(e) =>
                         updateQuantity(item.id, parseInt(e.target.value) || 0)
                       }
-                      className="w-10 h-7 text-center bg-gray-600 text-white rounded-md text-sm border-0 focus:ring-1 focus:ring-emerald-500"
+                      className="w-10 h-7 text-center bg-gray-50 text-gray-800 font-medium rounded-lg text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     />
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="w-7 h-7 rounded-md bg-gray-600 hover:bg-gray-500 text-white flex items-center justify-center transition"
+                      className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -637,7 +641,7 @@ export default function QPOSPage() {
 
                   {/* Item Total */}
                   <div className="text-left w-16 flex-shrink-0">
-                    <p className="text-white text-sm font-semibold">
+                    <p className="text-gray-800 text-sm font-bold">
                       {item.total.toFixed(2)}
                     </p>
                   </div>
@@ -645,7 +649,7 @@ export default function QPOSPage() {
                   {/* Remove */}
                   <button
                     onClick={() => removeFromCart(item.id)}
-                    className="text-red-400 hover:text-red-300 p-1"
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -656,23 +660,23 @@ export default function QPOSPage() {
 
           {/* Cart Discount */}
           {cart.length > 0 && (
-            <div className="p-3 border-t border-gray-700 space-y-2">
+            <div className="p-3 border-t border-gray-200 space-y-2 bg-white">
               <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-gray-400" />
-                <span className="text-gray-400 text-xs">خصم:</span>
+                <Tag className="h-4 w-4 text-emerald-600" />
+                <span className="text-gray-600 text-xs font-medium">خصم:</span>
                 <input
                   type="number"
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
                   placeholder="0"
-                  className="flex-1 h-7 bg-gray-700 text-white rounded-md text-sm px-2 border-0 focus:ring-1 focus:ring-emerald-500"
+                  className="flex-1 h-7 bg-gray-50 text-gray-800 rounded-lg text-sm px-2 border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <select
                   value={discountType}
                   onChange={(e) =>
                     setDiscountType(e.target.value as "percentage" | "fixed")
                   }
-                  className="h-7 bg-gray-700 text-white rounded-md text-sm px-1 border-0 focus:ring-1 focus:ring-emerald-500"
+                  className="h-7 bg-gray-50 text-gray-800 rounded-lg text-sm px-1 border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 >
                   <option value="fixed">ر.س</option>
                   <option value="percentage">%</option>
@@ -682,29 +686,29 @@ export default function QPOSPage() {
           )}
 
           {/* Cart Totals */}
-          <div className="p-3 border-t border-gray-700 space-y-1.5">
-            <div className="flex justify-between text-gray-400 text-sm">
+          <div className="p-3 border-t border-gray-200 space-y-1.5 bg-white">
+            <div className="flex justify-between text-gray-600 text-sm">
               <span>المجموع الفرعي</span>
-              <span>{subtotal.toFixed(2)} ر.س</span>
+              <span className="font-medium">{subtotal.toFixed(2)} ر.س</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-yellow-400 text-sm">
+              <div className="flex justify-between text-yellow-600 text-sm">
                 <span>الخصم</span>
-                <span>-{discountAmount.toFixed(2)} ر.س</span>
+                <span className="font-medium">-{discountAmount.toFixed(2)} ر.س</span>
               </div>
             )}
-            <div className="flex justify-between text-white text-lg font-bold pt-1 border-t border-gray-700">
+            <div className="flex justify-between text-gray-800 text-lg font-bold pt-2 border-t border-gray-200">
               <span>الإجمالي</span>
-              <span className="text-emerald-400">{total.toFixed(2)} ر.س</span>
+              <span className="text-emerald-600">{total.toFixed(2)} ر.س</span>
             </div>
           </div>
 
           {/* Pay Button */}
-          <div className="p-3 border-t border-gray-700">
+          <div className="p-3 border-t border-gray-200 bg-white">
             <button
               onClick={() => cart.length > 0 && setShowPayment(true)}
               disabled={cart.length === 0}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
             >
               <DollarSign className="h-5 w-5" />
               دفع (F9)
@@ -715,7 +719,7 @@ export default function QPOSPage() {
         {/* ===== Right: Products Panel ===== */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Search & Filters */}
-          <div className="p-3 bg-gray-800/50 border-b border-gray-700 space-y-2">
+          <div className="p-3 bg-white border-b border-gray-200 space-y-2 shadow-sm">
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
@@ -724,12 +728,12 @@ export default function QPOSPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="بحث بالاسم أو الباركود... (F2)"
-                className="w-full h-11 bg-gray-700 text-white rounded-xl pr-11 pl-4 text-sm border-0 focus:ring-2 focus:ring-emerald-500 placeholder:text-gray-500"
+                className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl pr-11 pl-4 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-1 rounded-lg transition"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -740,10 +744,10 @@ export default function QPOSPage() {
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
               <button
                 onClick={() => setSelectedCategory("all")}
-                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition ${
+                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all ${
                   selectedCategory === "all"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 <Grid3X3 className="inline-block h-3.5 w-3.5 ml-1" />
@@ -753,10 +757,10 @@ export default function QPOSPage() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition ${
+                  className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all ${
                     selectedCategory === cat
-                      ? "bg-emerald-600 text-white"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   {cat}
@@ -766,13 +770,13 @@ export default function QPOSPage() {
           </div>
 
           {/* Products Grid */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 overflow-y-auto p-3 bg-gray-50">
             {filteredProducts.length === 0 ? (
-              <div className="text-center text-gray-500 py-20">
+              <div className="text-center text-gray-400 py-20">
                 <Package className="h-16 w-16 mx-auto mb-3 opacity-30" />
-                <p className="text-lg">لا توجد منتجات</p>
+                <p className="text-lg text-gray-600 font-medium">لا توجد منتجات</p>
                 {searchQuery && (
-                  <p className="text-sm mt-1">
+                  <p className="text-sm mt-1 text-gray-500">
                     لم يتم العثور على نتائج لـ &quot;{searchQuery}&quot;
                   </p>
                 )}
@@ -788,11 +792,11 @@ export default function QPOSPage() {
                       key={product.id}
                       onClick={() => !outOfStock && addToCart(product)}
                       disabled={outOfStock}
-                      className={`relative bg-gray-800 rounded-xl p-2 text-right transition hover:ring-2 hover:ring-emerald-500 group ${
+                      className={`relative bg-white rounded-xl p-2 text-right transition-all hover:shadow-lg group ${
                         outOfStock
                           ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer"
-                      } ${inCart ? "ring-2 ring-emerald-500" : ""}`}
+                          : "cursor-pointer hover:scale-105"
+                      } ${inCart ? "ring-2 ring-emerald-500 shadow-md" : "shadow-sm"}`}
                     >
                       {/* Image */}
                       <div className="aspect-square rounded-lg overflow-hidden bg-gray-700 mb-2">
@@ -810,19 +814,19 @@ export default function QPOSPage() {
                       </div>
 
                       {/* Name */}
-                      <p className="text-white text-sm font-medium truncate">
+                      <p className="text-gray-800 text-sm font-semibold truncate">
                         {product.name}
                       </p>
 
                       {/* Price & Stock */}
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-emerald-400 font-bold text-sm">
+                        <span className="text-emerald-600 font-bold text-sm">
                           {product.price.toFixed(2)}
                         </span>
                         <span
-                          className={`text-xs ${
+                          className={`text-xs font-medium ${
                             product.stock <= 5
-                              ? "text-red-400"
+                              ? "text-red-500"
                               : "text-gray-500"
                           }`}
                         >
@@ -832,15 +836,15 @@ export default function QPOSPage() {
 
                       {/* In Cart Badge */}
                       {inCart && (
-                        <div className="absolute top-1 left-1 bg-emerald-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                        <div className="absolute top-1 left-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
                           {inCart.quantity}
                         </div>
                       )}
 
                       {/* Out of Stock */}
                       {outOfStock && (
-                        <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                          <span className="text-red-400 text-xs font-bold bg-black/80 px-2 py-1 rounded">
+                        <div className="absolute inset-0 bg-gray-900/70 rounded-xl flex items-center justify-center">
+                          <span className="text-red-500 text-xs font-bold bg-white px-2 py-1 rounded-lg shadow-lg">
                             نفذ المخزون
                           </span>
                         </div>
