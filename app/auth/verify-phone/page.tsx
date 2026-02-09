@@ -128,12 +128,18 @@ export default function VerifyPhonePage() {
             setRegistering(true)
             const pendingData = JSON.parse(pendingDataStr)
             
+            // Build address from stored fields
+            const storeAddress = [pendingData.street, pendingData.city, pendingData.country].filter(Boolean).join(", ")
+            
             const sellerData = {
               phone: pendingData.phone,
               storeName: pendingData.storeName,
               storeDescription: pendingData.storeDescription,
               storeType: pendingData.storeType,
-              storeLogo: pendingData.storeLogo,
+              storeLogo: null as File | null, // File can't be stored in sessionStorage, logo will need to be uploaded from settings
+              address: storeAddress,
+              latitude: pendingData.latitude,
+              longitude: pendingData.longitude,
             }
             
             const success = await register(
