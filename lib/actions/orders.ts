@@ -651,13 +651,16 @@ export async function driverRejectOrder(orderId: string, driverId: string, reaso
 
     await docRef.set(updatePayload, { merge: true })
 
-    // Create notification for customer
+    // Create notification for customer with link to change-driver page
     await db.collection("notifications").add({
       user_id: orderData.customer_id,
       type: "driver_rejected",
       title: "تم رفض الطلب من السائق",
+      title_en: "Order rejected by driver",
       message: `السائق ${orderData.driver_name || "المحدد"} رفض توصيل طلبك. يرجى اختيار سائق آخر.`,
-      order_id: orderId,
+      message_en: `Driver ${orderData.driver_name || "assigned"} rejected your order. Please select another driver.`,
+      link: `/account/change-driver?orderId=${orderId}&currentDriverId=${driverId}`,
+      data: { order_id: orderId, driver_id: driverId },
       is_read: false,
       created_at: now,
     })

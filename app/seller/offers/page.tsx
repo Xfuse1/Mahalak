@@ -597,8 +597,8 @@ export default function OffersPage() {
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                           <Tag className="h-5 w-5 text-white" />
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <CardTitle className="text-lg">{offer.title}</CardTitle>
+                        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                          <CardTitle className="text-lg break-words whitespace-normal">{offer.title}</CardTitle>
                           <Badge variant="outline" className={cn("w-fit text-xs px-2.5 py-0.5 rounded-full", status.className)}>
                             {status.label}
                           </Badge>
@@ -623,7 +623,7 @@ export default function OffersPage() {
                         </Button>
                       </div>
                     </div>
-                    <CardDescription className="mt-2 text-gray-600">{offer.description}</CardDescription>
+                    <CardDescription className="mt-2 text-gray-600 break-words whitespace-normal">{offer.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="p-5">
                     <div className="space-y-4">

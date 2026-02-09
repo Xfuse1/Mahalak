@@ -146,7 +146,7 @@ export async function createPOSSale(saleData: POSSaleData) {
   revalidatePath("/seller/products")
   return {
     success: true,
-    data: { id: saleRef.id, sale_number: salePayload.sale_number, ...salePayload },
+    data: { id: saleRef.id, ...salePayload },
   }
 }
 

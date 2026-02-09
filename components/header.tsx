@@ -82,6 +82,9 @@ export function Header() {
       case "order_delivered":
       case "order_updated":
         return orderLink
+      case "driver_rejected":
+        // Driver rejected the order - go to change driver page
+        return orderId ? `/account/change-driver?orderId=${orderId}` : "/account"
       case "store_confirmed":
       case "store_rejected":
       case "all_items_picked":
