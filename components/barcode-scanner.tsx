@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Camera, X, Zap, RotateCcw } from "lucide-react"
+import { Camera, X, Zap, RotateCcw, CheckCircle2 } from "lucide-react"
 
 interface BarcodeScannerProps {
   onScan: (code: string) => void
@@ -11,65 +11,12 @@ interface BarcodeScannerProps {
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [error, setError] = useState("")
   const [isStarting, setIsStarting] = useState(true)
-  const [lastScanned, setLastScanned] = useState("")
+  const [scannedCode, setScannedCode] = useState("")
+  const [isPaused, setIsPaused] = useState(false)
   const scannerRef = useRef<any>(null)
-  const readerRef = useRef<HTMLDivElement>(null)
+  const hasScannedRef = useRef(false)
 
-  useEffect(() => {
-    let html5QrCode: any = null
-
-    const startScanner = async () => {
-      try {
-        // Dynamic import to avoid SSR issues
-        const { Html5Qrcode } = await import("html5-qrcode")
-        
-        html5QrCode = new Html5Qrcode("barcode-reader")
-        scannerRef.current = html5QrCode
-
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          {
-            fps: 15,
-            qrbox: { width: 280, height: 160 },
-            aspectRatio: 1.5,
-          },
-          (decodedText: string) => {
-            // Avoid duplicate scans
-            if (decodedText !== lastScanned) {
-              setLastScanned(decodedText)
-              onScan(decodedText)
-            }
-          },
-          () => {
-            // Ignore scan errors (no code found in frame)
-          }
-        )
-        
-        setIsStarting(false)
-      } catch (err: any) {
-        console.error("[BarcodeScanner] Error:", err)
-        setIsStarting(false)
-        
-        if (err?.toString?.()?.includes("NotAllowedError")) {
-          setError("لم يتم السماح بالوصول للكاميرا. يرجى السماح بالوصول من إعدادات المتصفح.")
-        } else if (err?.toString?.()?.includes("NotFoundError")) {
-          setError("لم يتم العثور على كاميرا. تأكد من توصيل الكاميرا.")
-        } else {
-          setError("فشل في تشغيل الكاميرا. تأكد من أن الموقع يعمل على HTTPS.")
-        }
-      }
-    }
-
-    startScanner()
-
-    return () => {
-      if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch(() => {})
-      }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleClose = async () => {
+  const stopScanner = async () => {
     try {
       if (scannerRef.current && scannerRef.current.isScanning) {
         await scannerRef.current.stop()
@@ -77,20 +24,17 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     } catch {
       // Ignore
     }
-    onClose()
   }
 
-  const handleRetry = async () => {
+  const initScanner = async () => {
     setError("")
     setIsStarting(true)
-    try {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        await scannerRef.current.stop()
-      }
-    } catch {
-      // Ignore
-    }
-    
+    setScannedCode("")
+    setIsPaused(false)
+    hasScannedRef.current = false
+
+    await stopScanner()
+
     try {
       const { Html5Qrcode } = await import("html5-qrcode")
       const html5QrCode = new Html5Qrcode("barcode-reader")
@@ -99,23 +43,57 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       await html5QrCode.start(
         { facingMode: "environment" },
         {
-          fps: 15,
+          fps: 10,
           qrbox: { width: 280, height: 160 },
           aspectRatio: 1.5,
         },
-        (decodedText: string) => {
-          if (decodedText !== lastScanned) {
-            setLastScanned(decodedText)
-            onScan(decodedText)
+        async (decodedText: string) => {
+          // Only process ONCE
+          if (hasScannedRef.current) return
+          hasScannedRef.current = true
+
+          // Stop camera immediately
+          setScannedCode(decodedText)
+          setIsPaused(true)
+
+          try {
+            await html5QrCode.stop()
+          } catch {
+            // Ignore
           }
+
+          // Send to parent
+          onScan(decodedText)
         },
         () => {}
       )
       setIsStarting(false)
     } catch (err: any) {
+      console.error("[BarcodeScanner] Error:", err)
       setIsStarting(false)
-      setError("فشل في تشغيل الكاميرا")
+
+      if (err?.toString?.()?.includes("NotAllowedError")) {
+        setError("لم يتم السماح بالوصول للكاميرا. يرجى السماح بالوصول من إعدادات المتصفح.")
+      } else if (err?.toString?.()?.includes("NotFoundError")) {
+        setError("لم يتم العثور على كاميرا. تأكد من توصيل الكاميرا.")
+      } else {
+        setError("فشل في تشغيل الكاميرا. تأكد من أن الموقع يعمل على HTTPS.")
+      }
     }
+  }
+
+  useEffect(() => {
+    initScanner()
+    return () => { stopScanner() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleClose = async () => {
+    await stopScanner()
+    onClose()
+  }
+
+  const handleScanAgain = () => {
+    initScanner()
   }
 
   return (
@@ -153,7 +131,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
               </div>
               <p className="text-red-600 text-center font-medium mb-4">{error}</p>
               <button
-                onClick={handleRetry}
+                onClick={handleScanAgain}
                 className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -162,23 +140,34 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             </div>
           )}
 
+          {/* Camera view - hidden when paused */}
           <div
             id="barcode-reader"
-            ref={readerRef}
-            className={`w-full rounded-xl overflow-hidden ${error ? "hidden" : ""}`}
+            className={`w-full rounded-xl overflow-hidden ${error || isPaused ? "hidden" : ""}`}
           />
 
-          {!isStarting && !error && (
+          {!isStarting && !error && !isPaused && (
             <div className="mt-4 flex items-center justify-center gap-2 text-emerald-600">
               <Zap className="h-4 w-4 animate-pulse" />
               <p className="text-sm font-medium">وجّه الكاميرا نحو الباركود</p>
             </div>
           )}
 
-          {lastScanned && (
-            <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
-              <p className="text-xs text-gray-500 mb-1">آخر باركود:</p>
-              <p className="text-emerald-700 font-bold font-mono text-lg">{lastScanned}</p>
+          {/* Scan Result */}
+          {isPaused && scannedCode && (
+            <div className="flex flex-col items-center justify-center py-6">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+              </div>
+              <p className="text-gray-500 text-sm mb-1">تم مسح الباركود بنجاح</p>
+              <p className="text-emerald-700 font-bold font-mono text-2xl mb-4">{scannedCode}</p>
+              <button
+                onClick={handleScanAgain}
+                className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition font-medium"
+              >
+                <Camera className="h-4 w-4" />
+                مسح باركود آخر
+              </button>
             </div>
           )}
         </div>
