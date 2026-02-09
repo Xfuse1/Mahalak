@@ -21,6 +21,9 @@ import {
   DialogTitle,
 } from "../../../components/ui/dialog"
 import Image from "next/image"
+import { Textarea } from "../../../components/ui/textarea"
+import { Label } from "../../../components/ui/label"
+import { AlertTriangle, Clock, Truck } from "lucide-react"
 
 type OrderItem = {
   id: string
@@ -66,6 +69,9 @@ export default function SellerOrdersPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isMultiDetailsOpen, setIsMultiDetailsOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
+  const [rejectOrderId, setRejectOrderId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -175,12 +181,18 @@ export default function SellerOrdersPage() {
     setActionLoading(null)
   }
 
-  const handleRejectMultiOrder = async (orderId: string) => {
-    if (!user?.id) return
-    const reason = prompt(t("سبب الرفض (اختياري):", "Reason for rejection (optional):"))
-    setActionLoading(orderId)
+  const openRejectDialog = (orderId: string) => {
+    setRejectOrderId(orderId)
+    setRejectReason("")
+    setIsRejectDialogOpen(true)
+  }
+
+  const handleRejectMultiOrder = async () => {
+    if (!user?.id || !rejectOrderId) return
+    setActionLoading(rejectOrderId)
+    setIsRejectDialogOpen(false)
     try {
-      const result = await rejectStorePickup(orderId, user.id, reason || undefined)
+      const result = await rejectStorePickup(rejectOrderId, user.id, rejectReason || undefined)
       if (result.success) {
         await loadOrders()
       } else {
@@ -190,6 +202,8 @@ export default function SellerOrdersPage() {
       console.error("Error rejecting:", error)
     }
     setActionLoading(null)
+    setRejectOrderId(null)
+    setRejectReason("")
   }
 
   const formatDate = (dateString: string) => {
@@ -398,28 +412,42 @@ export default function SellerOrdersPage() {
                           ))}
                         </div>
 
-                        {/* Action buttons for pending orders */}
-                        {myStop.status === "pending" && (
-                          <div className="flex gap-3 pt-4 border-t border-dashed">
-                            <Button
-                              onClick={() => handleConfirmMultiOrder(order.id)}
-                              disabled={actionLoading === order.id}
-                              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-xl"
-                            >
-                              <CheckCircle className="w-4 h-4 ml-2" />
-                              {actionLoading === order.id ? t("جاري...", "Processing...") : t("تأكيد الطلب", "Confirm Order")}
-                            </Button>
-                            <Button
-                              onClick={() => handleRejectMultiOrder(order.id)}
-                              disabled={actionLoading === order.id}
-                              variant="outline"
-                              className="flex-1 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
-                            >
-                              <XCircle className="w-4 h-4 ml-2" />
-                              {t("رفض", "Reject")}
-                            </Button>
-                          </div>
-                        )}
+                        {/* Action buttons */}
+                        <div className="flex gap-3 pt-4 border-t border-dashed">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-purple-600 border-purple-200 hover:bg-purple-50 rounded-xl"
+                            onClick={() => {
+                              setSelectedMultiOrder(order)
+                              setIsMultiDetailsOpen(true)
+                            }}
+                          >
+                            <Eye className="w-4 h-4 ml-2" />
+                            {t("عرض التفاصيل", "View Details")}
+                          </Button>
+                          {myStop.status === "pending" && (
+                            <>
+                              <Button
+                                onClick={() => handleConfirmMultiOrder(order.id)}
+                                disabled={actionLoading === order.id}
+                                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-xl"
+                              >
+                                <CheckCircle className="w-4 h-4 ml-2" />
+                                {actionLoading === order.id ? t("جاري...", "Processing...") : t("تأكيد الطلب", "Confirm Order")}
+                              </Button>
+                              <Button
+                                onClick={() => openRejectDialog(order.id)}
+                                disabled={actionLoading === order.id}
+                                variant="outline"
+                                className="flex-1 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
+                              >
+                                <XCircle className="w-4 h-4 ml-2" />
+                                {t("رفض", "Reject")}
+                              </Button>
+                            </>
+                          )}
+                        </div>
 
                         {myStop.status === "confirmed" && (
                           <div className="pt-4 border-t border-dashed">
@@ -563,6 +591,198 @@ export default function SellerOrdersPage() {
                   </div>
                 </div>
               )}
+            </DialogContent>
+          </Dialog>
+          {/* Multi-Store Order Details Modal */}
+          <Dialog open={isMultiDetailsOpen} onOpenChange={setIsMultiDetailsOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={t("rtl", "ltr")}>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                  <Store className="w-6 h-6 text-purple-600" />
+                  {t("تفاصيل طلب متعدد المتاجر", "Multi-Store Order Details")} #{selectedMultiOrder?.id.slice(0, 8)}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedMultiOrder?.created_at && formatDate(selectedMultiOrder.created_at)}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedMultiOrder && (() => {
+                const myStop: PickupStop = selectedMultiOrder.my_stop
+                return (
+                  <div className="space-y-6 mt-4">
+                    {/* Customer & Driver Info */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-4 rounded-xl space-y-3">
+                        <h3 className="font-bold border-b pb-2 flex items-center gap-2">
+                          <User className="w-4 h-4 text-purple-600" />
+                          {t("بيانات العميل", "Customer Info")}
+                        </h3>
+                        <div className="space-y-1 text-sm">
+                          <p className="font-medium text-base">{selectedMultiOrder.customer_name || t("عميل", "Customer")}</p>
+                          <p className="flex items-center gap-2 text-gray-600">
+                            <PhoneIcon className="w-3 h-3" />
+                            {selectedMultiOrder.customer_phone || t("لا يوجد رقم", "No phone")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-4 rounded-xl space-y-3">
+                        <h3 className="font-bold border-b pb-2 flex items-center gap-2">
+                          <Truck className="w-4 h-4 text-purple-600" />
+                          {t("بيانات السائق والتوصيل", "Driver & Delivery Info")}
+                        </h3>
+                        <div className="space-y-1 text-sm">
+                          <p className="font-medium">{selectedMultiOrder.driver_name || "-"}</p>
+                          <p className="flex items-center gap-2 text-gray-600">
+                            <MapPin className="w-3 h-3" />
+                            {selectedMultiOrder.delivery_address || t("لم يتم تحديد", "Not specified")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Order Status */}
+                    <div className="flex items-center gap-4 bg-purple-50 p-4 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-medium text-gray-600">{t("حالة الطلب:", "Order Status:")}</span>
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${getStatusColor(selectedMultiOrder.status)}`}>
+                          {getStatusText(selectedMultiOrder.status)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600">{t("حالة متجرك:", "Your Stop:")}</span>
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${getStatusColor(myStop.status)}`}>
+                          {getStopStatusText(myStop.status)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* My Stop Items */}
+                    <div className="space-y-3">
+                      <h3 className="font-bold flex items-center gap-2">
+                        <ShoppingCart className="w-4 h-4 text-purple-600" />
+                        {t("منتجات متجرك", "Your Store Products")} ({myStop.items.length})
+                      </h3>
+                      <div className="border rounded-xl overflow-hidden">
+                        <div className="bg-gray-50 grid grid-cols-4 p-3 text-xs font-bold text-gray-500 border-b">
+                          <div className="col-span-2">{t("المنتج", "Product")}</div>
+                          <div className="text-center">{t("الكمية", "Qty")}</div>
+                          <div className="text-left">{t("الإجمالي", "Total")}</div>
+                        </div>
+                        <div className="divide-y">
+                          {myStop.items.map((item: any, idx: number) => (
+                            <div key={idx} className="grid grid-cols-4 p-3 items-center text-sm">
+                              <div className="col-span-2 flex items-center gap-3">
+                                {item.image_url && (
+                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                                    <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                  </div>
+                                )}
+                                <p className="font-medium line-clamp-1">{item.name}</p>
+                              </div>
+                              <div className="text-center">x{item.quantity}</div>
+                              <div className="text-left font-bold text-purple-600">
+                                {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Other Stops */}
+                    {selectedMultiOrder.pickup_stops && selectedMultiOrder.pickup_stops.length > 1 && (
+                      <div className="space-y-3">
+                        <h3 className="font-bold flex items-center gap-2 text-gray-500">
+                          <Store className="w-4 h-4" />
+                          {t("المتاجر الأخرى في الطلب", "Other Stores in Order")}
+                        </h3>
+                        <div className="space-y-2">
+                          {selectedMultiOrder.pickup_stops
+                            .filter((stop: PickupStop) => stop.store_id !== user?.id)
+                            .map((stop: PickupStop, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl text-sm">
+                                <span className="font-medium">{stop.store_name}</span>
+                                <span className={`px-3 py-1 rounded-lg text-xs font-bold ${getStatusColor(stop.status)}`}>
+                                  {getStopStatusText(stop.status)}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="bg-purple-50 p-4 rounded-xl">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-sm text-gray-600">{t("إجمالي متجرك", "Your Store Subtotal")}</p>
+                          <p className="text-xl font-black text-purple-700">
+                            {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
+                          </p>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm text-gray-600">{t("إجمالي الطلب الكلي", "Order Grand Total")}</p>
+                          <p className="text-xl font-black text-gray-800">
+                            {Number(selectedMultiOrder.total).toLocaleString()} {t("جنيه", "EGP")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </DialogContent>
+          </Dialog>
+
+          {/* Reject Order Dialog */}
+          <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+            <DialogContent className="max-w-md" dir={t("rtl", "ltr")}>
+              <DialogHeader>
+                <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-8 h-8 text-red-500" />
+                </div>
+                <DialogTitle className="text-xl font-bold text-center">
+                  {t("رفض الطلب", "Reject Order")}
+                </DialogTitle>
+                <DialogDescription className="text-center">
+                  {t("هل أنت متأكد من رفض هذا الطلب؟ يمكنك إضافة سبب الرفض أدناه.", "Are you sure you want to reject this order? You can add a reason below.")}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="rejectReason" className="text-sm font-medium text-gray-700">
+                    {t("سبب الرفض (اختياري)", "Reason for rejection (optional)")}
+                  </Label>
+                  <Textarea
+                    id="rejectReason"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder={t("مثال: المنتج غير متوفر حالياً...", "Example: Product currently unavailable...")}
+                    className="mt-1.5 rounded-xl border-gray-200 focus:border-red-300 focus:ring-red-300 resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    onClick={handleRejectMultiOrder}
+                    className="flex-1 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-xl text-white"
+                  >
+                    <XCircle className="w-4 h-4 ml-2" />
+                    {t("تأكيد الرفض", "Confirm Rejection")}
+                  </Button>
+                  <Button
+                    onClick={() => setIsRejectDialogOpen(false)}
+                    variant="outline"
+                    className="flex-1 rounded-xl"
+                  >
+                    {t("إلغاء", "Cancel")}
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
