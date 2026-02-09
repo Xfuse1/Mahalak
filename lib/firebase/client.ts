@@ -105,22 +105,30 @@ export async function sendPhoneOTP(phoneNumber: string): Promise<{ success: bool
   try {
     const auth = getFirebaseAuth()
     
-    // Auto-initialize reCAPTCHA if not done
-    if (!recaptchaVerifier) {
-      // Create a temporary container if needed
-      let container = document.getElementById("recaptcha-container")
-      if (!container) {
-        container = document.createElement("div")
-        container.id = "recaptcha-container"
-        container.style.display = "none"
-        document.body.appendChild(container)
+    // Clean up old reCAPTCHA before creating a new one
+    if (recaptchaVerifier) {
+      try {
+        recaptchaVerifier.clear()
+      } catch (e) {
+        // Ignore clear errors
       }
-      
-      recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => console.log("[v0] reCAPTCHA verified"),
-      })
+      recaptchaVerifier = null
     }
+    
+    // Remove old reCAPTCHA container and create a fresh one
+    let container = document.getElementById("recaptcha-container")
+    if (container) {
+      container.remove()
+    }
+    container = document.createElement("div")
+    container.id = "recaptcha-container"
+    container.style.display = "none"
+    document.body.appendChild(container)
+    
+    recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+      size: "invisible",
+      callback: () => console.log("[v0] reCAPTCHA verified"),
+    })
     
     // Format phone number if needed
     let formattedPhone = phoneNumber.trim()
