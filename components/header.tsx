@@ -69,7 +69,8 @@ export function Header() {
 
   const getNotificationFallbackLink = (notification: Notification) => {
     const orderId = notification.data?.order_id as string | undefined
-    const orderLink = orderId ? `/account/edit-order/${orderId}` : "/account"
+    // Multi-store order notifications go to edit-order page, single-store go to account
+    const orderLink = "/account"
 
     switch (notification.type) {
       case "review_request":
@@ -78,13 +79,15 @@ export function Header() {
       case "new_multi_order":
         return user?.role === "seller" ? "/seller/orders" : orderLink
       case "order_status":
+      case "order_delivered":
+      case "order_updated":
+        return orderLink
       case "store_confirmed":
       case "store_rejected":
       case "all_items_picked":
       case "driver_picked_from_store":
-      case "order_delivered":
-      case "order_updated":
-        return orderLink
+        // These are multi-store specific notifications
+        return orderId ? `/account/edit-order/${orderId}` : "/account"
       case "promotion":
       case "general":
         return "/"

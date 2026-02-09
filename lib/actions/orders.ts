@@ -378,9 +378,11 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         order_id: orderId,
         driver_name: currentData.driver_name,
       })
-    } else if (currentData?.customer_id && status !== "pending" && status !== "ordered") {
-      // Send general status update notification
+    } else if (currentData?.customer_id && status !== "ordered") {
+      // Send general status update notification for all statuses including pending and reviewing
       const statusMessages: Record<string, { ar: string, en: string }> = {
+        pending: { ar: "تم استلام طلبك وهو قيد الانتظار", en: "Your order has been received and is pending" },
+        reviewing: { ar: "طلبك قيد المراجعة الآن", en: "Your order is being reviewed" },
         confirmed: { ar: "تم تأكيد طلبك بنجاح", en: "Your order has been confirmed" },
         processing: { ar: "طلبك قيد التجهيز الآن", en: "Your order is being processed" },
         shipped: { ar: "تم شحن طلبك", en: "Your order has been shipped" },
@@ -393,6 +395,11 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         en: `Your order status has been updated to: ${status}`
       }
 
+      // Use /account for single-store orders, /account/edit-order for multi-store
+      const notificationLink = currentData.order_type === "multi_store"
+        ? `/account/edit-order/${orderId}`
+        : `/account`
+
       await createNotification({
         user_id: currentData.customer_id,
         title: "تحديث حالة الطلب",
@@ -400,7 +407,7 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         message: message.ar,
         message_en: message.en,
         type: "order_status",
-        link: `/account/edit-order/${orderId}`,
+        link: notificationLink,
         data: { order_id: orderId, status }
       })
     }

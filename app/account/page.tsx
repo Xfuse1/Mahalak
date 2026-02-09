@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, Pencil, RefreshCw } from "lucide-react"
+import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
@@ -75,18 +75,33 @@ export default function AccountPage() {
       setOrdersLoading(true)
       setOrdersError(null)
       console.log("[v0] Fetching orders for customer:")
-      const [data, rejectedResult, multiResult] = await Promise.all([
+      
+      // Fetch each independently so one failure doesn't block the others
+      const [dataResult, rejectedResult, multiResult] = await Promise.allSettled([
         getCustomerOrders(user.id),
         getRejectedOrdersForCustomer(user.id),
         getCustomerMultiStoreOrders(user.id),
       ])
-      console.log("[v0] Fetched orders:")
-      setOrders(data as Order[])
-      if (rejectedResult.success) {
-        setRejectedOrders(rejectedResult.orders as RejectedOrder[])
+      
+      console.log("[v0] Fetched orders:", { dataResult: dataResult.status, rejectedResult: rejectedResult.status, multiResult: multiResult.status })
+      
+      if (dataResult.status === "fulfilled") {
+        setOrders(dataResult.value as Order[])
+      } else {
+        console.error("[v0] Error fetching customer orders:", dataResult.reason)
       }
-      if (multiResult.success) {
-        setMultiOrders(multiResult.orders)
+      
+      if (rejectedResult.status === "fulfilled" && rejectedResult.value.success) {
+        setRejectedOrders(rejectedResult.value.orders as RejectedOrder[])
+      }
+      
+      if (multiResult.status === "fulfilled" && multiResult.value.success) {
+        setMultiOrders(multiResult.value.orders)
+      }
+      
+      // Only show error if ALL fetches failed
+      if (dataResult.status === "rejected" && rejectedResult.status === "rejected" && multiResult.status === "rejected") {
+        setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
       }
     } catch (error) {
       console.error("[v0] Error fetching orders:", error)

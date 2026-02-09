@@ -1,8 +1,20 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getAdminDb } from "@/lib/firebase/admin"
+import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin"
 import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
+
+// Reset user password using Firebase Admin SDK (bypasses client-side auth)
+export async function resetUserPassword(userId: string, newPassword: string) {
+  try {
+    const auth = getAdminAuth()
+    await auth.updateUser(userId, { password: newPassword })
+    return { success: true }
+  } catch (error: any) {
+    console.error("[v0] Error resetting password via admin:", error)
+    return { success: false, error: error?.message || "Failed to reset password" }
+  }
+}
 
 // Check if phone number exists in the database and return user data
 export async function getUserByPhone(phone: string) {

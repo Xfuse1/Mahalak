@@ -14,8 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { useLanguage } from "@/lib/language-context"
 import { getFirebaseAuth, initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth } from "@/lib/firebase/client"
-import { updatePassword } from "firebase/auth"
-import { getUserByPhone } from "@/lib/actions/profile"
+import { getUserByPhone, resetUserPassword } from "@/lib/actions/profile"
 import { ArrowLeft, ArrowRight, CheckCircle2, Phone, Shield, Loader2, RefreshCw, Lock } from "lucide-react"
 
 type Step = "phone" | "otp" | "new-password" | "success"
@@ -171,24 +170,23 @@ export default function ForgotPasswordPage() {
     }
 
     try {
-      const auth = getFirebaseAuth()
-      const user = auth.currentUser
-
-      if (user) {
-        await updatePassword(user, newPassword)
-        setStep("success")
-      } else {
+      if (!userId) {
         setError(t("يرجى إعادة التحقق من رقم الهاتف", "Please re-verify your phone number"))
         setStep("phone")
+        return
+      }
+
+      // Use server action with Firebase Admin SDK to update the correct user's password
+      const result = await resetUserPassword(userId, newPassword)
+      
+      if (result.success) {
+        setStep("success")
+      } else {
+        setError(result.error || t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
       }
     } catch (err: any) {
       console.error("[v0] Password reset error:", err)
-      if (err.code === "auth/requires-recent-login") {
-        setError(t("يرجى إعادة التحقق من رقم الهاتف", "Please re-verify your phone number"))
-        setStep("phone")
-      } else {
-        setError(t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
-      }
+      setError(t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
     } finally {
       setIsLoading(false)
     }
