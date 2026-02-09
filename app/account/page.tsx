@@ -483,14 +483,6 @@ export default function AccountPage() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-3">
-                                {stops.some((s: PickupStop) => s.status === "rejected") && order.status !== "delivered" && order.status !== "cancelled" && (
-                                  <Link href={`/account/edit-order/${order.id}`}>
-                                    <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5">
-                                      <Pencil className="h-4 w-4 ml-2" />
-                                      {t("تعديل الطلب", "Edit Order")}
-                                    </Button>
-                                  </Link>
-                                )}
                                 <Button
                                   variant="default"
                                   size="sm"
