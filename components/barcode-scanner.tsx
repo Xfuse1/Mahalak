@@ -8,13 +8,15 @@ interface BarcodeScannerProps {
   onClose: () => void
 }
 
+const COOLDOWN_MS = 3000 // 3 seconds cooldown per barcode
+
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const [error, setError] = useState("")
   const [isStarting, setIsStarting] = useState(true)
-  const [scannedCode, setScannedCode] = useState("")
-  const [isPaused, setIsPaused] = useState(false)
+  const [lastScanned, setLastScanned] = useState("")
+  const [showFlash, setShowFlash] = useState(false)
   const scannerRef = useRef<any>(null)
-  const hasScannedRef = useRef(false)
+  const cooldownMap = useRef<Map<string, number>>(new Map())
 
   const stopScanner = async () => {
     try {
@@ -29,9 +31,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const initScanner = async () => {
     setError("")
     setIsStarting(true)
-    setScannedCode("")
-    setIsPaused(false)
-    hasScannedRef.current = false
 
     await stopScanner()
 
@@ -47,20 +46,20 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           qrbox: { width: 280, height: 160 },
           aspectRatio: 1.5,
         },
-        async (decodedText: string) => {
-          // Only process ONCE
-          if (hasScannedRef.current) return
-          hasScannedRef.current = true
+        (decodedText: string) => {
+          const now = Date.now()
+          const lastTime = cooldownMap.current.get(decodedText) || 0
 
-          // Stop camera immediately
-          setScannedCode(decodedText)
-          setIsPaused(true)
+          // Skip if same barcode scanned within cooldown period
+          if (now - lastTime < COOLDOWN_MS) return
 
-          try {
-            await html5QrCode.stop()
-          } catch {
-            // Ignore
-          }
+          // Record this scan time
+          cooldownMap.current.set(decodedText, now)
+
+          // Show flash feedback
+          setLastScanned(decodedText)
+          setShowFlash(true)
+          setTimeout(() => setShowFlash(false), 600)
 
           // Send to parent
           onScan(decodedText)
@@ -92,10 +91,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     onClose()
   }
 
-  const handleScanAgain = () => {
-    initScanner()
-  }
-
   return (
     <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" dir="rtl">
@@ -116,7 +111,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         </div>
 
         {/* Scanner Area */}
-        <div className="p-4">
+        <div className="p-4 relative">
           {isStarting && !error && (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
@@ -131,7 +126,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
               </div>
               <p className="text-red-600 text-center font-medium mb-4">{error}</p>
               <button
-                onClick={handleScanAgain}
+                onClick={initScanner}
                 className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -140,34 +135,34 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             </div>
           )}
 
-          {/* Camera view - hidden when paused */}
+          {/* Camera view */}
           <div
             id="barcode-reader"
-            className={`w-full rounded-xl overflow-hidden ${error || isPaused ? "hidden" : ""}`}
+            className={`w-full rounded-xl overflow-hidden ${error ? "hidden" : ""}`}
           />
 
-          {!isStarting && !error && !isPaused && (
+          {/* Green flash on successful scan */}
+          {showFlash && (
+            <div className="absolute inset-4 bg-emerald-500/20 rounded-xl border-4 border-emerald-500 flex items-center justify-center pointer-events-none animate-pulse z-10">
+              <CheckCircle2 className="h-16 w-16 text-emerald-500 drop-shadow-lg" />
+            </div>
+          )}
+
+          {!isStarting && !error && (
             <div className="mt-4 flex items-center justify-center gap-2 text-emerald-600">
               <Zap className="h-4 w-4 animate-pulse" />
               <p className="text-sm font-medium">وجّه الكاميرا نحو الباركود</p>
             </div>
           )}
 
-          {/* Scan Result */}
-          {isPaused && scannedCode && (
-            <div className="flex flex-col items-center justify-center py-6">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+          {/* Last scanned barcode */}
+          {lastScanned && (
+            <div className={`mt-3 rounded-xl p-3 text-center transition-all ${showFlash ? "bg-emerald-100 border-2 border-emerald-400" : "bg-emerald-50 border border-emerald-200"}`}>
+              <div className="flex items-center justify-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <p className="text-xs text-gray-500">تم إضافة:</p>
               </div>
-              <p className="text-gray-500 text-sm mb-1">تم مسح الباركود بنجاح</p>
-              <p className="text-emerald-700 font-bold font-mono text-2xl mb-4">{scannedCode}</p>
-              <button
-                onClick={handleScanAgain}
-                className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition font-medium"
-              >
-                <Camera className="h-4 w-4" />
-                مسح باركود آخر
-              </button>
+              <p className="text-emerald-700 font-bold font-mono text-lg">{lastScanned}</p>
             </div>
           )}
         </div>
