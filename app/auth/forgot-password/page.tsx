@@ -15,7 +15,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { useLanguage } from "@/lib/language-context"
 import { getFirebaseAuth, initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth } from "@/lib/firebase/client"
 import { getUserByPhone, resetUserPassword } from "@/lib/actions/profile"
-import { ArrowLeft, ArrowRight, CheckCircle2, Phone, Shield, Loader2, RefreshCw, Lock } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2, Phone, Shield, Loader2, RefreshCw, Lock, Eye, EyeOff } from "lucide-react"
 
 type Step = "phone" | "otp" | "new-password" | "success"
 
@@ -35,6 +35,7 @@ export default function ForgotPasswordPage() {
   const [attempts, setAttempts] = useState(0)
   const [userId, setUserId] = useState("")
   const [userEmail, setUserEmail] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const maxAttempts = 3
 
   // Countdown timer
@@ -362,30 +363,48 @@ export default function ForgotPasswordPage() {
         <Label htmlFor="new-password" className="text-base">
           {t("كلمة المرور الجديدة", "New Password")}
         </Label>
-        <Input
-          id="new-password"
-          type="password"
-          required
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="••••••••"
-          className="h-12"
-        />
+        <div className="relative">
+          <Input
+            id="new-password"
+            type={showPassword ? "text" : "password"}
+            required
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="••••••••"
+            className="h-12 pr-10"
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition-colors"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="confirm-password" className="text-base">
           {t("تأكيد كلمة المرور", "Confirm Password")}
         </Label>
-        <Input
-          id="confirm-password"
-          type="password"
-          required
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="••••••••"
-          className="h-12"
-        />
+        <div className="relative">
+          <Input
+            id="confirm-password"
+            type={showPassword ? "text" : "password"}
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            className="h-12 pr-10"
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition-colors"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       <Button
