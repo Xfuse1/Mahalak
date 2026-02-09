@@ -81,7 +81,7 @@ export async function getProducts(category?: string) {
   }
 
   const snapshot = await query.get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  let products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 
   // Fetch active offers
   const now = new Date().toISOString()
@@ -93,6 +93,16 @@ export async function getProducts(category?: string) {
 
   const storeIds = Array.from(new Set(products.map((p: any) => p.store_id)))
   const storeMap = await getStoreMap(db, storeIds)
+
+  // If filtering by a main category, also filter products by store category
+  // This prevents products with shared subcategory names (e.g., "أخرى") from leaking across categories
+  if (category && storeCategorySubcategories[category]) {
+    products = products.filter((product: any) => {
+      const store = storeMap.get(product.store_id)
+      if (!store) return false
+      return store.category === category
+    })
+  }
 
   return products.map((product: any) => {
     const store = storeMap.get(product.store_id)
