@@ -861,24 +861,26 @@ export default function QPOSPage() {
       {/* ===== Payment Modal ===== */}
       {showPayment && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-              <h2 className="text-white text-lg font-bold flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-400" />
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
+                <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-1.5 rounded-lg">
+                  <DollarSign className="h-4 w-4 text-white" />
+                </div>
                 إتمام الدفع
               </h2>
               <button
                 onClick={() => setShowPayment(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto bg-gray-50">
               {/* Payment Method */}
               <div>
-                <label className="text-gray-400 text-sm block mb-2">طريقة الدفع</label>
+                <label className="text-gray-700 text-sm font-medium block mb-2">طريقة الدفع</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { value: "cash" as const, label: "نقدي", icon: Banknote },
@@ -888,14 +890,14 @@ export default function QPOSPage() {
                     <button
                       key={value}
                       onClick={() => setPaymentMethod(value)}
-                      className={`p-3 rounded-xl flex flex-col items-center gap-1.5 transition ${
+                      className={`p-3 rounded-xl flex flex-col items-center gap-1.5 transition-all ${
                         paymentMethod === value
-                          ? "bg-emerald-600 text-white"
-                          : "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                          ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg scale-105"
+                          : "bg-white text-gray-600 hover:bg-gray-100 shadow-sm"
                       }`}
                     >
                       <Icon className="h-5 w-5" />
-                      <span className="text-xs">{label}</span>
+                      <span className="text-xs font-medium">{label}</span>
                     </button>
                   ))}
                 </div>
@@ -904,13 +906,13 @@ export default function QPOSPage() {
               {/* Amount Paid (cash only) */}
               {paymentMethod === "cash" && (
                 <div>
-                  <label className="text-gray-400 text-sm block mb-1.5">المبلغ المدفوع</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">المبلغ المدفوع</label>
                   <input
                     type="number"
                     value={amountPaid}
                     onChange={(e) => setAmountPaid(e.target.value)}
                     placeholder={total.toFixed(2)}
-                    className="w-full h-12 bg-gray-700 text-white text-lg rounded-xl px-4 border-0 focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-12 bg-white text-gray-800 text-lg font-semibold rounded-xl px-4 border-2 border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     autoFocus
                   />
                   {/* Quick amount buttons */}
@@ -927,7 +929,7 @@ export default function QPOSPage() {
                         <button
                           key={amount}
                           onClick={() => setAmountPaid(String(amount))}
-                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-1.5 rounded-lg text-sm transition"
+                          className="flex-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium py-1.5 rounded-lg text-sm transition hover:border-emerald-500"
                         >
                           {amount}
                         </button>
@@ -938,7 +940,7 @@ export default function QPOSPage() {
 
               {/* Customer Info (Optional) */}
               <div className="space-y-2">
-                <label className="text-gray-400 text-sm flex items-center gap-1">
+                <label className="text-gray-700 text-sm font-medium flex items-center gap-1">
                   <User className="h-3.5 w-3.5" />
                   بيانات العميل (اختياري)
                 </label>
@@ -947,21 +949,21 @@ export default function QPOSPage() {
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="اسم العميل"
-                  className="w-full h-9 bg-gray-700 text-white rounded-lg px-3 text-sm border-0 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full h-9 bg-white text-gray-800 rounded-lg px-3 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <input
                   type="tel"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   placeholder="رقم الجوال"
-                  className="w-full h-9 bg-gray-700 text-white rounded-lg px-3 text-sm border-0 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full h-9 bg-white text-gray-800 rounded-lg px-3 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   dir="ltr"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="text-gray-400 text-sm flex items-center gap-1 mb-1">
+                <label className="text-gray-700 text-sm font-medium flex items-center gap-1 mb-1">
                   <StickyNote className="h-3.5 w-3.5" />
                   ملاحظات
                 </label>
@@ -970,44 +972,44 @@ export default function QPOSPage() {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="ملاحظات إضافية..."
                   rows={2}
-                  className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm border-0 focus:ring-1 focus:ring-emerald-500 resize-none"
+                  className="w-full bg-white text-gray-800 rounded-lg px-3 py-2 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
                 />
               </div>
 
               {/* Summary */}
-              <div className="bg-gray-900 rounded-xl p-3 space-y-1.5">
-                <div className="flex justify-between text-gray-400 text-sm">
+              <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-3 space-y-1.5 border border-gray-200">
+                <div className="flex justify-between text-gray-600 text-sm">
                   <span>المجموع</span>
-                  <span>{subtotal.toFixed(2)} ر.س</span>
+                  <span className="font-medium">{subtotal.toFixed(2)} ر.س</span>
                 </div>
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-yellow-400 text-sm">
+                  <div className="flex justify-between text-yellow-600 text-sm">
                     <span>الخصم</span>
-                    <span>-{discountAmount.toFixed(2)} ر.س</span>
+                    <span className="font-medium">-{discountAmount.toFixed(2)} ر.س</span>
                   </div>
                 )}
-                <div className="flex justify-between text-white font-bold text-lg border-t border-gray-700 pt-1.5">
+                <div className="flex justify-between text-gray-800 font-bold text-lg border-t border-gray-200 pt-1.5">
                   <span>الإجمالي</span>
-                  <span className="text-emerald-400">{total.toFixed(2)} ر.س</span>
+                  <span className="text-emerald-600">{total.toFixed(2)} ر.س</span>
                 </div>
                 {paymentMethod === "cash" && Number(amountPaid) > 0 && (
-                  <div className="flex justify-between text-blue-400 text-sm border-t border-gray-700 pt-1.5">
+                  <div className="flex justify-between text-blue-600 text-sm border-t border-gray-200 pt-1.5">
                     <span>الباقي</span>
-                    <span>{change.toFixed(2)} ر.س</span>
+                    <span className="font-medium">{change.toFixed(2)} ر.س</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Action */}
-            <div className="p-4 border-t border-gray-700">
+            <div className="p-4 border-t border-gray-200 bg-white">
               <button
                 onClick={processSale}
                 disabled={
                   processing ||
                   (paymentMethod === "cash" && (Number(amountPaid) || 0) < total)
                 }
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
               >
                 {processing ? (
                   <>
@@ -1132,49 +1134,51 @@ export default function QPOSPage() {
       {/* ===== Sales History Modal ===== */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" dir="rtl">
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-              <h2 className="text-white text-lg font-bold flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-emerald-400" />
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" dir="rtl">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-rose-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
+                <div className="bg-gradient-to-r from-rose-500 to-rose-600 p-1.5 rounded-lg">
+                  <Receipt className="h-4 w-4 text-white" />
+                </div>
                 سجل المبيعات
               </h2>
               <button
                 onClick={() => setShowHistory(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
               {salesHistory.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
+                <div className="text-center text-gray-400 py-12">
                   <Receipt className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p>لا توجد مبيعات بعد</p>
+                  <p className="text-gray-600 font-medium">لا توجد مبيعات بعد</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {salesHistory.map((sale) => (
                     <div
                       key={sale.id}
-                      className="bg-gray-700/50 rounded-xl p-3 flex items-center justify-between"
+                      className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm hover:shadow-md transition"
                     >
                       <div>
-                        <p className="text-white font-medium text-sm">
+                        <p className="text-gray-800 font-bold text-sm">
                           #{sale.sale_number}
                         </p>
-                        <p className="text-gray-400 text-xs">
+                        <p className="text-gray-500 text-xs">
                           {new Date(sale.created_at).toLocaleString("ar-SA")}
                         </p>
                         {sale.customer_name && (
-                          <p className="text-gray-500 text-xs flex items-center gap-1 mt-0.5">
+                          <p className="text-gray-600 text-xs flex items-center gap-1 mt-0.5">
                             <User className="h-3 w-3" />
                             {sale.customer_name}
                           </p>
                         )}
                       </div>
                       <div className="text-left">
-                        <p className="text-emerald-400 font-bold">
+                        <p className="text-emerald-600 font-bold">
                           {Number(sale.total).toFixed(2)} ر.س
                         </p>
                         <p className="text-gray-500 text-xs">
@@ -1198,73 +1202,75 @@ export default function QPOSPage() {
       {/* ===== Daily Summary Modal ===== */}
       {showSummary && dailySummary && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-              <h2 className="text-white text-lg font-bold flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-emerald-400" />
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-violet-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
+                <div className="bg-gradient-to-r from-violet-500 to-violet-600 p-1.5 rounded-lg">
+                  <BarChart3 className="h-4 w-4 text-white" />
+                </div>
                 ملخص اليوم
               </h2>
               <button
                 onClick={() => setShowSummary(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-3 bg-gray-50">
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-700/50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-emerald-400">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-emerald-600">
                     {dailySummary.totalSales}
                   </p>
-                  <p className="text-gray-400 text-sm mt-1">عمليات البيع</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">عمليات البيع</p>
                 </div>
-                <div className="bg-gray-700/50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-emerald-400">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-emerald-600">
                     {dailySummary.totalRevenue.toFixed(0)}
                   </p>
-                  <p className="text-gray-400 text-sm mt-1">إجمالي الإيرادات</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">إجمالي الإيرادات</p>
                 </div>
-                <div className="bg-gray-700/50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-blue-400">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-violet-600">
                     {dailySummary.totalItems}
                   </p>
-                  <p className="text-gray-400 text-sm mt-1">المنتجات المباعة</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">المنتجات المباعة</p>
                 </div>
-                <div className="bg-gray-700/50 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-blue-400">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-violet-600">
                     {dailySummary.averageOrderValue.toFixed(0)}
                   </p>
-                  <p className="text-gray-400 text-sm mt-1">متوسط الطلب</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">متوسط الطلب</p>
                 </div>
               </div>
 
-              <div className="bg-gray-700/50 rounded-xl p-4">
-                <h3 className="text-white font-medium mb-2">طرق الدفع</h3>
+              <div className="bg-white rounded-xl p-4 shadow-sm">
+                <h3 className="text-gray-800 font-bold mb-3">طرق الدفع</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400 flex items-center gap-1.5">
+                    <span className="text-gray-600 flex items-center gap-1.5 font-medium">
                       <Banknote className="h-4 w-4" />
                       نقدي
                     </span>
-                    <span className="text-white">{dailySummary.cashSales}</span>
+                    <span className="text-gray-800 font-bold">{dailySummary.cashSales}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400 flex items-center gap-1.5">
+                    <span className="text-gray-600 flex items-center gap-1.5 font-medium">
                       <CreditCard className="h-4 w-4" />
                       بطاقة / محفظة
                     </span>
-                    <span className="text-white">{dailySummary.cardSales}</span>
+                    <span className="text-gray-800 font-bold">{dailySummary.cardSales}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 border-t border-gray-700">
+            <div className="p-4 border-t border-gray-200 bg-white">
               <button
                 onClick={() => setShowSummary(false)}
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2.5 rounded-xl font-medium transition"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-xl transition"
               >
                 إغلاق
               </button>
