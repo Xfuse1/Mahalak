@@ -20,6 +20,7 @@ import { MapPin, Loader2, CheckCircle } from "lucide-react"
 import Image from "next/image"
 import { PhoneVerification } from "../../components/phone-verification"
 import { getUserByPhone } from "../../lib/actions/profile"
+import { uploadStoreImage } from "../../lib/actions/stores"
 
 export default function AuthPage() {
   const router = useRouter()
@@ -288,14 +289,21 @@ export default function AuthPage() {
       if (!isPhoneVerified && phoneStep === "phone") {
         setIsLoading(true)
         
-        // Convert storeLogo to base64 so it survives sessionStorage
-        let storeLogoBase64: string | null = null
+        // Upload logo to Supabase first (base64 is too large for sessionStorage)
+        let storeLogoUrl: string | null = null
         if (storeLogo) {
-          storeLogoBase64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.readAsDataURL(storeLogo)
-          })
+          try {
+            const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
+            const uploadFormData = new FormData()
+            uploadFormData.append("file", storeLogo)
+            uploadFormData.append("storeId", tempId)
+            const uploadRes = await uploadStoreImage(uploadFormData)
+            if (uploadRes.success && uploadRes.url) {
+              storeLogoUrl = uploadRes.url
+            }
+          } catch (err) {
+            console.error("[v0] Failed to pre-upload logo:", err)
+          }
         }
         
         // Save seller data to session storage for later
@@ -307,7 +315,7 @@ export default function AuthPage() {
           storeName,
           storeDescription,
           storeType,
-          storeLogoBase64,
+          storeLogoUrl,
           street,
           city,
           country,

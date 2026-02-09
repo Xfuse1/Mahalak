@@ -46,6 +46,7 @@ interface AuthContextType {
       address?: string
       storeType?: string
       storeLogo?: File | null
+      storeLogoUrl?: string | null
       latitude?: number
       longitude?: number
     },
@@ -177,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       address?: string
       storeType?: string
       storeLogo?: File | null
+      storeLogoUrl?: string | null
       latitude?: number
       longitude?: number
     },
@@ -241,7 +243,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         console.log("[v0] Store created successfully:", result.data.id)
 
-        if (sellerData.storeLogo) {
+        // Use pre-uploaded URL if available, otherwise upload the File
+        if (sellerData.storeLogoUrl) {
+          console.log("[v0] Using pre-uploaded logo URL:", sellerData.storeLogoUrl)
+          const updateResult = await updateStore(result.data.id, { image_url: sellerData.storeLogoUrl })
+          if (!updateResult.success) {
+            console.error("[v0] Failed to update store with image URL:", updateResult.error)
+          } else {
+            console.log("[v0] Store logo saved successfully")
+          }
+        } else if (sellerData.storeLogo) {
           console.log("[v0] Uploading store logo...")
           const storeId = result.data.id
           const formData = new FormData()

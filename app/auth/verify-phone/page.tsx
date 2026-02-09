@@ -131,24 +131,13 @@ export default function VerifyPhonePage() {
             // Build address from stored fields
             const storeAddress = [pendingData.street, pendingData.city, pendingData.country].filter(Boolean).join(", ")
             
-            // Convert base64 logo back to File
-            let logoFile: File | null = null
-            if (pendingData.storeLogoBase64) {
-              try {
-                const res = await fetch(pendingData.storeLogoBase64)
-                const blob = await res.blob()
-                logoFile = new File([blob], 'store-logo.png', { type: blob.type })
-              } catch (e) {
-                console.error("[v0] Failed to convert logo base64 to File:", e)
-              }
-            }
-            
             const sellerData = {
               phone: pendingData.phone,
               storeName: pendingData.storeName,
               storeDescription: pendingData.storeDescription,
               storeType: pendingData.storeType,
-              storeLogo: logoFile,
+              storeLogo: null as File | null,
+              storeLogoUrl: pendingData.storeLogoUrl || null,
               address: storeAddress,
               latitude: pendingData.latitude,
               longitude: pendingData.longitude,
