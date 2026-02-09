@@ -493,9 +493,6 @@ export default function QPOSPage() {
               </>
             )}
           </button>
-          <div className="text-gray-500 text-xs mr-2 hidden lg:block">
-            F2: بحث | F4: مسح | F9: دفع
-          </div>
         </div>
       </header>
 
