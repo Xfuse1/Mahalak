@@ -148,6 +148,16 @@ export async function createPOSQuickProduct(data: {
     const db = getAdminDb()
     const now = new Date().toISOString()
 
+    // التحقق من اعتماد المتجر قبل إنشاء المنتج
+    const userDoc = await db.collection("users").doc(data.store_id).get()
+    if (userDoc.exists) {
+      const userData = userDoc.data()
+      const storeData = userData?.store
+      if (!storeData?.is_approved) {
+        return { success: false, error: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة." }
+      }
+    }
+
     // Check if barcode already exists for this store
     if (data.barcode) {
       const existing = await db

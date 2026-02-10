@@ -103,6 +103,7 @@ export default function QPOSPage() {
   const [quickAddCategory, setQuickAddCategory] = useState("")
   const [quickAddLoading, setQuickAddLoading] = useState(false)
   const [showMobileCart, setShowMobileCart] = useState(false)
+  const isStoreApproved = store?.is_approved === true
   const searchRef = useRef<HTMLInputElement>(null)
 
   // ===================== Load Data =====================
@@ -440,6 +441,11 @@ export default function QPOSPage() {
       setTimeout(() => setSuccess(""), 2000)
     } else {
       setShowScanner(false)
+      if (!isStoreApproved) {
+        setError("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.")
+        setTimeout(() => setError(""), 5000)
+        return
+      }
       setQuickAddBarcode(code)
       setShowQuickAdd(true)
       setError(`لا يوجد منتج بالباركود: ${code}`)
@@ -559,6 +565,19 @@ export default function QPOSPage() {
 
   return (
     <div className="h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col overflow-hidden print:bg-white" dir="rtl">
+      {/* ===== Store Not Approved Banner ===== */}
+      {!isStoreApproved && (
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-200 px-4 py-3 flex items-center gap-3 print:hidden" dir="rtl">
+          <div className="bg-amber-100 p-2 rounded-full">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-amber-800 font-bold text-sm">متجرك في انتظار موافقة الإدارة</p>
+            <p className="text-amber-600 text-xs">يمكنك استخدام نظام الكاشير للمنتجات الموجودة، لكن لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك.</p>
+          </div>
+        </div>
+      )}
+
       {/* ===== Top Bar ===== */}
       <header className="bg-white border-b border-gray-200 px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between print:hidden shadow-sm">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -871,9 +890,20 @@ export default function QPOSPage() {
                 <span className="text-sm font-medium hidden sm:inline">مسح</span>
               </button>
               <button
-                onClick={() => setShowQuickAdd(true)}
-                className="h-9 sm:h-11 px-2 sm:px-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
-                title="إضافة منتج سريع"
+                onClick={() => {
+                  if (!isStoreApproved) {
+                    setError("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.")
+                    setTimeout(() => setError(""), 5000)
+                    return
+                  }
+                  setShowQuickAdd(true)
+                }}
+                className={`h-9 sm:h-11 px-2 sm:px-3 rounded-xl transition-all flex items-center gap-1.5 ${
+                  isStoreApproved
+                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-lg hover:scale-105"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+                title={isStoreApproved ? "إضافة منتج سريع" : "متجرك غير معتمد بعد"}
               >
                 <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="text-sm font-medium hidden sm:inline">منتج</span>

@@ -20,6 +20,7 @@ export default function SellerProductsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
   const { t } = useLanguage()
 
   useEffect(() => {
@@ -44,6 +45,8 @@ export default function SellerProductsPage() {
           setProducts([])
           return
         }
+
+        setIsStoreApproved((store as any).is_approved === true)
 
         const storeProducts = await getProductsByStoreId(store.id)
 
@@ -104,13 +107,32 @@ export default function SellerProductsPage() {
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة المنتجات", "Product Management")}</h1>
               <p className="text-gray-500 mt-1">{t("إدارة وتعديل منتجاتك", "Manage and edit your products")}</p>
             </div>
-            <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
-              <Link href="/seller/products/new">
+            {isStoreApproved ? (
+              <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
+                <Link href="/seller/products/new">
+                  <Plus className="ml-2 h-4 w-4" />
+                  {t("إضافة منتج جديد", "Add New Product")}
+                </Link>
+              </Button>
+            ) : (
+              <Button disabled className="bg-gray-300 text-gray-500 cursor-not-allowed rounded-xl px-6">
                 <Plus className="ml-2 h-4 w-4" />
                 {t("إضافة منتج جديد", "Add New Product")}
-              </Link>
-            </Button>
+              </Button>
+            )}
           </div>
+
+          {!isStoreApproved && (
+            <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center gap-3" dir="rtl">
+              <div className="bg-amber-100 p-2 rounded-full">
+                <Tag className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-amber-800 font-bold text-sm">{t("متجرك في انتظار موافقة الإدارة", "Your store is pending admin approval")}</p>
+                <p className="text-amber-600 text-xs">{t("لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.", "You cannot add new products until your store is approved by admin.")}</p>
+              </div>
+            </div>
+          )}
 
           {products.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
