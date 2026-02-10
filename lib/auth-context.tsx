@@ -222,14 +222,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await setDoc(doc(db, "users", credential.user.uid), profileData)
 
       if (role === "seller" && credential.user && sellerData?.storeName) {
-        console.log("[v0] Creating store for seller:", credential.user.uid)
-        console.log("[v0] Store data:", {
-          name: sellerData.storeName,
-          address: sellerData.address,
-          phone: sellerData.phone,
-          hasLogo: !!sellerData.storeLogo
-        })
-        
         const result = await createStore({
           seller_id: credential.user.uid,
           name: sellerData.storeName,
@@ -252,20 +244,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await signOut(auth)
           throw new Error("Failed to create store: " + result.error)
         }
-        
-        console.log("[v0] Store created successfully:", result.data.id)
 
         // Use pre-uploaded URL if available, otherwise upload the File
         if (sellerData.storeLogoUrl) {
-          console.log("[v0] Using pre-uploaded logo URL:", sellerData.storeLogoUrl)
           const updateResult = await updateStore(result.data.id, { image_url: sellerData.storeLogoUrl })
           if (!updateResult.success) {
             console.error("[v0] Failed to update store with image URL:", updateResult.error)
-          } else {
-            console.log("[v0] Store logo saved successfully")
           }
         } else if (sellerData.storeLogo) {
-          console.log("[v0] Uploading store logo...")
           const storeId = result.data.id
           const formData = new FormData()
           formData.append("file", sellerData.storeLogo)
@@ -273,12 +259,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const uploadRes = await uploadStoreImage(formData)
           if (uploadRes.success && uploadRes.url) {
-            console.log("[v0] Logo uploaded, updating store with URL:", uploadRes.url)
             const updateResult = await updateStore(storeId, { image_url: uploadRes.url })
             if (!updateResult.success) {
               console.error("[v0] Failed to update store with image URL:", updateResult.error)
-            } else {
-              console.log("[v0] Store logo saved successfully")
             }
           } else {
             console.error("[v0] Logo upload failed:", uploadRes.error)

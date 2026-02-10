@@ -9,6 +9,7 @@ import { useLanguage } from '../../lib/language-context';
 import { cn } from '../../lib/utils';
 import { Product, Shelf, Placement } from '../../lib/types/product-management';
 import { sections } from '../../lib/mock/supermarket-data';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function ShelfManager() {
     const {
@@ -21,6 +22,7 @@ export default function ShelfManager() {
         removeShelf
     } = useProductStore();
     const { t } = useLanguage();
+    const confirmDialog = useConfirm();
 
     const currentSection = sections.find(s => s.id === selectedSectionId);
     const sectionShelves = shelves.filter((s: Shelf) => s.sectionEN === selectedSectionId);
@@ -102,8 +104,15 @@ export default function ShelfManager() {
                                 <Button
                                     variant="outline"
                                     className="gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                    onClick={() => {
-                                        if (confirm(t("هل أنت متأكد من حذف هذا الرف؟", "Are you sure you want to delete this shelf?"))) {
+                                    onClick={async () => {
+                                        const confirmed = await confirmDialog({
+                                            title: t("حذف الرف", "Delete Shelf"),
+                                            message: t("هل أنت متأكد من حذف هذا الرف؟", "Are you sure you want to delete this shelf?"),
+                                            confirmText: t("حذف", "Delete"),
+                                            cancelText: t("إلغاء", "Cancel"),
+                                            variant: "danger",
+                                        });
+                                        if (confirmed) {
                                             removeShelf(shelf.shelfId);
                                         }
                                     }}

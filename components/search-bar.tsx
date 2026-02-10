@@ -9,6 +9,7 @@ import { Button } from "./ui/button"
 import { Label } from "./ui/label"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "../lib/language-context"
+import { useToast } from "@/components/ui/toast"
 
 interface SearchBarProps {
   placeholder?: string
@@ -22,6 +23,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   const [isFocused, setIsFocused] = useState(false)
   const router = useRouter()
   const { t, language } = useLanguage()
+  const toast = useToast()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isRTL = language === "ar"
@@ -85,7 +87,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
 
       recognition.onerror = () => {
         setIsListening(false)
-        alert(t("حدث خطأ في البحث الصوتي", "An error occurred with voice search"))
+        toast.error(t("حدث خطأ في البحث الصوتي", "An error occurred with voice search"))
       }
 
       recognition.onend = () => {
@@ -94,7 +96,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
 
       recognition.start()
     } else {
-      alert(t("البحث الصوتي غير مدعوم في هذا المتصفح", "Voice search is not supported in this browser"))
+      toast.error(t("البحث الصوتي غير مدعوم في هذا المتصفح", "Voice search is not supported in this browser"))
     }
   }
 

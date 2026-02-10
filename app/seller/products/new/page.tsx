@@ -16,10 +16,12 @@ import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../lib/actions/stores"
+import { useToast } from "@/components/ui/toast"
 
 
 export default function NewProductPage() {
   const { user, isLoading } = useAuth()
+  const toast = useToast()
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -104,7 +106,6 @@ export default function NewProductPage() {
         uploadFormData.append("file", imageFile)
         uploadFormData.append("storeId", store.id)
 
-        console.log("[v0] Uploading image via server action:")
         const uploadResult = await uploadProductImage(uploadFormData)
 
         if (!uploadResult.success) {
@@ -112,7 +113,6 @@ export default function NewProductPage() {
         }
 
         imageUrl = uploadResult.url!
-        console.log("[v0] Image uploaded successfully via server:")
       }
 
       // Create product in database
@@ -127,17 +127,13 @@ export default function NewProductPage() {
         store_id: store.id,
       }
 
-      console.log("[v0] Creating product with data:")
-
       const result = await createProduct(productData)
 
       if (!result.success) {
         throw new Error(result.error || "فشل إضافة المنتج")
       }
 
-      console.log("[v0] Product created successfully:")
-
-      alert("تم إضافة المنتج بنجاح!")
+      toast.success("تم إضافة المنتج بنجاح!")
       router.push("/seller/products")
     } catch (err: any) {
       console.error("[v0] Error creating product:", err)

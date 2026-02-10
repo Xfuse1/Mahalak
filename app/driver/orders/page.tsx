@@ -27,6 +27,7 @@ import { getMultiStoreOrdersForDriver, markStorePickedUp } from "@/lib/actions/o
 import type { PickupStop } from "@/lib/actions/orders"
 import { getDriverById } from "@/lib/actions/delivery"
 import type { Driver } from "@/lib/actions/delivery"
+import { useToast } from "@/components/ui/toast"
 
 type MultiOrder = {
   id: string
@@ -46,6 +47,7 @@ export default function DriverOrdersPage() {
   const searchParams = useSearchParams()
   const driverIdParam = searchParams.get("driverId") || ""
   const { t } = useLanguage()
+  const toast = useToast()
 
   const [driverId, setDriverId] = useState(driverIdParam)
   const [driverIdInput, setDriverIdInput] = useState(driverIdParam)
@@ -101,10 +103,10 @@ export default function DriverOrdersPage() {
       if (result.success) {
         await loadDriverData(driverId)
       } else {
-        alert(result.error || t("حدث خطأ", "Something went wrong"))
+        toast.error(result.error || t("حدث خطأ", "Something went wrong"))
       }
     } catch {
-      alert(t("حدث خطأ", "Something went wrong"))
+      toast.error(t("حدث خطأ", "Something went wrong"))
     } finally {
       setActionLoading(null)
     }

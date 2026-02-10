@@ -5,8 +5,8 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp"
-import { Phone, Shield, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
-import { initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth } from "@/lib/firebase/client"
+import { Phone, Shield, CheckCircle2, Loader2, RefreshCw, AlertTriangle } from "lucide-react"
+import { initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth, getOTPCooldownRemaining, getOTPAttemptsRemaining } from "@/lib/firebase/client"
 
 interface PhoneVerificationProps {
   phoneNumber: string
@@ -35,9 +35,11 @@ export function PhoneVerification({
   const [step, setStep] = useState<"phone" | "otp" | "verified">(isVerified ? "verified" : "phone")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [successMsg, setSuccessMsg] = useState("")
   const [otpCode, setOtpCode] = useState("")
-  const [countdown, setCountdown] = useState(0)
-  const [attempts, setAttempts] = useState(0)
+  const [countdown, setCountdown] = useState(() => getOTPCooldownRemaining())
+  const [attempts, setAttempts] = useState(() => 3 - getOTPAttemptsRemaining())
+  const [sendCount, setSendCount] = useState(0)
   const maxAttempts = 3
 
   const t = useCallback(
@@ -71,7 +73,7 @@ export function PhoneVerification({
   // Trigger OTP send from parent (when "Create Account" is clicked)
   useEffect(() => {
     if (triggerSendOTP && step === "phone" && !isLoading) {
-      handleSendOTPExternal()
+      handleSendOTP(true)
     }
   }, [triggerSendOTP])
 
@@ -82,68 +84,46 @@ export function PhoneVerification({
     }
   }, [])
 
-  const handleSendOTPExternal = async () => {
+  // Unified send OTP function (used by both internal button and external trigger)
+  const handleSendOTP = async (isExternal = false) => {
     if (!phoneNumber || phoneNumber.length < 10) {
       const errorMsg = t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number")
       setError(errorMsg)
-      onOTPSent?.(false, errorMsg)
+      if (isExternal) onOTPSent?.(false, errorMsg)
       return
     }
 
     setIsLoading(true)
     setError("")
+    setSuccessMsg("")
 
     try {
       // Initialize reCAPTCHA
       initRecaptchaVerifier("recaptcha-container")
 
-      // Send OTP
+      // Send OTP (rate limiting is handled inside sendPhoneOTP)
       const result = await sendPhoneOTP(phoneNumber)
 
       if (result.success) {
         setStep("otp")
-        setCountdown(60)
+        // Progressive cooldown from rate limit data
+        const cooldown = getOTPCooldownRemaining()
+        setCountdown(cooldown > 0 ? cooldown : 60)
         setAttempts(0)
-        onOTPSent?.(true)
+        setSendCount(prev => prev + 1)
+        setSuccessMsg(t("تم إرسال كود التحقق بنجاح", "Verification code sent successfully"))
+        setTimeout(() => setSuccessMsg(""), 4000)
+        if (isExternal) onOTPSent?.(true)
       } else {
         const errorMsg = result.error || t("فشل إرسال كود التحقق", "Failed to send verification code")
+        if (result.cooldown) setCountdown(result.cooldown)
         setError(errorMsg)
-        onOTPSent?.(false, errorMsg)
+        if (isExternal) onOTPSent?.(false, errorMsg)
       }
     } catch (err: any) {
       const errorMsg = t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again")
       setError(errorMsg)
-      onOTPSent?.(false, errorMsg)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSendOTP = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      setError(t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number"))
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      // Initialize reCAPTCHA
-      initRecaptchaVerifier("recaptcha-container")
-
-      // Send OTP
-      const result = await sendPhoneOTP(phoneNumber)
-
-      if (result.success) {
-        setStep("otp")
-        setCountdown(60) // 60 seconds before resend
-        setAttempts(0)
-      } else {
-        setError(result.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
-      }
-    } catch (err: any) {
-      setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+      if (isExternal) onOTPSent?.(false, errorMsg)
     } finally {
       setIsLoading(false)
     }
@@ -162,6 +142,7 @@ export function PhoneVerification({
 
     setIsLoading(true)
     setError("")
+    setSuccessMsg("")
     setAttempts((prev) => prev + 1)
 
     try {
@@ -172,8 +153,9 @@ export function PhoneVerification({
         onVerified(true)
       } else {
         setError(result.error || t("كود التحقق غير صحيح", "Invalid verification code"))
-        if (attempts + 1 >= maxAttempts) {
-          setError(t("تم تجاوز عدد المحاولات. يرجى طلب كود جديد", "Maximum attempts exceeded. Please request a new code"))
+        // Sync attempts from rate limiter
+        if (typeof result.attemptsRemaining === 'number') {
+          setAttempts(maxAttempts - result.attemptsRemaining)
         }
       }
     } catch (err: any) {
@@ -274,8 +256,26 @@ export function PhoneVerification({
           </InputOTP>
         </div>
 
+        {successMsg && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
+            <p className="text-sm text-green-600 flex items-center justify-center gap-1">
+              <CheckCircle2 className="h-4 w-4" />
+              {successMsg}
+            </p>
+          </div>
+        )}
+
         {error && (
           <p className="text-sm text-red-600 text-center">{error}</p>
+        )}
+
+        {attempts >= maxAttempts && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center">
+            <p className="text-sm text-amber-700 flex items-center justify-center gap-1">
+              <AlertTriangle className="h-4 w-4" />
+              {t("تم تجاوز عدد المحاولات. يرجى طلب كود جديد", "Max attempts reached. Please request a new code")}
+            </p>
+          </div>
         )}
 
         <p className="text-sm text-gray-500 text-center">
@@ -285,7 +285,7 @@ export function PhoneVerification({
         <Button
           type="button"
           onClick={handleVerifyOTP}
-          disabled={isLoading || otpCode.length !== 6}
+          disabled={isLoading || otpCode.length !== 6 || attempts >= maxAttempts}
           className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
         >
           {isLoading ? (

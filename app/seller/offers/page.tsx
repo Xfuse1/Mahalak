@@ -18,6 +18,8 @@ import { getSubcategoriesForStore } from "../../../lib/mock-data"
 import { Badge } from "../../../components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
+import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 interface Product {
   id: string
@@ -43,6 +45,8 @@ interface Offer {
 
 export default function OffersPage() {
   const { user, isLoading } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
   const router = useRouter()
   const [offers, setOffers] = useState<Offer[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -121,17 +125,17 @@ export default function OffersPage() {
     
     // Validation
     if (discountPercentage <= 0 || discountPercentage > 100) {
-      alert("نسبة الخصم يجب أن تكون بين 1 و 100")
+      toast.error("نسبة الخصم يجب أن تكون بين 1 و 100")
       return
     }
     
     if (offerTarget === "product" && !selectedProduct && !productId) {
-      alert("يجب اختيار منتج للعرض")
+      toast.error("يجب اختيار منتج للعرض")
       return
     }
     
     if (offerTarget === "category" && !selectedCategory) {
-      alert("يجب اختيار قسم للعرض")
+      toast.error("يجب اختيار قسم للعرض")
       return
     }
     
@@ -140,7 +144,7 @@ export default function OffersPage() {
       const start = new Date(startDate)
       const end = new Date(endDate)
       if (end < start) {
-        alert("تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+        toast.error("تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
         return
       }
     }
@@ -170,7 +174,7 @@ export default function OffersPage() {
           setEditingOffer(null)
           setIsAdding(false)
         } else {
-          alert(`فشل تحديث العرض: ${result.error}`)
+          toast.error(`فشل تحديث العرض: ${result.error}`)
         }
       } else {
         // Create new offer
@@ -184,19 +188,26 @@ export default function OffersPage() {
           setOffers(updatedOffers as Offer[])
           setIsAdding(false)
         } else {
-          alert(`فشل إضافة العرض: ${result.error}`)
+          toast.error(`فشل إضافة العرض: ${result.error}`)
         }
       }
     } catch (error) {
       console.error("[v0] Error submitting offer:", error)
-      alert("حدث خطأ أثناء حفظ العرض")
+      toast.error("حدث خطأ أثناء حفظ العرض")
     } finally {
       setSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("هل أنت متأكد من حذف هذا العرض؟")) return
+    const confirmed = await confirm({
+      title: "حذف العرض",
+      message: "هل أنت متأكد من حذف هذا العرض؟",
+      confirmText: "حذف",
+      cancelText: "إلغاء",
+      variant: "danger",
+    })
+    if (!confirmed) return
     if (!storeId) return
 
     try {
@@ -206,11 +217,11 @@ export default function OffersPage() {
         const updatedOffers = await getStoreOffers(storeId)
         setOffers(updatedOffers as Offer[])
       } else {
-        alert(`فشل حذف العرض: ${result.error}`)
+        toast.error(`فشل حذف العرض: ${result.error}`)
       }
     } catch (error) {
       console.error("[v0] Error deleting offer:", error)
-      alert("حدث خطأ أثناء حذف العرض")
+      toast.error("حدث خطأ أثناء حذف العرض")
     }
   }
 

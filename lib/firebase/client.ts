@@ -12,7 +12,7 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 }
 
-export function getFirebaseApp(): FirebaseApp {
+function getFirebaseApp(): FirebaseApp {
   if (getApps().length) {
     return getApp()
   }
@@ -51,6 +51,134 @@ function setConfirmationResult(result: ConfirmationResult | null): void {
   }
 }
 
+// ==================== OTP Rate Limiting ====================
+
+const OTP_STORAGE_KEY = "otp_rate_limit"
+const OTP_COOLDOWNS = [60, 120, 300] // Progressive cooldown: 1min, 2min, 5min
+const OTP_MAX_SENDS_PER_HOUR = 5
+const OTP_LOCKOUT_DURATION = 30 * 60 * 1000 // 30 min lockout after max attempts
+
+interface OTPRateLimitData {
+  sendCount: number
+  lastSendTime: number
+  verifyAttempts: number
+  lastVerifyTime: number
+  lockedUntil: number
+  phone: string
+}
+
+function getOTPRateLimitData(): OTPRateLimitData {
+  if (typeof window === 'undefined') {
+    return { sendCount: 0, lastSendTime: 0, verifyAttempts: 0, lastVerifyTime: 0, lockedUntil: 0, phone: "" }
+  }
+  try {
+    const raw = localStorage.getItem(OTP_STORAGE_KEY)
+    if (!raw) return { sendCount: 0, lastSendTime: 0, verifyAttempts: 0, lastVerifyTime: 0, lockedUntil: 0, phone: "" }
+    const data = JSON.parse(raw) as OTPRateLimitData
+    // Reset if more than 1 hour has passed since last send
+    if (Date.now() - data.lastSendTime > 60 * 60 * 1000) {
+      return { sendCount: 0, lastSendTime: 0, verifyAttempts: 0, lastVerifyTime: 0, lockedUntil: 0, phone: "" }
+    }
+    return data
+  } catch {
+    return { sendCount: 0, lastSendTime: 0, verifyAttempts: 0, lastVerifyTime: 0, lockedUntil: 0, phone: "" }
+  }
+}
+
+function saveOTPRateLimitData(data: OTPRateLimitData): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(OTP_STORAGE_KEY, JSON.stringify(data))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function getOTPCooldownRemaining(): number {
+  const data = getOTPRateLimitData()
+  if (data.lockedUntil > Date.now()) {
+    return Math.ceil((data.lockedUntil - Date.now()) / 1000)
+  }
+  const cooldownIndex = Math.min(data.sendCount - 1, OTP_COOLDOWNS.length - 1)
+  const cooldownSeconds = cooldownIndex >= 0 ? OTP_COOLDOWNS[cooldownIndex] : 0
+  const elapsed = (Date.now() - data.lastSendTime) / 1000
+  return Math.max(0, Math.ceil(cooldownSeconds - elapsed))
+}
+
+export function getOTPAttemptsRemaining(): number {
+  const data = getOTPRateLimitData()
+  return Math.max(0, 3 - data.verifyAttempts)
+}
+
+function checkOTPSendAllowed(phone: string): { allowed: boolean; error?: string; cooldown?: number } {
+  const data = getOTPRateLimitData()
+
+  // Check lockout
+  if (data.lockedUntil > Date.now()) {
+    const remaining = Math.ceil((data.lockedUntil - Date.now()) / 1000 / 60)
+    return { allowed: false, error: `تم تجاوز عدد المحاولات. يرجى الانتظار ${remaining} دقيقة`, cooldown: Math.ceil((data.lockedUntil - Date.now()) / 1000) }
+  }
+
+  // Reset counts if phone changed
+  if (data.phone && data.phone !== phone) {
+    return { allowed: true }
+  }
+
+  // Check hourly send limit
+  if (data.sendCount >= OTP_MAX_SENDS_PER_HOUR) {
+    const lockData = { ...data, lockedUntil: Date.now() + OTP_LOCKOUT_DURATION }
+    saveOTPRateLimitData(lockData)
+    return { allowed: false, error: "تم تجاوز الحد الأقصى للإرسال. يرجى المحاولة بعد 30 دقيقة", cooldown: OTP_LOCKOUT_DURATION / 1000 }
+  }
+
+  // Check progressive cooldown
+  const cooldown = getOTPCooldownRemaining()
+  if (cooldown > 0) {
+    return { allowed: false, error: `يرجى الانتظار ${cooldown} ثانية قبل إعادة الإرسال`, cooldown }
+  }
+
+  return { allowed: true }
+}
+
+function recordOTPSend(phone: string): void {
+  const data = getOTPRateLimitData()
+  const newData: OTPRateLimitData = {
+    ...data,
+    sendCount: data.phone === phone ? data.sendCount + 1 : 1,
+    lastSendTime: Date.now(),
+    verifyAttempts: data.phone === phone ? data.verifyAttempts : 0,
+    phone,
+    lockedUntil: data.lockedUntil,
+  }
+  saveOTPRateLimitData(newData)
+}
+
+function recordOTPVerifyAttempt(): { allowed: boolean; error?: string } {
+  const data = getOTPRateLimitData()
+  const newAttempts = data.verifyAttempts + 1
+
+  if (newAttempts > 3) {
+    return { allowed: false, error: "تم تجاوز عدد المحاولات. يرجى طلب كود جديد" }
+  }
+
+  saveOTPRateLimitData({ ...data, verifyAttempts: newAttempts, lastVerifyTime: Date.now() })
+  return { allowed: true }
+}
+
+function resetOTPVerifyAttempts(): void {
+  const data = getOTPRateLimitData()
+  saveOTPRateLimitData({ ...data, verifyAttempts: 0 })
+}
+
+function clearOTPRateLimitData(): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(OTP_STORAGE_KEY)
+  } catch {
+    // Ignore
+  }
+}
+
 /**
  * Initialize invisible reCAPTCHA verifier for phone authentication
  * Must be called before sending OTP
@@ -66,13 +194,11 @@ export function initRecaptchaVerifier(containerId: string = "recaptcha-container
   // Check if container exists
   const container = document.getElementById(containerId)
   if (!container) {
-    console.warn("[v0] reCAPTCHA container not found:", containerId)
     return null
   }
   
   // Check if container already has reCAPTCHA rendered
   if (container.hasChildNodes()) {
-    console.log("[v0] reCAPTCHA already rendered, reusing...")
     return recaptchaVerifier
   }
   
@@ -80,18 +206,17 @@ export function initRecaptchaVerifier(containerId: string = "recaptcha-container
     recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
       size: "invisible",
       callback: () => {
-        // reCAPTCHA solved - will proceed with phone auth
-        console.log("[v0] reCAPTCHA verified")
+        // reCAPTCHA solved
       },
       "expired-callback": () => {
-        // Reset reCAPTCHA
-        console.log("[v0] reCAPTCHA expired")
+        // reCAPTCHA expired - will be re-rendered on next send
+        recaptchaVerifier = null
       },
     })
     
     return recaptchaVerifier
   } catch (error: any) {
-    console.error("[v0] Error initializing reCAPTCHA:", error.message)
+    console.error("[OTP] Error initializing reCAPTCHA:", error.message)
     return null
   }
 }
@@ -101,7 +226,23 @@ export function initRecaptchaVerifier(containerId: string = "recaptcha-container
  * @param phoneNumber - Phone number with country code (e.g., +201012345678)
  * @returns Promise<boolean> - true if OTP sent successfully
  */
-export async function sendPhoneOTP(phoneNumber: string): Promise<{ success: boolean; error?: string }> {
+export async function sendPhoneOTP(phoneNumber: string): Promise<{ success: boolean; error?: string; cooldown?: number }> {
+  // Format phone number first
+  let formattedPhone = phoneNumber.trim()
+  if (!formattedPhone.startsWith("+")) {
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "+2" + formattedPhone
+    } else {
+      formattedPhone = "+20" + formattedPhone
+    }
+  }
+
+  // Check rate limiting before proceeding
+  const rateCheck = checkOTPSendAllowed(formattedPhone)
+  if (!rateCheck.allowed) {
+    return { success: false, error: rateCheck.error, cooldown: rateCheck.cooldown }
+  }
+
   try {
     const auth = getFirebaseAuth()
     
@@ -127,38 +268,22 @@ export async function sendPhoneOTP(phoneNumber: string): Promise<{ success: bool
     
     recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
       size: "invisible",
-      callback: () => console.log("[v0] reCAPTCHA verified"),
+      callback: () => {},
     })
-    
-    // Format phone number if needed
-    let formattedPhone = phoneNumber.trim()
-    if (!formattedPhone.startsWith("+")) {
-      // Assume Egypt if no country code
-      if (formattedPhone.startsWith("0")) {
-        formattedPhone = "+2" + formattedPhone
-      } else {
-        formattedPhone = "+20" + formattedPhone
-      }
-    }
-    
-    console.log("========== PHONE DEBUG ==========")
-    console.log("Original phone input:", phoneNumber)
-    console.log("Formatted phone sent to Firebase:", formattedPhone)
-    console.log("Expected test number in Firebase: +201550448160")
-    console.log("Are they equal?", formattedPhone === "+201550448160")
-    console.log("==================================")
     
     const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier)
     setConfirmationResult(result)
-    console.log("[v0] OTP sent successfully to:", formattedPhone)
+    
+    // Record successful send for rate limiting
+    recordOTPSend(formattedPhone)
     
     return { success: true }
   } catch (error: any) {
-    console.error("[v0] Error sending OTP:", error)
+    console.error("[OTP] Send error:", error.code)
     
     // Reset reCAPTCHA on error
     if (recaptchaVerifier) {
-      recaptchaVerifier.clear()
+      try { recaptchaVerifier.clear() } catch { /* ignore */ }
       recaptchaVerifier = null
     }
     
@@ -180,40 +305,42 @@ export async function sendPhoneOTP(phoneNumber: string): Promise<{ success: bool
  * @param code - 6-digit OTP code
  * @returns Promise with verification result
  */
-export async function verifyPhoneOTP(code: string): Promise<{ success: boolean; error?: string }> {
+export async function verifyPhoneOTP(code: string): Promise<{ success: boolean; error?: string; attemptsRemaining?: number }> {
+  // Check verify attempt limit
+  const attemptCheck = recordOTPVerifyAttempt()
+  if (!attemptCheck.allowed) {
+    return { success: false, error: attemptCheck.error, attemptsRemaining: 0 }
+  }
+
   try {
     const confirmationResult = getConfirmationResult()
     
-    console.log("========== OTP VERIFY DEBUG ==========")
-    console.log("OTP code entered:", code)
-    console.log("confirmationResult exists?", !!confirmationResult)
-    console.log("Expected test code: 111111")
-    console.log("Are they equal?", code === "111111")
-    console.log("======================================")
-    
     if (!confirmationResult) {
-      console.log("ERROR: No confirmationResult found in window!")
       return { success: false, error: "لم يتم إرسال كود التحقق بعد" }
     }
     
     const result = await confirmationResult.confirm(code)
-    console.log("[v0] Phone verified successfully:", result.user.phoneNumber)
     
     // Clear the confirmation result after successful verification
     setConfirmationResult(null)
+    // Clear rate limit data on success
+    clearOTPRateLimitData()
     
     return { success: true }
   } catch (error: any) {
-    console.error("[v0] Error verifying OTP:", error)
+    console.error("[OTP] Verify error:", error.code)
     
+    const remaining = getOTPAttemptsRemaining()
     let errorMessage = "كود التحقق غير صحيح"
     if (error.code === "auth/invalid-verification-code") {
-      errorMessage = "كود التحقق غير صحيح"
+      errorMessage = remaining > 0 
+        ? `كود التحقق غير صحيح. المحاولات المتبقية: ${remaining}`
+        : "تم تجاوز عدد المحاولات. يرجى طلب كود جديد"
     } else if (error.code === "auth/code-expired") {
       errorMessage = "انتهت صلاحية كود التحقق. يرجى طلب كود جديد"
     }
     
-    return { success: false, error: errorMessage }
+    return { success: false, error: errorMessage, attemptsRemaining: remaining }
   }
 }
 
@@ -222,7 +349,7 @@ export async function verifyPhoneOTP(code: string): Promise<{ success: boolean; 
  */
 export function clearPhoneAuth(): void {
   if (recaptchaVerifier) {
-    recaptchaVerifier.clear()
+    try { recaptchaVerifier.clear() } catch { /* ignore */ }
     recaptchaVerifier = null
   }
   setConfirmationResult(null)

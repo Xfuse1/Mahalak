@@ -154,7 +154,6 @@ export default function SupermarketSimulator() {
                             const layoutRes = await getSupermarketLayout(userStore.id);
                             if (layoutRes.success && layoutRes.data) {
                                 fetchedLayout = layoutRes.data;
-                                console.log("3D Sim: Loaded Saved Layout", fetchedLayout);
                             }
                         }
                     } catch (err) {
@@ -1410,7 +1409,6 @@ export default function SupermarketSimulator() {
         const useCustomLayout = layoutData && layoutData.shelves && layoutData.shelves.length > 0;
 
         if (useCustomLayout) {
-            console.log("Building 3D Store from Layout...");
             layoutData.shelves.forEach((s: any) => renderDynamicShelf(s));
             if (layoutData.placements) {
                 layoutData.placements.forEach((p: any) => renderDynamicProduct(p, layoutData.shelves));
@@ -2133,13 +2131,11 @@ export default function SupermarketSimulator() {
                 });
                 setMessage(`+ ${p.name}`);
                 setTimeout(() => setMessage(''), 1000);
-                console.log("Product Dropped into Cart:", p.name);
             } else {
                 // If it was a quick click and we are on mobile or simple mode, add it anyway?
                 // Actually, let's stick to the button for clarity.
                 setMessage("اسحب لأسفل للإضافة");
                 setTimeout(() => setMessage(''), 800);
-                console.log("Product Return/Cancel Drop");
             }
 
             // Cleanup

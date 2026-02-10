@@ -12,7 +12,7 @@ type RecordMap = {
 }
 
 // Timeline entry type for order tracking
-export type TimelineEntry = {
+type TimelineEntry = {
   status: string
   timestamp: string
   note?: string

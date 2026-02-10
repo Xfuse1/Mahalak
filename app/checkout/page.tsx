@@ -15,19 +15,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react"
-
-type CheckoutItem = {
-  id: string
-  name: string
-  price: number
-  category?: string
-  image_url?: string | null
-  store_id?: string
-  store_name?: string
-  description?: string
-  quantity: number
-  discount_percentage?: number
-}
+import type { CheckoutItem } from "@/lib/types/checkout"
 
 export default function CheckoutPage() {
   const { t } = useLanguage()

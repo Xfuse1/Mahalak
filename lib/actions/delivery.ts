@@ -95,7 +95,6 @@ export async function getDriverCommission(): Promise<number> {
     const doc = await db.collection("settings").doc("driverCommission").get()
     
     if (!doc.exists) {
-      console.log("[v0] Driver commission settings not found, using default 0")
       return 0
     }
 
@@ -114,7 +113,6 @@ export async function isSimulatorEnabled(): Promise<boolean> {
     const doc = await db.collection("settings").doc("simulator").get()
     
     if (!doc.exists) {
-      console.log("[v0] Simulator settings not found, defaulting to false")
       return false
     }
 

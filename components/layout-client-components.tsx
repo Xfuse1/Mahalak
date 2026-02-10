@@ -1,6 +1,8 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { ToastProvider } from "./ui/toast"
+import { ConfirmProvider } from "./ui/confirm-dialog"
 
 const TrackingConsent = dynamic(
   () => import("./tracking-consent"),
@@ -15,12 +17,15 @@ const ScrollToTop = dynamic(
   { ssr: false }
 )
 
-export function LayoutClientComponents() {
+export function LayoutClientComponents({ children }: { children?: React.ReactNode }) {
   return (
-    <>
-      <TrackingConsent />
-      <GlobalContactTracker />
-      <ScrollToTop />
-    </>
+    <ToastProvider>
+      <ConfirmProvider>
+        <TrackingConsent />
+        <GlobalContactTracker />
+        <ScrollToTop />
+        {children}
+      </ConfirmProvider>
+    </ToastProvider>
   )
 }

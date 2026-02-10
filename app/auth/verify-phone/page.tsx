@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
-import { Shield, ArrowRight, RefreshCw, Phone, Loader2 } from "lucide-react"
+import { Shield, ArrowRight, RefreshCw, Phone, Loader2, CheckCircle2 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { verifyPhoneOTP, sendPhoneOTP } from "@/lib/firebase/client"
+import { verifyPhoneOTP, sendPhoneOTP, getOTPCooldownRemaining } from "@/lib/firebase/client"
 import { useAuth } from "@/lib/auth-context"
 import Link from "next/link"
 
@@ -27,6 +27,7 @@ export default function VerifyPhonePage() {
   const [loading, setLoading] = useState(false)
   const [registering, setRegistering] = useState(false)
   const [error, setError] = useState("")
+  const [successMsg, setSuccessMsg] = useState("")
   const [attempts, setAttempts] = useState(3)
   const [countdown, setCountdown] = useState(60)
   const [canResend, setCanResend] = useState(false)
@@ -45,9 +46,14 @@ export default function VerifyPhonePage() {
         const result = await sendPhoneOTP(phone)
         if (result.success) {
           setOtpSent(true)
-          console.log("[v0] OTP sent from verify-phone page")
+          setSuccessMsg(t("تم إرسال كود التحقق بنجاح", "Verification code sent successfully"))
+          setTimeout(() => setSuccessMsg(""), 4000)
+          // Set cooldown from rate limiter
+          const cooldown = getOTPCooldownRemaining()
+          if (cooldown > 0) setCountdown(cooldown)
         } else {
           setError(result.error || "فشل إرسال كود التحقق")
+          if (result.cooldown) setCountdown(result.cooldown)
           otpSendingRef.current = false
         }
       } catch (err) {
@@ -180,14 +186,17 @@ export default function VerifyPhonePage() {
         router.push(returnUrl)
       } else {
         setAttempts((prev) => prev - 1)
+        // Use server-returned attempts if available
+        if (typeof result.attemptsRemaining === 'number') {
+          setAttempts(result.attemptsRemaining)
+        }
         if (attempts <= 1) {
           setError(t("انتهت المحاولات. يرجى طلب كود جديد", "No attempts left. Please request a new code"))
         } else {
-          setError(t("الكود غير صحيح. حاول مرة أخرى", "Invalid code. Please try again"))
+          setError(result.error || t("الكود غير صحيح. حاول مرة أخرى", "Invalid code. Please try again"))
         }
       }
     } catch (err: any) {
-      console.error("[v0] Verification error:", err)
       setAttempts((prev) => prev - 1)
       setError(t("حدث خطأ. حاول مرة أخرى", "An error occurred. Please try again"))
     } finally {
@@ -207,12 +216,20 @@ export default function VerifyPhonePage() {
       const result = await sendPhoneOTP(formattedPhone)
 
       if (result.success) {
-        setCountdown(60)
+        // Use progressive cooldown from rate limiter
+        const cooldown = getOTPCooldownRemaining()
+        setCountdown(cooldown > 0 ? cooldown : 120)
         setCanResend(false)
         setAttempts(3)
         setOtpCode("")
+        setSuccessMsg(t("تم إعادة إرسال الكود بنجاح", "Code resent successfully"))
+        setTimeout(() => setSuccessMsg(""), 4000)
       } else {
-        setError(t("فشل إعادة إرسال الكود", "Failed to resend code"))
+        setError(result.error || t("فشل إعادة إرسال الكود", "Failed to resend code"))
+        if (result.cooldown) {
+          setCountdown(result.cooldown)
+          setCanResend(false)
+        }
       }
     } catch (err) {
       setError(t("حدث خطأ أثناء إعادة الإرسال", "Error resending code"))
@@ -274,6 +291,14 @@ export default function VerifyPhonePage() {
               </InputOTPGroup>
             </InputOTP>
           </div>
+
+          {/* Success Message */}
+          {successMsg && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl text-center flex items-center justify-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <p className="text-green-600 text-sm">{successMsg}</p>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

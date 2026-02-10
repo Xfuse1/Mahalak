@@ -44,7 +44,7 @@ export type POSSaleItem = {
   image_url?: string
 }
 
-export type POSSaleData = {
+type POSSaleData = {
   store_id: string
   seller_id: string
   items: POSSaleItem[]

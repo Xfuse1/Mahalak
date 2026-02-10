@@ -80,7 +80,6 @@ export default function AccountPage() {
     try {
       setOrdersLoading(true)
       setOrdersError(null)
-      console.log("[v0] Fetching orders for customer:")
       
       // Fetch each independently so one failure doesn't block the others
       const [dataResult, rejectedResult, multiResult] = await Promise.allSettled([
@@ -88,8 +87,6 @@ export default function AccountPage() {
         getRejectedOrdersForCustomer(user.id),
         getCustomerMultiStoreOrders(user.id),
       ])
-      
-      console.log("[v0] Fetched orders:", { dataResult: dataResult.status, rejectedResult: rejectedResult.status, multiResult: multiResult.status })
       
       if (dataResult.status === "fulfilled") {
         setOrders(dataResult.value as Order[])

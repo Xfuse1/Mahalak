@@ -14,10 +14,14 @@ import { Edit, Trash2, Plus, Tag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useLanguage } from "../../../lib/language-context"
+import { useToast } from "@/components/ui/toast"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 export default function SellerProductsPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
@@ -70,12 +74,19 @@ export default function SellerProductsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm(t("هل أنت متأكد من حذف هذا المنتج؟", "Are you sure you want to delete this product?"))) {
+    const confirmed = await confirm({
+      title: t("حذف المنتج", "Delete Product"),
+      message: t("هل أنت متأكد من حذف هذا المنتج؟", "Are you sure you want to delete this product?"),
+      confirmText: t("حذف", "Delete"),
+      cancelText: t("إلغاء", "Cancel"),
+      variant: "danger",
+    })
+    if (confirmed) {
       const result = await deleteProduct(id)
       if (result.success) {
         setProducts(products.filter((p) => p.id !== id))
       } else {
-        alert(t("فشل حذف المنتج", "Failed to delete product"))
+        toast.error(t("فشل حذف المنتج", "Failed to delete product"))
       }
     }
   }

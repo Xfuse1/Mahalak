@@ -16,6 +16,7 @@ import { getProduct, updateProduct, uploadProductImage } from "../../../../../li
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import Image from "next/image"
 import { getSubcategoriesForStore } from "../../../../../lib/mock-data"
+import { useToast } from "@/components/ui/toast"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   // Next.js 14+: params may be a Promise, unwrap with React.use()
@@ -23,6 +24,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     ? React.use(params as unknown as Promise<{ id: string }>)
     : (params as { id: string });
   const { id } = unwrappedParams;
+  const toast = useToast()
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
@@ -154,7 +156,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         throw new Error(result.error || "فشل تحديث المنتج")
       }
 
-      alert("تم تحديث المنتج بنجاح")
+      toast.success("تم تحديث المنتج بنجاح")
       router.push("/seller/products")
     } catch (err: any) {
       setError(err.message || "حدث خطأ أثناء تحديث المنتج")

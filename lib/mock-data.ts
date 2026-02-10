@@ -37,7 +37,7 @@ export interface Product {
 }
 
 // Subcategories for grocery and food stores
-export const grocerySubcategories = [
+const grocerySubcategories = [
   { id: "bakery", name: "المخبز", icon: "🥖" },
   { id: "produce", name: "الخضروات والفواكه", icon: "🥬" },
   { id: "dairy", name: "الألبان والأجبان", icon: "🥛" },

@@ -49,7 +49,6 @@ export async function createNotification(data: {
 export async function getUserNotifications(userId: string, limit: number = 20): Promise<Notification[]> {
   try {
     const db = getAdminDb()
-    console.log("[v0] Fetching notifications for user:", userId)
     
     // Try with orderBy first (requires composite index)
     let snapshot
@@ -69,8 +68,6 @@ export async function getUserNotifications(userId: string, limit: number = 20): 
         .limit(limit * 2) // Get more to have room for sorting
         .get()
     }
-
-    console.log("[v0] Found notifications count:", snapshot.size)
 
     const notifications = snapshot.docs.map((doc) => ({
       id: doc.id,

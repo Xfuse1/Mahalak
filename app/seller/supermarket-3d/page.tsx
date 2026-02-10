@@ -74,10 +74,7 @@ export default function Supermarket3DPage() {
                         if (!isSupermarket) {
                             setAccessDenied(true)
                         } else {
-                            // Fetch ALL products from all stores
-                            console.log("Fetching products from all stores");
                             const realProducts = await getProducts();
-                            console.log("All products fetched:", realProducts.length);
 
                             // Map real products to 3D layout format
                             const mappedProducts: Product[] = realProducts.map((p: any) => ({
@@ -168,7 +165,6 @@ export default function Supermarket3DPage() {
                                 });
                             });
 
-                            console.log("Auto-generated placements:", autoPlacements.length);
                             setPlacements(autoPlacements);
                         }
                     }

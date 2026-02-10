@@ -280,10 +280,7 @@ export async function createProduct(formData: {
   simulator_section?: string | null
 }) {
   try {
-    console.log("[v0] createProduct called with store_id:", formData.store_id)
-    
     const db = getAdminDb()
-    console.log("[v0] Firebase Admin DB initialized successfully")
     
     // التحقق من صحة السعر والكمية على السيرفر
     if (!formData.price || formData.price <= 0) {
@@ -295,7 +292,6 @@ export async function createProduct(formData: {
     
     // التحقق من اعتماد المتجر قبل إنشاء المنتج
     const userDoc = await db.collection("users").doc(formData.store_id).get()
-    console.log("[v0] User document fetched, exists:", userDoc.exists)
     
     if (userDoc.exists) {
       const userData = userDoc.data()
@@ -326,7 +322,6 @@ export async function createProduct(formData: {
     }
 
     await docRef.set(payload)
-    console.log("[v0] Product created successfully with ID:", docRef.id)
 
     revalidatePath("/seller/products")
     revalidateTag("products")
@@ -576,20 +571,16 @@ export async function uploadProductImage(formData: FormData) {
     const file = formData.get("file") as File
     const storeId = formData.get("storeId") as string
 
-    console.log("[v0] uploadProductImage called with storeId:", storeId, "file:", file?.name)
-
     if (!file || !storeId) {
       return { success: false, error: "Missing file or store ID" }
     }
 
     const supabase = await createAdminClient()
-    console.log("[v0] Supabase client initialized")
     
     const fileExt = file.name.split(".").pop()
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `products/${storeId}/${fileName}`
 
-    console.log(`[v0] Attempting to upload to path: ${filePath}`)
     const { data, error } = await supabase.storage
       .from("product-images")
       .upload(filePath, file, {
@@ -606,7 +597,6 @@ export async function uploadProductImage(formData: FormData) {
       data: { publicUrl },
     } = supabase.storage.from("product-images").getPublicUrl(data.path)
 
-    console.log("[v0] Image uploaded successfully, URL:", publicUrl)
     return { success: true, url: publicUrl }
   } catch (error: any) {
     console.error("[v0] Server upload error:", error)

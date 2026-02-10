@@ -14,6 +14,7 @@ import { Star, Truck, Package, CheckCircle, Loader2 } from "lucide-react"
 import { getOrderById } from "@/lib/actions/orders"
 import { createOrderReview, hasOrderBeenReviewed } from "@/lib/actions/reviews"
 import { markNotificationAsRead } from "@/lib/actions/notifications"
+import { useToast } from "@/components/ui/toast"
 
 type OrderItem = {
   id?: string
@@ -40,6 +41,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
   const { t } = useLanguage()
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
+  const toast = useToast()
 
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
@@ -117,7 +119,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
     const hasProductRating = Object.values(productRatings).some((r) => r.rating > 0)
 
     if (!hasDriverRating && !hasProductRating) {
-      alert(t("يرجى إضافة تقييم واحد على الأقل", "Please add at least one rating"))
+      toast.error(t("يرجى إضافة تقييم واحد على الأقل", "Please add at least one rating"))
       return
     }
 
@@ -144,11 +146,11 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
       if (result.success) {
         setSubmitted(true)
       } else {
-        alert(result.error || t("حدث خطأ", "An error occurred"))
+        toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (error) {
       console.error("Error submitting review:", error)
-      alert(t("حدث خطأ أثناء إرسال التقييم", "Error submitting review"))
+      toast.error(t("حدث خطأ أثناء إرسال التقييم", "Error submitting review"))
     } finally {
       setSubmitting(false)
     }

@@ -13,11 +13,13 @@ import Image from "next/image"
 import { Star, Truck, CheckCircle, Loader2, User, Car, AlertTriangle } from "lucide-react"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 import { changeOrderDriver } from "@/lib/actions/orders"
+import { useToast } from "@/components/ui/toast"
 
 export default function ChangeDriverPage() {
   const { t } = useLanguage()
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
+  const toast = useToast()
   const searchParams = useSearchParams()
 
   const orderId = searchParams.get("orderId") || ""
@@ -97,7 +99,7 @@ export default function ChangeDriverPage() {
       )
 
       if (result.success) {
-        alert(t("تم تغيير السائق بنجاح!", "Driver changed successfully!"))
+        toast.success(t("تم تغيير السائق بنجاح!", "Driver changed successfully!"))
         router.push("/account")
       } else {
         setError(result.error || t("حدث خطأ", "An error occurred"))

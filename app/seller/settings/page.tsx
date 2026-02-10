@@ -16,6 +16,7 @@ import { getStoreByUserId, updateStore, createStore, uploadStoreImage } from "..
 import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
 import dynamic from "next/dynamic"
+import { useToast } from "@/components/ui/toast"
 
 // Lazy load phone verification (heavy: Firebase reCAPTCHA)
 const PhoneVerification = dynamic(
@@ -25,6 +26,7 @@ const PhoneVerification = dynamic(
 
 export default function SettingsPage() {
   const { user, isLoading } = useAuth()
+  const toast = useToast()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
   const [store, setStore] = useState<any>(null)
@@ -136,14 +138,6 @@ export default function SettingsPage() {
 
       setIsLoadingStore(true)
       const storeData = await getStoreByUserId(user.id)
-      console.log("[v0] Settings: Loaded store data:", {
-        id: storeData?.id,
-        name: storeData?.name,
-        address: storeData?.address,
-        phone: storeData?.phone,
-        image_url: storeData?.image_url,
-        hasStore: !!storeData
-      })
       if (storeData) {
         setStore(storeData)
         if (storeData.image_url) {
@@ -200,7 +194,7 @@ export default function SettingsPage() {
     e.preventDefault()
 
     if (!user?.id) {
-      alert("لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.")
+      toast.error("لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.")
       return
     }
 
@@ -222,10 +216,9 @@ export default function SettingsPage() {
         }
 
         imageUrl = uploadResult.url!
-        console.log("[v0] Store image uploaded successfully")
       } catch (error: any) {
         console.error("Error uploading image:", error)
-        alert("فشل رفع الصورة: " + (error.message || "Unknown error"))
+        toast.error("فشل رفع الصورة: " + (error.message || "Unknown error"))
         setIsSaving(false)
         setIsUploadingImage(false)
         return
@@ -255,10 +248,10 @@ export default function SettingsPage() {
     if (result.success) {
       setStore(result.data)
       setImageFile(null)
-      alert("تم حفظ الإعدادات بنجاح")
+      toast.success("تم حفظ الإعدادات بنجاح")
       window.location.reload() // Force reload to ensure data is fresh
     } else {
-      alert("حدث خطأ أثناء حفظ الإعدادات: " + result.error)
+      toast.error("حدث خطأ أثناء حفظ الإعدادات: " + result.error)
     }
   }
 

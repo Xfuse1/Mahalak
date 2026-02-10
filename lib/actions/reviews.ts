@@ -82,7 +82,7 @@ export async function upsertReview(productId: string, customerId: string, rating
 
 // ==================== Order Review System ====================
 
-export type OrderReview = {
+type OrderReview = {
   id: string
   order_id: string
   customer_id: string

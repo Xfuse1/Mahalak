@@ -24,6 +24,7 @@ import Image from "next/image"
 import { Textarea } from "../../../components/ui/textarea"
 import { Label } from "../../../components/ui/label"
 import { AlertTriangle, Clock, Truck } from "lucide-react"
+import { useToast } from "@/components/ui/toast"
 
 type OrderItem = {
   id: string
@@ -60,6 +61,7 @@ export default function SellerOrdersPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+  const toast = useToast()
   const [orders, setOrders] = useState<Order[]>([])
   const [multiOrders, setMultiOrders] = useState<any[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
@@ -173,7 +175,7 @@ export default function SellerOrdersPage() {
       if (result.success) {
         await loadOrders()
       } else {
-        alert(result.error || t("حدث خطأ", "An error occurred"))
+        toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (error) {
       console.error("Error confirming:", error)
@@ -196,7 +198,7 @@ export default function SellerOrdersPage() {
       if (result.success) {
         await loadOrders()
       } else {
-        alert(result.error || t("حدث خطأ", "An error occurred"))
+        toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (error) {
       console.error("Error rejecting:", error)

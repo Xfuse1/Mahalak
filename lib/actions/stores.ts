@@ -181,7 +181,6 @@ export async function createStore(storeData: {
     return { success: false, error: error?.message || "Failed to create store" }
   }
 
-  console.log("[v0] Store created successfully for user:", storeData.seller_id)
   // Return store ID = seller_id
   return { success: true, data: { id: storeData.seller_id, seller_id: storeData.seller_id, ...storePayload } }
 }
@@ -272,7 +271,6 @@ export async function uploadStoreImage(formData: FormData) {
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `stores/${storeId}/${fileName}`
 
-    console.log(`[v0] Attempting to upload store image to path: ${filePath}`)
     const { data, error } = await supabase.storage
       .from("product-images")
       .upload(filePath, file, {

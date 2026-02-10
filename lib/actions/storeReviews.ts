@@ -28,8 +28,6 @@ export async function upsertStoreReview(storeId: string, customerId: string, rat
   const r = Math.max(1, Math.min(5, Math.round(Number(rating))))
   const now = new Date().toISOString()
 
-  console.log(`[storeReviews] Upserting review: store=${storeId}, customer=${customerId}, rating=${r}`)
-
   try {
     const existingSnap = await db
       .collection("store_reviews")
@@ -45,7 +43,6 @@ export async function upsertStoreReview(storeId: string, customerId: string, rat
         comment: comment || null,
         updated_at: now
       })
-      console.log(`[storeReviews] Updated existing review: ${doc.id}`)
     } else {
       const newDoc = await db.collection("store_reviews").add({
         store_id: storeId,
@@ -55,15 +52,12 @@ export async function upsertStoreReview(storeId: string, customerId: string, rat
         created_at: now,
         updated_at: now,
       })
-      console.log(`[storeReviews] Created new review: ${newDoc.id}`)
     }
 
     // Recalculate average
     const rowsSnap = await db.collection("store_reviews").where("store_id", "==", storeId).get()
     const ratings = rowsSnap.docs.map((doc) => Number(doc.data().rating || 0))
     const avg = ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0
-
-    console.log(`[storeReviews] New average for store ${storeId}: ${avg} (${ratings.length} reviews)`)
 
     await updateStore(storeId, { rating: avg })
 

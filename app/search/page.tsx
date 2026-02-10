@@ -10,7 +10,7 @@ import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
 import { Star } from "lucide-react"
 import { SearchBar } from "../../components/search-bar"
-import { FilterSort } from "../../components/filter-sort"
+import { FilterSort, type FilterState } from "../../components/filter-sort"
 import { BackButton } from "../../components/back-button"
 import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
@@ -50,6 +50,7 @@ function SearchResults() {
           image: product.image_url, // Map image_url to image for ProductCard component
           storeName: product.stores?.name || "",
           createdAt: product.created_at,
+          updatedAt: product.updated_at || product.created_at,
         }))
 
         setProducts(transformedProducts)
@@ -66,33 +67,52 @@ function SearchResults() {
   }, [query])
 
   const handleFilterChange = useCallback(
-    (filters: { sortBy: string }) => {
-      const sorted = [...products]
+    (filters: FilterState) => {
+      let filtered = [...products]
 
+      // فلترة حسب السعر
+      if (filters.priceMin !== null) {
+        filtered = filtered.filter((p) => p.price >= filters.priceMin!)
+      }
+      if (filters.priceMax !== null) {
+        filtered = filtered.filter((p) => p.price <= filters.priceMax!)
+      }
+
+      // فلترة حسب تاريخ التحديث
+      if (filters.daysAgo !== null && filters.daysAgo > 0) {
+        const cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() - filters.daysAgo)
+        filtered = filtered.filter((p) => {
+          const date = new Date(p.updatedAt || p.createdAt)
+          return date >= cutoff
+        })
+      }
+
+      // ترتيب النتائج
       switch (filters.sortBy) {
         case "price-asc":
-          sorted.sort((a, b) => a.price - b.price)
+          filtered.sort((a, b) => a.price - b.price)
           break
         case "price-desc":
-          sorted.sort((a, b) => b.price - a.price)
+          filtered.sort((a, b) => b.price - a.price)
           break
         case "rating":
-          sorted.sort((a, b) => b.rating - a.rating)
+          filtered.sort((a, b) => b.rating - a.rating)
           break
         case "newest":
-          sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
           break
         case "name-asc":
-          sorted.sort((a, b) => a.name.localeCompare(b.name, isRTL ? "ar" : "en"))
+          filtered.sort((a, b) => a.name.localeCompare(b.name, isRTL ? "ar" : "en"))
           break
         case "name-desc":
-          sorted.sort((a, b) => b.name.localeCompare(a.name, isRTL ? "ar" : "en"))
+          filtered.sort((a, b) => b.name.localeCompare(a.name, isRTL ? "ar" : "en"))
           break
         default:
           break
       }
 
-      setSortedProducts(sorted)
+      setSortedProducts(filtered)
     },
     [products, isRTL],
   )

@@ -24,6 +24,7 @@ import { getProductsByStoreId } from "../../../lib/actions/products"
 import { trackMetaEvent } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
+import { useToast } from "@/components/ui/toast"
 
 type Store = {
   id: string
@@ -65,6 +66,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
   const { user } = useAuth()
   const router = useRouter()
   const { t, language } = useLanguage()
+  const toast = useToast()
 
   const unwrappedParams =
     typeof params === "object" && "then" in params
@@ -216,7 +218,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
     if (!phoneNumber || phoneNumber.length < 8) {
       // show a simple alert when phone number looks invalid for wa.me
       // you can replace with a nicer UI notification if desired
-      alert(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
+      toast.error(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
       return
     }
 
@@ -313,11 +315,11 @@ export default function StorePage({ params }: { params: { id: string } }) {
                                   setStore((s) => (s ? { ...s, rating: newAvg } : s))
                                   setUserStoreReview(n)
                                 } else if (res && res.error) {
-                                  alert(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
+                                  toast.error(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
                                 }
                               } catch (err: any) {
                                 console.error("[v0] Error submitting store review:", err)
-                                alert(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
+                                toast.error(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
                               } finally {
                                 setSubmittingReview(false)
                               }

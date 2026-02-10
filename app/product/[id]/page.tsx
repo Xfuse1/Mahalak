@@ -17,6 +17,7 @@ import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { Tag } from "lucide-react"
+import { useToast } from "@/components/ui/toast"
 
 type Product = {
   id: string
@@ -47,6 +48,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const { t } = useLanguage()
   const { addItem } = useCartStore()
+  const toast = useToast()
 
   const [product, setProduct] = useState<Product | null>(null)
   const [userReview, setUserReview] = useState<number | null>(null)
@@ -212,7 +214,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const phone = formatPhoneForWhatsApp(product.stores?.phone) || ""
 
     if (!phone || phone.length < 8) {
-      alert(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
+      toast.error(t("رقم الهاتف غير صالح لفتح واتساب. الرجاء تحديث رقم الواتساب في إعدادات المتجر.", "Phone number invalid for WhatsApp. Please update the store WhatsApp number in settings."))
       return
     }
 

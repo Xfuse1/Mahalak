@@ -15,6 +15,8 @@ import { Star, Truck, CheckCircle, MapPin, Loader2, User, Phone, Car } from "luc
 import { createOrder, createMultiStoreOrder } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
+import type { CheckoutItem } from "@/lib/types/checkout"
+import { useToast } from "@/components/ui/toast"
 
 type CheckoutData = {
   fullName: string
@@ -27,20 +29,9 @@ type CheckoutData = {
   longitude: string
 }
 
-type CheckoutItem = {
-  id: string
-  name: string
-  price: number
-  category?: string
-  image_url?: string | null
-  store_id?: string
-  store_name?: string
-  description?: string
-  quantity: number
-}
-
 export default function DeliveryPage() {
   const { t } = useLanguage()
+  const toast = useToast()
   const { user, isLoading: authLoading } = useAuth()
   const { items: cartItems, clear: clearCart } = useCartStore()
   const router = useRouter()
@@ -138,7 +129,7 @@ export default function DeliveryPage() {
 
   const handleConfirmOrder = async () => {
     if (!selectedDriver || !checkoutData || !user) {
-      alert(t("يرجى اختيار سائق التوصيل", "Please select a delivery driver"))
+      toast.error(t("يرجى اختيار سائق التوصيل", "Please select a delivery driver"))
       return
     }
 
@@ -243,11 +234,11 @@ export default function DeliveryPage() {
       }
       sessionStorage.removeItem("checkoutData")
 
-      alert(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
+      toast.success(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
       router.push("/")
     } catch (error) {
       console.error("Error creating order:", error)
-      alert(t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
+      toast.error(t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
     } finally {
       setIsSubmitting(false)
     }

@@ -1,31 +1,63 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { SlidersHorizontal } from "lucide-react"
+import { SlidersHorizontal, Calendar, DollarSign } from "lucide-react"
 import { Button } from "./ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Label } from "./ui/label"
+import { Input } from "./ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet"
 import { useLanguage } from "../lib/language-context"
 
+export interface FilterState {
+  sortBy: string
+  priceMin: number | null
+  priceMax: number | null
+  daysAgo: number | null
+}
+
 interface FilterSortProps {
-  onFilterChange?: (filters: { sortBy: string }) => void
+  onFilterChange?: (filters: FilterState) => void
   initialSort?: string
 }
 
+const DATE_OPTIONS = [
+  { value: 0, labelAr: "الكل", labelEn: "All" },
+  { value: 1, labelAr: "يوم واحد", labelEn: "1 day" },
+  { value: 3, labelAr: "3 أيام", labelEn: "3 days" },
+  { value: 7, labelAr: "أسبوع", labelEn: "1 week" },
+  { value: 14, labelAr: "أسبوعين", labelEn: "2 weeks" },
+  { value: 30, labelAr: "شهر", labelEn: "1 month" },
+  { value: 90, labelAr: "3 أشهر", labelEn: "3 months" },
+]
+
 export function FilterSort({ onFilterChange, initialSort = "relevance" }: FilterSortProps) {
   const [sortBy, setSortBy] = useState(initialSort)
+  const [priceMin, setPriceMin] = useState("")
+  const [priceMax, setPriceMax] = useState("")
+  const [daysAgo, setDaysAgo] = useState(0)
   const [open, setOpen] = useState(false)
   const { t, language } = useLanguage()
 
   const isRTL = language === "ar"
 
-  // تطبيق التغييرات تلقائياً عند تغيير الترتيب
+  const hasActiveFilters =
+    sortBy !== "relevance" ||
+    priceMin !== "" ||
+    priceMax !== "" ||
+    daysAgo > 0
+
+  // تطبيق التغييرات تلقائياً عند تغيير أي فلتر
   useEffect(() => {
     if (onFilterChange) {
-      onFilterChange({ sortBy })
+      onFilterChange({
+        sortBy,
+        priceMin: priceMin ? Number(priceMin) : null,
+        priceMax: priceMax ? Number(priceMax) : null,
+        daysAgo: daysAgo > 0 ? daysAgo : null,
+      })
     }
-  }, [sortBy, onFilterChange])
+  }, [sortBy, priceMin, priceMax, daysAgo, onFilterChange])
 
   const handleSortChange = (value: string) => {
     setSortBy(value)
@@ -33,15 +65,23 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
 
   const handleApply = () => {
     if (onFilterChange) {
-      onFilterChange({ sortBy })
+      onFilterChange({
+        sortBy,
+        priceMin: priceMin ? Number(priceMin) : null,
+        priceMax: priceMax ? Number(priceMax) : null,
+        daysAgo: daysAgo > 0 ? daysAgo : null,
+      })
     }
     setOpen(false)
   }
 
   const handleReset = () => {
     setSortBy("relevance")
+    setPriceMin("")
+    setPriceMax("")
+    setDaysAgo(0)
     if (onFilterChange) {
-      onFilterChange({ sortBy: "relevance" })
+      onFilterChange({ sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null })
     }
     setOpen(false)
   }
@@ -49,7 +89,7 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
   const getSortLabel = () => {
     switch (sortBy) {
       case "relevance":
-        return t("الأكثر صلة", "Most Relevant")
+        return t("الأقرب", "Nearest")
       case "price-asc":
         return t("السعر: من الأقل للأعلى", "Price: Low to High")
       case "price-desc":
@@ -63,8 +103,14 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
       case "name-desc":
         return t("الاسم: ي-أ", "Name: Z-A")
       default:
-        return t("الأكثر صلة", "Most Relevant")
+        return t("الأقرب", "Nearest")
     }
+  }
+
+  const getDateLabel = () => {
+    const opt = DATE_OPTIONS.find((o) => o.value === daysAgo)
+    if (!opt || opt.value === 0) return t("الكل", "All")
+    return isRTL ? opt.labelAr : opt.labelEn
   }
 
   return (
@@ -76,21 +122,23 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
         >
           <SlidersHorizontal className="h-4 w-4" />
           {t("فلترة وترتيب", "Filter & Sort")}
-          {sortBy !== "relevance" && <span className="h-2 w-2 bg-red-500 rounded-full ml-1"></span>}
+          {hasActiveFilters && <span className="h-2 w-2 bg-red-500 rounded-full ml-1"></span>}
         </Button>
       </SheetTrigger>
 
       <SheetContent side={isRTL ? "left" : "right"} className="w-full sm:w-[380px] flex flex-col h-full">
         <SheetHeader className="mb-6 flex-shrink-0">
-          <SheetTitle className={isRTL ? "text-right" : "text-left"}>{t("ترتيب المنتجات", "Sort Products")}</SheetTitle>
+          <SheetTitle className={isRTL ? "text-right" : "text-left"}>
+            {t("فلترة وترتيب المنتجات", "Filter & Sort Products")}
+          </SheetTitle>
           <SheetDescription className={isRTL ? "text-right" : "text-left"}>
-            {t("اختر طريقة ترتيب المنتجات حسب تفضيلاتك", "Choose how to sort products based on your preferences")}
+            {t("اختر طريقة ترتيب وفلترة المنتجات حسب تفضيلاتك", "Choose how to sort and filter products based on your preferences")}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-8 p-1">
-          {/* قسم الترتيب */}
-          <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-6 p-1">
+          {/* ───── قسم الترتيب ───── */}
+          <div className="space-y-3">
             <Label
               htmlFor="sort-select"
               className={`text-base font-semibold block ${isRTL ? "text-right" : "text-left"}`}
@@ -100,14 +148,13 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
             <Select value={sortBy} onValueChange={handleSortChange}>
               <SelectTrigger
                 id="sort-select"
-                className={`h-12 border-2 border-[#1F478B] border-opacity-30 focus:border-[#1F478B] focus:border-opacity-60 transition-colors duration-200 ${isRTL ? "text-right" : "text-left"
-                  }`}
+                className={`h-12 border-2 border-[#1F478B] border-opacity-30 focus:border-[#1F478B] focus:border-opacity-60 transition-colors duration-200 ${isRTL ? "text-right" : "text-left"}`}
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className={isRTL ? "text-right" : "text-left"}>
                 <SelectItem value="relevance" className={isRTL ? "text-right" : "text-left"}>
-                  {t("الأكثر صلة", "Most Relevant")}
+                  {t("الأقرب", "Nearest")}
                 </SelectItem>
                 <SelectItem value="price-asc" className={isRTL ? "text-right" : "text-left"}>
                   {t("السعر: من الأقل للأعلى", "Price: Low to High")}
@@ -131,14 +178,120 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
             </Select>
           </div>
 
-          {/* عرض الترتيب المحدد */}
+          {/* ───── قسم فلترة السعر ───── */}
           <div className="space-y-3">
-            <div
-              className={`flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 ${isRTL ? "text-right" : "text-left"
-                }`}
-            >
-              <span className="text-sm font-medium text-gray-700">{t("الترتيب المحدد:", "Selected Sort:")}</span>
-              <span className="text-sm text-[#1F478B] font-semibold">{getSortLabel()}</span>
+            <Label className={`text-base font-semibold flex items-center gap-2 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
+              <DollarSign className="h-4 w-4 text-[#1F478B]" />
+              {t("نطاق السعر", "Price Range")}
+            </Label>
+
+            <div className={`flex items-center gap-3 ${isRTL ? "flex-row-reverse" : ""}`}>
+              <div className="flex-1 space-y-1">
+                <span className={`text-xs text-gray-500 block ${isRTL ? "text-right" : "text-left"}`}>
+                  {t("من", "From")}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={t("أقل سعر", "Min")}
+                  value={priceMin}
+                  onChange={(e) => setPriceMin(e.target.value)}
+                  className={`h-11 border-2 border-gray-200 focus:border-[#1F478B] transition-colors ${isRTL ? "text-right" : "text-left"}`}
+                />
+              </div>
+
+              <span className="text-gray-400 font-bold mt-5">→</span>
+
+              <div className="flex-1 space-y-1">
+                <span className={`text-xs text-gray-500 block ${isRTL ? "text-right" : "text-left"}`}>
+                  {t("إلى", "To")}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={t("أعلى سعر", "Max")}
+                  value={priceMax}
+                  onChange={(e) => setPriceMax(e.target.value)}
+                  className={`h-11 border-2 border-gray-200 focus:border-[#1F478B] transition-colors ${isRTL ? "text-right" : "text-left"}`}
+                />
+              </div>
+            </div>
+
+            {priceMin && priceMax && Number(priceMin) > Number(priceMax) && (
+              <p className={`text-xs text-red-500 ${isRTL ? "text-right" : "text-left"}`}>
+                {t("أقل سعر يجب أن يكون أقل من أعلى سعر", "Min price must be less than max price")}
+              </p>
+            )}
+          </div>
+
+          {/* ───── قسم فلترة التاريخ ───── */}
+          <div className="space-y-3">
+            <Label className={`text-base font-semibold flex items-center gap-2 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
+              <Calendar className="h-4 w-4 text-[#1F478B]" />
+              {t("تاريخ التحديث", "Last Updated")}
+            </Label>
+            <p className={`text-xs text-gray-500 ${isRTL ? "text-right" : "text-left"}`}>
+              {t("عرض المنتجات التي تم تحديثها خلال الفترة المحددة", "Show products updated within the selected period")}
+            </p>
+
+            {/* شريط التاريخ */}
+            <div className="space-y-2">
+              <input
+                type="range"
+                min={0}
+                max={DATE_OPTIONS.length - 1}
+                step={1}
+                value={DATE_OPTIONS.findIndex((o) => o.value === daysAgo)}
+                onChange={(e) => setDaysAgo(DATE_OPTIONS[Number(e.target.value)].value)}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#1F478B]"
+                style={{ direction: "ltr" }}
+              />
+              {/* تسميات الشريط */}
+              <div className="flex justify-between text-[10px] text-gray-400 px-0.5" dir="ltr">
+                {DATE_OPTIONS.map((opt) => (
+                  <span
+                    key={opt.value}
+                    className={`transition-colors ${daysAgo === opt.value ? "text-[#1F478B] font-bold" : ""}`}
+                  >
+                    {isRTL ? opt.labelAr : opt.labelEn}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {daysAgo > 0 && (
+              <div className={`p-3 bg-blue-50 rounded-lg border border-blue-100 ${isRTL ? "text-right" : "text-left"}`}>
+                <p className="text-sm text-[#1F478B] font-medium">
+                  {t(
+                    `عرض المنتجات المحدثة خلال آخر ${daysAgo} ${daysAgo === 1 ? "يوم" : daysAgo <= 10 ? "أيام" : "يوم"}`,
+                    `Showing products updated in the last ${daysAgo} day${daysAgo > 1 ? "s" : ""}`
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ───── عرض الفلاتر المحددة ───── */}
+          <div className="space-y-3">
+            <div className={`p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2 ${isRTL ? "text-right" : "text-left"}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">{t("الترتيب:", "Sort:")}</span>
+                <span className="text-sm text-[#1F478B] font-semibold">{getSortLabel()}</span>
+              </div>
+              {(priceMin || priceMax) && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">{t("السعر:", "Price:")}</span>
+                  <span className="text-sm text-[#1F478B] font-semibold">
+                    {priceMin || "0"} → {priceMax || "∞"}
+                  </span>
+                </div>
+              )}
+              {daysAgo > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">{t("التحديث:", "Updated:")}</span>
+                  <span className="text-sm text-[#1F478B] font-semibold">{getDateLabel()}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -156,7 +309,7 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
             onClick={handleApply}
             className="flex-1 h-12 bg-[#1F478B] hover:bg-[#1a3a70] active:bg-[#153267] text-white text-base font-semibold transition-all duration-200 border-2 border-[#1F478B] hover:border-[#1a3a70] shadow-md"
           >
-            {t("تطبيق الترتيب", "Apply Sort")}
+            {t("تطبيق الفلترة", "Apply Filters")}
           </Button>
         </div>
       </SheetContent>
