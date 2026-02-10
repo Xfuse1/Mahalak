@@ -89,9 +89,6 @@ export default function NewProductPage() {
       if (!finalCategory) {
         throw new Error("يرجى اختيار قسم المنتج")
       }
-      if (!imageFile) {
-        throw new Error("يرجى رفع صورة المنتج")
-      }
 
       // Get seller's store
       const store = await getStoreByUserId(user.id)

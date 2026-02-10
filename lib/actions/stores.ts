@@ -77,6 +77,20 @@ async function _getStoresImpl(category?: string) {
   })
 }
 
+// Check if a store name already exists in the database
+export async function checkStoreNameExists(storeName: string): Promise<boolean> {
+  const db = getAdminDb()
+  const normalizedName = storeName.trim().toLowerCase()
+  
+  const snapshot = await db.collection("users").where("role", "==", "seller").get()
+  
+  return snapshot.docs.some((doc) => {
+    const data = doc.data()
+    if (!data.store?.name) return false
+    return data.store.name.trim().toLowerCase() === normalizedName
+  })
+}
+
 // Cached version of getStores (revalidates every 120 seconds)
 export async function getStores(category?: string) {
   return unstable_cache(

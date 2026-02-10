@@ -16,17 +16,25 @@ import Link from "next/link"
 import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
-import { MapPin, Loader2, CheckCircle } from "lucide-react"
+import { MapPin, Loader2, CheckCircle, Camera, Upload, X, Map } from "lucide-react"
 import Image from "next/image"
 import dynamic from "next/dynamic"
 import { getUserByPhone } from "../../lib/actions/profile"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog"
+import { Textarea } from "../../components/ui/textarea"
 
 // Lazy load phone verification (heavy: Firebase reCAPTCHA)
 const PhoneVerification = dynamic(
   () => import("../../components/phone-verification").then(m => ({ default: m.PhoneVerification })),
   { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
 )
-import { uploadStoreImage } from "../../lib/actions/stores"
+import { uploadStoreImage, checkStoreNameExists } from "../../lib/actions/stores"
+
+// Lazy load map picker
+const MapPicker = dynamic(
+  () => import("../../components/map-picker").then(m => ({ default: m.MapPicker })),
+  { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
+)
 
 export default function AuthPage() {
   const router = useRouter()
@@ -60,12 +68,34 @@ export default function AuthPage() {
   
   // Seller document fields
   const [ownerIdNumber, setOwnerIdNumber] = useState("")
-  const [idCardImage, setIdCardImage] = useState<File | null>(null)
-  const [idCardImagePreview, setIdCardImagePreview] = useState<string | null>(null)
+  const [idCardImageFront, setIdCardImageFront] = useState<File | null>(null)
+  const [idCardImageFrontPreview, setIdCardImageFrontPreview] = useState<string | null>(null)
+  const [idCardImageBack, setIdCardImageBack] = useState<File | null>(null)
+  const [idCardImageBackPreview, setIdCardImageBackPreview] = useState<string | null>(null)
   const [commercialRegisterImage, setCommercialRegisterImage] = useState<File | null>(null)
   const [commercialRegisterImagePreview, setCommercialRegisterImagePreview] = useState<string | null>(null)
-  const [taxCardImage, setTaxCardImage] = useState<File | null>(null)
-  const [taxCardImagePreview, setTaxCardImagePreview] = useState<string | null>(null)
+  const [taxCardImageFront, setTaxCardImageFront] = useState<File | null>(null)
+  const [taxCardImageFrontPreview, setTaxCardImageFrontPreview] = useState<string | null>(null)
+  const [taxCardImageBack, setTaxCardImageBack] = useState<File | null>(null)
+  const [taxCardImageBackPreview, setTaxCardImageBackPreview] = useState<string | null>(null)
+  
+  // Upload method dialog state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [activeUploadTarget, setActiveUploadTarget] = useState<string>("")
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Store name uniqueness check
+  const [isCheckingStoreName, setIsCheckingStoreName] = useState(false)
+  const [storeNameExists, setStoreNameExists] = useState(false)
+  const storeNameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Map picker state
+  const [showMapPicker, setShowMapPicker] = useState(false)
+  
+  // Country/City selection
+  const [selectedCountry, setSelectedCountry] = useState("")
+  const [selectedCity, setSelectedCity] = useState("")
   
   // Error scroll ref
   const errorRef = useRef<HTMLDivElement>(null)
@@ -116,6 +146,124 @@ export default function AuthPage() {
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
 
+  // Countries and cities data
+  const countriesAndCities: Record<string, string[]> = {
+    "مصر": ["القاهرة", "الجيزة", "الإسكندرية", "الشرقية", "الدقهلية", "البحيرة", "المنيا", "المنوفية", "الغربية", "القليوبية", "كفر الشيخ", "سوهاج", "أسيوط", "قنا", "الأقصر", "أسوان", "الفيوم", "بني سويف", "بورسعيد", "الإسماعيلية", "السويس", "دمياط", "شمال سيناء", "جنوب سيناء", "البحر الأحمر", "الوادي الجديد", "مطروح"],
+    "السعودية": ["الرياض", "جدة", "مكة المكرمة", "المدينة المنورة", "الدمام", "الخبر", "الطائف", "تبوك", "أبها", "خميس مشيط"],
+    "الإمارات": ["دبي", "أبو ظبي", "الشارقة", "عجمان", "رأس الخيمة", "الفجيرة", "أم القيوين"],
+    "الأردن": ["عمان", "إربد", "الزرقاء", "العقبة", "السلط", "مادبا"],
+    "العراق": ["بغداد", "البصرة", "أربيل", "الموصل", "كركوك", "النجف"],
+    "الكويت": ["مدينة الكويت", "حولي", "الفروانية", "الأحمدي", "الجهراء"],
+    "قطر": ["الدوحة", "الوكرة", "الخور", "الريان"],
+    "البحرين": ["المنامة", "المحرق", "الرفاع"],
+    "عمان": ["مسقط", "صلالة", "صحار", "نزوى"],
+    "ليبيا": ["طرابلس", "بنغازي", "مصراتة", "الزاوية"],
+    "تونس": ["تونس العاصمة", "صفاقس", "سوسة", "قابس"],
+    "الجزائر": ["الجزائر العاصمة", "وهران", "قسنطينة", "عنابة"],
+    "المغرب": ["الرباط", "الدار البيضاء", "فاس", "مراكش", "طنجة"],
+    "السودان": ["الخرطوم", "أم درمان", "بور سودان"],
+    "اليمن": ["صنعاء", "عدن", "تعز"],
+    "فلسطين": ["القدس", "رام الله", "غزة", "نابلس", "الخليل"],
+    "لبنان": ["بيروت", "طرابلس", "صيدا", "جبيل"],
+    "سوريا": ["دمشق", "حلب", "حمص", "اللاذقية"],
+  }
+
+  // Handle store name check
+  const handleStoreNameChange = (value: string) => {
+    if (storeNameTimeoutRef.current) {
+      clearTimeout(storeNameTimeoutRef.current)
+    }
+    setStoreNameExists(false)
+    
+    if (value.trim().length >= 3) {
+      storeNameTimeoutRef.current = setTimeout(async () => {
+        setIsCheckingStoreName(true)
+        try {
+          const exists = await checkStoreNameExists(value.trim())
+          setStoreNameExists(exists)
+        } catch (err) {
+          console.error("Error checking store name:", err)
+        }
+        setIsCheckingStoreName(false)
+      }, 500)
+    }
+  }
+
+  // Open upload dialog for a specific target
+  const openUploadDialog = (target: string) => {
+    setActiveUploadTarget(target)
+    setUploadDialogOpen(true)
+  }
+  
+  // Handle file from upload or camera
+  const handleUploadedFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const preview = reader.result as string
+      switch (activeUploadTarget) {
+        case "idCardFront":
+          setIdCardImageFront(file)
+          setIdCardImageFrontPreview(preview)
+          break
+        case "idCardBack":
+          setIdCardImageBack(file)
+          setIdCardImageBackPreview(preview)
+          break
+        case "commercialRegister":
+          setCommercialRegisterImage(file)
+          setCommercialRegisterImagePreview(preview)
+          break
+        case "taxCardFront":
+          setTaxCardImageFront(file)
+          setTaxCardImageFrontPreview(preview)
+          break
+        case "taxCardBack":
+          setTaxCardImageBack(file)
+          setTaxCardImageBackPreview(preview)
+          break
+      }
+    }
+    reader.readAsDataURL(file)
+    setUploadDialogOpen(false)
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleUploadedFile(file)
+    e.target.value = ""
+  }
+
+  const handleCameraInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleUploadedFile(file)
+    e.target.value = ""
+  }
+
+  const removeImage = (target: string) => {
+    switch (target) {
+      case "idCardFront":
+        setIdCardImageFront(null)
+        setIdCardImageFrontPreview(null)
+        break
+      case "idCardBack":
+        setIdCardImageBack(null)
+        setIdCardImageBackPreview(null)
+        break
+      case "commercialRegister":
+        setCommercialRegisterImage(null)
+        setCommercialRegisterImagePreview(null)
+        break
+      case "taxCardFront":
+        setTaxCardImageFront(null)
+        setTaxCardImageFrontPreview(null)
+        break
+      case "taxCardBack":
+        setTaxCardImageBack(null)
+        setTaxCardImageBackPreview(null)
+        break
+    }
+  }
+
   // Handle store logo upload
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -134,22 +282,6 @@ export default function AuthPage() {
     setStoreLogoPreview(null)
   }
   
-  // Handle document image uploads
-  const handleDocImageChange = (setter: (f: File | null) => void, previewSetter: (s: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setter(file)
-      const reader = new FileReader()
-      reader.onloadend = () => previewSetter(reader.result as string)
-      reader.readAsDataURL(file)
-    }
-  }
-  
-  const removeDocImage = (setter: (f: File | null) => void, previewSetter: (s: string | null) => void) => () => {
-    setter(null)
-    previewSetter(null)
-  }
-
   // Redirect if already logged in
   useEffect(() => {
     if (user && !isLoggingIn) {
@@ -229,8 +361,8 @@ export default function AuthPage() {
     const password = formData.get("password") as string
     const confirmPassword = formData.get("confirmPassword") as string
     const street = formData.get("street") as string
-    const city = formData.get("city") as string
-    const country = formData.get("country") as string
+    const city = selectedCity || ""
+    const country = selectedCountry || ""
 
     // ======= Comprehensive Validation =======
 
@@ -344,26 +476,28 @@ export default function AuthPage() {
       }
       
       // Seller document validations
-      if (!ownerIdNumber || ownerIdNumber.trim().length < 10) {
-        setError(t("يرجى إدخال رقم بطاقة صاحب المتجر (14 رقم)", "Please enter the store owner's ID card number (14 digits)"))
+      if (!ownerIdNumber || ownerIdNumber.length !== 14) {
+        setError(t("رقم البطاقة يجب أن يكون 14 رقم بالضبط", "ID card number must be exactly 14 digits"))
         return
       }
-      if (!idCardImage) {
-        setError(t("يرجى رفع صورة البطاقة", "Please upload the ID card image"))
+      if (!idCardImageFront) {
+        setError(t("يرجى رفع صورة وجه البطاقة", "Please upload the front side of the ID card"))
         return
       }
-      if (!commercialRegisterImage) {
-        setError(t("يرجى رفع صورة السجل التجاري", "Please upload the commercial register image"))
-        return
-      }
-      if (!taxCardImage) {
-        setError(t("يرجى رفع صورة البطاقة الضريبية", "Please upload the tax card image"))
+      if (!idCardImageBack) {
+        setError(t("يرجى رفع صورة ظهر البطاقة", "Please upload the back side of the ID card"))
         return
       }
 
       // Store name validation
       if (!storeName || storeName.trim().length < 3) {
         setError(t("اسم المتجر يجب أن يكون 3 أحرف على الأقل", "Store name must be at least 3 characters"))
+        return
+      }
+      
+      // Check store name uniqueness
+      if (storeNameExists) {
+        setError(t("اسم المتجر مسجل بالفعل. يرجى اختيار اسم آخر", "Store name is already taken. Please choose a different name"))
         return
       }
 
@@ -412,11 +546,13 @@ export default function AuthPage() {
           }
         }
         
-        const [storeLogoUrl, idCardImageUrl, commercialRegisterImageUrl, taxCardImageUrl] = await Promise.all([
+        const [storeLogoUrl, idCardImageFrontUrl, idCardImageBackUrl, commercialRegisterImageUrl, taxCardImageFrontUrl, taxCardImageBackUrl] = await Promise.all([
           uploadFile(storeLogo, "logo"),
-          uploadFile(idCardImage, "id-card"),
+          uploadFile(idCardImageFront, "id-card-front"),
+          uploadFile(idCardImageBack, "id-card-back"),
           uploadFile(commercialRegisterImage, "commercial-register"),
-          uploadFile(taxCardImage, "tax-card"),
+          uploadFile(taxCardImageFront, "tax-card-front"),
+          uploadFile(taxCardImageBack, "tax-card-back"),
         ])
         
         // Save seller data to session storage for later
@@ -430,9 +566,11 @@ export default function AuthPage() {
           storeType,
           storeLogoUrl,
           ownerIdNumber,
-          idCardImageUrl,
+          idCardImageUrl: idCardImageFrontUrl,
+          idCardImageBackUrl,
           commercialRegisterImageUrl,
-          taxCardImageUrl,
+          taxCardImageUrl: taxCardImageFrontUrl,
+          taxCardImageBackUrl,
           street,
           city,
           country,
@@ -664,30 +802,48 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="register-city" className="text-base">
-                        {t("المدينة", "City")} <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="register-city"
-                        name="city"
-                        type="text"
-                        required
-                        placeholder={t("القاهرة", "Cairo")}
-                        className="h-12"
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label htmlFor="register-country" className="text-base">
                         {t("الدولة", "Country")} <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        id="register-country"
+                      <Select
                         name="country"
-                        type="text"
                         required
-                        placeholder={t("مصر", "Egypt")}
-                        className="h-12"
-                      />
+                        value={selectedCountry}
+                        onValueChange={(value) => {
+                          setSelectedCountry(value)
+                          setSelectedCity("") // Reset city when country changes
+                        }}
+                      >
+                        <SelectTrigger id="register-country" className="h-12">
+                          <SelectValue placeholder={t("اختر الدولة", "Choose country")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(countriesAndCities).map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-city" className="text-base">
+                        {t("المدينة", "City")} <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        name="city"
+                        required
+                        value={selectedCity}
+                        onValueChange={setSelectedCity}
+                        disabled={!selectedCountry}
+                      >
+                        <SelectTrigger id="register-city" className="h-12">
+                          <SelectValue placeholder={selectedCountry ? t("اختر المدينة", "Choose city") : t("اختر الدولة أولاً", "Choose country first")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(countriesAndCities[selectedCountry] || []).map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {role === "seller" && (
@@ -711,26 +867,40 @@ export default function AuthPage() {
                           <Label htmlFor="register-storeName" className="text-base">
                             {t("اسم المتجر", "Store Name")} <span className="text-red-500">*</span>
                           </Label>
-                          <Input
-                            id="register-storeName"
-                            name="storeName"
-                            type="text"
-                            required
-                            placeholder={t("متجر الإلكترونيات", "Electronics Store")}
-                            className="h-12"
-                          />
+                          <div className="relative">
+                            <Input
+                              id="register-storeName"
+                              name="storeName"
+                              type="text"
+                              required
+                              placeholder={t("متجر الإلكترونيات", "Electronics Store")}
+                              className={`h-12 ${storeNameExists ? "border-red-500 focus:border-red-500" : ""}`}
+                              onChange={(e) => handleStoreNameChange(e.target.value)}
+                            />
+                            {isCheckingStoreName && (
+                              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                              </div>
+                            )}
+                          </div>
+                          {storeNameExists && (
+                            <p className="text-xs text-red-500 mt-1">
+                              {t("اسم المتجر مسجل بالفعل. يرجى اختيار اسم آخر", "Store name is already taken. Please choose a different name")}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="register-storeDescription" className="text-base">
                             {t("وصف المتجر", "Store Description")} <span className="text-red-500">*</span>
                           </Label>
-                          <Input
+                          <Textarea
                             id="register-storeDescription"
                             name="storeDescription"
-                            type="text"
                             required
+                            dir="auto"
                             placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
-                            className="h-12"
+                            className="min-h-[80px] resize-none"
+                            style={{ textAlign: "right", unicodeBidi: "plaintext" } as React.CSSProperties}
                           />
                         </div>
                         <div className="space-y-2">
@@ -849,43 +1019,68 @@ export default function AuthPage() {
                               setOwnerIdNumber(val)
                             }}
                             placeholder="12345678901234"
-                            className="h-12"
+                            className={`h-12 ${ownerIdNumber.length > 0 && ownerIdNumber.length !== 14 ? "border-red-400" : ownerIdNumber.length === 14 ? "border-green-400" : ""}`}
                             maxLength={14}
                           />
-                          <p className="text-xs text-gray-500">
-                            {t("أدخل الرقم القومي المكون من 14 رقم", "Enter the 14-digit national ID number")}
+                          <p className={`text-xs ${ownerIdNumber.length > 0 && ownerIdNumber.length !== 14 ? "text-red-500" : "text-gray-500"}`}>
+                            {ownerIdNumber.length > 0
+                              ? t(`${ownerIdNumber.length}/14 رقم`, `${ownerIdNumber.length}/14 digits`)
+                              : t("أدخل الرقم القومي المكون من 14 رقم", "Enter the 14-digit national ID number")}
                           </p>
                         </div>
                         
-                        {/* ID Card Image */}
-                        <div className="space-y-2">
-                          <Label htmlFor="register-idCardImage" className="text-base">
-                            {t("صورة البطاقة", "ID Card Image")} <span className="text-red-500">*</span>
+                        {/* ID Card Images (Front & Back) */}
+                        <div className="space-y-3">
+                          <Label className="text-base">
+                            {t("صورة البطاقة (وجه وظهر)", "ID Card Images (Front & Back)")} <span className="text-red-500">*</span>
                           </Label>
-                          <div className="flex flex-col items-center gap-3">
-                            {idCardImagePreview ? (
-                              <div className="relative w-full">
-                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                  <Image src={idCardImagePreview} alt="ID Card" width={300} height={128} className="w-full h-full object-cover" />
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Front */}
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-500 font-medium text-center">{t("الوجه", "Front")}</p>
+                              {idCardImageFrontPreview ? (
+                                <div className="relative">
+                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                    <Image src={idCardImageFrontPreview} alt="ID Card Front" width={200} height={112} className="w-full h-full object-cover" />
+                                  </div>
+                                  <button type="button" onClick={() => removeImage("idCardFront")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                    <X className="h-4 w-4" />
+                                  </button>
                                 </div>
-                                <button type="button" onClick={removeDocImage(setIdCardImage, setIdCardImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              ) : (
+                                <button type="button" onClick={() => openUploadDialog("idCardFront")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                                  <span className="text-xs text-gray-500">{t("صورة الوجه", "Front side")}</span>
                                 </button>
-                              </div>
-                            ) : (
-                              <label htmlFor="register-idCardImage" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة البطاقة", "Click to upload ID card image")}</span>
-                              </label>
-                            )}
-                            <input id="register-idCardImage" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setIdCardImage, setIdCardImagePreview)} className="hidden" />
+                              )}
+                            </div>
+                            {/* Back */}
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-500 font-medium text-center">{t("الظهر", "Back")}</p>
+                              {idCardImageBackPreview ? (
+                                <div className="relative">
+                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                    <Image src={idCardImageBackPreview} alt="ID Card Back" width={200} height={112} className="w-full h-full object-cover" />
+                                  </div>
+                                  <button type="button" onClick={() => removeImage("idCardBack")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => openUploadDialog("idCardBack")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                                  <span className="text-xs text-gray-500">{t("صورة الظهر", "Back side")}</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                         
-                        {/* Commercial Register Image */}
+                        {/* Commercial Register Image (Optional) */}
                         <div className="space-y-2">
-                          <Label htmlFor="register-commercialRegister" className="text-base">
-                            {t("صورة السجل التجاري", "Commercial Register Image")} <span className="text-red-500">*</span>
+                          <Label className="text-base">
+                            {t("صورة السجل التجاري", "Commercial Register Image")}
+                            <span className="text-xs text-gray-400 mr-2">({t("اختياري", "Optional")})</span>
                           </Label>
                           <div className="flex flex-col items-center gap-3">
                             {commercialRegisterImagePreview ? (
@@ -893,42 +1088,64 @@ export default function AuthPage() {
                                 <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
                                   <Image src={commercialRegisterImagePreview} alt="Commercial Register" width={300} height={128} className="w-full h-full object-cover" />
                                 </div>
-                                <button type="button" onClick={removeDocImage(setCommercialRegisterImage, setCommercialRegisterImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                <button type="button" onClick={() => removeImage("commercialRegister")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                  <X className="h-4 w-4" />
                                 </button>
                               </div>
                             ) : (
-                              <label htmlFor="register-commercialRegister" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة السجل التجاري", "Click to upload commercial register image")}</span>
-                              </label>
+                              <button type="button" onClick={() => openUploadDialog("commercialRegister")} className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                <Upload className="h-8 w-8 text-gray-400 mb-1" />
+                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة أو فتح الكاميرا", "Click to upload or open camera")}</span>
+                              </button>
                             )}
-                            <input id="register-commercialRegister" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setCommercialRegisterImage, setCommercialRegisterImagePreview)} className="hidden" />
                           </div>
                         </div>
                         
-                        {/* Tax Card Image */}
-                        <div className="space-y-2">
-                          <Label htmlFor="register-taxCard" className="text-base">
-                            {t("صورة البطاقة الضريبية", "Tax Card Image")} <span className="text-red-500">*</span>
+                        {/* Tax Card Images (Front & Back, Optional) */}
+                        <div className="space-y-3">
+                          <Label className="text-base">
+                            {t("صورة البطاقة الضريبية (وجه وظهر)", "Tax Card Images (Front & Back)")}
+                            <span className="text-xs text-gray-400 mr-2">({t("اختياري", "Optional")})</span>
                           </Label>
-                          <div className="flex flex-col items-center gap-3">
-                            {taxCardImagePreview ? (
-                              <div className="relative w-full">
-                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                  <Image src={taxCardImagePreview} alt="Tax Card" width={300} height={128} className="w-full h-full object-cover" />
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Front */}
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-500 font-medium text-center">{t("الوجه", "Front")}</p>
+                              {taxCardImageFrontPreview ? (
+                                <div className="relative">
+                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                    <Image src={taxCardImageFrontPreview} alt="Tax Card Front" width={200} height={112} className="w-full h-full object-cover" />
+                                  </div>
+                                  <button type="button" onClick={() => removeImage("taxCardFront")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                    <X className="h-4 w-4" />
+                                  </button>
                                 </div>
-                                <button type="button" onClick={removeDocImage(setTaxCardImage, setTaxCardImagePreview)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              ) : (
+                                <button type="button" onClick={() => openUploadDialog("taxCardFront")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                                  <span className="text-xs text-gray-500">{t("صورة الوجه", "Front side")}</span>
                                 </button>
-                              </div>
-                            ) : (
-                              <label htmlFor="register-taxCard" className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة البطاقة الضريبية", "Click to upload tax card image")}</span>
-                              </label>
-                            )}
-                            <input id="register-taxCard" type="file" accept="image/png, image/jpeg, image/jpg, image/webp" onChange={handleDocImageChange(setTaxCardImage, setTaxCardImagePreview)} className="hidden" />
+                              )}
+                            </div>
+                            {/* Back */}
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-500 font-medium text-center">{t("الظهر", "Back")}</p>
+                              {taxCardImageBackPreview ? (
+                                <div className="relative">
+                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
+                                    <Image src={taxCardImageBackPreview} alt="Tax Card Back" width={200} height={112} className="w-full h-full object-cover" />
+                                  </div>
+                                  <button type="button" onClick={() => removeImage("taxCardBack")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => openUploadDialog("taxCardBack")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                                  <span className="text-xs text-gray-500">{t("صورة الظهر", "Back side")}</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                         
@@ -938,35 +1155,41 @@ export default function AuthPage() {
                             {t("موقع المتجر (اختياري)", "Store Location (Optional)")}
                           </Label>
                           <div className="flex flex-col gap-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={getCurrentLocation}
-                              disabled={isGettingLocation}
-                              className="h-12 w-full flex items-center justify-center gap-2"
-                            >
-                              {isGettingLocation ? (
-                                <>
-                                  <Loader2 className="h-5 w-5 animate-spin" />
-                                  {t("جاري تحديد الموقع...", "Getting location...")}
-                                </>
-                              ) : storeLocation ? (
-                                <>
-                                  <CheckCircle className="h-5 w-5 text-green-500" />
-                                  {t("تم تحديد الموقع", "Location captured")}
-                                </>
-                              ) : (
-                                <>
-                                  <MapPin className="h-5 w-5" />
-                                  {t("تحديد موقع المتجر الحالي", "Get current store location")}
-                                </>
-                              )}
-                            </Button>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={getCurrentLocation}
+                                disabled={isGettingLocation}
+                                className="h-12 flex items-center justify-center gap-2"
+                              >
+                                {isGettingLocation ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="text-xs">{t("جاري...", "Getting...")}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <MapPin className="h-4 w-4" />
+                                    <span className="text-xs">{t("الموقع الحالي", "Current Location")}</span>
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowMapPicker(true)}
+                                className="h-12 flex items-center justify-center gap-2"
+                              >
+                                <Map className="h-4 w-4" />
+                                <span className="text-xs">{t("اختر من الخريطة", "Pick from Map")}</span>
+                              </Button>
+                            </div>
                             
                             {storeLocation && (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
                                 <div className="flex items-center gap-2 text-green-700">
-                                  <MapPin className="h-4 w-4" />
+                                  <CheckCircle className="h-4 w-4" />
                                   <span className="font-medium">{t("تم تحديد الموقع بنجاح", "Location captured successfully")}</span>
                                 </div>
                                 <div className="mt-1 text-green-600 text-xs">
@@ -1049,6 +1272,71 @@ export default function AuthPage() {
       </main>
 
       <Footer />
+      
+      {/* Upload Method Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              {t("اختر طريقة الرفع", "Choose Upload Method")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 p-4">
+            <button
+              type="button"
+              onClick={() => {
+                setUploadDialogOpen(false)
+                setTimeout(() => fileInputRef.current?.click(), 100)
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+            >
+              <Upload className="h-10 w-10 text-blue-500" />
+              <span className="text-sm font-medium text-gray-700">{t("رفع صورة", "Upload Image")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUploadDialogOpen(false)
+                setTimeout(() => cameraInputRef.current?.click(), 100)
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+            >
+              <Camera className="h-10 w-10 text-blue-500" />
+              <span className="text-sm font-medium text-gray-700">{t("فتح الكاميرا", "Open Camera")}</span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Hidden file inputs for upload/camera */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png, image/jpeg, image/jpg, image/webp"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleCameraInputChange}
+        className="hidden"
+      />
+      
+      {/* Map Picker Dialog */}
+      <MapPicker
+        open={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onLocationSelect={(lat, lng) => {
+          setStoreLocation({ latitude: lat, longitude: lng })
+          setLocationError(null)
+        }}
+        initialLat={storeLocation?.latitude}
+        initialLng={storeLocation?.longitude}
+        language={language}
+      />
     </div>
   )
 }

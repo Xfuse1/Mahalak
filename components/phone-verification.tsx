@@ -260,6 +260,8 @@ export function PhoneVerification({
             value={otpCode}
             onChange={setOtpCode}
             disabled={isLoading}
+            autoComplete="one-time-code"
+            textAlign="center"
           >
             <InputOTPGroup>
               <InputOTPSlot index={0} />
