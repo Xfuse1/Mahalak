@@ -68,43 +68,6 @@ export async function getDrivers(): Promise<Driver[]> {
   }
 }
 
-// Create a new driver (admin only)
-export async function createDriver(data: Omit<Driver, "id">) {
-  try {
-    const db = getAdminDb()
-    const now = new Date().toISOString()
-    
-    const docRef = await db.collection("drivers").add({
-      ...data,
-      created_at: now,
-      updated_at: now,
-    })
-
-    return { success: true, id: docRef.id }
-  } catch (error: any) {
-    console.error("[v0] Error creating driver:", error)
-    return { success: false, error: error?.message || "Failed to create driver" }
-  }
-}
-
-// Update a driver
-export async function updateDriver(id: string, data: Partial<Driver>) {
-  try {
-    const db = getAdminDb()
-    const now = new Date().toISOString()
-    
-    await db.collection("drivers").doc(id).update({
-      ...data,
-      updated_at: now,
-    })
-
-    return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error updating driver:", error)
-    return { success: false, error: error?.message || "Failed to update driver" }
-  }
-}
-
 // Get a single driver by ID
 export async function getDriverById(id: string): Promise<Driver | null> {
   try {

@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { Search, Mic, Sparkles } from "lucide-react"
+import { useState, useRef, useCallback, useEffect } from "react"
+import { Search, Mic } from "lucide-react"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
 import { Label } from "./ui/label"
@@ -22,12 +22,42 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   const [isFocused, setIsFocused] = useState(false)
   const router = useRouter()
   const { t, language } = useLanguage()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isRTL = language === "ar"
   const searchPlaceholder = placeholder || t("ابحث عن منتجات، متاجر...", "Search for products, stores...")
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  const debouncedOnSearch = useCallback(
+    (value: string) => {
+      if (!onSearch) return
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onSearch(value)
+      }, 300)
+    },
+    [onSearch],
+  )
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setQuery(value)
+    // If onSearch is provided (live search mode), debounce it
+    if (onSearch) {
+      debouncedOnSearch(value)
+    }
+  }
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    // Cancel any pending debounced call and fire immediately
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     if (onSearch) {
       onSearch(query)
     } else {
@@ -80,7 +110,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           type="text"
           placeholder={searchPlaceholder}
           value={query}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+          onChange={handleChange}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           className={`relative border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 hover:border-blue-300 transition-all duration-300 h-14 rounded-2xl shadow-sm bg-white ${isRTL ? 'text-right pl-12 pr-5' : 'text-left pr-12 pl-5'} text-base`}

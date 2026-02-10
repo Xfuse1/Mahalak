@@ -259,7 +259,7 @@ export default function CheckoutPage() {
                 return (
                   <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
                     <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
-                      <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                      <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill loading="lazy" sizes="64px" className="object-cover" />
                       {hasDiscount && (
                         <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                           -{item.discount_percentage}%

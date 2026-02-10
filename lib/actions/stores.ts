@@ -1,10 +1,11 @@
 "use server"
 
 import type { DocumentSnapshot, Query } from "firebase-admin/firestore"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
+import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
-import { cleanUndefined, serializeData } from "../firebase/firestore-helpers"
+import { serializeData } from "../firebase/firestore-helpers"
 
 type StoreRecord = Record<string, any>
 
@@ -22,7 +23,8 @@ function extractStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | n
   })
 }
 
-export async function getStores(category?: string) {
+// Internal implementation
+async function _getStoresImpl(category?: string) {
   const db = getAdminDb()
   
   // Query users who are sellers and have store data
@@ -75,23 +77,40 @@ export async function getStores(category?: string) {
   })
 }
 
-export async function getStore(id: string) {
+// Cached version of getStores (revalidates every 120 seconds)
+export async function getStores(category?: string) {
+  return unstable_cache(
+    () => _getStoresImpl(category),
+    ["stores", category || "all"],
+    { revalidate: 120, tags: ["stores"] }
+  )()
+}
+
+// Internal getStore implementation
+async function _getStoreImpl(id: string) {
   const db = getAdminDb()
   // Store ID is now User ID
   const docSnap = await db.collection("users").doc(id).get()
 
   if (!docSnap.exists) {
-    console.error("[v0] Error fetching store: user not found")
     return null
   }
 
   const store = extractStore(docSnap)
   if (!store) {
-    console.error("[v0] Error fetching store: no store data for user")
     return null
   }
 
   return store
+}
+
+// Cached version
+export async function getStore(id: string) {
+  return unstable_cache(
+    () => _getStoreImpl(id),
+    ["store", id],
+    { revalidate: 120, tags: ["stores", `store-${id}`] }
+  )()
 }
 
 export async function getStoreByUserId(userId: string) {
@@ -205,6 +224,8 @@ export async function updateStore(
 
   revalidatePath("/seller/settings")
   revalidatePath(`/store/${id}`)
+  revalidateTag("stores")
+  revalidateTag(`store-${id}`)
   return { success: true, data: store }
 }
 

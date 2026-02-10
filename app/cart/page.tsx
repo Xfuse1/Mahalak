@@ -77,7 +77,7 @@ export default function CartPage() {
                   <Card key={item.id} className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 group" style={{ animationDelay: `${index * 100}ms` }}>
                     <CardContent className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center">
                       <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 group-hover:shadow-lg transition-all">
-                        <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill loading="lazy" sizes="112px" className="object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition-colors">{item.name}</h3>

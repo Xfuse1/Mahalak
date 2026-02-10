@@ -11,15 +11,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Loader2, Store, Eye, AlertTriangle, Truck, Mail, Phone, Calendar, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
+import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
 import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreOrders } from "../../lib/actions/orders"
 import type { PickupStop } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
-import { OrderTrackingModal } from "../../components/order-tracking-modal"
+import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
+
+// Lazy load tracking modal (only opens on user action)
+const OrderTrackingModal = dynamic(
+  () => import("../../components/order-tracking-modal").then(m => ({ default: m.OrderTrackingModal })),
+  { ssr: false }
+)
 
 type Order = {
   id: string

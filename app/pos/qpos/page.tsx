@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, createPOSQuickProduct, type POSSaleItem } from "@/lib/actions/pos"
 import { getStoreByUserId } from "@/lib/actions/stores"
@@ -11,8 +12,13 @@ import {
   CreditCard, Banknote, Wallet, AlertTriangle, CheckCircle2, Clock,
   User, StickyNote, Tag, Grid3X3, Store, MessageCircle, Camera, ScanLine
 } from "lucide-react"
-import { BarcodeScanner } from "@/components/barcode-scanner"
 import { QRCodeSVG } from "qrcode.react"
+
+// Lazy load camera/barcode scanner (heavy: html5-qrcode library)
+const BarcodeScanner = dynamic(
+  () => import("@/components/barcode-scanner").then(m => ({ default: m.BarcodeScanner })),
+  { ssr: false, loading: () => <div className="flex items-center justify-center p-8">جاري تحميل الماسح...</div> }
+)
 
 // ===================== Types =====================
 

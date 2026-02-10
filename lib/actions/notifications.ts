@@ -123,31 +123,6 @@ export async function markNotificationAsRead(notificationId: string) {
   }
 }
 
-// Mark all notifications as read for a user
-export async function markAllNotificationsAsRead(userId: string) {
-  try {
-    const db = getAdminDb()
-    const snapshot = await db
-      .collection("notifications")
-      .where("user_id", "==", userId)
-      .where("is_read", "==", false)
-      .get()
-
-    const batch = db.batch()
-    const now = new Date().toISOString()
-
-    snapshot.docs.forEach((doc) => {
-      batch.update(doc.ref, { is_read: true, read_at: now })
-    })
-
-    await batch.commit()
-    return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error marking all notifications as read:", error)
-    return { success: false, error: error?.message }
-  }
-}
-
 // Send review request notification when order is delivered
 export async function sendReviewRequestNotification(data: {
   user_id: string
@@ -169,14 +144,4 @@ export async function sendReviewRequestNotification(data: {
   })
 }
 
-// Delete a notification
-export async function deleteNotification(notificationId: string) {
-  try {
-    const db = getAdminDb()
-    await db.collection("notifications").doc(notificationId).delete()
-    return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error deleting notification:", error)
-    return { success: false, error: error?.message }
-  }
-}
+

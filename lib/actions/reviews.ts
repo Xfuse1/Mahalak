@@ -78,20 +78,7 @@ export async function upsertReview(productId: string, customerId: string, rating
   }
 }
 
-/**
- * (Optional) Get the current average rating & count for a product.
- */
-export async function getProductRating(productId: string) {
-  const db = getAdminDb()
-  const docSnap = await db.collection("products").doc(productId).get()
 
-  if (!docSnap.exists) {
-    return { rating: null, rating_count: 0 }
-  }
-
-  const data = docSnap.data() as Record<string, any>
-  return { rating: data?.rating ?? null, rating_count: data?.rating_count ?? 0 }
-}
 
 // ==================== Order Review System ====================
 
@@ -225,25 +212,4 @@ export async function hasOrderBeenReviewed(orderId: string, customerId: string):
   }
 }
 
-// Get order review
-export async function getOrderReview(orderId: string): Promise<OrderReview | null> {
-  try {
-    const db = getAdminDb()
-    const snapshot = await db
-      .collection("order_reviews")
-      .where("order_id", "==", orderId)
-      .limit(1)
-      .get()
 
-    if (snapshot.empty) return null
-
-    const doc = snapshot.docs[0]
-    return {
-      id: doc.id,
-      ...doc.data(),
-    } as OrderReview
-  } catch (error) {
-    console.error("[v0] Error fetching order review:", error)
-    return null
-  }
-}

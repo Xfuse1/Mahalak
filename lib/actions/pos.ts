@@ -31,23 +31,7 @@ export async function getPOSProducts(storeId: string) {
   return products
 }
 
-// ==================== POS Categories ====================
 
-export async function getPOSCategories(storeId: string) {
-  const db = getAdminDb()
-  const snapshot = await db
-    .collection("products")
-    .where("store_id", "==", storeId)
-    .get()
-
-  const categories = new Set<string>()
-  snapshot.docs.forEach((doc) => {
-    const cat = doc.data().category
-    if (cat) categories.add(cat)
-  })
-
-  return Array.from(categories)
-}
 
 // ==================== POS Sales ====================
 
@@ -234,13 +218,6 @@ export async function getPOSSales(storeId: string, limit: number = 50) {
     console.error("[getPOSSales] Error:", error)
     throw new Error(`فشل في تحميل سجل المبيعات: ${error?.message || "خطأ غير معروف"}`)
   }
-}
-
-export async function getPOSSaleById(saleId: string) {
-  const db = getAdminDb()
-  const doc = await db.collection("pos_sales").doc(saleId).get()
-  if (!doc.exists) return null
-  return serializeData({ id: doc.id, ...doc.data() })
 }
 
 // ==================== POS Daily Summary ====================

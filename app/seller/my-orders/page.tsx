@@ -10,8 +10,14 @@ import { Button } from "../../../components/ui/button"
 import { Package, MapPin, Eye, Store, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { getCustomerOrders } from "../../../lib/actions/orders"
-import { OrderTrackingModal } from "../../../components/order-tracking-modal"
+import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../../components/order-tracking-timeline"
+
+// Lazy load tracking modal (only opens on user action)
+const OrderTrackingModal = dynamic(
+  () => import("../../../components/order-tracking-modal").then(m => ({ default: m.OrderTrackingModal })),
+  { ssr: false }
+)
 
 type Order = {
   id: string

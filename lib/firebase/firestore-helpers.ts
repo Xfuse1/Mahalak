@@ -1,13 +1,7 @@
-import type { DocumentSnapshot } from "firebase-admin/firestore"
-
 export function cleanUndefined<T extends Record<string, any>>(data: T) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) as Partial<T>
 }
 
-export function mapDoc<T>(doc: DocumentSnapshot) {
-  if (!doc.exists) return null
-  return { id: doc.id, ...(doc.data() as object) } as T
-}
 
 export function serializeData<T>(data: T): T {
   if (data === null || data === undefined) return data

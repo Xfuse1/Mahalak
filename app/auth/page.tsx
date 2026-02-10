@@ -18,8 +18,14 @@ import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
 import { MapPin, Loader2, CheckCircle } from "lucide-react"
 import Image from "next/image"
-import { PhoneVerification } from "../../components/phone-verification"
+import dynamic from "next/dynamic"
 import { getUserByPhone } from "../../lib/actions/profile"
+
+// Lazy load phone verification (heavy: Firebase reCAPTCHA)
+const PhoneVerification = dynamic(
+  () => import("../../components/phone-verification").then(m => ({ default: m.PhoneVerification })),
+  { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
+)
 import { uploadStoreImage } from "../../lib/actions/stores"
 
 export default function AuthPage() {

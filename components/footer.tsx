@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import Link from "next/link"
-import { Facebook, X, Instagram, Mail, Phone, MapPin } from "lucide-react"
+import { Facebook, X, Instagram, Mail } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 const FooterComponent = () => {

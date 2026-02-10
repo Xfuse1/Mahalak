@@ -15,7 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { getStoreByUserId, updateStore, createStore, uploadStoreImage } from "../../../lib/actions/stores"
 import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
-import { PhoneVerification } from "../../../components/phone-verification"
+import dynamic from "next/dynamic"
+
+// Lazy load phone verification (heavy: Firebase reCAPTCHA)
+const PhoneVerification = dynamic(
+  () => import("../../../components/phone-verification").then(m => ({ default: m.PhoneVerification })),
+  { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
+)
 
 export default function SettingsPage() {
   const { user, isLoading } = useAuth()

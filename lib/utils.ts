@@ -18,10 +18,4 @@ export function trackMetaEvent(eventName: string, params?: Record<string, any>) 
   }
 }
 
-export function formatAddress(address: any) {
-  if (typeof address === "object" && address !== null) {
-    const parts = [address.street, address.city, address.state, address.zipCode || address.postal_code].filter(Boolean)
-    return parts.join(", ")
-  }
-  return address || ""
-}
+

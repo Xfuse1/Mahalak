@@ -60,30 +60,25 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     const fetchData = async () => {
       try {
         setLoading(true)
-        console.log("[v0] Fetching product with ID:")
 
         const productData = await getProduct(id) as Product | null
-        console.log("[v0] Product data received:")
 
         if (!productData) {
-          console.log("[v0] Product not found")
           notFound()
           return
         }
 
         setProduct(productData)
 
-        // Fetch products from the same store
-        const sameStore = await getProductsFromSameStore(id, productData.store_id, 4)
+        // Fetch all related data in parallel instead of sequentially
+        const [sameStore, otherStores, related] = await Promise.all([
+          getProductsFromSameStore(id, productData.store_id, 4),
+          getProductsFromOtherStores(id, productData.store_id, 4),
+          getRelatedProducts(id, productData.category, 4),
+        ])
+
         setSameStoreProducts(sameStore as Product[])
-
-        // Fetch products from other stores
-        const otherStores = await getProductsFromOtherStores(id, productData.store_id, 4)
         setOtherStoresProducts(otherStores as Product[])
-
-        // Keep related products for backwards compatibility
-        const related = await getRelatedProducts(id, productData.category, 4)
-        console.log("[v0] Related products:")
         setRelatedProducts(related as Product[])
 
         setLoading(false)
@@ -274,7 +269,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* Product Image */}
             <div className="aspect-square relative bg-gray-100 rounded-3xl overflow-hidden shadow-xl group">
-              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
 
@@ -476,6 +471,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                           src={storeProduct.image_url || "/placeholder.svg"}
                           alt={storeProduct.name}
                           fill
+                          loading="lazy"
+                          sizes="(max-width: 640px) 50vw, 25vw"
                           className="object-cover group-hover:scale-110 transition-transform duration-500"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -519,6 +516,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                           src={otherProduct.image_url || "/placeholder.svg"}
                           alt={otherProduct.name}
                           fill
+                          loading="lazy"
+                          sizes="(max-width: 640px) 50vw, 25vw"
                           className="object-cover group-hover:scale-110 transition-transform duration-500"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />

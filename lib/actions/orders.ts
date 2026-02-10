@@ -608,73 +608,6 @@ export async function createContactInquiry(inquiryData: {
   return { success: true, data: { id: orderRef.id, ...orderPayload } }
 }
 
-// Driver rejects an order
-export async function driverRejectOrder(orderId: string, driverId: string, reason?: string) {
-  const db = getAdminDb()
-  const docRef = db.collection("orders").doc(orderId)
-  const now = new Date().toISOString()
-
-  try {
-    const orderDoc = await docRef.get()
-    if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
-    }
-
-    const orderData = orderDoc.data()
-
-    // Verify that the driver is assigned to this order
-    if (orderData?.driver_id !== driverId) {
-      return { success: false, error: "لا يمكنك رفض هذا الطلب" }
-    }
-
-    // Create timeline entry
-    const timelineEntry: TimelineEntry = {
-      status: "driver_rejected",
-      timestamp: now,
-      note: reason || "تم رفض الطلب من السائق",
-    }
-
-    // Build update payload
-    const updatePayload: Record<string, any> = {
-      status: "driver_rejected",
-      driver_rejected_at: now,
-      driver_rejection_reason: reason || "السائق غير متاح",
-      updated_at: now,
-    }
-
-    // Add to timeline
-    if (orderData?.timeline && Array.isArray(orderData.timeline)) {
-      updatePayload.timeline = [...orderData.timeline, timelineEntry]
-    } else {
-      updatePayload.timeline = [timelineEntry]
-    }
-
-    await docRef.set(updatePayload, { merge: true })
-
-    // Create notification for customer with link to change-driver page
-    await db.collection("notifications").add({
-      user_id: orderData.customer_id,
-      type: "driver_rejected",
-      title: "تم رفض الطلب من السائق",
-      title_en: "Order rejected by driver",
-      message: `السائق ${orderData.driver_name || "المحدد"} رفض توصيل طلبك. يرجى اختيار سائق آخر.`,
-      message_en: `Driver ${orderData.driver_name || "assigned"} rejected your order. Please select another driver.`,
-      link: `/account/change-driver?orderId=${orderId}&currentDriverId=${driverId}`,
-      data: { order_id: orderId, driver_id: driverId },
-      is_read: false,
-      created_at: now,
-    })
-
-    revalidatePath("/account")
-    revalidatePath("/seller/orders")
-
-    return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error rejecting order:", error)
-    return { success: false, error: error?.message || "فشل رفض الطلب" }
-  }
-}
-
 // Change driver for an order (after rejection or customer request)
 export async function changeOrderDriver(
   orderId: string,
@@ -1370,47 +1303,6 @@ export async function getCustomerMultiStoreOrders(customerId: string) {
   } catch (error: any) {
     console.error("[v0] Error fetching customer multi-store orders:", error)
     return { success: false, error: error?.message, orders: [] }
-  }
-}
-
-export async function getUnreadNotifications(userId: string) {
-  const db = getAdminDb()
-
-  try {
-    const snapshot = await db
-      .collection("notifications")
-      .where("user_id", "==", userId)
-      .where("is_read", "==", false)
-      .orderBy("created_at", "desc")
-      .limit(20)
-      .get()
-
-    const notifications = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-
-    return { success: true, notifications }
-  } catch (error: any) {
-    console.error("[v0] Error fetching notifications:", error)
-    return { success: false, error: error?.message, notifications: [] }
-  }
-}
-
-// Mark notification as read
-export async function markNotificationAsRead(notificationId: string) {
-  const db = getAdminDb()
-
-  try {
-    await db.collection("notifications").doc(notificationId).update({
-      is_read: true,
-      read_at: new Date().toISOString(),
-    })
-
-    return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error marking notification as read:", error)
-    return { success: false, error: error?.message }
   }
 }
 

@@ -228,19 +228,4 @@ export function clearPhoneAuth(): void {
   setConfirmationResult(null)
 }
 
-/**
- * Format phone number for display
- */
-export function formatPhoneNumber(phone: string): string {
-  if (!phone) return ""
-  
-  // Remove all non-digit characters
-  const digits = phone.replace(/\D/g, "")
-  
-  // Format as Egyptian number
-  if (digits.startsWith("20") && digits.length === 12) {
-    return `+${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`
-  }
-  
-  return phone
-}
+

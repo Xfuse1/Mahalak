@@ -1,7 +1,8 @@
 "use server"
 
 import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
+import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
@@ -61,7 +62,8 @@ function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>)
   }
 }
 
-export async function getProducts(category?: string) {
+// Internal implementation (no cache)
+async function _getProductsImpl(category?: string) {
   const db = getAdminDb()
 
   if (category && storeCategorySubcategories[category]) {
@@ -182,12 +184,21 @@ export async function getProducts(category?: string) {
   })
 }
 
-export async function getProduct(id: string) {
+// Cached version of getProducts (revalidates every 60 seconds)
+export async function getProducts(category?: string) {
+  return unstable_cache(
+    () => _getProductsImpl(category),
+    ["products", category || "all"],
+    { revalidate: 60, tags: ["products"] }
+  )()
+}
+
+// Internal getProduct implementation
+async function _getProductImpl(id: string) {
   const db = getAdminDb()
   const docSnap = await db.collection("products").doc(id).get()
 
   if (!docSnap.exists) {
-    console.error("[v0] Error fetching product:", "Product not found")
     return null
   }
 
@@ -246,6 +257,15 @@ export async function getProduct(id: string) {
     discount_percentage,
     offer_title
   })
+}
+
+// Cached version of getProduct (revalidates every 120 seconds)
+export async function getProduct(id: string) {
+  return unstable_cache(
+    () => _getProductImpl(id),
+    ["product", id],
+    { revalidate: 120, tags: ["products", `product-${id}`] }
+  )()
 }
 
 export async function createProduct(formData: {
@@ -309,10 +329,10 @@ export async function createProduct(formData: {
     console.log("[v0] Product created successfully with ID:", docRef.id)
 
     revalidatePath("/seller/products")
+    revalidateTag("products")
     return { success: true, data: { id: docRef.id, ...payload } }
   } catch (error: any) {
     console.error("[v0] Error in createProduct:", error)
-    console.error("[v0] Error stack:", error?.stack)
     return { success: false, error: error?.message || "حدث خطأ غير متوقع أثناء إنشاء المنتج" }
   }
 }
@@ -361,6 +381,8 @@ export async function updateProduct(
 
   revalidatePath("/seller/products")
   revalidatePath(`/product/${id}`)
+  revalidateTag("products")
+  revalidateTag(`product-${id}`)
   return { success: true, data: mapProduct(updatedSnap) }
 }
 
@@ -375,6 +397,7 @@ export async function deleteProduct(id: string) {
   }
 
   revalidatePath("/seller/products")
+  revalidateTag("products")
   return { success: true }
 }
 
@@ -503,13 +526,17 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
 // Get products from other stores (excluding current product and current store)
 export async function getProductsFromOtherStores(productId: string, storeId: string, limit = 4) {
   const db = getAdminDb()
-  const snapshot = await db.collection("products").get()
-  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+  // Only fetch a limited number of products from other stores instead of ALL products
+  const snapshot = await db.collection("products")
+    .where("store_id", "!=", storeId)
+    .orderBy("store_id")
+    .limit(limit * 3) // fetch a bit more to allow filtering
+    .get()
+  const products = snapshot.docs
+    .map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+    .filter((p: ProductRecord & { id: string }) => p.id !== productId)
 
   const filtered = products
-    .filter((product: ProductRecord & { id: string }) =>
-      product.id !== productId && product.store_id !== storeId
-    )
     .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))
     .slice(0, limit)
 
@@ -518,9 +545,11 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
     filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
   )
 
-  // Fetch all active offers
+  // Fetch only active offers (not all offers)
   const today = new Date().toISOString().split('T')[0]
-  const offersSnapshot = await db.collection("offers").get()
+  const offersSnapshot = await db.collection("offers")
+    .where("end_date", ">=", today)
+    .get()
   const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer => 
     offer.start_date <= today && offer.end_date >= today
   )

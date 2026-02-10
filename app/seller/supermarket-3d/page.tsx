@@ -12,11 +12,16 @@ import { Button } from "../../../components/ui/button"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { initialProducts, initialShelves, sections } from "../../../lib/mock/supermarket-data"
 
-// Dashboard components
-import SectionsPanel from "../../../components/dashboard/SectionsPanel"
-import ShelfManager from "../../../components/dashboard/ShelfManager"
-import ProductModal from "../../../components/dashboard/ProductModal"
-import AddShelfModal from "../../../components/dashboard/AddShelfModal"
+// Dashboard components - lazy loaded
+import dynamic from "next/dynamic"
+const SectionsPanel = dynamic(() => import("../../../components/dashboard/SectionsPanel"), {
+  ssr: false, loading: () => <div className="animate-pulse bg-gray-100 rounded-lg h-64" />
+})
+const ShelfManager = dynamic(() => import("../../../components/dashboard/ShelfManager"), {
+  ssr: false, loading: () => <div className="animate-pulse bg-gray-100 rounded-lg h-64" />
+})
+const ProductModal = dynamic(() => import("../../../components/dashboard/ProductModal"), { ssr: false })
+const AddShelfModal = dynamic(() => import("../../../components/dashboard/AddShelfModal"), { ssr: false })
 import { useProductStore } from "../../../lib/stores/product-store"
 import { getProducts } from "../../../lib/actions/products"
 import { getSupermarketLayout } from "../../../lib/actions/layout"

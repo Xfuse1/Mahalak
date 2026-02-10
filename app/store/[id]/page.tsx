@@ -94,8 +94,12 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
         setStore(storeData)
 
-        // Fetch offers
-        const offersData = await getStoreOffers(id)
+        // Fetch offers and products in parallel instead of sequentially
+        const [offersData, productsData] = await Promise.all([
+          getStoreOffers(id),
+          getProductsByStoreId(id),
+        ])
+
         const now = new Date()
         const activeOffers = offersData.filter((offer: any) => {
           const startDate = new Date(offer.start_date)
@@ -104,7 +108,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
         })
         setOffers(activeOffers as Offer[])
 
-        const productsData = await getProductsByStoreId(id)
         const transformedProducts = productsData.map((product: any) => ({
           ...product,
           image: typeof product.image_url === "string" && product.image_url ? product.image_url : "/placeholder.svg",
@@ -269,6 +272,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
                   alt={store.name}
                   fill
                   priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                   className="object-cover"
                 />
               </div>
