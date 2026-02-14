@@ -6,6 +6,7 @@ import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, createPOSQuickProduct, type POSSaleItem } from "@/lib/actions/pos"
 import { getStoreByUserId } from "@/lib/actions/stores"
+import { fetchStoreSubcategories, type SubcategoryItem } from "@/lib/firebase/categories"
 import { useLanguage } from "@/lib/language-context"
 import { logError } from "@/lib/logger"
 import {
@@ -77,6 +78,7 @@ type StoreData = {
   phone?: string
   logo_url?: string
   is_approved?: boolean
+  category?: string
 }
 
 type PosErrorMessage = { ar: string; en: string }
@@ -145,6 +147,7 @@ export default function QPOSPage() {
   const [quickAddStock, setQuickAddStock] = useState("1")
   const [quickAddCategory, setQuickAddCategory] = useState("")
   const [quickAddLoading, setQuickAddLoading] = useState(false)
+  const [storeSubcategories, setStoreSubcategories] = useState<SubcategoryItem[]>([])
   const [showMobileCart, setShowMobileCart] = useState(false)
   const isStoreApproved = store?.is_approved === true
   const searchRef = useRef<HTMLInputElement>(null)
@@ -187,6 +190,11 @@ export default function QPOSPage() {
           return
         }
         setStore(storeData)
+
+        // Fetch subcategories for the store's category
+        if (storeData.category) {
+          fetchStoreSubcategories(storeData.category).then(setStoreSubcategories).catch(() => {})
+        }
 
         const productsData = await getPOSProducts(storeData.id, user!.id)
         setProducts(productsData as Product[])
@@ -539,7 +547,7 @@ export default function QPOSPage() {
         name: quickAddName.trim(),
         price: Number(quickAddPrice),
         stock: Number(quickAddStock) || 1,
-        category: quickAddCategory.trim() || t("عام", "General"),
+        category: quickAddCategory.trim() || storeSubcategories[0]?.name || t("عام", "General"),
         barcode: quickAddBarcode.trim() || undefined,
         store_id: store.id,
       }, user!.id)
@@ -1666,15 +1674,15 @@ export default function QPOSPage() {
               </div>
 
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("القسم", "Category")}</label>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الفئة", "Category")}</label>
                 <select
                   value={quickAddCategory}
                   onChange={(e) => setQuickAddCategory(e.target.value)}
                   className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">{t("عام", "General")}</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
+                  <option value="">{t("اختر الفئة", "Select category")}</option>
+                  {storeSubcategories.map((sub) => (
+                    <option key={sub.id} value={sub.name}>{sub.name}</option>
                   ))}
                 </select>
               </div>
