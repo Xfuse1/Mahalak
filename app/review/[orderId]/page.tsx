@@ -122,7 +122,9 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           })
           setProductRatings(initialRatings)
         }
-      } catch (_error) {\n        // handled by loading state\n      } finally {
+      } catch (_error) {
+        // handled by loading state
+      } finally {
         setLoading(false)
       }
     }
