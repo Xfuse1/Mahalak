@@ -32,6 +32,32 @@ export async function getUserReview(productId: string, customerId: string) {
 export async function upsertReview(productId: string, customerId: string, rating: number) {
   const db = getAdminDb()
 
+  // التحقق من أن العميل اشترى هذا المنتج
+  const ordersSnap = await db.collection("orders")
+    .where("customer_id", "==", customerId)
+    .where("status", "==", "delivered")
+    .get()
+
+  if (!ordersSnap.empty) {
+    const orderIds = ordersSnap.docs.map(doc => doc.id)
+    // Check order_items for this product in chunks of 10 (Firestore 'in' limit)
+    let hasPurchased = false
+    for (let i = 0; i < orderIds.length && !hasPurchased; i += 10) {
+      const chunk = orderIds.slice(i, i + 10)
+      const itemsSnap = await db.collection("order_items")
+        .where("order_id", "in", chunk)
+        .where("product_id", "==", productId)
+        .limit(1)
+        .get()
+      if (!itemsSnap.empty) hasPurchased = true
+    }
+    if (!hasPurchased) {
+      return { success: false, error: "يجب شراء المنتج قبل تقييمه", average: 0, count: 0 }
+    }
+  } else {
+    return { success: false, error: "يجب شراء المنتج قبل تقييمه", average: 0, count: 0 }
+  }
+
   // Clamp + round to the 1..5 scale
   const r = Math.max(1, Math.min(5, Math.round(rating)))
 
@@ -160,7 +186,6 @@ export async function createOrderReview(data: {
 
     return { success: true, id: reviewRef.id }
   } catch (error: any) {
-    console.error("[v0] Error creating order review:", error)
     return { success: false, error: error?.message || "Failed to create review" }
   }
 }
@@ -176,7 +201,7 @@ async function updateDriverRatingAverage(driverId: string, newRating: number) {
 
     const driverData = driverDoc.data()
     const currentRating = driverData?.rating || 0
-    const totalDeliveries = driverData?.totalDeliveries || driverData?.total_deliveries || 0
+    const totalDeliveries = driverData?.total_deliveries || driverData?.totalDeliveries || 0
 
     // Calculate new average rating
     const newAvgRating = totalDeliveries > 0
@@ -185,12 +210,11 @@ async function updateDriverRatingAverage(driverId: string, newRating: number) {
 
     await driverRef.update({
       rating: Math.round(newAvgRating * 10) / 10,
-      totalDeliveries: totalDeliveries + 1,
       total_deliveries: totalDeliveries + 1,
       updated_at: new Date().toISOString(),
     })
-  } catch (error) {
-    console.error("[v0] Error updating driver rating:", error)
+  } catch (_error) {
+    // silently fail — non-critical operation
   }
 }
 
@@ -206,8 +230,7 @@ export async function hasOrderBeenReviewed(orderId: string, customerId: string):
       .get()
 
     return !snapshot.empty
-  } catch (error) {
-    console.error("[v0] Error checking order review:", error)
+  } catch (_error) {
     return false
   }
 }

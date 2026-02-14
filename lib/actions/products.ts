@@ -8,8 +8,74 @@ import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
 
-type ProductRecord = Record<string, any>
-type StoreRecord = Record<string, any>
+type ProductRecord = {
+  id?: string
+  name?: string
+  description?: string
+  price?: number
+  category?: string
+  stock?: number
+  image_url?: string
+  store_id?: string
+  barcode?: string
+  simulator_section?: string | null
+  rating?: number
+  rating_count?: number
+  created_at?: string
+  updated_at?: string
+  discount_percentage?: number
+  offer_title?: string | null
+  stores?:
+    | {
+      id?: string
+      name?: string
+      category?: string
+      phone?: string
+      address?: unknown
+    }
+    | { name?: string }
+    | null
+  [key: string]: unknown
+}
+
+type StoreRecord = {
+  id: string
+  seller_id?: string
+  name?: string
+  category?: string
+  phone?: string
+  address?: unknown
+  [key: string]: unknown
+}
+
+type OfferRecord = {
+  product_id?: string
+  category?: string
+  store_id?: string
+  title?: string | null
+  discount_percentage?: number
+  start_date?: string
+  end_date?: string
+  [key: string]: unknown
+}
+
+const PRODUCT_ERROR_CODES = {
+  UNAUTHORIZED_STORE_PRODUCT_CREATE: "UNAUTHORIZED_STORE_PRODUCT_CREATE",
+  PRICE_MUST_BE_POSITIVE: "PRICE_MUST_BE_POSITIVE",
+  STOCK_MUST_BE_POSITIVE: "STOCK_MUST_BE_POSITIVE",
+  STORE_NOT_APPROVED: "STORE_NOT_APPROVED",
+  CREATE_PRODUCT_UNEXPECTED_ERROR: "CREATE_PRODUCT_UNEXPECTED_ERROR",
+  PRODUCT_NOT_FOUND: "PRODUCT_NOT_FOUND",
+  UNAUTHORIZED_PRODUCT_ACCESS: "UNAUTHORIZED_PRODUCT_ACCESS",
+  UPDATE_PRODUCT_FAILED: "UPDATE_PRODUCT_FAILED",
+  DELETE_PRODUCT_FAILED: "DELETE_PRODUCT_FAILED",
+  MISSING_FILE_OR_STORE_ID: "MISSING_FILE_OR_STORE_ID",
+  UNAUTHORIZED_IMAGE_UPLOAD: "UNAUTHORIZED_IMAGE_UPLOAD",
+  UNSUPPORTED_IMAGE_TYPE: "UNSUPPORTED_IMAGE_TYPE",
+  IMAGE_TOO_LARGE: "IMAGE_TOO_LARGE",
+  IMAGE_UPLOAD_FAILED: "IMAGE_UPLOAD_FAILED",
+  IMAGE_UPLOAD_INTERNAL_ERROR: "IMAGE_UPLOAD_INTERNAL_ERROR",
+} as const
 
 function mapProduct(doc: DocumentSnapshot): (ProductRecord & { id: string }) | null {
   if (!doc.exists) return null
@@ -62,6 +128,36 @@ function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>)
   }
 }
 
+/**
+ * Shared helper: find the best discount for a product from a list of offers.
+ * Priority: product-specific > category-specific > store-wide.
+ */
+function findBestDiscount(
+  product: { id: string; category?: string; store_id?: string },
+  activeOffers: OfferRecord[],
+  today: string
+): { discount_percentage: number; offer_title: string | null } {
+  let bestDiscount = 0
+  let offerTitle: string | null = null
+
+  for (const offer of activeOffers) {
+    if ((offer.start_date && offer.start_date > today) || (offer.end_date && offer.end_date < today)) continue
+    const d = Number(offer.discount_percentage ?? 0)
+    if (d <= bestDiscount) continue
+
+    if (offer.product_id === product.id && offer.store_id === product.store_id) {
+      bestDiscount = d
+      offerTitle = offer.title || null
+    } else if (!offer.product_id && offer.category === product.category && offer.store_id === product.store_id) {
+      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
+    } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
+      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
+    }
+  }
+
+  return { discount_percentage: bestDiscount, offer_title: offerTitle }
+}
+
 // Internal implementation (no cache)
 async function _getProductsImpl(category?: string) {
   const db = getAdminDb()
@@ -81,18 +177,18 @@ async function _getProductsImpl(category?: string) {
 
     // Step 2: Get all products belonging to those stores (batch in chunks of 30 for Firestore "in" limit)
     const chunks = chunkArray(storeIds, 30)
-    let products: any[] = []
+    let products: Array<ProductRecord & { id: string }> = []
     for (const chunk of chunks) {
       const snap = await db.collection("products").where("store_id", "in", chunk).get()
-      products.push(...snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
+      products.push(...snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) })))
     }
 
     // Build store map from already fetched sellers
-    const storeMap = new Map<string, any>()
+    const storeMap = new Map<string, StoreRecord>()
     sellersSnapshot.docs.forEach((doc) => {
       const data = doc.data()
       if (data.store && data.store.category === category) {
-        storeMap.set(doc.id, { id: doc.id, seller_id: doc.id, ...data.store })
+        storeMap.set(doc.id, { id: doc.id, seller_id: doc.id, ...(data.store as Record<string, unknown>) })
       }
     })
 
@@ -101,34 +197,18 @@ async function _getProductsImpl(category?: string) {
     const offersSnapshot = await db.collection("offers")
       .where("end_date", ">=", now.split('T')[0])
       .get()
-    const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+    const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
     const today = new Date().toISOString().split('T')[0]
 
-    return products.map((product: any) => {
-      const store = storeMap.get(product.store_id)
-      let bestDiscount = 0
-      let offerTitle: string | null = null
-
-      for (const offer of activeOffers) {
-        if (offer.start_date > today || offer.end_date < today) continue
-        const discount = Number(offer.discount_percentage) || 0
-        if (discount <= bestDiscount) continue
-
-        if (offer.product_id === product.id && offer.store_id === product.store_id) {
-          bestDiscount = discount
-          offerTitle = offer.title || null
-        } else if (offer.category && offer.category === product.category && !offer.product_id && offer.store_id === product.store_id) {
-          if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
-        } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
-          if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
-        }
-      }
+    return products.map((product) => {
+      const store = product.store_id ? storeMap.get(product.store_id) : undefined
+      const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
 
       return serializeData({
         ...product,
         stores: store ? { name: store.name } : null,
-        discount_percentage: bestDiscount,
-        offer_title: offerTitle
+        discount_percentage,
+        offer_title
       })
     })
   }
@@ -140,46 +220,30 @@ async function _getProductsImpl(category?: string) {
   }
 
   const snapshot = await query.get()
-  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+  const products = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   // Fetch active offers
   const now = new Date().toISOString()
   const offersSnapshot = await db.collection("offers")
     .where("end_date", ">=", now.split('T')[0])
     .get()
-  const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+  const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
   const today = new Date().toISOString().split('T')[0]
 
-  const storeIds = Array.from(new Set(products.map((p: any) => p.store_id)))
+  const storeIds = Array.from(
+    new Set(products.map((p) => p.store_id).filter((id): id is string => typeof id === "string" && id.length > 0)),
+  )
   const storeMap = await getStoreMap(db, storeIds)
 
-  return products.map((product: any) => {
-    const store = storeMap.get(product.store_id)
-
-    // Find best offer: product-specific > category-specific > store-wide
-    let bestDiscount = 0
-    let offerTitle: string | null = null
-
-    for (const offer of activeOffers) {
-      if (offer.start_date > today || offer.end_date < today) continue
-      const discount = Number(offer.discount_percentage) || 0
-      if (discount <= bestDiscount) continue
-
-      if (offer.product_id === product.id && offer.store_id === product.store_id) {
-        bestDiscount = discount
-        offerTitle = offer.title || null
-      } else if (offer.category && offer.category === product.category && !offer.product_id && offer.store_id === product.store_id) {
-        if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
-      } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
-        if (discount > bestDiscount) { bestDiscount = discount; offerTitle = offer.title || null }
-      }
-    }
+  return products.map((product) => {
+    const store = product.store_id ? storeMap.get(product.store_id) : undefined
+    const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
 
     return serializeData({
       ...product,
       stores: store ? { name: store.name } : null,
-      discount_percentage: bestDiscount,
-      offer_title: offerTitle
+      discount_percentage,
+      offer_title
     })
   })
 }
@@ -202,55 +266,27 @@ async function _getProductImpl(id: string) {
     return null
   }
 
-  const product = mapProduct(docSnap) as any
+  const product = mapProduct(docSnap)
   if (!product) return null
 
-  const storeMap = await getStoreMap(db, [product.store_id])
+  const storeMap = await getStoreMap(db, product.store_id ? [product.store_id] : [])
   const productWithStore = attachStore(product, storeMap)
+
+  if (!product.store_id) {
+    return serializeData({
+      ...productWithStore,
+      discount_percentage: 0,
+      offer_title: null,
+    })
+  }
   
-  // Fetch active offer for this product
+  // Fetch all offers for this product's store (covers product-specific, category, and store-wide)
   const today = new Date().toISOString().split('T')[0]
   const offersSnapshot = await db.collection("offers")
-    .where("product_id", "==", id)
+    .where("store_id", "==", product.store_id)
     .get()
-  
-  let discount_percentage = 0
-  let offer_title = null
-  
-  for (const doc of offersSnapshot.docs) {
-    const offer = doc.data()
-    if (offer.start_date <= today && offer.end_date >= today) {
-      if ((offer.discount_percentage || 0) > discount_percentage) {
-        discount_percentage = offer.discount_percentage
-        offer_title = offer.title
-      }
-    }
-  }
-  
-  // Also check for store-wide and category-wide offers
-  if (product.store_id) {
-    const storeOffersSnapshot = await db.collection("offers")
-      .where("store_id", "==", product.store_id)
-      .get()
-    
-    for (const doc of storeOffersSnapshot.docs) {
-      const offer = doc.data()
-      if (offer.start_date > today || offer.end_date < today) continue
-      const d = Number(offer.discount_percentage) || 0
-      if (d <= discount_percentage) continue
-
-      // Category-specific offer
-      if (!offer.product_id && offer.category && offer.category === product.category) {
-        discount_percentage = d
-        offer_title = offer.title
-      }
-      // Store-wide offer (no product_id, no category)
-      else if (!offer.product_id && !offer.category) {
-        discount_percentage = d
-        offer_title = offer.title
-      }
-    }
-  }
+  const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
+  const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
   
   return serializeData({
     ...productWithStore,
@@ -278,16 +314,24 @@ export async function createProduct(formData: {
   store_id: string
   barcode?: string
   simulator_section?: string | null
-}) {
+}, callerUserId?: string) {
   try {
     const db = getAdminDb()
+
+    // Ownership check: caller must match target store id
+    if (callerUserId && callerUserId !== formData.store_id) {
+      return {
+        success: false,
+        error: PRODUCT_ERROR_CODES.UNAUTHORIZED_STORE_PRODUCT_CREATE,
+      }
+    }
     
     // التحقق من صحة السعر والكمية على السيرفر
     if (!formData.price || formData.price <= 0) {
-      return { success: false, error: "السعر يجب أن يكون أكبر من صفر" }
+      return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
     }
     if (!formData.stock || formData.stock <= 0) {
-      return { success: false, error: "الكمية يجب أن تكون أكبر من صفر" }
+      return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
     }
     
     // التحقق من اعتماد المتجر قبل إنشاء المنتج
@@ -297,8 +341,7 @@ export async function createProduct(formData: {
       const userData = userDoc.data()
       const storeData = userData?.store
       if (!storeData?.is_approved) {
-        console.error("[v0] Store not approved, cannot create product")
-        return { success: false, error: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة." }
+        return { success: false, error: PRODUCT_ERROR_CODES.STORE_NOT_APPROVED }
       }
     }
     
@@ -326,9 +369,8 @@ export async function createProduct(formData: {
     revalidatePath("/seller/products")
     revalidateTag("products")
     return { success: true, data: { id: docRef.id, ...payload } }
-  } catch (error: any) {
-    console.error("[v0] Error in createProduct:", error)
-    return { success: false, error: error?.message || "حدث خطأ غير متوقع أثناء إنشاء المنتج" }
+  } catch (error: unknown) {
+    return { success: false, error: PRODUCT_ERROR_CODES.CREATE_PRODUCT_UNEXPECTED_ERROR }
   }
 }
 
@@ -343,16 +385,30 @@ export async function updateProduct(
     image_url: string
     rating: number
     simulator_section?: string | null
+    barcode?: string
   }>,
+  callerUserId?: string,
 ) {
   const db = getAdminDb()
-  
+
+  // التحقق من ملكية المنتج
+  if (callerUserId) {
+    const productSnap = await db.collection("products").doc(id).get()
+    if (!productSnap.exists) {
+      return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
+    }
+    const productData = productSnap.data()
+    if (productData?.store_id !== callerUserId) {
+      return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
+    }
+  }
+
   // التحقق من صحة السعر والكمية على السيرفر
   if (formData.price !== undefined && formData.price <= 0) {
-    return { success: false, error: "السعر يجب أن يكون أكبر من صفر" }
+    return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
   }
   if (formData.stock !== undefined && formData.stock <= 0) {
-    return { success: false, error: "الكمية يجب أن تكون أكبر من صفر" }
+    return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
   }
 
   const docRef = db.collection("products").doc(id)
@@ -364,14 +420,13 @@ export async function updateProduct(
 
   try {
     await docRef.set(updateData, { merge: true })
-  } catch (error: any) {
-    console.error("[v0] Error updating product:", error)
-    return { success: false, error: error?.message || "Failed to update product" }
+  } catch (error: unknown) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UPDATE_PRODUCT_FAILED }
   }
 
   const updatedSnap = await docRef.get()
   if (!updatedSnap.exists) {
-    return { success: false, error: "Product not found" }
+    return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
   }
 
   revalidatePath("/seller/products")
@@ -381,14 +436,25 @@ export async function updateProduct(
   return { success: true, data: mapProduct(updatedSnap) }
 }
 
-export async function deleteProduct(id: string) {
+export async function deleteProduct(id: string, callerUserId?: string) {
   const db = getAdminDb()
+
+  // التحقق من ملكية المنتج
+  if (callerUserId) {
+    const productSnap = await db.collection("products").doc(id).get()
+    if (!productSnap.exists) {
+      return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
+    }
+    const productData = productSnap.data()
+    if (productData?.store_id !== callerUserId) {
+      return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
+    }
+  }
 
   try {
     await db.collection("products").doc(id).delete()
-  } catch (error: any) {
-    console.error("[v0] Error deleting product:", error)
-    return { success: false, error: error?.message || "Failed to delete product" }
+  } catch (error: unknown) {
+    return { success: false, error: PRODUCT_ERROR_CODES.DELETE_PRODUCT_FAILED }
   }
 
   revalidatePath("/seller/products")
@@ -404,11 +470,11 @@ export async function getProductsByStoreId(storeId: string) {
   // Fetch active offers for this store
   const today = new Date().toISOString().split('T')[0]
   const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
-  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer =>
+  const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord).filter((offer) =>
     offer.start_date <= today && offer.end_date >= today
   )
 
-  const enriched = products.map((product: any) => {
+  const enriched = products.map((product) => {
     // Find best offer: product-specific > category-specific > store-wide
     let bestDiscount = 0
     let offerTitle: string | null = null
@@ -440,34 +506,51 @@ export async function getProductsByStoreId(storeId: string) {
     }
   })
 
-  enriched.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
+  enriched.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
   return serializeData(enriched)
 }
 
-export async function searchProducts(query: string) {
+async function _searchProductsImpl(normalizedQuery: string) {
   const products = await getProducts()
-  const q = query.trim().toLowerCase()
 
-  if (!q) {
+  if (!normalizedQuery) {
     return products
   }
 
-  return products.filter((product: any) => {
+  return products.filter((product: ProductRecord) => {
     const name = (product.name || "").toLowerCase()
     const description = (product.description || "").toLowerCase()
     const storeName = (product.stores?.name || "").toLowerCase()
-    return name.includes(q) || description.includes(q) || storeName.includes(q)
+    return name.includes(normalizedQuery) || description.includes(normalizedQuery) || storeName.includes(normalizedQuery)
   })
+}
+
+// Search reuses cached getProducts() and additionally caches each normalized
+// query result for 60 seconds. This is still in-memory filtering and not
+// full-text search; move to Algolia/Typesense (or indexed search fields) at scale.
+export async function searchProducts(query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  return unstable_cache(
+    () => _searchProductsImpl(normalizedQuery),
+    ["products-search", normalizedQuery || "all"],
+    { revalidate: 60, tags: ["products"] },
+  )()
 }
 
 export async function getRelatedProducts(productId: string, category: string, limit = 4) {
   const db = getAdminDb()
-  const snapshot = await db.collection("products").where("category", "==", category).get()
+  const queryLimit = Math.max(1, limit + 1)
+  const snapshot = await db
+    .collection("products")
+    .where("category", "==", category)
+    .orderBy("rating", "desc")
+    .limit(queryLimit)
+    .get()
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   const filtered = products
     .filter((product: ProductRecord & { id: string }) => product.id !== productId)
-    .sort((a: ProductRecord, b: ProductRecord) => Number(b.rating || 0) - Number(a.rating || 0))
     .slice(0, limit)
 
   const storeMap = await getStoreMap(
@@ -503,17 +586,10 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
 
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
     const productWithStore = attachStore(product, storeMap)
-    let bestDiscount = 0
-    for (const offer of activeOffers) {
-      const d = Number(offer.discount_percentage) || 0
-      if (d <= bestDiscount) continue
-      if (offer.product_id === product.id) { bestDiscount = d }
-      else if (!offer.product_id && offer.category && offer.category === product.category) { bestDiscount = d }
-      else if (!offer.product_id && !offer.category) { bestDiscount = d }
-    }
+    const { discount_percentage } = findBestDiscount(product, activeOffers, today)
     return {
       ...productWithStore,
-      discount_percentage: bestDiscount
+      discount_percentage
     }
   }))
 }
@@ -551,28 +627,40 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
 
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
     const productWithStore = attachStore(product, storeMap)
-    let bestDiscount = 0
-    for (const offer of activeOffers) {
-      const d = Number(offer.discount_percentage) || 0
-      if (d <= bestDiscount) continue
-      if (offer.product_id === product.id && offer.store_id === product.store_id) { bestDiscount = d }
-      else if (!offer.product_id && offer.category && offer.category === product.category && offer.store_id === product.store_id) { bestDiscount = d }
-      else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) { bestDiscount = d }
-    }
+    const { discount_percentage } = findBestDiscount(product, activeOffers, today)
     return {
       ...productWithStore,
-      discount_percentage: bestDiscount
+      discount_percentage
     }
   }))
 }
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
 export async function uploadProductImage(formData: FormData) {
   try {
     const file = formData.get("file") as File
     const storeId = formData.get("storeId") as string
+    const callerId = formData.get("callerId") as string
 
     if (!file || !storeId) {
-      return { success: false, error: "Missing file or store ID" }
+      return { success: false, error: PRODUCT_ERROR_CODES.MISSING_FILE_OR_STORE_ID }
+    }
+
+    // Ownership check
+    if (callerId && callerId !== storeId) {
+      return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_IMAGE_UPLOAD }
+    }
+
+    // التحقق من نوع الملف
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      return { success: false, error: PRODUCT_ERROR_CODES.UNSUPPORTED_IMAGE_TYPE }
+    }
+
+    // التحقق من حجم الملف
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_TOO_LARGE }
     }
 
     const supabase = await createAdminClient()
@@ -589,8 +677,7 @@ export async function uploadProductImage(formData: FormData) {
       })
 
     if (error) {
-      console.error("[v0] Storage upload error details:", JSON.stringify(error, null, 2))
-      return { success: false, error: error.message }
+      return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_FAILED }
     }
 
     const {
@@ -598,9 +685,7 @@ export async function uploadProductImage(formData: FormData) {
     } = supabase.storage.from("product-images").getPublicUrl(data.path)
 
     return { success: true, url: publicUrl }
-  } catch (error: any) {
-    console.error("[v0] Server upload error:", error)
-    console.error("[v0] Server upload error stack:", error?.stack)
-    return { success: false, error: error?.message || "Internal server error during upload" }
+  } catch (error: unknown) {
+    return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_INTERNAL_ERROR }
   }
 }

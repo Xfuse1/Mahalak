@@ -47,7 +47,7 @@ export default function ResetPasswordPage() {
       if (!oobCode) {
         setError(
           t(
-            "Ø±Ø§Ø¨Ø· Ø¥Ø¹Ø§Ø¯Ø© ØªØ¹ÙŠÙŠÙ† ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± ØºÙŠØ± ØµØ§Ù„Ø­ Ø£Ùˆ Ù…Ù†ØªÙ‡ÙŠ Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ©",
+            "رابط إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية",
             "Reset link is invalid or expired",
           ),
         )

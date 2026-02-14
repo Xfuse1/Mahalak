@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { SlidersHorizontal, Calendar, DollarSign } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { SlidersHorizontal, Calendar, Banknote } from "lucide-react"
 import { Button } from "./ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Label } from "./ui/label"
@@ -48,7 +48,12 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
     daysAgo > 0
 
   // تطبيق التغييرات تلقائياً عند تغيير أي فلتر
+  const isFirstMount = useRef(true)
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false
+      return
+    }
     if (onFilterChange) {
       onFilterChange({
         sortBy,
@@ -181,7 +186,7 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
           {/* ───── قسم فلترة السعر ───── */}
           <div className="space-y-3">
             <Label className={`text-base font-semibold flex items-center gap-2 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
-              <DollarSign className="h-4 w-4 text-[#1F478B]" />
+              <Banknote className="h-4 w-4 text-[#1F478B]" />
               {t("نطاق السعر", "Price Range")}
             </Label>
 

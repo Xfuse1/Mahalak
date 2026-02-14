@@ -1,14 +1,53 @@
 "use server"
 
 import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
+import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { chunkArray } from "../firebase/firestore-helpers"
+import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "./notifications"
 
 type RecordMap = {
   id: string
-  [key: string]: any
+  [key: string]: unknown
+}
+
+type OrderItemRecord = {
+  id: string
+  order_id: string
+  product_id: string
+  quantity?: number
+  price?: number
+  name?: string
+  image_url?: string | null
+  [key: string]: unknown
+}
+
+type OrderRecord = {
+  id: string
+  order_type?: string
+  store_id?: string
+  customer_id?: string
+  driver_id?: string
+  driver_name?: string
+  status?: string
+  total?: number
+  created_at?: string
+  delivery_address?: string
+  timeline?: TimelineEntry[]
+  pickup_stops?: PickupStop[]
+  [key: string]: unknown
+}
+
+type ItemProductRef = {
+  id: string
+  name: string
+  image_url: string | null
+}
+
+type OrderItemWithProduct = OrderItemRecord & {
+  products: ItemProductRef | null
 }
 
 // Timeline entry type for order tracking
@@ -37,19 +76,41 @@ export type PickupStop = {
   rejection_reason?: string | null
 }
 
+function getErrorMessage(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message
+  }
+
+  return undefined
+}
+
+function isInquiryOrder(order: OrderRecord) {
+  return (
+    order.order_type === "inquiry" ||
+    order.status === "inquiry" ||
+    order.delivery_address === "Contact via WhatsApp" ||
+    order.delivery_address === "Contact via Phone"
+  )
+}
+
 async function fetchDocsMap(db: Firestore, collection: string, ids: string[]) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
   if (uniqueIds.length === 0) {
-    return new Map<string, any>()
+    return new Map<string, RecordMap>()
   }
 
   const refs = uniqueIds.map((id) => db.collection(collection).doc(id))
   const docs = await db.getAll(...refs)
-  const map = new Map<string, any>()
+  const map = new Map<string, RecordMap>()
 
   docs.forEach((doc: DocumentSnapshot) => {
     if (doc.exists) {
-      map.set(doc.id, { ...doc.data(), id: doc.id })
+      map.set(doc.id, { ...(doc.data() as Record<string, unknown>), id: doc.id })
     }
   })
 
@@ -60,13 +121,13 @@ async function fetchDocsMap(db: Firestore, collection: string, ids: string[]) {
 async function fetchStoresMap(db: Firestore, storeIds: string[]) {
   const uniqueIds = Array.from(new Set(storeIds.filter(Boolean)))
   if (uniqueIds.length === 0) {
-    return new Map<string, any>()
+    return new Map<string, RecordMap>()
   }
 
   // Store IDs are now User IDs
   const refs = uniqueIds.map((id) => db.collection("users").doc(id))
   const docs = await db.getAll(...refs)
-  const map = new Map<string, any>()
+  const map = new Map<string, RecordMap>()
 
   docs.forEach((doc: DocumentSnapshot) => {
     if (doc.exists) {
@@ -86,15 +147,23 @@ async function fetchStoresMap(db: Firestore, storeIds: string[]) {
 
 async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
   const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)))
-  if (uniqueIds.length === 0) return []
+  if (uniqueIds.length === 0) return [] as OrderItemRecord[]
 
-  const items: any[] = []
+  const items: OrderItemRecord[] = []
   const chunks = chunkArray(uniqueIds, 10)
 
   for (const chunk of chunks) {
     const snapshot = await db.collection("order_items").where("order_id", "in", chunk).get()
     snapshot.docs.forEach((doc) => {
-      items.push({ ...doc.data(), id: doc.id })
+      const data = doc.data()
+      const orderId = typeof data.order_id === "string" ? data.order_id : ""
+      const productId = typeof data.product_id === "string" ? data.product_id : ""
+      items.push({
+        ...(data as Record<string, unknown>),
+        id: doc.id,
+        order_id: orderId,
+        product_id: productId,
+      })
     })
   }
 
@@ -102,7 +171,7 @@ async function getOrderItemsByOrderIds(db: Firestore, orderIds: string[]) {
 }
 
 // Get a single order by ID
-export async function getOrderById(orderId: string) {
+export async function getOrderById(orderId: string, callerUserId?: string) {
   try {
     const db = getAdminDb()
 
@@ -125,6 +194,16 @@ export async function getOrderById(orderId: string) {
 
     const orderData = orderDoc.data()
     if (!orderData) return null
+
+    // Ownership check: if callerUserId is provided, verify access
+    if (callerUserId) {
+      const isCustomer = orderData.customer_id === callerUserId
+      const isSeller = orderData.store_id === callerUserId
+      const isDriver = orderData.driver_id === callerUserId
+      if (!isCustomer && !isSeller && !isDriver) {
+        return null
+      }
+    }
 
     // Get order items
     const itemsSnapshot = await db
@@ -159,7 +238,7 @@ export async function getOrderById(orderId: string) {
       updated_at: updatedAt,
     }
   } catch (error) {
-    console.error("[v0] Error fetching order:", error)
+    logError("[v0] Error fetching order:", error)
     return null
   }
 }
@@ -167,40 +246,40 @@ export async function getOrderById(orderId: string) {
 export async function getCustomerOrders(customerId: string) {
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("customer_id", "==", customerId).get()
-  // Filter out multi-store orders to avoid duplicates (they have their own section)
-  const orders = snapshot.docs
-    .map((doc) => ({ ...doc.data(), id: doc.id } as any))
-    .filter((order: any) => order.order_type !== "multi_store")
+  // Filter out multi-store and inquiry records from regular customer orders
+  const orders: OrderRecord[] = snapshot.docs
+    .map((doc) => ({ ...(doc.data() as Record<string, unknown>), id: doc.id } as OrderRecord))
+    .filter((order) => order.order_type !== "multi_store" && !isInquiryOrder(order))
 
-  orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
   // Use fetchStoresMap for stores (now embedded in users collection)
   const storeMap = await fetchStoresMap(
     db,
-    orders.map((order: any) => order.store_id),
+    orders.map((order) => order.store_id || ""),
   )
 
   const orderItems = await getOrderItemsByOrderIds(
     db,
-    orders.map((order: any) => order.id),
+    orders.map((order) => order.id),
   )
 
   const productMap = await fetchDocsMap(
     db,
     "products",
-    orderItems.map((item: any) => item.product_id),
+    orderItems.map((item) => item.product_id),
   )
 
-  const itemsByOrder = new Map<string, any[]>()
-  orderItems.forEach((item: any) => {
+  const itemsByOrder = new Map<string, OrderItemWithProduct[]>()
+  orderItems.forEach((item) => {
     const product = productMap.get(item.product_id)
-    const entry = {
+    const entry: OrderItemWithProduct = {
       ...item,
       products: product
         ? {
           id: product.id,
-          name: product.name,
-          image_url: product.image_url || null,
+          name: typeof product.name === "string" ? product.name : "",
+          image_url: typeof product.image_url === "string" ? product.image_url : null,
         }
         : null,
     }
@@ -211,14 +290,14 @@ export async function getCustomerOrders(customerId: string) {
     itemsByOrder.get(item.order_id)!.push(entry)
   })
 
-  return orders.map((order: any) => {
-    const store = storeMap.get(order.store_id)
+  return orders.map((order) => {
+    const store = order.store_id ? storeMap.get(order.store_id) : null
     return {
       ...order,
       stores: store
         ? {
           id: store.id,
-          name: store.name,
+          name: typeof store.name === "string" ? store.name : "",
         }
         : null,
       order_items: itemsByOrder.get(order.id) || [],
@@ -232,20 +311,16 @@ export async function getPendingOrdersCount(storeId: string): Promise<number> {
     // Count single-store pending orders
     const singleSnap = await db.collection("orders")
       .where("store_id", "==", storeId)
+      .where("status", "==", "pending")
       .get()
-    let count = 0
-    singleSnap.docs.forEach((doc) => {
-      if (doc.data().status === "pending") {
-        count++
-      }
-    })
+    let count = singleSnap.size
 
     // Count multi-store orders where this store's stop is pending
     const multiSnap = await db.collection("orders")
       .where("order_type", "==", "multi_store")
       .get()
     multiSnap.docs.forEach((doc) => {
-      const stops: any[] = doc.data().pickup_stops || []
+      const stops: PickupStop[] = (doc.data().pickup_stops as PickupStop[]) || []
       const myStop = stops.find((s) => s.store_id === storeId)
       if (myStop && myStop.status === "pending") {
         count++
@@ -254,17 +329,25 @@ export async function getPendingOrdersCount(storeId: string): Promise<number> {
 
     return count
   } catch (error) {
-    console.error("[getPendingOrdersCount] Error:", error)
+    logError("[getPendingOrdersCount] Error:", error)
     return 0
   }
 }
 
-export async function getStoreOrders(storeId: string) {
+export async function getStoreOrders(storeId: string, callerId: string) {
+  if (callerId !== storeId) {
+    logError("[getStoreOrders] Unauthorized access attempt", { storeId, callerId })
+    return []
+  }
+
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
-  const orders = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
+  // Exclude inquiry records from standard seller order lists
+  const orders: OrderRecord[] = snapshot.docs
+    .map((doc) => ({ ...(doc.data() as Record<string, unknown>), id: doc.id } as OrderRecord))
+    .filter((order) => !isInquiryOrder(order))
 
-  orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
   if (orders.length === 0) {
     return []
@@ -272,31 +355,31 @@ export async function getStoreOrders(storeId: string) {
 
   const orderItems = await getOrderItemsByOrderIds(
     db,
-    orders.map((order: any) => order.id),
+    orders.map((order) => order.id),
   )
 
   const productMap = await fetchDocsMap(
     db,
     "products",
-    orderItems.map((item: any) => item.product_id),
+    orderItems.map((item) => item.product_id),
   )
 
   const customerMap = await fetchDocsMap(
     db,
     "users",
-    orders.map((order: any) => order.customer_id),
+    orders.map((order) => order.customer_id || ""),
   )
 
-  const itemsByOrder = new Map<string, any[]>()
-  orderItems.forEach((item: any) => {
+  const itemsByOrder = new Map<string, OrderItemWithProduct[]>()
+  orderItems.forEach((item) => {
     const product = productMap.get(item.product_id)
-    const entry = {
+    const entry: OrderItemWithProduct = {
       ...item,
       products: product
         ? {
           id: product.id,
-          name: product.name,
-          image_url: product.image_url || null,
+          name: typeof product.name === "string" ? product.name : "",
+          image_url: typeof product.image_url === "string" ? product.image_url : null,
         }
         : null,
     }
@@ -307,16 +390,16 @@ export async function getStoreOrders(storeId: string) {
     itemsByOrder.get(item.order_id)!.push(entry)
   })
 
-  return orders.map((order: any) => {
-    const profile = customerMap.get(order.customer_id)
+  return orders.map((order) => {
+    const profile = order.customer_id ? customerMap.get(order.customer_id) : null
     return {
       ...order,
       profiles: profile
         ? {
           id: profile.id,
-          full_name: profile.full_name || null,
-          email: profile.email || "",
-          phone: profile.phone || null,
+          full_name: typeof profile.full_name === "string" ? profile.full_name : null,
+          email: typeof profile.email === "string" ? profile.email : "",
+          phone: typeof profile.phone === "string" ? profile.phone : null,
         }
         : null,
       order_items: itemsByOrder.get(order.id) || [],
@@ -324,7 +407,13 @@ export async function getStoreOrders(storeId: string) {
   })
 }
 
-export async function updateOrderStatus(orderId: string, status: string, note?: string) {
+export async function updateOrderStatus(
+  orderId: string,
+  status: string,
+  callerId: string,
+  callerRole: "seller" | "driver" | "admin",
+  note?: string
+) {
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
@@ -341,8 +430,20 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
     const currentOrder = await docRef.get()
     const currentData = currentOrder.data()
 
+    if (!currentData) {
+      return { success: false, error: "Order not found" }
+    }
+
+    // Authorization check
+    if (callerRole === "seller" && currentData.store_id !== callerId) {
+      return { success: false, error: "Unauthorized: not your store order" }
+    }
+    if (callerRole === "driver" && currentData.driver_id !== callerId) {
+      return { success: false, error: "Unauthorized: not your delivery" }
+    }
+
     // Build update payload
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       status,
       updated_at: now,
     }
@@ -411,9 +512,9 @@ export async function updateOrderStatus(orderId: string, status: string, note?: 
         data: { order_id: orderId, status }
       })
     }
-  } catch (error: any) {
-    console.error("[v0] Error updating order status:", error)
-    return { success: false, error: error?.message || "Failed to update order status" }
+  } catch (error: unknown) {
+    logError("[v0] Error updating order status:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to update order status" }
   }
 
   const updatedSnap = await docRef.get()
@@ -443,121 +544,117 @@ export async function createOrder(orderData: {
   const db = getAdminDb()
   const now = new Date().toISOString()
 
-  // التحقق من توفر المخزون قبل إنشاء الطلب
-  for (const item of orderData.items) {
-    const productDoc = await db.collection("products").doc(item.product_id).get()
-    if (!productDoc.exists) {
-      return { success: false, error: `المنتج غير موجود` }
-    }
-    const productData = productDoc.data()
-    const availableStock = productData?.stock ?? 0
-    if (item.quantity > availableStock) {
-      return { 
-        success: false, 
-        error: `الكمية المطلوبة من "${productData?.name || 'المنتج'}" (${item.quantity}) أكبر من المتاح (${availableStock})` 
+  try {
+    const result = await db.runTransaction(async (transaction) => {
+      // Step 1: Read and verify stock + prices atomically
+      const verifiedItems: { product_id: string; quantity: number; price: number; productRef: FirebaseFirestore.DocumentReference }[] = []
+      for (const item of orderData.items) {
+        const productRef = db.collection("products").doc(item.product_id)
+        const productDoc = await transaction.get(productRef)
+        if (!productDoc.exists) {
+          throw new Error("Product not found")
+        }
+        const productData = productDoc.data()
+        const availableStock = productData?.stock ?? 0
+        if (item.quantity > availableStock) {
+          throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${item.quantity}) exceeds available stock (${availableStock})`)
+        }
+        verifiedItems.push({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: productData?.price ?? item.price,
+          productRef,
+        })
       }
-    }
-  }
 
-  const orderRef = db.collection("orders").doc()
+      // Step 2: Calculate verified total
+      const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      const verifiedTotal = verifiedSubtotal + (orderData.delivery_price || 0)
 
-  const orderPayload: Record<string, any> = {
-    customer_id: orderData.customer_id,
-    store_id: orderData.store_id,
-    total: Number(orderData.total),
-    delivery_address: orderData.delivery_address,
-    status: "pending",
-    created_at: now,
-    updated_at: now,
-    // Initialize timeline with ordered status
-    timeline: [
-      {
-        status: "ordered",
-        timestamp: now,
-      } as TimelineEntry,
-    ],
-  }
+      const orderRef = db.collection("orders").doc()
 
-  // Add optional delivery details
-  if (orderData.customer_name) orderPayload.customer_name = orderData.customer_name
-  if (orderData.customer_phone) orderPayload.customer_phone = orderData.customer_phone
-  if (orderData.delivery_city) orderPayload.delivery_city = orderData.delivery_city
-  if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
-  if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
-  if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
-  if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
+      const orderPayload: Record<string, unknown> = {
+        customer_id: orderData.customer_id,
+        store_id: orderData.store_id,
+        total: Number(verifiedTotal),
+        delivery_address: orderData.delivery_address,
+        status: "pending",
+        created_at: now,
+        updated_at: now,
+        timeline: [
+          {
+            status: "ordered",
+            timestamp: now,
+          } as TimelineEntry,
+        ],
+      }
 
-  // Add driver information
-  if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
-  if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
+      // Add optional delivery details
+      if (orderData.customer_name) orderPayload.customer_name = orderData.customer_name
+      if (orderData.customer_phone) orderPayload.customer_phone = orderData.customer_phone
+      if (orderData.delivery_city) orderPayload.delivery_city = orderData.delivery_city
+      if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
+      if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
+      if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
+      if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
 
-  // Add coordinates if available
-  if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
-    orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
-    orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
-  }
+      // Add driver information
+      if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
+      if (orderData.driver_name) orderPayload.driver_name = orderData.driver_name
 
-  try {
-    await orderRef.set(orderPayload)
-  } catch (error: any) {
-    console.error("[v0] Error creating order:", error)
-    return { success: false, error: error?.message || "Failed to create order" }
-  }
+      // Add coordinates if available
+      if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
+        orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
+        orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
+      }
 
-  const batch = db.batch()
-  orderData.items.forEach((item) => {
-    const itemRef = db.collection("order_items").doc()
-    batch.set(itemRef, {
-      order_id: orderRef.id,
-      product_id: item.product_id,
-      quantity: Number(item.quantity),
-      price: Number(item.price),
-      created_at: now,
+      // Step 3: Create order atomically
+      transaction.set(orderRef, orderPayload)
+
+      // Step 4: Create order items atomically
+      verifiedItems.forEach((item) => {
+        const itemRef = db.collection("order_items").doc()
+        transaction.set(itemRef, {
+          order_id: orderRef.id,
+          product_id: item.product_id,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+          created_at: now,
+        })
+      })
+
+      // Step 5: Decrement stock atomically
+      for (const item of verifiedItems) {
+        transaction.update(item.productRef, {
+          stock: FieldValue.increment(-item.quantity),
+          updated_at: now,
+        })
+      }
+
+      return { orderId: orderRef.id, orderPayload, storeId: orderData.store_id }
     })
-  })
 
-  try {
-    await batch.commit()
-  } catch (error: any) {
-    console.error("[v0] Error creating order items:", error)
-    return { success: false, error: error?.message || "Failed to create order items" }
-  }
-
-  try {
-    await createNotification({
-      user_id: orderData.store_id,
-      title: "طلب جديد",
-      title_en: "New Order",
-      message: `لديك طلب جديد برقم ${orderRef.id}`,
-      message_en: `You have a new order: ${orderRef.id}`,
-      type: "new_order",
-      link: "/seller/orders",
-      data: { order_id: orderRef.id, store_id: orderData.store_id },
-    })
-  } catch (error: any) {
-    console.error("[v0] Error creating seller notification:", error)
-  }
-
-  // خصم الكمية من المخزون بعد إنشاء الطلب بنجاح
-  const stockBatch = db.batch()
-  for (const item of orderData.items) {
-    const productRef = db.collection("products").doc(item.product_id)
-    const productDoc = await productRef.get()
-    if (productDoc.exists) {
-      const currentStock = productDoc.data()?.stock ?? 0
-      const newStock = Math.max(0, currentStock - item.quantity)
-      stockBatch.update(productRef, { stock: newStock, updated_at: now })
+    // Notifications outside transaction (non-critical)
+    try {
+      await createNotification({
+        user_id: result.storeId,
+        title: "طلب جديد",
+        title_en: "New Order",
+        message: `لديك طلب جديد برقم ${result.orderId}`,
+        message_en: `You have a new order: ${result.orderId}`,
+        type: "new_order",
+        link: "/seller/orders",
+        data: { order_id: result.orderId, store_id: result.storeId },
+      })
+    } catch {
+      // Silent: notification failure should not affect order
     }
-  }
-  try {
-    await stockBatch.commit()
-  } catch (error: any) {
-    console.error("[v0] Error deducting stock:", error)
-    // لا نفشل الطلب لأنه تم بنجاح - فقط نسجل الخطأ
-  }
 
-  revalidatePath("/account")
-  return { success: true, data: { id: orderRef.id, ...orderPayload } }
+    revalidatePath("/account")
+    return { success: true, data: { id: result.orderId, ...result.orderPayload } }
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) || "Failed to create order" }
+  }
 }
 
 export async function createContactInquiry(inquiryData: {
@@ -578,16 +675,19 @@ export async function createContactInquiry(inquiryData: {
     store_id: inquiryData.store_id,
     total: Number(inquiryData.price),
     delivery_address: deliveryAddress,
-    status: "pending",
+    status: "inquiry",
+    order_type: "inquiry",
+    contact_method: inquiryData.contact_method,
+    inquiry_product_id: inquiryData.product_id,
     created_at: now,
     updated_at: now,
   }
 
   try {
     await orderRef.set(orderPayload)
-  } catch (error: any) {
-    console.error("[v0] Error creating contact inquiry:", error)
-    return { success: false, error: error?.message || "Failed to create inquiry" }
+  } catch (error: unknown) {
+    logError("[v0] Error creating contact inquiry:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to create inquiry" }
   }
 
   try {
@@ -598,9 +698,9 @@ export async function createContactInquiry(inquiryData: {
       price: Number(inquiryData.price),
       created_at: now,
     })
-  } catch (error: any) {
-    console.error("[v0] Error creating order item:", error)
-    return { success: false, error: error?.message || "Failed to create inquiry item" }
+  } catch (error: unknown) {
+    logError("[v0] Error creating order item:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to create inquiry item" }
   }
 
   revalidatePath("/account")
@@ -623,19 +723,19 @@ export async function changeOrderDriver(
   try {
     const orderDoc = await docRef.get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
 
     const orderData = orderDoc.data()
 
     // Verify the customer owns this order
     if (orderData?.customer_id !== customerId) {
-      return { success: false, error: "لا يمكنك تعديل هذا الطلب" }
+      return { success: false, error: "You are not allowed to modify this order" }
     }
 
     // Only allow driver change if status is driver_rejected or pending
     if (orderData?.status !== "driver_rejected" && orderData?.status !== "pending") {
-      return { success: false, error: "لا يمكن تغيير السائق في هذه المرحلة" }
+      return { success: false, error: "Driver cannot be changed at this stage" }
     }
 
     // Calculate new total (subtract old delivery price, add new)
@@ -651,7 +751,7 @@ export async function changeOrderDriver(
     }
 
     // Build update payload
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       status: "pending", // Reset to pending for new driver to accept
       driver_id: newDriverId,
       driver_name: newDriverName,
@@ -675,9 +775,9 @@ export async function changeOrderDriver(
     revalidatePath("/seller/orders")
 
     return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error changing driver:", error)
-    return { success: false, error: error?.message || "فشل تغيير السائق" }
+  } catch (error: unknown) {
+    logError("[v0] Error changing driver:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to change driver" }
   }
 }
 
@@ -698,9 +798,9 @@ export async function getRejectedOrdersForCustomer(customerId: string) {
     }))
 
     return { success: true, orders }
-  } catch (error: any) {
-    console.error("[v0] Error fetching rejected orders:", error)
-    return { success: false, error: error?.message, orders: [] }
+  } catch (error: unknown) {
+    logError("[v0] Error fetching rejected orders:", error)
+    return { success: false, error: getErrorMessage(error), orders: [] }
   }
 }
 
@@ -729,148 +829,156 @@ export async function createMultiStoreOrder(orderData: {
   const now = new Date().toISOString()
   const orderRef = db.collection("orders").doc()
 
-  // Calculate subtotal from all stops
-  const subtotal = orderData.pickup_stops.reduce((sum, stop) => sum + stop.subtotal, 0)
-  const total = subtotal + orderData.delivery_price + orderData.driver_commission
-
-  // Prepare pickup stops with default status
-  const stops: PickupStop[] = orderData.pickup_stops.map((stop) => ({
-    ...stop,
-    status: "pending",
-    confirmed_at: null,
-    picked_up_at: null,
-    rejected_at: null,
-    rejection_reason: null,
-  }))
-
-  const orderPayload: Record<string, any> = {
-    order_type: "multi_store",
-    customer_id: orderData.customer_id,
-    customer_name: orderData.customer_name,
-    customer_phone: orderData.customer_phone,
-    driver_id: orderData.driver_id,
-    driver_name: orderData.driver_name,
-    delivery_address: orderData.delivery_address,
-    delivery_city: orderData.delivery_city || "",
-    delivery_state: orderData.delivery_state || "",
-    delivery_notes: orderData.delivery_notes || "",
-    delivery_price: Number(orderData.delivery_price),
-    driver_commission: Number(orderData.driver_commission),
-    pickup_stops: stops,
-    subtotal: Number(subtotal),
-    total: Number(total),
-    status: "pending",
-    payment_status: "cod",
-    timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],
-    created_at: now,
-    updated_at: now,
-  }
-
-  if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
-    orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
-    orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
-  }
-
   try {
-    await orderRef.set(orderPayload)
+    const result = await db.runTransaction(async (transaction) => {
+      // Step 1: Read and verify stock + prices atomically
+      const verifiedStops: PickupStop[] = []
+      const productRefs: { ref: FirebaseFirestore.DocumentReference; quantity: number }[] = []
 
-    // التحقق من توفر المخزون قبل إنشاء عناصر الطلب
-    for (const stop of stops) {
-      for (const item of stop.items) {
-        const productDoc = await db.collection("products").doc(item.product_id).get()
-        if (productDoc.exists) {
+      for (const stop of orderData.pickup_stops) {
+        const verifiedItems: PickupStop["items"] = []
+        for (const item of stop.items) {
+          const productRef = db.collection("products").doc(item.product_id)
+          const productDoc = await transaction.get(productRef)
+          if (!productDoc.exists) {
+            throw new Error("Product not found")
+          }
           const productData = productDoc.data()
           const availableStock = productData?.stock ?? 0
           if (item.quantity > availableStock) {
-            // حذف الطلب لأنه لم يكتمل
-            await orderRef.delete()
-            return { 
-              success: false, 
-              error: `الكمية المطلوبة من "${productData?.name || 'المنتج'}" (${item.quantity}) أكبر من المتاح (${availableStock})` 
-            }
+            throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${item.quantity}) exceeds available stock (${availableStock})`)
           }
+          verifiedItems.push({
+            ...item,
+            price: productData?.price ?? item.price,
+          })
+          productRefs.push({ ref: productRef, quantity: item.quantity })
+        }
+        const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+        verifiedStops.push({
+          ...stop,
+          items: verifiedItems,
+          subtotal: verifiedSubtotal,
+        })
+      }
+
+      // Calculate subtotal from verified stops
+      const subtotal = verifiedStops.reduce((sum, stop) => sum + stop.subtotal, 0)
+      const total = subtotal + orderData.delivery_price
+
+      // Prepare pickup stops with default status
+      const stops: PickupStop[] = verifiedStops.map((stop) => ({
+        ...stop,
+        status: "pending",
+        confirmed_at: null,
+        picked_up_at: null,
+        rejected_at: null,
+        rejection_reason: null,
+      }))
+      const storeIds = Array.from(new Set(stops.map((stop) => stop.store_id).filter(Boolean)))
+
+      const orderPayload: Record<string, unknown> = {
+        order_type: "multi_store",
+        customer_id: orderData.customer_id,
+        customer_name: orderData.customer_name,
+        customer_phone: orderData.customer_phone,
+        driver_id: orderData.driver_id,
+        driver_name: orderData.driver_name,
+        delivery_address: orderData.delivery_address,
+        delivery_city: orderData.delivery_city || "",
+        delivery_state: orderData.delivery_state || "",
+        delivery_notes: orderData.delivery_notes || "",
+        delivery_price: Number(orderData.delivery_price),
+        driver_commission: Number(orderData.driver_commission),
+        store_ids: storeIds,
+        pickup_stops: stops,
+        subtotal: Number(subtotal),
+        total: Number(total),
+        status: "pending",
+        payment_status: "cod",
+        timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],
+        created_at: now,
+        updated_at: now,
+      }
+
+      if (orderData.delivery_latitude !== undefined && orderData.delivery_longitude !== undefined) {
+        orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
+        orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
+      }
+
+      // Step 2: Create order atomically
+      transaction.set(orderRef, orderPayload)
+
+      // Step 3: Create order_items atomically
+      for (let i = 0; i < stops.length; i++) {
+        for (const item of stops[i].items) {
+          const itemRef = db.collection("order_items").doc()
+          transaction.set(itemRef, {
+            order_id: orderRef.id,
+            product_id: item.product_id,
+            quantity: Number(item.quantity),
+            price: Number(item.price),
+            store_id: stops[i].store_id,
+            stop_index: i,
+            created_at: now,
+          })
         }
       }
-    }
 
-    // Also create order_items for compatibility
-    const batch = db.batch()
-    for (let i = 0; i < stops.length; i++) {
-      for (const item of stops[i].items) {
-        const itemRef = db.collection("order_items").doc()
-        batch.set(itemRef, {
-          order_id: orderRef.id,
-          product_id: item.product_id,
-          quantity: Number(item.quantity),
-          price: Number(item.price),
-          store_id: stops[i].store_id,
-          stop_index: i,
+      // Step 4: Decrement stock atomically
+      for (const { ref, quantity } of productRefs) {
+        transaction.update(ref, {
+          stock: FieldValue.increment(-quantity),
+          updated_at: now,
+        })
+      }
+
+      return { orderId: orderRef.id, orderPayload, stops }
+    })
+
+    // Notifications outside transaction (non-critical)
+    try {
+      const notifBatch = db.batch()
+      for (const stop of result.stops) {
+        const notifRef = db.collection("notifications").doc()
+        notifBatch.set(notifRef, {
+          user_id: stop.store_id,
+          type: "new_multi_order",
+          title: "طلب جديد 🛒",
+          title_en: "New Order 🛒",
+          message: `لديك طلب جديد يحتوي على ${stop.items.length} منتج بقيمة ${stop.subtotal} جنيه`,
+          message_en: `You have a new order with ${stop.items.length} items worth ${stop.subtotal} EGP`,
+          link: "/seller/orders",
+          data: { order_id: result.orderId, store_id: stop.store_id },
+          is_read: false,
           created_at: now,
         })
       }
-    }
-    await batch.commit()
 
-    // خصم الكمية من المخزون بعد إنشاء الطلب بنجاح
-    const stockBatch = db.batch()
-    for (const stop of stops) {
-      for (const item of stop.items) {
-        const productRef = db.collection("products").doc(item.product_id)
-        const productDoc = await productRef.get()
-        if (productDoc.exists) {
-          const currentStock = productDoc.data()?.stock ?? 0
-          const newStock = Math.max(0, currentStock - item.quantity)
-          stockBatch.update(productRef, { stock: newStock, updated_at: now })
-        }
-      }
-    }
-    try {
-      await stockBatch.commit()
-    } catch (stockError: any) {
-      console.error("[v0] Error deducting stock for multi-store order:", stockError)
-    }
-
-    // Send notifications to each store
-    const notifBatch = db.batch()
-    for (const stop of stops) {
-      const notifRef = db.collection("notifications").doc()
-      notifBatch.set(notifRef, {
-        user_id: stop.store_id,
+      const driverNotifRef = db.collection("notifications").doc()
+      notifBatch.set(driverNotifRef, {
+        user_id: orderData.driver_id,
         type: "new_multi_order",
-        title: "طلب جديد 🛒",
-        title_en: "New Order 🛒",
-        message: `لديك طلب جديد يحتوي على ${stop.items.length} منتج بقيمة ${stop.subtotal} جنيه`,
-        message_en: `You have a new order with ${stop.items.length} items worth ${stop.subtotal} EGP`,
-        link: "/seller/orders",
-        data: { order_id: orderRef.id, store_id: stop.store_id },
+        title: "طلب توصيل جديد 🚗",
+        title_en: "New Delivery Order 🚗",
+        message: `لديك طلب جديد من ${result.stops.length} متجر. في انتظار تأكيد المتاجر.`,
+        message_en: `New order from ${result.stops.length} stores. Waiting for store confirmations.`,
+        link: `/driver/orders?driverId=${orderData.driver_id}`,
+        data: { order_id: result.orderId },
         is_read: false,
         created_at: now,
       })
+
+      await notifBatch.commit()
+    } catch {
+      // Silent: notification failure should not affect order
     }
-
-    // Notify driver
-    const driverNotifRef = db.collection("notifications").doc()
-    notifBatch.set(driverNotifRef, {
-      user_id: orderData.driver_id,
-      type: "new_multi_order",
-      title: "طلب توصيل جديد 🚗",
-      title_en: "New Delivery Order 🚗",
-      message: `لديك طلب جديد من ${stops.length} متجر. في انتظار تأكيد المتاجر.`,
-      message_en: `New order from ${stops.length} stores. Waiting for store confirmations.`,
-      link: `/driver/orders?driverId=${orderData.driver_id}`,
-      data: { order_id: orderRef.id },
-      is_read: false,
-      created_at: now,
-    })
-
-    await notifBatch.commit()
 
     revalidatePath("/account")
     revalidatePath("/seller/orders")
-    return { success: true, data: { id: orderRef.id, ...orderPayload } }
-  } catch (error: any) {
-    console.error("[v0] Error creating multi-store order:", error)
-    return { success: false, error: error?.message || "Failed to create order" }
+    return { success: true, data: { id: result.orderId, ...result.orderPayload } }
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) || "Failed to create order" }
   }
 }
 
@@ -883,23 +991,23 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
   try {
     const orderDoc = await docRef.get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
 
     const orderData = orderDoc.data()
     if (orderData?.order_type !== "multi_store") {
-      return { success: false, error: "هذا ليس طلب متعدد المتاجر" }
+      return { success: false, error: "This is not a multi-store order" }
     }
 
     const stops: PickupStop[] = orderData.pickup_stops || []
     const stopIndex = stops.findIndex((s) => s.store_id === storeId)
 
     if (stopIndex === -1) {
-      return { success: false, error: "لم يتم العثور على متجرك في هذا الطلب" }
+      return { success: false, error: "Your store was not found in this order" }
     }
 
     if (stops[stopIndex].status !== "pending") {
-      return { success: false, error: "تم التعامل مع هذا الطلب مسبقاً" }
+      return { success: false, error: "This order has already been handled" }
     }
 
     // Update stop status
@@ -919,7 +1027,7 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
 
     const timeline = [...(orderData.timeline || []), timelineEntry]
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       pickup_stops: stops,
       timeline,
       updated_at: now,
@@ -990,9 +1098,9 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
     revalidatePath("/account")
     revalidatePath("/seller/orders")
     return { success: true, allConfirmed: allConfirmed && hasAnyConfirmed }
-  } catch (error: any) {
-    console.error("[v0] Error confirming store pickup:", error)
-    return { success: false, error: error?.message || "فشل تأكيد الطلب" }
+  } catch (error: unknown) {
+    logError("[v0] Error confirming store pickup:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to confirm order" }
   }
 }
 
@@ -1005,23 +1113,23 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
   try {
     const orderDoc = await docRef.get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
 
     const orderData = orderDoc.data()
     if (orderData?.order_type !== "multi_store") {
-      return { success: false, error: "هذا ليس طلب متعدد المتاجر" }
+      return { success: false, error: "This is not a multi-store order" }
     }
 
     const stops: PickupStop[] = orderData.pickup_stops || []
     const stopIndex = stops.findIndex((s) => s.store_id === storeId)
 
     if (stopIndex === -1) {
-      return { success: false, error: "لم يتم العثور على متجرك في هذا الطلب" }
+      return { success: false, error: "Your store was not found in this order" }
     }
 
     if (stops[stopIndex].status !== "pending") {
-      return { success: false, error: "تم التعامل مع هذا الطلب مسبقاً" }
+      return { success: false, error: "This order has already been handled" }
     }
 
     // Update stop status
@@ -1042,7 +1150,7 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
 
     const timeline = [...(orderData.timeline || []), timelineEntry]
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       pickup_stops: stops,
       timeline,
       updated_at: now,
@@ -1119,9 +1227,9 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
     revalidatePath("/account")
     revalidatePath("/seller/orders")
     return { success: true, allRejected, orderCancelled: allRejected }
-  } catch (error: any) {
-    console.error("[v0] Error rejecting store pickup:", error)
-    return { success: false, error: error?.message || "فشل رفض الطلب" }
+  } catch (error: unknown) {
+    logError("[v0] Error rejecting store pickup:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to reject order" }
   }
 }
 
@@ -1134,23 +1242,23 @@ export async function markStorePickedUp(orderId: string, driverId: string, store
   try {
     const orderDoc = await docRef.get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
 
     const orderData = orderDoc.data()
     if (orderData?.driver_id !== driverId) {
-      return { success: false, error: "لا يمكنك تحديث هذا الطلب" }
+      return { success: false, error: "You are not allowed to update this order" }
     }
 
     const stops: PickupStop[] = orderData.pickup_stops || []
     const stopIndex = stops.findIndex((s) => s.store_id === storeId)
 
     if (stopIndex === -1) {
-      return { success: false, error: "المتجر غير موجود في الطلب" }
+      return { success: false, error: "Store not found in this order" }
     }
 
     if (stops[stopIndex].status !== "confirmed") {
-      return { success: false, error: "المتجر لم يأكد الطلب بعد" }
+      return { success: false, error: "Store has not confirmed this order yet" }
     }
 
     // Mark as picked up
@@ -1171,7 +1279,7 @@ export async function markStorePickedUp(orderId: string, driverId: string, store
 
     const timeline = [...(orderData.timeline || []), timelineEntry]
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       pickup_stops: stops,
       timeline,
       updated_at: now,
@@ -1216,9 +1324,9 @@ export async function markStorePickedUp(orderId: string, driverId: string, store
 
     revalidatePath("/account")
     return { success: true, allPickedUp }
-  } catch (error: any) {
-    console.error("[v0] Error marking store picked up:", error)
-    return { success: false, error: error?.message || "فشل تحديث الاستلام" }
+  } catch (error: unknown) {
+    logError("[v0] Error marking store picked up:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to update pickup status" }
   }
 }
 
@@ -1229,19 +1337,15 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
   try {
     const snapshot = await db
       .collection("orders")
-      .where("order_type", "==", "multi_store")
+      .where("store_ids", "array-contains", storeId)
       .get()
 
-    // Filter orders that contain this store in pickup_stops
-    const orders = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((order: any) => {
+    const orders: OrderRecord[] = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
+      .filter((order) => order.order_type === "multi_store")
+      .map((order) => {
         const stops: PickupStop[] = order.pickup_stops || []
-        return stops.some((s) => s.store_id === storeId)
-      })
-      .map((order: any) => {
-        // Extract only this store's stop data
-        const stop = order.pickup_stops.find((s: PickupStop) => s.store_id === storeId)
+        const stop = stops.find((s) => s.store_id === storeId)
         return {
           ...order,
           my_stop: stop,
@@ -1249,12 +1353,12 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
       })
 
     // Sort by created_at descending in JS
-    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
     return { success: true, orders }
-  } catch (error: any) {
-    console.error("[v0] Error fetching multi-store orders:", error)
-    return { success: false, error: error?.message, orders: [] }
+  } catch (error: unknown) {
+    logError("[v0] Error fetching multi-store orders:", error)
+    return { success: false, error: getErrorMessage(error), orders: [] }
   }
 }
 
@@ -1268,17 +1372,17 @@ export async function getMultiStoreOrdersForDriver(driverId: string) {
       .where("driver_id", "==", driverId)
       .get()
 
-    const orders = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((order: any) => order.order_type === "multi_store")
+    const orders: OrderRecord[] = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
+      .filter((order) => order.order_type === "multi_store")
 
     // Sort by created_at descending in JS
-    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
     return { success: true, orders }
-  } catch (error: any) {
-    console.error("[v0] Error fetching driver multi-store orders:", error)
-    return { success: false, error: error?.message, orders: [] }
+  } catch (error: unknown) {
+    logError("[v0] Error fetching driver multi-store orders:", error)
+    return { success: false, error: getErrorMessage(error), orders: [] }
   }
 }
 
@@ -1292,17 +1396,17 @@ export async function getCustomerMultiStoreOrders(customerId: string) {
       .where("customer_id", "==", customerId)
       .get()
 
-    const orders = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((order: any) => order.order_type === "multi_store")
+    const orders: OrderRecord[] = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
+      .filter((order) => order.order_type === "multi_store")
 
     // Sort by created_at descending in JS
-    orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
     return { success: true, orders }
-  } catch (error: any) {
-    console.error("[v0] Error fetching customer multi-store orders:", error)
-    return { success: false, error: error?.message, orders: [] }
+  } catch (error: unknown) {
+    logError("[v0] Error fetching customer multi-store orders:", error)
+    return { success: false, error: getErrorMessage(error), orders: [] }
   }
 }
 
@@ -1313,20 +1417,20 @@ export async function getMultiStoreOrderForEdit(orderId: string, customerId: str
   try {
     const orderDoc = await db.collection("orders").doc(orderId).get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
     
     const orderData = orderDoc.data()
     if (!orderData) {
-      return { success: false, error: "بيانات الطلب غير متاحة" }
+      return { success: false, error: "Order data is unavailable" }
     }
     
     if (orderData.customer_id !== customerId) {
-      return { success: false, error: "ليس لديك صلاحية لتعديل هذا الطلب" }
+      return { success: false, error: "You are not authorized to edit this order" }
     }
     
     if (orderData.order_type !== "multi_store") {
-      return { success: false, error: "هذا ليس طلب متعدد المتاجر" }
+      return { success: false, error: "This is not a multi-store order" }
     }
 
     // Convert Timestamps
@@ -1342,9 +1446,9 @@ export async function getMultiStoreOrderForEdit(orderId: string, customerId: str
         updated_at: updatedAt,
       }
     }
-  } catch (error: any) {
-    console.error("[v0] Error fetching order for edit:", error)
-    return { success: false, error: error?.message || "فشل تحميل الطلب" }
+  } catch (error: unknown) {
+    logError("[v0] Error fetching order for edit:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to load order" }
   }
 }
 
@@ -1367,25 +1471,25 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
   try {
     const orderDoc = await db.collection("orders").doc(orderId).get()
     if (!orderDoc.exists) {
-      return { success: false, error: "الطلب غير موجود" }
+      return { success: false, error: "Order not found" }
     }
     
     const orderData = orderDoc.data()
     if (!orderData) {
-      return { success: false, error: "بيانات الطلب غير متاحة" }
+      return { success: false, error: "Order data is unavailable" }
     }
     
     if (orderData.customer_id !== customerId) {
-      return { success: false, error: "ليس لديك صلاحية لتعديل هذا الطلب" }
+      return { success: false, error: "You are not authorized to edit this order" }
     }
     
     if (orderData.order_type !== "multi_store") {
-      return { success: false, error: "هذا ليس طلب متعدد المتاجر" }
+      return { success: false, error: "This is not a multi-store order" }
     }
 
     // Check order is not delivered or cancelled
     if (orderData.status === "delivered" || orderData.status === "cancelled") {
-      return { success: false, error: "لا يمكن تعديل طلب مكتمل أو ملغي" }
+      return { success: false, error: "Completed or cancelled orders cannot be edited" }
     }
     
     // Validate stock for new items
@@ -1393,14 +1497,14 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
       for (const item of stop.items) {
         const productDoc = await db.collection("products").doc(item.product_id).get()
         if (!productDoc.exists) {
-          return { success: false, error: `المنتج "${item.name}" غير موجود` }
+          return { success: false, error: `Product "${item.name}" was not found` }
         }
         const productData = productDoc.data()
         const availableStock = productData?.stock ?? 0
         if (item.quantity > availableStock) {
           return { 
             success: false, 
-            error: `الكمية المطلوبة من "${item.name}" (${item.quantity}) أكبر من المتاح (${availableStock})` 
+            error: `Requested quantity for "${item.name}" (${item.quantity}) exceeds available stock (${availableStock})` 
           }
         }
       }
@@ -1420,6 +1524,7 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
     
     // Merge: keep all existing stops + add new ones
     const updatedStops = [...existingStops, ...formattedNewStops]
+    const updatedStoreIds = Array.from(new Set(updatedStops.map((s) => s.store_id).filter(Boolean)))
     
     // Recalculate totals (active = confirmed + pending, exclude rejected)
     const activeStops = updatedStops.filter(s => s.status !== "rejected")
@@ -1442,8 +1547,9 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
       newStatus = "pending"
     }
     
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       pickup_stops: updatedStops,
+      store_ids: updatedStoreIds,
       subtotal: newSubtotal,
       total: newTotal,
       timeline,
@@ -1526,8 +1632,8 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
     revalidatePath("/account")
     revalidatePath("/seller/orders")
     return { success: true }
-  } catch (error: any) {
-    console.error("[v0] Error adding stops to multi-store order:", error)
-    return { success: false, error: error?.message || "فشل تعديل الطلب" }
+  } catch (error: unknown) {
+    logError("[v0] Error adding stops to multi-store order:", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to edit order" }
   }
 }

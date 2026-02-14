@@ -2,82 +2,131 @@
 
 import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { getAdminDb } from "../firebase/admin"
-import { cleanUndefined, chunkArray } from "../firebase/firestore-helpers"
+import { chunkArray } from "../firebase/firestore-helpers"
 
-type RecordMap = {
-  id: string
-  [key: string]: any
+type FirestoreRecord = Record<string, unknown>
+type FirestoreRecordWithId<T extends FirestoreRecord = FirestoreRecord> = T & { id: string }
+
+type DashboardProduct = FirestoreRecordWithId<{
+  name?: string
+  stock?: number | string
+}>
+
+type DashboardOrder = FirestoreRecordWithId<{
+  customer_id?: string
+  total?: number | string
+  status?: string
+  created_at?: string
+  delivery_price?: number | string
+  driver_commission?: number | string
+}>
+
+export type DashboardAnalytics = {
+  totalRevenue: number
+  totalOrders: number
+  totalProducts: number
+  topProduct: string
+  topProductSales: number
+  lowStockProducts: number
+  averageRating: number
+  totalReviews: number
 }
 
-async function fetchDocsMap(db: Firestore, collection: string, ids: string[]) {
+export type RecentDashboardOrder = {
+  id: string
+  customer: string | null
+  total: number
+  status: string
+  date: string
+}
+
+async function fetchDocsMap<T extends FirestoreRecord>(db: Firestore, collection: string, ids: string[]) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
   if (uniqueIds.length === 0) {
-    return new Map<string, any>()
+    return new Map<string, FirestoreRecordWithId<T>>()
   }
 
   const refs = uniqueIds.map((id) => db.collection(collection).doc(id))
   const docs = await db.getAll(...refs)
-  const map = new Map<string, any>()
+  const map = new Map<string, FirestoreRecordWithId<T>>()
 
   docs.forEach((doc: DocumentSnapshot) => {
     if (doc.exists) {
-      map.set(doc.id, { ...doc.data(), id: doc.id })
+      map.set(doc.id, { ...(doc.data() as T), id: doc.id })
     }
   })
 
   return map
 }
 
-async function fetchByIn(db: Firestore, collection: string, field: string, values: string[]) {
+async function fetchByIn<T extends FirestoreRecord>(db: Firestore, collection: string, field: string, values: string[]) {
   const uniqueValues = Array.from(new Set(values.filter(Boolean)))
   if (uniqueValues.length === 0) return []
 
-  const results: any[] = []
+  const results: Array<FirestoreRecordWithId<T>> = []
   const chunks = chunkArray(uniqueValues, 10)
 
   for (const chunk of chunks) {
     const snapshot = await db.collection(collection).where(field, "in", chunk).get()
     snapshot.docs.forEach((doc) => {
-      results.push({ ...doc.data(), id: doc.id })
+      results.push({ ...(doc.data() as T), id: doc.id })
     })
   }
 
   return results
 }
 
-export async function getDashboardAnalytics(storeId: string) {
+export async function getDashboardAnalytics(storeId: string, callerId?: string): Promise<DashboardAnalytics> {
+  // Ownership check
+  if (callerId && callerId !== storeId) {
+    return {
+      totalRevenue: 0, totalOrders: 0, totalProducts: 0,
+      topProduct: "", topProductSales: 0,
+      lowStockProducts: 0, averageRating: 0, totalReviews: 0,
+    }
+  }
+
   const db = getAdminDb()
 
   const productsSnap = await db.collection("products").where("store_id", "==", storeId).get()
-  const products = productsSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
-  const productIds = products.map((product: any) => product.id)
+  const products: DashboardProduct[] = productsSnap.docs.map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
+  const productIds = products.map((product) => product.id)
 
   const totalProducts = products.length
-  const lowStockProducts = products.filter((product: any) => Number(product.stock || 0) < 10).length
+  const lowStockProducts = products.filter((product) => Number(product.stock || 0) < 10).length
 
   const ordersSnap = await db.collection("orders").where("store_id", "==", storeId).get()
-  const allOrders = ordersSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
+  const allOrders: DashboardOrder[] = ordersSnap.docs.map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
 
   // Only count 'delivered' orders for financial totals as requested
-  const confirmedOrders = allOrders.filter((order: any) => order.status === "delivered")
+  const confirmedOrders = allOrders.filter((order) => order.status === "delivered")
 
   const totalOrders = confirmedOrders.length
-  const totalRevenue = confirmedOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0)
+  const totalRevenue = confirmedOrders.reduce((sum: number, order) => {
+    const orderTotal = Number(order.total || 0)
+    const delivery = Number(order.delivery_price || 0)
+    const commission = Number(order.driver_commission || 0)
+    return sum + (orderTotal - delivery - commission)
+  }, 0)
 
-  const orderItems = await fetchByIn(db, "order_items", "product_id", productIds)
+  const orderItems = await fetchByIn<{
+    order_id?: string
+    product_id?: string
+    quantity?: number | string
+  }>(db, "order_items", "product_id", productIds)
 
-  const confirmedOrderIds = new Set(confirmedOrders.map((o: any) => o.id))
+  const confirmedOrderIds = new Set(confirmedOrders.map((order) => order.id))
   const productSales: Record<string, { name: string; quantity: number }> = {}
-  const productMap = new Map(products.map((product: any) => [product.id, product]))
+  const productMap = new Map(products.map((product) => [product.id, product] as const))
 
-  orderItems.forEach((item: any) => {
+  orderItems.forEach((item) => {
     // Only count sales for items that belong to a confirmed (delivered) order
     if (!confirmedOrderIds.has(item.order_id)) return
 
     const product = productMap.get(item.product_id)
     if (!product) return
     if (!productSales[item.product_id]) {
-      productSales[item.product_id] = { name: product.name, quantity: 0 }
+      productSales[item.product_id] = { name: product.name || "", quantity: 0 }
     }
     productSales[item.product_id].quantity += Number(item.quantity || 0)
   })
@@ -91,21 +140,20 @@ export async function getDashboardAnalytics(storeId: string) {
   let totalReviews = 0
 
   if (productIds.length > 0) {
-    const reviews = await fetchByIn(db, "reviews", "product_id", productIds)
+    const reviews = await fetchByIn<{
+      rating?: number | string
+    }>(db, "reviews", "product_id", productIds)
     totalReviews = reviews.length
     if (totalReviews > 0) {
-      const sumRatings = reviews.reduce((sum: number, review: any) => sum + (Number(review.rating) || 0), 0)
+      const sumRatings = reviews.reduce((sum: number, review) => sum + (Number(review.rating) || 0), 0)
       averageRating = sumRatings / totalReviews
     }
   }
-
-  const totalMessages = totalReviews
 
   return {
     totalRevenue,
     totalOrders,
     totalProducts,
-    totalMessages,
     topProduct: topProduct.name,
     topProductSales: topProduct.quantity,
     lowStockProducts,
@@ -114,25 +162,34 @@ export async function getDashboardAnalytics(storeId: string) {
   }
 }
 
-export async function getRecentOrders(storeId: string, limit = 3) {
+export async function getRecentOrders(storeId: string, limit = 3, callerId?: string): Promise<RecentDashboardOrder[]> {
+  // Ownership check
+  if (callerId && callerId !== storeId) {
+    return []
+  }
+  if (limit <= 0) {
+    return []
+  }
+
   const db = getAdminDb()
-  const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
-  const orders = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as any))
-
-  orders.sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
-
-  const limited = orders.slice(0, limit)
-  const customerMap = await fetchDocsMap(
+  const snapshot = await db
+    .collection("orders")
+    .where("store_id", "==", storeId)
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .get()
+  const orders: DashboardOrder[] = snapshot.docs.map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
+  const customerMap = await fetchDocsMap<{ full_name?: string }>(
     db,
     "users",
-    limited.map((order: any) => order.customer_id),
+    orders.map((order) => order.customer_id || ""),
   )
 
-  return limited.map((order: any) => ({
+  return orders.map((order) => ({
     id: order.id.substring(0, 8).toUpperCase(),
-    customer: customerMap.get(order.customer_id)?.full_name || "عميل",
+    customer: customerMap.get(order.customer_id || "")?.full_name?.trim() || null,
     total: Number(order.total || 0),
     status: order.status || "pending",
-    date: new Date(order.created_at).toLocaleDateString("en-CA"),
+    date: new Date(String(order.created_at || "")).toLocaleDateString("en-CA"),
   }))
 }

@@ -82,7 +82,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                 </div>
                                 <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("رقم الطلب", "Order ID")}</span>
                             </div>
-                            <p className="text-lg font-mono font-bold text-gray-900 pl-11">{order.id.slice(0, 8)}</p>
+                            <p className="text-lg font-mono font-bold text-gray-900 ps-11">{order.id.slice(0, 8)}</p>
                         </div>
 
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:border-[#1F478B]/20 transition-colors group">
@@ -92,7 +92,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                 </div>
                                 <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("تاريخ الطلب", "Date")}</span>
                             </div>
-                            <p className="text-sm font-semibold text-gray-900 pl-11">{formatDate(order.created_at)}</p>
+                            <p className="text-sm font-semibold text-gray-900 ps-11">{formatDate(order.created_at)}</p>
                         </div>
 
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:border-[#1F478B]/20 transition-colors group">
@@ -102,7 +102,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                 </div>
                                 <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("المتجر", "Store")}</span>
                             </div>
-                            <p className="text-base font-bold text-gray-900 pl-11">{order.stores?.name || t("غير معروف", "Unknown")}</p>
+                            <p className="text-base font-bold text-gray-900 ps-11">{order.stores?.name || t("غير معروف", "Unknown")}</p>
                         </div>
 
                         {order.delivery_address && (
@@ -113,7 +113,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                     </div>
                                     <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("العنوان", "Address")}</span>
                                 </div>
-                                <p className="text-sm font-medium text-gray-900 pl-11 line-clamp-2">{order.delivery_address}</p>
+                                <p className="text-sm font-medium text-gray-900 ps-11 line-clamp-2">{order.delivery_address}</p>
                             </div>
                         )}
                     </div>

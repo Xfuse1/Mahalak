@@ -11,16 +11,19 @@ import { Label } from "../../../../components/ui/label"
 import { Textarea } from "../../../../components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../components/ui/select"
-import { getSubcategoriesForStore } from "../../../../lib/mock-data"
+import { fetchStoreSubcategories, type SubcategoryItem } from "../../../../lib/firebase/categories"
 import { Upload, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { createProduct, uploadProductImage } from "../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../lib/actions/stores"
 import { useToast } from "@/components/ui/toast"
+import { useLanguage } from "../../../../lib/language-context"
+import { logError } from "../../../../lib/logger"
 
 
 export default function NewProductPage() {
   const { user, isLoading } = useAuth()
+  const { t } = useLanguage()
   const toast = useToast()
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -28,10 +31,66 @@ export default function NewProductPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
-  const [storeData, setStoreData] = useState<any>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("")
   const [customCategory, setCustomCategory] = useState<string>("")
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
+  const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([])
+  const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
+
+  const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
+    UNAUTHORIZED_STORE_PRODUCT_CREATE: {
+      ar: "ليس لديك صلاحية لإضافة منتجات لهذا المتجر",
+      en: "You are not authorized to add products for this store",
+    },
+    PRICE_MUST_BE_POSITIVE: {
+      ar: "السعر يجب أن يكون أكبر من صفر",
+      en: "Price must be greater than zero",
+    },
+    STOCK_MUST_BE_POSITIVE: {
+      ar: "الكمية يجب أن تكون أكبر من صفر",
+      en: "Stock must be greater than zero",
+    },
+    STORE_NOT_APPROVED: {
+      ar: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة.",
+      en: "Your store is not approved yet. You cannot add products until your store is approved by the administration.",
+    },
+    CREATE_PRODUCT_UNEXPECTED_ERROR: {
+      ar: "حدث خطأ غير متوقع أثناء إنشاء المنتج",
+      en: "An unexpected error occurred while creating the product",
+    },
+    MISSING_FILE_OR_STORE_ID: {
+      ar: "بيانات رفع الصورة غير مكتملة",
+      en: "Missing image upload data",
+    },
+    UNAUTHORIZED_IMAGE_UPLOAD: {
+      ar: "ليس لديك صلاحية لرفع صورة لهذا المتجر",
+      en: "You are not authorized to upload an image for this store",
+    },
+    UNSUPPORTED_IMAGE_TYPE: {
+      ar: "نوع الصورة غير مدعوم",
+      en: "Unsupported image type",
+    },
+    IMAGE_TOO_LARGE: {
+      ar: "حجم الصورة كبير جدًا (الحد الأقصى 5MB)",
+      en: "Image is too large (maximum 5MB)",
+    },
+    IMAGE_UPLOAD_FAILED: {
+      ar: "فشل رفع الصورة",
+      en: "Failed to upload image",
+    },
+    IMAGE_UPLOAD_INTERNAL_ERROR: {
+      ar: "حدث خطأ غير متوقع أثناء رفع الصورة",
+      en: "An unexpected error occurred while uploading the image",
+    },
+  }
+
+  const getProductActionErrorMessage = (errorCode?: string) => {
+    if (errorCode && productActionErrorMessages[errorCode]) {
+      const msg = productActionErrorMessages[errorCode]
+      return t(msg.ar, msg.en)
+    }
+    return t("فشل إضافة المنتج", "Failed to add product")
+  }
 
 
 
@@ -43,14 +102,25 @@ export default function NewProductPage() {
       router.push("/")
     }
 
-    // Fetch store data to check category
+    // Fetch store data to check category and load subcategories
     async function fetchStore() {
       if (user?.id) {
         const store = await getStoreByUserId(user.id)
         if (store) {
-          setStoreData(store)
-          setStoreCategory((store as any).category || "")
-          setIsStoreApproved((store as any).is_approved ?? false)
+          const cat = store.category || ""
+          setStoreCategory(cat)
+          setIsStoreApproved(store.is_approved ?? false)
+          // Fetch subcategories from Firestore
+          setIsLoadingSubcategories(true)
+          try {
+            const subs = await fetchStoreSubcategories(cat)
+            setSubcategories(subs)
+          } catch (err) {
+            console.error("Error fetching subcategories:", err)
+            setSubcategories([{ id: "other", name: "أخرى" }])
+          } finally {
+            setIsLoadingSubcategories(false)
+          }
         }
       }
     }
@@ -76,10 +146,10 @@ export default function NewProductPage() {
       const stock = Number.parseInt(formData.get("stock") as string)
       
       if (!price || price <= 0) {
-        throw new Error("السعر يجب أن يكون أكبر من صفر")
+        throw new Error(t("السعر يجب أن يكون أكبر من صفر", "Price must be greater than zero"))
       }
       if (!stock || stock <= 0) {
-        throw new Error("الكمية يجب أن تكون أكبر من صفر")
+        throw new Error(t("الكمية يجب أن تكون أكبر من صفر", "Quantity must be greater than zero"))
       }
       
       // Determine final category
@@ -89,13 +159,13 @@ export default function NewProductPage() {
       }
       
       if (!finalCategory) {
-        throw new Error("يرجى اختيار قسم المنتج")
+        throw new Error(t("يرجى اختيار قسم المنتج", "Please select a product category"))
       }
 
       // Get seller's store
       const store = await getStoreByUserId(user.id)
       if (!store) {
-        throw new Error("لم يتم العثور على متجرك. يرجى إنشاء متجر أولاً.")
+        throw new Error(t("لم يتم العثور على متجرك. يرجى إنشاء متجر أولاً.", "Store was not found. Please create your store first."))
       }
 
       let imageUrl = ""
@@ -105,11 +175,12 @@ export default function NewProductPage() {
         const uploadFormData = new FormData()
         uploadFormData.append("file", imageFile)
         uploadFormData.append("storeId", store.id)
+        uploadFormData.append("callerId", user!.id)
 
         const uploadResult = await uploadProductImage(uploadFormData)
 
         if (!uploadResult.success) {
-          throw new Error(uploadResult.error || "فشل رفع الصورة")
+          throw new Error(getProductActionErrorMessage(uploadResult.error))
         }
 
         imageUrl = uploadResult.url!
@@ -127,17 +198,18 @@ export default function NewProductPage() {
         store_id: store.id,
       }
 
-      const result = await createProduct(productData)
+      const result = await createProduct(productData, user.id)
 
       if (!result.success) {
-        throw new Error(result.error || "فشل إضافة المنتج")
+        throw new Error(getProductActionErrorMessage(result.error))
       }
 
-      toast.success("تم إضافة المنتج بنجاح!")
+      toast.success(t("تم إضافة المنتج بنجاح!", "Product added successfully!"))
       router.push("/seller/products")
-    } catch (err: any) {
-      console.error("[v0] Error creating product:", err)
-      setError(err.message || "حدث خطأ أثناء إضافة المنتج")
+    } catch (err: unknown) {
+      logError("[v0] Error creating product:", err)
+      const errMessage = err instanceof Error ? err.message : t("حدث خطأ أثناء إضافة المنتج", "An error occurred while adding the product")
+      setError(errMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -210,7 +282,7 @@ export default function NewProductPage() {
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-            إضافة منتج جديد
+            {t("إضافة منتج جديد", "Add New Product")}
           </h1>
 
           {/* تحذير المتجر غير المعتمد */}
@@ -222,10 +294,12 @@ export default function NewProductPage() {
                     <AlertTriangle className="h-8 w-8 text-amber-500" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-amber-800 text-lg mb-2">متجرك غير معتمد بعد</h3>
+                    <h3 className="font-bold text-amber-800 text-lg mb-2">{t("متجرك غير معتمد بعد", "Your store is not approved yet")}</h3>
                     <p className="text-amber-700">
-                      لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة.
-                      يرجى الانتظار حتى يتم مراجعة واعتماد حسابك.
+                      {t(
+                        "لا يمكنك إضافة منتجات حتى يتم اعتماد متجرك من قبل الإدارة. يرجى الانتظار حتى يتم مراجعة واعتماد حسابك.",
+                        "You cannot add products until your store is approved by admin. Please wait until your account is reviewed and approved.",
+                      )}
                     </p>
                   </div>
                 </div>
@@ -237,9 +311,9 @@ export default function NewProductPage() {
             <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5" />
-                معلومات المنتج
+                {t("معلومات المنتج", "Product Information")}
               </CardTitle>
-              <CardDescription className="text-blue-100">أدخل تفاصيل المنتج الذي تريد إضافته</CardDescription>
+              <CardDescription className="text-blue-100">{t("أدخل تفاصيل المنتج الذي تريد إضافته", "Enter the details of the product you want to add")}</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -252,23 +326,23 @@ export default function NewProductPage() {
                 )}
 
                 <div>
-                  <Label htmlFor="name" className="text-gray-700 font-medium">اسم المنتج *</Label>
+                  <Label htmlFor="name" className="text-gray-700 font-medium">{t("اسم المنتج *", "Product Name *")}</Label>
                   <Input
                     id="name"
                     name="name"
                     required
-                    placeholder="مثال: هاتف ذكي سامسونج"
+                    placeholder={t("مثال: هاتف ذكي سامسونج", "Example: Samsung Smartphone")}
                     className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="description" className="text-gray-700 font-medium">الوصف *</Label>
+                  <Label htmlFor="description" className="text-gray-700 font-medium">{t("الوصف *", "Description *")}</Label>
                   <Textarea
                     id="description"
                     name="description"
                     required
-                    placeholder="وصف تفصيلي للمنتج..."
+                    placeholder={t("وصف تفصيلي للمنتج...", "Detailed product description...")}
                     rows={4}
                     className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -276,7 +350,7 @@ export default function NewProductPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="price" className="text-gray-700 font-medium">السعر (جنيه) *</Label>
+                    <Label htmlFor="price" className="text-gray-700 font-medium">{t("السعر (جنيه) *", "Price (EGP) *")}</Label>
                     <Input
                       id="price"
                       name="price"
@@ -290,7 +364,7 @@ export default function NewProductPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="stock" className="text-gray-700 font-medium">الكمية المتاحة *</Label>
+                    <Label htmlFor="stock" className="text-gray-700 font-medium">{t("الكمية المتاحة *", "Available Quantity *")}</Label>
                     <Input
                       id="stock"
                       name="stock"
@@ -304,18 +378,23 @@ export default function NewProductPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="barcode" className="text-gray-700 font-medium">الباركود (اختياري)</Label>
+                  <Label htmlFor="barcode" className="text-gray-700 font-medium">{t("الباركود (اختياري)", "Barcode (Optional)")}</Label>
                   <Input
                     id="barcode"
                     name="barcode"
-                    placeholder="مثال: 6221507001016 - الرقم المطبوع على العلبة"
+                    placeholder={t("مثال: 6221507001016 - الرقم المطبوع على العلبة", "Example: 6221507001016 - printed code on the package")}
                     className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
                   />
-                  <p className="text-xs text-gray-500 mt-1">أدخل رقم الباركود المطبوع على المنتج (إن وجد) لتسريع البحث في نظام الكاشير</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {t(
+                      "أدخل رقم الباركود المطبوع على المنتج (إن وجد) لتسريع البحث في نظام الكاشير",
+                      "Enter the barcode printed on the product (if available) to speed up POS search",
+                    )}
+                  </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="category" className="text-gray-700 font-medium">قسم المنتج *</Label>
+                  <Label htmlFor="category" className="text-gray-700 font-medium">{t("قسم المنتج *", "Product Category *")}</Label>
                   <Select
                     name="category"
                     required
@@ -328,43 +407,53 @@ export default function NewProductPage() {
                     }}
                   >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue placeholder="اختر القسم" />
+                      <SelectValue placeholder={t("اختر القسم", "Select category")} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {getSubcategoriesForStore(storeCategory).map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
-                          {cat.icon} {cat.name}
+                      {isLoadingSubcategories ? (
+                        <SelectItem value="_loading" disabled className="rounded-lg">
+                          {t("جاري التحميل...", "Loading...")}
                         </SelectItem>
-                      ))}
+                      ) : subcategories.length > 0 ? (
+                        subcategories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
+                            {cat.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="_empty" disabled className="rounded-lg">
+                          {t("لا توجد فئات", "No categories")}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500 mt-1">اختر القسم المناسب لمنتجك</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("اختر القسم المناسب لمنتجك", "Choose the best category for your product")}</p>
                 </div>
 
                 {/* Custom category input when "أخرى" is selected */}
                 {selectedCategory === "أخرى" && (
                   <div>
-                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">اسم القسم *</Label>
+                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">{t("اسم القسم *", "Category Name *")}</Label>
                     <Input
                       id="customCategory"
                       name="customCategory"
                       required
                       value={customCategory}
                       onChange={(e) => setCustomCategory(e.target.value)}
-                      placeholder="أدخل اسم القسم"
+                      placeholder={t("أدخل اسم القسم", "Enter category name")}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                 )}
 
                 <div>
-                  <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج *</Label>
+                  <Label htmlFor="image" className="text-gray-700 font-medium">{t("صورة المنتج *", "Product Image *")}</Label>
                   <div className="mt-2">
                     {imagePreview ? (
                       <div className="relative w-full h-48 border-2 border-gray-200 rounded-2xl overflow-hidden shadow-md">
                         <Image
                           src={imagePreview || "/placeholder.svg"}
-                          alt="معاينة الصورة"
+                          alt={t("معاينة الصورة", "Image preview")}
                           width={400}
                           height={200}
                           className="w-full h-full object-cover"
@@ -377,7 +466,7 @@ export default function NewProductPage() {
                           }}
                           className="absolute top-3 end-3 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600 shadow-lg transition-all hover:scale-110"
                         >
-                          <span className="sr-only">حذف الصورة</span>×
+                          <span className="sr-only">{t("حذف الصورة", "Remove image")}</span>×
                         </button>
                       </div>
                     ) : (
@@ -390,9 +479,9 @@ export default function NewProductPage() {
                             <Upload className="h-6 w-6 text-white" />
                           </div>
                           <p className="text-sm text-gray-600 font-medium">
-                            {imageFile ? imageFile.name : "انقر لرفع صورة المنتج"}
+                            {imageFile ? imageFile.name : t("انقر لرفع صورة المنتج", "Click to upload product image")}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">PNG, JPG, JPEG (حتى 5MB)</p>
+                          <p className="text-xs text-gray-500 mt-1">{t("PNG, JPG, JPEG (حتى 5MB)", "PNG, JPG, JPEG (up to 5MB)")}</p>
                         </div>
                         <input
                           id="image"
@@ -413,7 +502,7 @@ export default function NewProductPage() {
                     className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg hover:shadow-xl transition-all"
                     disabled={isSubmitting || !isStoreApproved}
                   >
-                    {isSubmitting ? "جاري الإضافة..." : "إضافة المنتج"}
+                    {isSubmitting ? t("جاري الإضافة...", "Adding...") : t("إضافة المنتج", "Add Product")}
                   </Button>
                   <Button
                     type="button"
@@ -421,7 +510,7 @@ export default function NewProductPage() {
                     onClick={() => router.back()}
                     className="rounded-xl h-12 border-2 hover:bg-gray-50"
                   >
-                    إلغاء
+                    {t("إلغاء", "Cancel")}
                   </Button>
                 </div>
                 </fieldset>

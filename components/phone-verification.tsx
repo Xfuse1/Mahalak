@@ -15,6 +15,7 @@ interface PhoneVerificationProps {
   isVerified: boolean
   disabled?: boolean
   language?: "ar" | "en"
+  recaptchaId?: string // Unique ID for reCAPTCHA container to avoid duplicate IDs
   // New props for external control
   triggerSendOTP?: boolean // When true, triggers sending OTP
   onOTPSent?: (success: boolean, error?: string) => void // Callback when OTP is sent
@@ -31,6 +32,7 @@ export function PhoneVerification({
   triggerSendOTP = false,
   onOTPSent,
   onStepChange,
+  recaptchaId = "recaptcha-container",
 }: PhoneVerificationProps) {
   const [step, setStep] = useState<"phone" | "otp" | "verified">(isVerified ? "verified" : "phone")
   const [isLoading, setIsLoading] = useState(false)
@@ -99,7 +101,7 @@ export function PhoneVerification({
 
     try {
       // Initialize reCAPTCHA
-      initRecaptchaVerifier("recaptcha-container")
+      initRecaptchaVerifier(recaptchaId)
 
       // Send OTP (rate limiting is handled inside sendPhoneOTP)
       const result = await sendPhoneOTP(phoneNumber)
@@ -290,7 +292,7 @@ export function PhoneVerification({
         >
           {isLoading ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="me-2 h-4 w-4 animate-spin" />
               {t("جاري التحقق...", "Verifying...")}
             </>
           ) : (
@@ -325,7 +327,7 @@ export function PhoneVerification({
         </div>
 
         {/* Hidden reCAPTCHA container */}
-        <div id="recaptcha-container" />
+        <div id={recaptchaId} />
       </div>
     )
   }
@@ -359,7 +361,7 @@ export function PhoneVerification({
       </p>
 
       {/* Hidden reCAPTCHA container */}
-      <div id="recaptcha-container" />
+      <div id={recaptchaId} />
     </div>
   )
 }

@@ -194,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     city?: string,
     country?: string,
     phone?: string,
+    phoneVerified?: boolean,
   ): Promise<boolean> => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password)
@@ -210,8 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: name,
         role,
         phone: sellerData?.phone ?? phone ?? null,
-        phone_verified: role === "seller" ? true : false, // Seller phone is verified during registration
-        phone_verified_at: role === "seller" ? now : null,
+        phone_verified: phoneVerified ?? false,
+        phone_verified_at: phoneVerified ? now : null,
         street: street ?? null,
         city: city ?? null,
         country: country ?? null,

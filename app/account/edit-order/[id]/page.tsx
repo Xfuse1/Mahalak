@@ -13,6 +13,7 @@ import { useLanguage } from "@/lib/language-context"
 import { getMultiStoreOrderForEdit, addStopsToMultiStoreOrder } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
 import { searchProducts } from "@/lib/actions/products"
+import { logError } from "@/lib/logger"
 import Image from "next/image"
 import { Store, Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, XCircle, Clock, Loader2, AlertTriangle, Package } from "lucide-react"
 
@@ -105,7 +106,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
       )
       setSearchResults(filtered)
     } catch (err) {
-      console.error("Search error:", err)
+      logError("Search error:", err)
     }
     setSearching(false)
   }

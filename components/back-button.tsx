@@ -15,7 +15,7 @@ export function BackButton() {
       onClick={() => router.back()}
       className="mb-4 bg-[#1F478B] hover:bg-[#1a3a70]"
     >
-      <ArrowLeft className="mr-2 h-4 w-4" />
+      <ArrowLeft className="me-2 h-4 w-4" />
       {t('رجوع', 'Back')}
     </Button>
   )

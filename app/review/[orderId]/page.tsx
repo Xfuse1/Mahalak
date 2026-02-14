@@ -36,6 +36,43 @@ type Order = {
   total: number
 }
 
+// Star Rating Component
+function StarRating({
+  rating,
+  onRate,
+  size = "md",
+}: {
+  rating: number
+  onRate: (rating: number) => void
+  size?: "sm" | "md" | "lg"
+}) {
+  const [hoverRating, setHoverRating] = useState(0)
+  const sizeClass = size === "sm" ? "h-5 w-5" : size === "lg" ? "h-8 w-8" : "h-6 w-6"
+
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          className="focus:outline-none transition-transform hover:scale-110"
+          onMouseEnter={() => setHoverRating(star)}
+          onMouseLeave={() => setHoverRating(0)}
+          onClick={() => onRate(star)}
+        >
+          <Star
+            className={`${sizeClass} ${
+              star <= (hoverRating || rating)
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-gray-300"
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ReviewPage({ params }: { params: Promise<{ orderId: string }> }) {
   const resolvedParams = use(params)
   const { t } = useLanguage()
@@ -60,8 +97,15 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
       setLoading(true)
       try {
-        const fetchedOrder = await getOrderById(resolvedParams.orderId)
+        const fetchedOrder = await getOrderById(resolvedParams.orderId, user.id)
         if (fetchedOrder) {
+          // التحقق من أن الطلب يخص المستخدم الحالي (enforced server-side too)
+          if (fetchedOrder.customer_id !== user.id) {
+            setOrder(null)
+            setLoading(false)
+            return
+          }
+
           setOrder(fetchedOrder as unknown as Order)
 
           // Check if already reviewed
@@ -78,9 +122,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           })
           setProductRatings(initialRatings)
         }
-      } catch (error) {
-        console.error("Error fetching order:", error)
-      } finally {
+      } catch (_error) {\n        // handled by loading state\n      } finally {
         setLoading(false)
       }
     }
@@ -148,49 +190,11 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
       } else {
         toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
-    } catch (error) {
-      console.error("Error submitting review:", error)
+    } catch (_error) {
       toast.error(t("حدث خطأ أثناء إرسال التقييم", "Error submitting review"))
     } finally {
       setSubmitting(false)
     }
-  }
-
-  // Star Rating Component
-  const StarRating = ({
-    rating,
-    onRate,
-    size = "md",
-  }: {
-    rating: number
-    onRate: (rating: number) => void
-    size?: "sm" | "md" | "lg"
-  }) => {
-    const [hoverRating, setHoverRating] = useState(0)
-    const sizeClass = size === "sm" ? "h-5 w-5" : size === "lg" ? "h-8 w-8" : "h-6 w-6"
-
-    return (
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            type="button"
-            className="focus:outline-none transition-transform hover:scale-110"
-            onMouseEnter={() => setHoverRating(star)}
-            onMouseLeave={() => setHoverRating(0)}
-            onClick={() => onRate(star)}
-          >
-            <Star
-              className={`${sizeClass} ${
-                star <= (hoverRating || rating)
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-gray-300"
-              }`}
-            />
-          </button>
-        ))}
-      </div>
-    )
   }
 
   if (authLoading || loading) {

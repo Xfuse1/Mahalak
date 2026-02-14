@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Product, Shelf, Placement, SectionType } from '../types/product-management';
-import { initialProducts, initialShelves } from '../mock/supermarket-data';
+import { initialShelves } from '../mock/supermarket-data';
 
 interface ProductState {
     products: Product[];
@@ -75,10 +75,26 @@ export const useProductStore = create<ProductState>((set) => ({
     }),
 
     addShelf: (shelfData) => set((state) => {
+        const existingSectionShelves = state.shelves.filter((s) => s.sectionEN === shelfData.sectionEN);
+        const defaultSectionShelf = initialShelves.find((s) => s.sectionEN === shelfData.sectionEN);
+        const sectionAnchor = existingSectionShelves[0]?.position ?? defaultSectionShelf?.position ?? { x: 0, y: 0, z: 0 };
+
+        // Keep first shelf at section anchor, then place next shelves in a simple grid.
+        const sectionIndex = existingSectionShelves.length;
+        const shelvesPerRow = 4;
+        const spacingX = 6;
+        const spacingZ = 5;
+        const column = sectionIndex % shelvesPerRow;
+        const row = Math.floor(sectionIndex / shelvesPerRow);
+
         const newShelf: Shelf = {
             ...shelfData,
             shelfId: `${shelfData.type.toUpperCase()}_${Date.now()}`,
-            position: { x: 0, y: 0, z: 0 },
+            position: {
+                x: sectionAnchor.x + column * spacingX,
+                y: 0,
+                z: sectionAnchor.z + row * spacingZ,
+            },
             rotation: { x: 0, y: 0, z: 0 },
         };
         return { shelves: [...state.shelves, newShelf] };

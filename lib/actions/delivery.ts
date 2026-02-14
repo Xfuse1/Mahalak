@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
+import { logError } from "../logger"
 
 export type Driver = {
   id: string
@@ -23,11 +24,20 @@ export type Driver = {
 export async function getDrivers(): Promise<Driver[]> {
   try {
     const db = getAdminDb()
-    const snapshot = await db
+    // Prefer modern schema field first, then fallback for legacy docs.
+    let snapshot = await db
       .collection("drivers")
+      .where("isApproved", "==", true)
       .get()
 
-    const drivers: Driver[] = snapshot.docs.map((doc) => {
+    if (snapshot.empty) {
+      snapshot = await db
+        .collection("drivers")
+        .where("is_approved", "==", true)
+        .get()
+    }
+
+    const drivers: Driver[] = snapshot.docs.map((doc): Driver => {
       const data = doc.data()
       return {
         id: doc.id,
@@ -46,13 +56,10 @@ export async function getDrivers(): Promise<Driver[]> {
         created_at: data.createdAt?.toDate?.()?.toISOString?.() || data.created_at,
         updated_at: data.updatedAt?.toDate?.()?.toISOString?.() || data.updated_at,
       }
-    }) as Driver[]
-
-    // Filter only approved drivers
-    const approvedDrivers = drivers.filter(d => d.is_approved)
+    })
 
     // Sort: available first, then by rating descending
-    approvedDrivers.sort((a, b) => {
+    drivers.sort((a, b) => {
       // First, sort by availability (available first)
       if (a.is_available !== b.is_available) {
         return a.is_available ? -1 : 1
@@ -61,9 +68,9 @@ export async function getDrivers(): Promise<Driver[]> {
       return (b.rating || 0) - (a.rating || 0)
     })
 
-    return approvedDrivers
+    return drivers
   } catch (error) {
-    console.error("[v0] Error fetching drivers:", error)
+    logError("[v0] Error fetching drivers:", error)
     return []
   }
 }
@@ -83,8 +90,21 @@ export async function getDriverById(id: string): Promise<Driver | null> {
       ...doc.data(),
     } as Driver
   } catch (error) {
-    console.error("[v0] Error fetching driver:", error)
     return null
+  }
+}
+
+// Verify driver login with PIN
+export async function verifyDriverLogin(driverId: string, pin: string): Promise<{ success: boolean }> {
+  try {
+    const db = getAdminDb()
+    const doc = await db.collection("drivers").doc(driverId).get()
+    if (!doc.exists) return { success: false }
+    const data = doc.data()
+    if (data?.pin !== pin) return { success: false }
+    return { success: true }
+  } catch {
+    return { success: false }
   }
 }
 
@@ -101,7 +121,7 @@ export async function getDriverCommission(): Promise<number> {
     const data = doc.data()
     return data?.rate || 0
   } catch (error) {
-    console.error("[v0] Error fetching driver commission:", error)
+    logError("[v0] Error fetching driver commission:", error)
     return 0
   }
 }
@@ -119,7 +139,7 @@ export async function isSimulatorEnabled(): Promise<boolean> {
     const data = doc.data()
     return data?.enabled === true
   } catch (error) {
-    console.error("[v0] Error fetching simulator settings:", error)
+    logError("[v0] Error fetching simulator settings:", error)
     return false
   }
 }

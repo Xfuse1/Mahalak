@@ -3,12 +3,13 @@
 import React, { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Box, Menu } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
-import { useTranslation } from "react-i18next"
+import { useLanguage } from "../lib/language-context"
+import { logError } from "../lib/logger"
 import { cn } from "../lib/utils"
 import {
   Sheet,
@@ -24,7 +25,7 @@ export function SellerHeader() {
   const pathname = usePathname()
   const { logout, user } = useAuth()
   const router = useRouter()
-  const { t } = useTranslation("common")
+  const { t } = useLanguage()
   const [pendingCount, setPendingCount] = useState(0)
 
   const fetchPendingCount = useCallback(async () => {
@@ -36,7 +37,7 @@ export function SellerHeader() {
         setPendingCount(count)
       }
     } catch (e) {
-      console.error("Error fetching pending count:", e)
+      logError("Error fetching pending count:", e)
     }
   }, [user?.id])
 
@@ -47,11 +48,11 @@ export function SellerHeader() {
   }, [fetchPendingCount])
 
   const navItems = [
-    { href: "/seller/dashboard", label: t("dashboard"), icon: LayoutDashboard },
-    { href: "/seller/products", label: t("products"), icon: Package },
-    { href: "/seller/orders", label: t("orders"), icon: ShoppingBag },
-    { href: "/seller/offers", label: t("offers"), icon: Tag },
-    { href: "/seller/settings", label: t("settings"), icon: Settings },
+    { href: "/seller/dashboard", label: t("لوحة التحكم", "Dashboard"), icon: LayoutDashboard },
+    { href: "/seller/products", label: t("المنتجات", "Products"), icon: Package },
+    { href: "/seller/orders", label: t("الطلبات", "Orders"), icon: ShoppingBag },
+    { href: "/seller/offers", label: t("العروض", "Offers"), icon: Tag },
+    { href: "/seller/settings", label: t("الإعدادات", "Settings"), icon: Settings },
   ]
 
   const handleLogout = () => {
@@ -69,7 +70,7 @@ export function SellerHeader() {
 
       <nav className="flex-1 p-6 space-y-1 overflow-y-auto custom-scrollbar">
         <div className="pb-4">
-          <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">القائمة الرئيسية</p>
+          <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">{t("القائمة الرئيسية", "Main Menu")}</p>
           <ul className="space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -91,7 +92,7 @@ export function SellerHeader() {
                     <Icon className={cn("h-5 w-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-white" : "text-gray-400 group-hover:text-[#1F478B]")} />
                     <span className="font-black text-[14px]">{item.label}</span>
                     {item.href === "/seller/orders" && pendingCount > 0 && (
-                      <span className="mr-auto ml-2 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-black px-1.5 animate-pulse shadow-lg shadow-red-500/30">
+                      <span className="ms-auto me-2 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-black px-1.5 animate-pulse shadow-lg shadow-red-500/30">
                         {pendingCount > 99 ? "99+" : pendingCount}
                       </span>
                     )}
@@ -110,7 +111,7 @@ export function SellerHeader() {
           onClick={() => router.push("/")}
         >
           <Home className="h-5 w-5" />
-          <span>{t("backToSite")}</span>
+          <span>{t("العودة للموقع", "Back to Site")}</span>
         </Button>
         <Button
           variant="ghost"
@@ -118,7 +119,7 @@ export function SellerHeader() {
           onClick={handleLogout}
         >
           <LogOut className="h-5 w-5" />
-          <span>{t("logout")}</span>
+          <span>{t("تسجيل الخروج", "Logout")}</span>
         </Button>
       </div>
     </div>

@@ -40,7 +40,7 @@ export default function ProductModal() {
                     <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                         <div>
                             <DialogTitle className="text-xl font-bold text-gray-900 text-right">
-                                إدارة الرف: {selectedShelfId}
+                                {t("\u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0631\u0641:", "Manage Shelf:")} {selectedShelfId}
                             </DialogTitle>
                             <DialogDescription className="text-sm text-gray-500 text-right">
                                 {t("تخصيص المنتجات المعروضة على هذا الرف", "Manage products displayed on this shelf")}
@@ -53,7 +53,7 @@ export default function ProductModal() {
 
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden min-h-0">
                         {/* Current Products */}
-                        <div className="flex flex-col border-l border-gray-100 bg-gray-50/30">
+                        <div className="flex flex-col border-s border-gray-100 bg-gray-50/30">
                             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white/50">
                                 <span className="text-sm font-bold text-gray-700">{t("المنتجات الحالية", "Current Products")}</span>
                                 <span className="text-xs text-gray-400">{shelfProducts.length} / {currentShelf?.capacity || 0}</span>
@@ -146,7 +146,7 @@ export default function ProductModal() {
                         <Button
                             onClick={() => {
                                 if (storeId) {
-                                    saveSupermarketLayout(storeId, shelves, placements);
+                                    saveSupermarketLayout(storeId, shelves, placements, storeId);
                                 }
                                 toggleModal(false);
                             }}

@@ -6,6 +6,8 @@ import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, createPOSQuickProduct, type POSSaleItem } from "@/lib/actions/pos"
 import { getStoreByUserId } from "@/lib/actions/stores"
+import { useLanguage } from "@/lib/language-context"
+import { logError } from "@/lib/logger"
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Receipt, DollarSign,
   BarChart3, Printer, Package, ChevronLeft,
@@ -15,9 +17,14 @@ import {
 import { QRCodeSVG } from "qrcode.react"
 
 // Lazy load camera/barcode scanner (heavy: html5-qrcode library)
+function ScannerLoading() {
+  const { t } = useLanguage()
+  return <div className="flex items-center justify-center p-8">{t("جاري تحميل الماسح...", "Loading scanner...")}</div>
+}
+
 const BarcodeScanner = dynamic(
   () => import("@/components/barcode-scanner").then(m => ({ default: m.BarcodeScanner })),
-  { ssr: false, loading: () => <div className="flex items-center justify-center p-8">جاري تحميل الماسح...</div> }
+  { ssr: false, loading: () => <ScannerLoading /> }
 )
 
 // ===================== Types =====================
@@ -63,13 +70,49 @@ type DailySummary = {
   averageOrderValue: number
 }
 
+type StoreData = {
+  id: string
+  name: string
+  address?: string
+  phone?: string
+  logo_url?: string
+  is_approved?: boolean
+}
+
+type PosErrorMessage = { ar: string; en: string }
+
+const posErrorMessages: Record<string, PosErrorMessage> = {
+  POS_UNAUTHORIZED: { ar: "ليس لديك صلاحية", en: "You are not authorized to perform this action" },
+  POS_DISCOUNT_NEGATIVE: { ar: "الخصم لا يمكن أن يكون سالباً", en: "Discount cannot be negative" },
+  POS_DISCOUNT_PERCENT_EXCEEDED: { ar: "نسبة الخصم لا يمكن أن تتجاوز 100%", en: "Discount percentage cannot exceed 100%" },
+  POS_PRODUCT_NOT_FOUND: { ar: "المنتج غير موجود", en: "Product not found" },
+  POS_INSUFFICIENT_STOCK: { ar: "الكمية المطلوبة أكبر من المخزون المتاح", en: "Requested quantity exceeds available stock" },
+  POS_PAYMENT_TOO_LOW: { ar: "المبلغ المدفوع أقل من الإجمالي", en: "Paid amount is less than total" },
+  POS_CREATE_SALE_FAILED: { ar: "فشل في إنشاء عملية البيع", en: "Failed to create sale" },
+  POS_QUICK_PRODUCT_NAME_REQUIRED: { ar: "اسم المنتج مطلوب", en: "Product name is required" },
+  POS_QUICK_PRODUCT_PRICE_INVALID: { ar: "السعر يجب أن يكون أكبر من صفر", en: "Price must be greater than zero" },
+  POS_QUICK_PRODUCT_STOCK_INVALID: { ar: "الكمية يجب أن تكون أكبر من صفر", en: "Stock must be greater than zero" },
+  POS_STORE_NOT_APPROVED: {
+    ar: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.",
+    en: "Your store is not approved yet. You cannot add new products until your store is approved by the administration.",
+  },
+  POS_DUPLICATE_BARCODE: { ar: "يوجد منتج بنفس الباركود", en: "A product with this barcode already exists" },
+  POS_CREATE_QUICK_PRODUCT_FAILED: { ar: "فشل في إضافة المنتج", en: "Failed to add product" },
+  POS_LOAD_SALES_HISTORY_FAILED: { ar: "حدث خطأ أثناء تحميل سجل المبيعات", en: "Failed to load sales history" },
+  POS_LOAD_DAILY_SUMMARY_FAILED: { ar: "حدث خطأ أثناء تحميل ملخص اليوم", en: "Failed to load daily summary" },
+}
+
 // ===================== Main Component =====================
 
 export default function QPOSPage() {
   const { user, isLoading: authLoading } = useAuth()
+  const { t, language } = useLanguage()
   const router = useRouter()
+  const pageDir = language === "ar" ? "rtl" : "ltr"
+  const locale = language === "ar" ? "ar-EG" : "en-US"
+  const currencyLabel = t("جنيه", "EGP")
 
-  const [store, setStore] = useState<any>(null)
+  const [store, setStore] = useState<StoreData | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -86,7 +129,7 @@ export default function QPOSPage() {
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
   const [notes, setNotes] = useState("")
-  const [lastSale, setLastSale] = useState<any>(null)
+  const [lastSale, setLastSale] = useState<Sale | null>(null)
   const [salesHistory, setSalesHistory] = useState<Sale[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [processing, setProcessing] = useState(false)
@@ -105,6 +148,27 @@ export default function QPOSPage() {
   const [showMobileCart, setShowMobileCart] = useState(false)
   const isStoreApproved = store?.is_approved === true
   const searchRef = useRef<HTMLInputElement>(null)
+  const translatePosError = useCallback(
+    (errorCode?: string | null, fallback?: string) => {
+      if (!errorCode) {
+        return fallback || t("حدث خطأ غير متوقع", "An unexpected error occurred")
+      }
+
+      const mapped = posErrorMessages[errorCode]
+      if (mapped) {
+        return t(mapped.ar, mapped.en)
+      }
+
+      if (errorCode.startsWith("POS_")) {
+        return fallback || t("حدث خطأ غير متوقع", "An unexpected error occurred")
+      }
+
+      return errorCode
+    },
+    [t],
+  )
+  const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && error.message ? translatePosError(error.message, fallback) : fallback
 
   // ===================== Load Data =====================
 
@@ -124,18 +188,18 @@ export default function QPOSPage() {
         }
         setStore(storeData)
 
-        const productsData = await getPOSProducts(storeData.id)
+        const productsData = await getPOSProducts(storeData.id, user!.id)
         setProducts(productsData as Product[])
       } catch (err) {
-        console.error("[POS] Error loading data:", err)
-        setError("فشل في تحميل البيانات")
+        logError("[POS] Error loading data:", err)
+        setError(t("فشل في تحميل البيانات", "Failed to load data"))
       } finally {
         setLoading(false)
       }
     }
 
     loadData()
-  }, [user, authLoading, router])
+  }, [user, authLoading, router, t])
 
   // ===================== Categories =====================
 
@@ -208,7 +272,7 @@ export default function QPOSPage() {
         const existing = prev.find((item) => item.id === product.id)
         if (existing) {
           if (existing.quantity >= product.stock) {
-            setError(`لا يوجد مخزون كافي من "${product.name}"`)
+            setError(`${t("لا يوجد مخزون كافي من", 'Insufficient stock for')} "${product.name}"`)
             return prev
           }
           return prev.map((item) =>
@@ -222,7 +286,7 @@ export default function QPOSPage() {
           )
         }
         if (product.stock <= 0) {
-          setError(`المنتج "${product.name}" غير متوفر`)
+          setError(`${t("المنتج", "Product")} "${product.name}" ${t("غير متوفر", "is unavailable")}`)
           return prev
         }
         return [
@@ -231,7 +295,7 @@ export default function QPOSPage() {
         ]
       })
     },
-    []
+    [t]
   )
 
   const updateQuantity = useCallback(
@@ -242,7 +306,7 @@ export default function QPOSPage() {
       }
       const product = products.find((p) => p.id === productId)
       if (product && newQty > product.stock) {
-        setError(`لا يوجد مخزون كافي من "${product.name}"`)
+        setError(`${t("لا يوجد مخزون كافي من", "Insufficient stock for")} "${product.name}"`)
         return
       }
       setCart((prev) =>
@@ -253,7 +317,7 @@ export default function QPOSPage() {
         )
       )
     },
-    [products]
+    [products, t]
   )
 
   const removeFromCart = useCallback((productId: string) => {
@@ -275,7 +339,7 @@ export default function QPOSPage() {
   const processSale = async () => {
     if (cart.length === 0) return
     if (paymentMethod === "cash" && (Number(amountPaid) || 0) < total) {
-      setError("المبلغ المدفوع أقل من الإجمالي")
+      setError(t("المبلغ المدفوع أقل من الإجمالي", "Paid amount is less than total"))
       return
     }
 
@@ -307,13 +371,13 @@ export default function QPOSPage() {
         customer_name: customerName || undefined,
         customer_phone: customerPhone || undefined,
         notes: notes || undefined,
-      })
+      }, user!.id)
 
       if (result.success) {
         setLastSale(result.data)
         setShowPayment(false)
         setShowReceipt(true)
-        setSuccess("تمت عملية البيع بنجاح!")
+        setSuccess(t("تمت عملية البيع بنجاح!", "Sale completed successfully!"))
 
         // Update local product stock
         setProducts((prev) =>
@@ -329,10 +393,10 @@ export default function QPOSPage() {
         clearCart()
         setTimeout(() => setSuccess(""), 3000)
       } else {
-        setError(result.error || "فشل في إتمام عملية البيع")
+        setError(translatePosError(result.error, t("فشل في إتمام عملية البيع", "Failed to complete sale")))
       }
-    } catch (err: any) {
-      setError(err?.message || "حدث خطأ غير متوقع")
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ غير متوقع", "An unexpected error occurred")))
     } finally {
       setProcessing(false)
     }
@@ -342,21 +406,24 @@ export default function QPOSPage() {
 
   const loadHistory = async () => {
     if (!store) {
-      setError("لم يتم العثور على بيانات المتجر")
+      setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
       return
     }
     setLoadingHistory(true)
     setError("")
     try {
-      const history = await getPOSSales(store.id, 50)
+      const history = await getPOSSales(store.id, 50, user!.id)
       setSalesHistory(history as Sale[])
       setShowHistory(true)
       if (history.length === 0) {
-        setSuccess("لا توجد مبيعات مسجلة بعد")
+        setSuccess(t("لا توجد مبيعات مسجلة بعد", "No sales recorded yet"))
       }
-    } catch (err: any) {
-      console.error("[POS] Error loading history:", err)
-      const errorMsg = err?.message || "حدث خطأ أثناء تحميل سجل المبيعات"
+    } catch (err: unknown) {
+      logError("[POS] Error loading history:", err)
+      const errorMsg = getErrorMessage(
+        err,
+        t("حدث خطأ أثناء تحميل سجل المبيعات", "An error occurred while loading sales history"),
+      )
       setError(errorMsg)
     } finally {
       setLoadingHistory(false)
@@ -365,21 +432,24 @@ export default function QPOSPage() {
 
   const loadDailySummary = async () => {
     if (!store) {
-      setError("لم يتم العثور على بيانات المتجر")
+      setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
       return
     }
     setLoadingSummary(true)
     setError("")
     try {
-      const summary = await getPOSDailySummary(store.id)
+      const summary = await getPOSDailySummary(store.id, undefined, user!.id)
       setDailySummary(summary)
       setShowSummary(true)
       if (summary.totalSales === 0) {
-        setSuccess("لا توجد مبيعات لهذا اليوم")
+        setSuccess(t("لا توجد مبيعات لهذا اليوم", "No sales for today"))
       }
-    } catch (err: any) {
-      console.error("[POS] Error loading summary:", err)
-      const errorMsg = err?.message || "حدث خطأ أثناء تحميل ملخص اليوم"
+    } catch (err: unknown) {
+      logError("[POS] Error loading summary:", err)
+      const errorMsg = getErrorMessage(
+        err,
+        t("حدث خطأ أثناء تحميل ملخص اليوم", "An error occurred while loading daily summary"),
+      )
       setError(errorMsg)
     } finally {
       setLoadingSummary(false)
@@ -402,29 +472,29 @@ export default function QPOSPage() {
     if (store.address) message += `📍 ${store.address}\n`
     if (store.phone) message += `📞 ${store.phone}\n`
     message += `\n━━━━━━━━━━━━━━━━\n\n`
-    message += `📅 ${new Date(lastSale.created_at).toLocaleDateString("ar-SA")}\n`
-    message += `🔢 رقم الفاتورة: #${lastSale.sale_number}\n\n`
-    message += `📦 *المنتجات:*\n`
+    message += `📅 ${new Date(lastSale.created_at).toLocaleDateString(locale)}\n`
+    message += `🔢 ${t("رقم الفاتورة", "Invoice No.")}: #${lastSale.sale_number}\n\n`
+    message += `📦 *${t("المنتجات", "Products")}:*\n`
     
-    lastSale.items.forEach((item: any) => {
-      message += `• ${item.name} × ${item.quantity} = ${item.total.toFixed(2)} ر.س\n`
+    lastSale.items.forEach((item: POSSaleItem) => {
+      message += `• ${item.name} × ${item.quantity} = ${item.total.toFixed(2)} ${currencyLabel}\n`
     })
     
     message += `\n━━━━━━━━━━━━━━━━\n\n`
-    message += `المجموع: ${lastSale.subtotal.toFixed(2)} ر.س\n`
+    message += `${t("المجموع", "Subtotal")}: ${lastSale.subtotal.toFixed(2)} ${currencyLabel}\n`
     
     if (lastSale.discount > 0) {
-      message += `الخصم: -${lastSale.discount.toFixed(2)} ر.س\n`
+      message += `${t("الخصم", "Discount")}: -${lastSale.discount.toFixed(2)} ${currencyLabel}\n`
     }
     
-    message += `\n💰 *الإجمالي: ${lastSale.total.toFixed(2)} ر.س*\n\n`
+    message += `\n💰 *${t("الإجمالي", "Total")}: ${lastSale.total.toFixed(2)} ${currencyLabel}*\n\n`
     
     if (lastSale.payment_method === "cash") {
-      message += `المدفوع: ${lastSale.amount_paid.toFixed(2)} ر.س\n`
-      message += `الباقي: ${lastSale.change.toFixed(2)} ر.س\n\n`
+      message += `${t("المدفوع", "Paid")}: ${lastSale.amount_paid.toFixed(2)} ${currencyLabel}\n`
+      message += `${t("الباقي", "Change")}: ${lastSale.change.toFixed(2)} ${currencyLabel}\n\n`
     }
     
-    message += `🙏 شكراً لتسوقكم معنا`
+    message += `🙏 ${t("شكراً لتسوقكم معنا", "Thank you for shopping with us")}`
     
     // Open WhatsApp with message
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`
@@ -437,18 +507,18 @@ export default function QPOSPage() {
     const product = products.find((p) => p.barcode === code)
     if (product) {
       addToCart(product)
-      setSuccess(`تم إضافة "${product.name}" للسلة`)
+      setSuccess(`${t("تم إضافة", "Added")} "${product.name}" ${t("للسلة", "to cart")}`)
       setTimeout(() => setSuccess(""), 2000)
     } else {
       setShowScanner(false)
       if (!isStoreApproved) {
-        setError("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.")
+        setError(t("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.", "Your store is not approved yet. You cannot add new products until your store is approved by the administration."))
         setTimeout(() => setError(""), 5000)
         return
       }
       setQuickAddBarcode(code)
       setShowQuickAdd(true)
-      setError(`لا يوجد منتج بالباركود: ${code}`)
+      setError(`${t("لا يوجد منتج بالباركود", "No product found with barcode")}: ${code}`)
       setTimeout(() => setError(""), 3000)
     }
   }
@@ -457,7 +527,7 @@ export default function QPOSPage() {
 
   const handleQuickAddProduct = async () => {
     if (!quickAddName.trim() || !quickAddPrice || Number(quickAddPrice) <= 0) {
-      setError("يرجى إدخال اسم المنتج والسعر")
+      setError(t("يرجى إدخال اسم المنتج والسعر", "Please enter product name and price"))
       return
     }
 
@@ -469,16 +539,16 @@ export default function QPOSPage() {
         name: quickAddName.trim(),
         price: Number(quickAddPrice),
         stock: Number(quickAddStock) || 1,
-        category: quickAddCategory.trim() || "عام",
+        category: quickAddCategory.trim() || t("عام", "General"),
         barcode: quickAddBarcode.trim() || undefined,
         store_id: store.id,
-      })
+      }, user!.id)
 
       if (result.success && result.data) {
         const newProduct = result.data as Product
         setProducts((prev) => [...prev, newProduct])
         addToCart(newProduct)
-        setSuccess(`تم إضافة "${newProduct.name}" وإضافته للسلة`)
+        setSuccess(`${t("تم إضافة", "Added")} "${newProduct.name}" ${t("وإضافته للسلة", "and added to cart")}`)
         setTimeout(() => setSuccess(""), 3000)
         setShowQuickAdd(false)
         setQuickAddBarcode("")
@@ -487,10 +557,10 @@ export default function QPOSPage() {
         setQuickAddStock("1")
         setQuickAddCategory("")
       } else {
-        setError(result.error || "فشل في إضافة المنتج")
+        setError(translatePosError(result.error, t("فشل في إضافة المنتج", "Failed to add product")))
       }
-    } catch (err: any) {
-      setError(err?.message || "حدث خطأ غير متوقع")
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ غير متوقع", "An unexpected error occurred")))
     } finally {
       setQuickAddLoading(false)
     }
@@ -538,7 +608,7 @@ export default function QPOSPage() {
       <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 text-lg font-medium">جاري تحميل نظام الكاشير...</p>
+          <p className="text-gray-600 text-lg font-medium">{t("جاري تحميل نظام الكاشير...", "Loading POS system...")}</p>
         </div>
       </div>
     )
@@ -549,12 +619,12 @@ export default function QPOSPage() {
       <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <p className="text-xl mb-4 text-gray-800 font-bold">لا يمكن الوصول لنظام الكاشير</p>
+          <p className="text-xl mb-4 text-gray-800 font-bold">{t("لا يمكن الوصول لنظام الكاشير", "Unable to access POS system")}</p>
           <button
             onClick={() => router.push("/seller/dashboard")}
             className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-3 rounded-xl hover:shadow-lg hover:scale-105 transition-all font-medium"
           >
-            العودة للوحة التحكم
+            {t("العودة للوحة التحكم", "Back to Dashboard")}
           </button>
         </div>
       </div>
@@ -564,16 +634,16 @@ export default function QPOSPage() {
   // ===================== Render =====================
 
   return (
-    <div className="h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col overflow-hidden print:bg-white" dir="rtl">
+    <div className="h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col overflow-hidden print:bg-white" dir={pageDir}>
       {/* ===== Store Not Approved Banner ===== */}
       {!isStoreApproved && (
-        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-200 px-4 py-3 flex items-center gap-3 print:hidden" dir="rtl">
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-200 px-4 py-3 flex items-center gap-3 print:hidden" dir={pageDir}>
           <div className="bg-amber-100 p-2 rounded-full">
             <AlertTriangle className="h-5 w-5 text-amber-600" />
           </div>
           <div className="flex-1">
-            <p className="text-amber-800 font-bold text-sm">متجرك في انتظار موافقة الإدارة</p>
-            <p className="text-amber-600 text-xs">يمكنك استخدام نظام الكاشير للمنتجات الموجودة، لكن لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك.</p>
+            <p className="text-amber-800 font-bold text-sm">{t("متجرك في انتظار موافقة الإدارة", "Your store is awaiting admin approval")}</p>
+            <p className="text-amber-600 text-xs">{t("يمكنك استخدام نظام الكاشير للمنتجات الموجودة، لكن لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك.", "You can use POS for existing products, but you cannot add new products until your store is approved.")}</p>
           </div>
         </div>
       )}
@@ -584,7 +654,7 @@ export default function QPOSPage() {
           <button
             onClick={() => router.push("/seller/dashboard")}
             className="text-gray-500 hover:text-emerald-600 transition p-1.5 hover:bg-gray-100 rounded-lg"
-            title="العودة للوحة التحكم"
+            title={t("العودة للوحة التحكم", "Back to Dashboard")}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -602,7 +672,7 @@ export default function QPOSPage() {
             )}
             <div>
               <h1 className="text-gray-800 font-bold text-sm sm:text-lg leading-tight truncate max-w-[120px] sm:max-w-none">{store.name}</h1>
-              <span className="text-gray-500 text-[10px] sm:text-xs">نظام الكاشير</span>
+              <span className="text-gray-500 text-[10px] sm:text-xs">{t("نظام الكاشير", "POS System")}</span>
             </div>
           </div>
         </div>
@@ -628,12 +698,12 @@ export default function QPOSPage() {
             {loadingSummary ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                <span className="hidden sm:inline">جاري التحميل...</span>
+                <span className="hidden sm:inline">{t("جاري التحميل...", "Loading...")}</span>
               </>
             ) : (
               <>
                 <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">ملخص اليوم</span>
+                <span className="hidden sm:inline">{t("ملخص اليوم", "Today's Summary")}</span>
               </>
             )}
           </button>
@@ -645,12 +715,12 @@ export default function QPOSPage() {
             {loadingHistory ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                <span className="hidden sm:inline">جاري التحميل...</span>
+                <span className="hidden sm:inline">{t("جاري التحميل...", "Loading...")}</span>
               </>
             ) : (
               <>
                 <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">سجل المبيعات</span>
+                <span className="hidden sm:inline">{t("سجل المبيعات", "Sales History")}</span>
               </>
             )}
           </button>
@@ -662,7 +732,7 @@ export default function QPOSPage() {
         <div className="bg-red-500/90 text-white px-4 py-2 text-center text-sm font-medium print:hidden">
           {error}
           <button onClick={() => setError("")} className="mr-3 underline">
-            إغلاق
+            {t("إغلاق", "Close")}
           </button>
         </div>
       )}
@@ -702,7 +772,7 @@ export default function QPOSPage() {
                 <ShoppingCart className="h-4 w-4 text-white" />
               </div>
               <span className="text-gray-800 font-bold">
-                السلة ({cartItemsCount})
+                {t("السلة", "Cart")} ({cartItemsCount})
               </span>
             </div>
             {cart.length > 0 && (
@@ -711,7 +781,7 @@ export default function QPOSPage() {
                 className="text-red-500 hover:text-red-600 text-xs flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded-lg transition"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                مسح الكل
+                {t("مسح الكل", "Clear All")}
               </button>
             )}
           </div>
@@ -721,8 +791,8 @@ export default function QPOSPage() {
             {cart.length === 0 ? (
               <div className="text-center text-gray-400 py-16">
                 <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="text-gray-600 font-medium">السلة فارغة</p>
-                <p className="text-xs mt-1">اضغط على المنتج لإضافته</p>
+                <p className="text-gray-600 font-medium">{t("السلة فارغة", "Cart is empty")}</p>
+                <p className="text-xs mt-1">{t("اضغط على المنتج لإضافته", "Tap a product to add it")}</p>
               </div>
             ) : (
               cart.map((item) => (
@@ -749,7 +819,7 @@ export default function QPOSPage() {
                       {item.name}
                     </p>
                     <p className="text-emerald-600 text-xs font-medium">
-                      {item.price.toFixed(2)} ر.س
+                      {item.price.toFixed(2)} {currencyLabel}
                     </p>
                   </div>
 
@@ -778,7 +848,7 @@ export default function QPOSPage() {
                   </div>
 
                   {/* Item Total */}
-                  <div className="text-left w-16 flex-shrink-0">
+                  <div className="text-end w-16 flex-shrink-0">
                     <p className="text-gray-800 text-sm font-bold">
                       {item.total.toFixed(2)}
                     </p>
@@ -801,7 +871,7 @@ export default function QPOSPage() {
             <div className="p-3 border-t border-gray-200 space-y-2 bg-white">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-emerald-600" />
-                <span className="text-gray-600 text-xs font-medium">خصم:</span>
+                <span className="text-gray-600 text-xs font-medium">{t("خصم:", "Discount:")}</span>
                 <input
                   type="number"
                   value={discount}
@@ -816,7 +886,7 @@ export default function QPOSPage() {
                   }
                   className="h-7 bg-gray-50 text-gray-800 rounded-lg text-sm px-1 border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 >
-                  <option value="fixed">ر.س</option>
+                  <option value="fixed">{currencyLabel}</option>
                   <option value="percentage">%</option>
                 </select>
               </div>
@@ -826,18 +896,18 @@ export default function QPOSPage() {
           {/* Cart Totals */}
           <div className="p-3 border-t border-gray-200 space-y-1.5 bg-white">
             <div className="flex justify-between text-gray-600 text-sm">
-              <span>المجموع الفرعي</span>
-              <span className="font-medium">{subtotal.toFixed(2)} ر.س</span>
+              <span>{t("المجموع الفرعي", "Subtotal")}</span>
+              <span className="font-medium">{subtotal.toFixed(2)} {currencyLabel}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-yellow-600 text-sm">
-                <span>الخصم</span>
-                <span className="font-medium">-{discountAmount.toFixed(2)} ر.س</span>
+                <span>{t("الخصم", "Discount")}</span>
+                <span className="font-medium">-{discountAmount.toFixed(2)} {currencyLabel}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-800 text-lg font-bold pt-2 border-t border-gray-200">
-              <span>الإجمالي</span>
-              <span className="text-emerald-600">{total.toFixed(2)} ر.س</span>
+              <span>{t("الإجمالي", "Total")}</span>
+              <span className="text-emerald-600">{total.toFixed(2)} {currencyLabel}</span>
             </div>
           </div>
 
@@ -852,7 +922,7 @@ export default function QPOSPage() {
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-base sm:text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
             >
               <DollarSign className="h-5 w-5" />
-              دفع (F9)
+              {t("دفع (F9)", "Pay (F9)")}
             </button>
           </div>
         </div>
@@ -869,7 +939,7 @@ export default function QPOSPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="بحث بالاسم أو الباركود... (F2)"
+                  placeholder={t("بحث بالاسم أو الباركود... (F2)", "Search by name or barcode... (F2)")}
                   className="w-full h-9 sm:h-11 bg-gray-50 text-gray-800 rounded-xl pr-9 sm:pr-11 pl-4 text-xs sm:text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder:text-gray-400"
                 />
                 {searchQuery && (
@@ -884,15 +954,15 @@ export default function QPOSPage() {
               <button
                 onClick={() => setShowScanner(true)}
                 className="h-9 sm:h-11 px-2 sm:px-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1.5"
-                title="مسح الباركود بالكاميرا"
+                title={t("مسح الباركود بالكاميرا", "Scan barcode with camera")}
               >
                 <Camera className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-sm font-medium hidden sm:inline">مسح</span>
+                <span className="text-sm font-medium hidden sm:inline">{t("مسح", "Scan")}</span>
               </button>
               <button
                 onClick={() => {
                   if (!isStoreApproved) {
-                    setError("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.")
+                    setError(t("متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.", "Your store is not approved yet. You cannot add new products until your store is approved by the administration."))
                     setTimeout(() => setError(""), 5000)
                     return
                   }
@@ -903,10 +973,10 @@ export default function QPOSPage() {
                     ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-lg hover:scale-105"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
-                title={isStoreApproved ? "إضافة منتج سريع" : "متجرك غير معتمد بعد"}
+                title={isStoreApproved ? t("إضافة منتج سريع", "Quick add product") : t("متجرك غير معتمد بعد", "Your store is not approved yet")}
               >
                 <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-sm font-medium hidden sm:inline">منتج</span>
+                <span className="text-sm font-medium hidden sm:inline">{t("منتج", "Product")}</span>
               </button>
             </div>
 
@@ -921,7 +991,7 @@ export default function QPOSPage() {
                 }`}
               >
                 <Grid3X3 className="inline-block h-3.5 w-3.5 ml-1" />
-                الكل
+                {t("الكل", "All")}
               </button>
               {categories.map((cat) => (
                 <button
@@ -944,10 +1014,10 @@ export default function QPOSPage() {
             {filteredProducts.length === 0 ? (
               <div className="text-center text-gray-400 py-20">
                 <Package className="h-16 w-16 mx-auto mb-3 opacity-30" />
-                <p className="text-lg text-gray-600 font-medium">لا توجد منتجات</p>
+                <p className="text-lg text-gray-600 font-medium">{t("لا توجد منتجات", "No products found")}</p>
                 {searchQuery && (
                   <p className="text-sm mt-1 text-gray-500">
-                    لم يتم العثور على نتائج لـ &quot;{searchQuery}&quot;
+                    {t("لم يتم العثور على نتائج لـ", "No results found for")} &quot;{searchQuery}&quot;
                   </p>
                 )}
               </div>
@@ -1015,7 +1085,7 @@ export default function QPOSPage() {
                       {outOfStock && (
                         <div className="absolute inset-0 bg-gray-900/70 rounded-xl flex items-center justify-center">
                           <span className="text-red-500 text-xs font-bold bg-white px-2 py-1 rounded-lg shadow-lg">
-                            نفذ المخزون
+                            {t("نفذ المخزون", "Out of stock")}
                           </span>
                         </div>
                       )}
@@ -1031,13 +1101,13 @@ export default function QPOSPage() {
       {/* ===== Payment Modal ===== */}
       {showPayment && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
               <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
                 <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-1.5 rounded-lg">
                   <DollarSign className="h-4 w-4 text-white" />
                 </div>
-                إتمام الدفع
+                {t("إتمام الدفع", "Complete Payment")}
               </h2>
               <button
                 onClick={() => setShowPayment(false)}
@@ -1050,12 +1120,12 @@ export default function QPOSPage() {
             <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto bg-gray-50">
               {/* Payment Method */}
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-2">طريقة الدفع</label>
+                <label className="text-gray-700 text-sm font-medium block mb-2">{t("طريقة الدفع", "Payment Method")}</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { value: "cash" as const, label: "نقدي", icon: Banknote },
-                    { value: "card" as const, label: "بطاقة", icon: CreditCard },
-                    { value: "wallet" as const, label: "محفظة", icon: Wallet },
+                    { value: "cash" as const, label: t("نقدي", "Cash"), icon: Banknote },
+                    { value: "card" as const, label: t("بطاقة", "Card"), icon: CreditCard },
+                    { value: "wallet" as const, label: t("محفظة", "Wallet"), icon: Wallet },
                   ].map(({ value, label, icon: Icon }) => (
                     <button
                       key={value}
@@ -1076,7 +1146,7 @@ export default function QPOSPage() {
               {/* Amount Paid (cash only) */}
               {paymentMethod === "cash" && (
                 <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">المبلغ المدفوع</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("المبلغ المدفوع", "Amount Paid")}</label>
                   <input
                     type="number"
                     value={amountPaid}
@@ -1112,20 +1182,20 @@ export default function QPOSPage() {
               <div className="space-y-2">
                 <label className="text-gray-700 text-sm font-medium flex items-center gap-1">
                   <User className="h-3.5 w-3.5" />
-                  بيانات العميل (اختياري)
+                  {t("بيانات العميل (اختياري)", "Customer Details (Optional)")}
                 </label>
                 <input
                   type="text"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="اسم العميل"
+                  placeholder={t("اسم العميل", "Customer name")}
                   className="w-full h-9 bg-white text-gray-800 rounded-lg px-3 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <input
                   type="tel"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="رقم الجوال"
+                  placeholder={t("رقم الجوال", "Phone number")}
                   className="w-full h-9 bg-white text-gray-800 rounded-lg px-3 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   dir="ltr"
                 />
@@ -1135,12 +1205,12 @@ export default function QPOSPage() {
               <div>
                 <label className="text-gray-700 text-sm font-medium flex items-center gap-1 mb-1">
                   <StickyNote className="h-3.5 w-3.5" />
-                  ملاحظات
+                  {t("ملاحظات", "Notes")}
                 </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="ملاحظات إضافية..."
+                  placeholder={t("ملاحظات إضافية...", "Additional notes...")}
                   rows={2}
                   className="w-full bg-white text-gray-800 rounded-lg px-3 py-2 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
                 />
@@ -1149,23 +1219,23 @@ export default function QPOSPage() {
               {/* Summary */}
               <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-3 space-y-1.5 border border-gray-200">
                 <div className="flex justify-between text-gray-600 text-sm">
-                  <span>المجموع</span>
-                  <span className="font-medium">{subtotal.toFixed(2)} ر.س</span>
+                  <span>{t("المجموع", "Subtotal")}</span>
+                  <span className="font-medium">{subtotal.toFixed(2)} {currencyLabel}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-yellow-600 text-sm">
-                    <span>الخصم</span>
-                    <span className="font-medium">-{discountAmount.toFixed(2)} ر.س</span>
+                    <span>{t("الخصم", "Discount")}</span>
+                    <span className="font-medium">-{discountAmount.toFixed(2)} {currencyLabel}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-gray-800 font-bold text-lg border-t border-gray-200 pt-1.5">
-                  <span>الإجمالي</span>
-                  <span className="text-emerald-600">{total.toFixed(2)} ر.س</span>
+                  <span>{t("الإجمالي", "Total")}</span>
+                  <span className="text-emerald-600">{total.toFixed(2)} {currencyLabel}</span>
                 </div>
                 {paymentMethod === "cash" && Number(amountPaid) > 0 && (
                   <div className="flex justify-between text-blue-600 text-sm border-t border-gray-200 pt-1.5">
-                    <span>الباقي</span>
-                    <span className="font-medium">{change.toFixed(2)} ر.س</span>
+                    <span>{t("الباقي", "Change")}</span>
+                    <span className="font-medium">{change.toFixed(2)} {currencyLabel}</span>
                   </div>
                 )}
               </div>
@@ -1184,12 +1254,12 @@ export default function QPOSPage() {
                 {processing ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    جاري المعالجة...
+                    {t("جاري المعالجة...", "Processing...")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-5 w-5" />
-                    تأكيد الدفع
+                    {t("تأكيد الدفع", "Confirm Payment")}
                   </>
                 )}
               </button>
@@ -1201,7 +1271,7 @@ export default function QPOSPage() {
       {/* ===== Receipt Modal ===== */}
       {showReceipt && lastSale && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" dir="rtl">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" dir={pageDir}>
             {/* Receipt Content */}
             <div className="p-6 text-center" id="receipt">
               <h2 className="font-bold text-xl mb-1">{store.name}</h2>
@@ -1215,7 +1285,7 @@ export default function QPOSPage() {
 
               <div className="flex justify-between text-xs text-gray-500 mb-3">
                 <span>
-                  {new Date(lastSale.created_at).toLocaleDateString("ar-SA")}
+                  {new Date(lastSale.created_at).toLocaleDateString(locale)}
                 </span>
                 <span>#{lastSale.sale_number}</span>
               </div>
@@ -1224,7 +1294,7 @@ export default function QPOSPage() {
 
               {/* Items */}
               <div className="space-y-1.5 text-sm">
-                {lastSale.items.map((item: any, i: number) => (
+                {lastSale.items.map((item: POSSaleItem, i: number) => (
                   <div key={i} className="flex justify-between">
                     <span className="text-right flex-1">
                       {item.name} × {item.quantity}
@@ -1240,27 +1310,27 @@ export default function QPOSPage() {
 
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>المجموع</span>
+                  <span>{t("المجموع", "Subtotal")}</span>
                   <span>{lastSale.subtotal.toFixed(2)}</span>
                 </div>
                 {lastSale.discount > 0 && (
                   <div className="flex justify-between text-red-500">
-                    <span>الخصم</span>
+                    <span>{t("الخصم", "Discount")}</span>
                     <span>-{lastSale.discount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg">
-                  <span>الإجمالي</span>
-                  <span>{lastSale.total.toFixed(2)} ر.س</span>
+                  <span>{t("الإجمالي", "Total")}</span>
+                  <span>{lastSale.total.toFixed(2)} {currencyLabel}</span>
                 </div>
                 {lastSale.payment_method === "cash" && (
                   <>
                     <div className="flex justify-between text-gray-500">
-                      <span>المدفوع</span>
+                      <span>{t("المدفوع", "Paid")}</span>
                       <span>{lastSale.amount_paid.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-gray-500">
-                      <span>الباقي</span>
+                      <span>{t("الباقي", "Change")}</span>
                       <span>{lastSale.change.toFixed(2)}</span>
                     </div>
                   </>
@@ -1269,40 +1339,19 @@ export default function QPOSPage() {
 
               <div className="border-t border-dashed border-gray-300 my-3" />
 
-              <p className="text-gray-400 text-xs mb-4">شكراً لتسوقكم معنا</p>
+              <p className="text-gray-400 text-xs mb-4">{t("شكراً لتسوقكم معنا", "Thank you for shopping with us")}</p>
 
               {/* QR Code for invoice */}
               <div className="flex flex-col items-center gap-2 mb-2">
                 <div className="bg-white p-3 rounded-xl border-2 border-gray-200 shadow-sm">
                   <QRCodeSVG
-                    value={(() => {
-                      const receiptData = {
-                        store: store.name,
-                        address: store.address || "",
-                        phone: store.phone || "",
-                        sale_number: lastSale.sale_number,
-                        date: lastSale.created_at,
-                        items: lastSale.items.map((item: any) => ({
-                          name: item.name,
-                          qty: item.quantity,
-                          price: item.price,
-                          total: item.total,
-                        })),
-                        subtotal: lastSale.subtotal,
-                        discount: lastSale.discount,
-                        total: lastSale.total,
-                        payment_method: lastSale.payment_method,
-                        amount_paid: lastSale.amount_paid,
-                        change: lastSale.change,
-                      }
-                      return `${typeof window !== "undefined" ? window.location.origin : ""}/pos/receipt?data=${encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(receiptData)))))}`
-                    })()}
+                    value={`${typeof window !== "undefined" ? window.location.origin : ""}/pos/receipt?id=${encodeURIComponent(String(lastSale.id))}`}
                     size={140}
                     level="M"
                     includeMargin={false}
                   />
                 </div>
-                <p className="text-gray-500 text-[11px]">امسح الكود لعرض الفاتورة</p>
+                <p className="text-gray-500 text-[11px]">{t("امسح الكود لعرض الفاتورة", "Scan the code to view the receipt")}</p>
               </div>
             </div>
 
@@ -1311,24 +1360,24 @@ export default function QPOSPage() {
               <button
                 onClick={sendWhatsApp}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
-                title="إرسال عبر واتساب"
+                title={t("إرسال عبر واتساب", "Send via WhatsApp")}
               >
                 <MessageCircle className="h-4 w-4" />
-                واتساب
+                {t("واتساب", "WhatsApp")}
               </button>
               <button
                 onClick={printReceipt}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
               >
                 <Printer className="h-4 w-4" />
-                طباعة
+                {t("طباعة", "Print")}
               </button>
               <button
                 onClick={() => setShowReceipt(false)}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                تم
+                {t("تم", "Done")}
               </button>
             </div>
           </div>
@@ -1338,13 +1387,13 @@ export default function QPOSPage() {
       {/* ===== Sales History Modal ===== */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" dir="rtl">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" dir={pageDir}>
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-rose-50 to-white">
               <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
                 <div className="bg-gradient-to-r from-rose-500 to-rose-600 p-1.5 rounded-lg">
                   <Receipt className="h-4 w-4 text-white" />
                 </div>
-                سجل المبيعات
+                {t("سجل المبيعات", "Sales History")}
               </h2>
               <button
                 onClick={() => setShowHistory(false)}
@@ -1358,7 +1407,7 @@ export default function QPOSPage() {
               {salesHistory.length === 0 ? (
                 <div className="text-center text-gray-400 py-12">
                   <Receipt className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-gray-600 font-medium">لا توجد مبيعات بعد</p>
+                  <p className="text-gray-600 font-medium">{t("لا توجد مبيعات بعد", "No sales yet")}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1372,7 +1421,7 @@ export default function QPOSPage() {
                           #{sale.sale_number}
                         </p>
                         <p className="text-gray-500 text-xs">
-                          {new Date(sale.created_at).toLocaleString("ar-SA")}
+                          {new Date(sale.created_at).toLocaleString(locale)}
                         </p>
                         {sale.customer_name && (
                           <p className="text-gray-600 text-xs flex items-center gap-1 mt-0.5">
@@ -1381,17 +1430,17 @@ export default function QPOSPage() {
                           </p>
                         )}
                       </div>
-                      <div className="text-left">
+                      <div className="text-end">
                         <p className="text-emerald-600 font-bold">
-                          {Number(sale.total).toFixed(2)} ر.س
+                          {Number(sale.total).toFixed(2)} {currencyLabel}
                         </p>
                         <p className="text-gray-500 text-xs">
-                          {sale.items?.length || 0} منتج •{" "}
+                          {sale.items?.length || 0} {t("منتج", "item")} •{" "}
                           {sale.payment_method === "cash"
-                            ? "نقدي"
+                            ? t("نقدي", "Cash")
                             : sale.payment_method === "card"
-                            ? "بطاقة"
-                            : "محفظة"}
+                            ? t("بطاقة", "Card")
+                            : t("محفظة", "Wallet")}
                         </p>
                       </div>
                     </div>
@@ -1406,13 +1455,13 @@ export default function QPOSPage() {
       {/* ===== Daily Summary Modal ===== */}
       {showSummary && dailySummary && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-violet-50 to-white">
               <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
                 <div className="bg-gradient-to-r from-violet-500 to-violet-600 p-1.5 rounded-lg">
                   <BarChart3 className="h-4 w-4 text-white" />
                 </div>
-                ملخص اليوم
+                {t("ملخص اليوم", "Today's Summary")}
               </h2>
               <button
                 onClick={() => setShowSummary(false)}
@@ -1428,42 +1477,42 @@ export default function QPOSPage() {
                   <p className="text-3xl font-bold text-emerald-600">
                     {dailySummary.totalSales}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">عمليات البيع</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("عمليات البيع", "Sales")}</p>
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-emerald-600">
                     {dailySummary.totalRevenue.toFixed(0)}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">إجمالي الإيرادات</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("إجمالي الإيرادات", "Total Revenue")}</p>
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-violet-600">
                     {dailySummary.totalItems}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">المنتجات المباعة</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("المنتجات المباعة", "Items Sold")}</p>
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-violet-600">
                     {dailySummary.averageOrderValue.toFixed(0)}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">متوسط الطلب</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("متوسط الطلب", "Average Order")}</p>
                 </div>
               </div>
 
               <div className="bg-white rounded-xl p-4 shadow-sm">
-                <h3 className="text-gray-800 font-bold mb-3">طرق الدفع</h3>
+                <h3 className="text-gray-800 font-bold mb-3">{t("طرق الدفع", "Payment Methods")}</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600 flex items-center gap-1.5 font-medium">
                       <Banknote className="h-4 w-4" />
-                      نقدي
+                      {t("نقدي", "Cash")}
                     </span>
                     <span className="text-gray-800 font-bold">{dailySummary.cashSales}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600 flex items-center gap-1.5 font-medium">
                       <CreditCard className="h-4 w-4" />
-                      بطاقة / محفظة
+                      {t("بطاقة / محفظة", "Card / Wallet")}
                     </span>
                     <span className="text-gray-800 font-bold">{dailySummary.cardSales}</span>
                   </div>
@@ -1476,7 +1525,7 @@ export default function QPOSPage() {
                 onClick={() => setShowSummary(false)}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-xl transition"
               >
-                إغلاق
+                {t("إغلاق", "Close")}
               </button>
             </div>
           </div>
@@ -1493,11 +1542,11 @@ export default function QPOSPage() {
           </div>
           <div className="border-t border-dashed my-2" />
           <div className="flex justify-between text-xs mb-2">
-            <span>{new Date(lastSale.created_at).toLocaleDateString("ar-SA")}</span>
+            <span>{new Date(lastSale.created_at).toLocaleDateString(locale)}</span>
             <span>#{lastSale.sale_number}</span>
           </div>
           <div className="border-t border-dashed my-2" />
-          {lastSale.items.map((item: any, i: number) => (
+          {lastSale.items.map((item: POSSaleItem, i: number) => (
             <div key={i} className="flex justify-between text-sm py-0.5">
               <span>
                 {item.name} × {item.quantity}
@@ -1508,28 +1557,28 @@ export default function QPOSPage() {
           <div className="border-t border-dashed my-2" />
           {lastSale.discount > 0 && (
             <div className="flex justify-between text-sm">
-              <span>خصم</span>
+              <span>{t("خصم", "Discount")}</span>
               <span>-{lastSale.discount.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-lg my-1">
-            <span>الإجمالي</span>
-            <span>{lastSale.total.toFixed(2)} ر.س</span>
+            <span>{t("الإجمالي", "Total")}</span>
+            <span>{lastSale.total.toFixed(2)} {currencyLabel}</span>
           </div>
           {lastSale.payment_method === "cash" && (
             <>
               <div className="flex justify-between text-sm">
-                <span>المدفوع</span>
+                <span>{t("المدفوع", "Paid")}</span>
                 <span>{lastSale.amount_paid.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>الباقي</span>
+                <span>{t("الباقي", "Change")}</span>
                 <span>{lastSale.change.toFixed(2)}</span>
               </div>
             </>
           )}
           <div className="border-t border-dashed my-3" />
-          <p className="text-center text-xs text-gray-400">شكراً لتسوقكم معنا</p>
+          <p className="text-center text-xs text-gray-400">{t("شكراً لتسوقكم معنا", "Thank you for shopping with us")}</p>
         </div>
       )}
 
@@ -1544,13 +1593,13 @@ export default function QPOSPage() {
       {/* ===== Quick Add Product Modal ===== */}
       {showQuickAdd && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir="rtl">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
               <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-1.5 rounded-lg">
                   <Plus className="h-4 w-4 text-white" />
                 </div>
-                إضافة منتج سريع
+                {t("إضافة منتج سريع", "Quick Add Product")}
               </h2>
               <button
                 onClick={() => {
@@ -1572,19 +1621,19 @@ export default function QPOSPage() {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
                   <ScanLine className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="text-xs text-gray-500">الباركود</p>
+                    <p className="text-xs text-gray-500">{t("الباركود", "Barcode")}</p>
                     <p className="text-emerald-700 font-bold font-mono">{quickAddBarcode}</p>
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-1.5">اسم المنتج *</label>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("اسم المنتج *", "Product Name *")}</label>
                 <input
                   type="text"
                   value={quickAddName}
                   onChange={(e) => setQuickAddName(e.target.value)}
-                  placeholder="مثال: بيبسي 330 مل"
+                  placeholder={t("مثال: بيبسي 330 مل", "Example: Pepsi 330 ml")}
                   className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   autoFocus
                 />
@@ -1592,7 +1641,7 @@ export default function QPOSPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">السعر *</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("السعر *", "Price *")}</label>
                   <input
                     type="number"
                     value={quickAddPrice}
@@ -1604,7 +1653,7 @@ export default function QPOSPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">الكمية</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الكمية", "Quantity")}</label>
                   <input
                     type="number"
                     value={quickAddStock}
@@ -1617,13 +1666,13 @@ export default function QPOSPage() {
               </div>
 
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-1.5">القسم</label>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("القسم", "Category")}</label>
                 <select
                   value={quickAddCategory}
                   onChange={(e) => setQuickAddCategory(e.target.value)}
                   className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">عام</option>
+                  <option value="">{t("عام", "General")}</option>
                   {categories.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -1632,12 +1681,12 @@ export default function QPOSPage() {
 
               {!quickAddBarcode && (
                 <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">الباركود (اختياري)</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الباركود (اختياري)", "Barcode (Optional)")}</label>
                   <input
                     type="text"
                     value={quickAddBarcode}
                     onChange={(e) => setQuickAddBarcode(e.target.value)}
-                    placeholder="رقم الباركود"
+                    placeholder={t("رقم الباركود", "Barcode number")}
                     className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
                   />
                 </div>
@@ -1653,12 +1702,12 @@ export default function QPOSPage() {
                 {quickAddLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                    جاري الإضافة...
+                    {t("جاري الإضافة...", "Adding...")}
                   </>
                 ) : (
                   <>
                     <Plus className="h-4 w-4" />
-                    إضافة وإضافة للسلة
+                    {t("إضافة وإضافة للسلة", "Add and add to cart")}
                   </>
                 )}
               </button>
@@ -1673,7 +1722,7 @@ export default function QPOSPage() {
                 }}
                 className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
               >
-                إلغاء
+                {t("إلغاء", "Cancel")}
               </button>
             </div>
           </div>

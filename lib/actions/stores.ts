@@ -6,21 +6,114 @@ import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
 import { serializeData } from "../firebase/firestore-helpers"
+import { logError } from "../logger"
 
-type StoreRecord = Record<string, any>
+export type StoreRecord = {
+  seller_id: string
+  name?: string
+  description?: string
+  address?: string
+  phone?: string
+  category?: string
+  latitude?: number | null
+  longitude?: number | null
+  whatsapp_number?: string
+  support_email?: string
+  owner_id_number?: string
+  id_card_image_url?: string | null
+  commercial_register_image_url?: string | null
+  tax_card_image_url?: string | null
+  image_url?: string
+  open_time?: string
+  close_time?: string
+  working_days?: string
+  return_policy?: string
+  is_approved?: boolean
+  rating?: number
+  created_at?: string
+  updated_at?: string
+  [key: string]: unknown
+}
+
+type EmbeddedStoreRecord = Omit<StoreRecord, "seller_id">
+
+export type Store = StoreRecord & { id: string }
+
+type ActiveOffer = {
+  store_id?: string
+  start_date?: string
+  end_date?: string
+  discount_percentage?: number
+  title?: string
+}
+
+type StoreWithActiveOffer = Store & {
+  activeOffer: {
+    discount_percentage?: number
+    title?: string
+  } | null
+}
+
+export type StoreCreateInput = {
+  seller_id: string
+  name: string
+  address: string
+  phone: string
+  category: string
+  description?: string
+  latitude?: number
+  longitude?: number
+  whatsapp_number?: string
+  support_email?: string
+  owner_id_number?: string
+  id_card_image_url?: string
+  commercial_register_image_url?: string
+  tax_card_image_url?: string
+  image_url?: string
+  open_time?: string
+  close_time?: string
+  working_days?: string
+  return_policy?: string
+}
+
+export type StoreUpdateInput = {
+  name: string
+  description: string
+  address: string
+  phone: string
+  image_url: string
+  category: string
+  open_time: string
+  close_time: string
+  working_days: string
+  support_email: string
+  whatsapp_number: string
+  return_policy: string
+  rating: number
+  latitude: number
+  longitude: number
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+function normalizeStoreName(name: string) {
+  return name.trim().toLowerCase()
+}
 
 // Helper to extract store from user document
 // Store ID is now the same as User ID (seller_id)
-function extractStore(doc: DocumentSnapshot): (StoreRecord & { id: string }) | null {
+function extractStore(doc: DocumentSnapshot): Store | null {
   if (!doc.exists) return null
-  const data = doc.data()
+  const data = doc.data() as { store?: EmbeddedStoreRecord } | undefined
   if (!data?.store) return null
   
   return serializeData({
     id: doc.id, // Store ID = User ID
     seller_id: doc.id,
     ...data.store,
-  })
+  }) as Store
 }
 
 // Internal implementation
@@ -33,24 +126,24 @@ async function _getStoresImpl(category?: string) {
   const snapshot = await query.get()
   
   // Extract stores from user documents
-  let stores = snapshot.docs
+  let stores: Store[] = snapshot.docs
     .map((doc) => {
-      const data = doc.data()
+      const data = doc.data() as { store?: EmbeddedStoreRecord } | undefined
       if (!data.store) return null
       return serializeData({
         id: doc.id, // Store ID = User ID
         seller_id: doc.id,
         ...data.store,
-      })
+      }) as Store
     })
-    .filter((store): store is NonNullable<typeof store> => store !== null)
+    .filter((store): store is Store => store !== null)
 
   // Filter by category if provided
   if (category) {
-    stores = stores.filter((store: any) => store.category === category)
+    stores = stores.filter((store) => store.category === category)
   }
 
-  stores.sort((a: any, b: any) => Number(b.rating || 0) - Number(a.rating || 0))
+  stores.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
 
   // Fetch active offers to show on store cards
   const now = new Date().toISOString()
@@ -58,14 +151,14 @@ async function _getStoresImpl(category?: string) {
     .where("end_date", ">=", now.split('T')[0])
     .get()
 
-  const activeOffers = offersSnapshot.docs.map(doc => doc.data())
+  const activeOffers: ActiveOffer[] = offersSnapshot.docs.map((doc) => doc.data() as ActiveOffer)
   const today = new Date().toISOString().split('T')[0]
 
-  return stores.map(store => {
-    const storeOffer = activeOffers.find(offer =>
+  return stores.map((store) => {
+    const storeOffer = activeOffers.find((offer) =>
       offer.store_id === store.id &&
-      offer.start_date <= today &&
-      offer.end_date >= today
+      (offer.start_date || "") <= today &&
+      (offer.end_date || "") >= today
     )
     return serializeData({
       ...store,
@@ -73,22 +166,22 @@ async function _getStoresImpl(category?: string) {
         discount_percentage: storeOffer.discount_percentage,
         title: storeOffer.title
       } : null
-    })
+    }) as StoreWithActiveOffer
   })
 }
 
 // Check if a store name already exists in the database
 export async function checkStoreNameExists(storeName: string): Promise<boolean> {
   const db = getAdminDb()
-  const normalizedName = storeName.trim().toLowerCase()
-  
-  const snapshot = await db.collection("users").where("role", "==", "seller").get()
-  
-  return snapshot.docs.some((doc) => {
-    const data = doc.data()
-    if (!data.store?.name) return false
-    return data.store.name.trim().toLowerCase() === normalizedName
-  })
+  const normalizedName = normalizeStoreName(storeName)
+
+  if (!normalizedName) {
+    return false
+  }
+
+  const snapshot = await db.collection("users").where("store_name_lower", "==", normalizedName).limit(1).get()
+
+  return !snapshot.empty
 }
 
 // Cached version of getStores (revalidates every 120 seconds)
@@ -132,22 +225,7 @@ export async function getStoreByUserId(userId: string) {
   return getStore(userId)
 }
 
-export async function createStore(storeData: {
-  seller_id: string
-  name: string
-  address: string
-  phone: string
-  category: string
-  description?: string
-  latitude?: number
-  longitude?: number
-  whatsapp_number?: string
-  support_email?: string
-  owner_id_number?: string
-  id_card_image_url?: string
-  commercial_register_image_url?: string
-  tax_card_image_url?: string
-}) {
+export async function createStore(storeData: StoreCreateInput) {
   const db = getAdminDb()
   const now = new Date().toISOString()
   
@@ -175,10 +253,17 @@ export async function createStore(storeData: {
   }
 
   try {
-    await userRef.set({ store: storePayload, updated_at: now }, { merge: true })
-  } catch (error: any) {
-    console.error("[v0] Error creating store:", error)
-    return { success: false, error: error?.message || "Failed to create store" }
+    await userRef.set(
+      {
+        store: storePayload,
+        store_name_lower: normalizeStoreName(storeData.name),
+        updated_at: now,
+      },
+      { merge: true },
+    )
+  } catch (error: unknown) {
+    logError("[v0] Error creating store:", error)
+    return { success: false, error: getErrorMessage(error, "Failed to create store") }
   }
 
   // Return store ID = seller_id
@@ -187,41 +272,36 @@ export async function createStore(storeData: {
 
 export async function updateStore(
   id: string,
-  formData: Partial<{
-    name: string
-    description: string
-    address: string
-    phone: string
-    image_url: string
-    category: string
-    open_time: string
-    close_time: string
-    working_days: string
-    support_email: string
-    whatsapp_number: string
-    return_policy: string
-    rating: number
-  }>,
+  formData: Partial<StoreUpdateInput>,
+  callerId?: string,
 ) {
+  // Ownership check: if callerId provided, must match store id
+  if (callerId && callerId !== id) {
+    return { success: false, error: "ليس لديك صلاحية لتعديل هذا المتجر" }
+  }
+
   const db = getAdminDb()
   // Store ID = User ID
   const userRef = db.collection("users").doc(id)
 
   // Build the update object for nested store field
-  const storeUpdates: Record<string, any> = {}
+  const storeUpdates: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(formData)) {
     if (value !== undefined) {
       storeUpdates[`store.${key}`] = value
     }
+  }
+  if (typeof formData.name === "string") {
+    storeUpdates["store_name_lower"] = normalizeStoreName(formData.name)
   }
   storeUpdates["store.updated_at"] = new Date().toISOString()
   storeUpdates["updated_at"] = new Date().toISOString()
 
   try {
     await userRef.update(storeUpdates)
-  } catch (error: any) {
-    console.error("[v0] Error updating store:", error)
-    return { success: false, error: error?.message || "Failed to update store" }
+  } catch (error: unknown) {
+    logError("[v0] Error updating store:", error)
+    return { success: false, error: getErrorMessage(error, "Failed to update store") }
   }
 
   const updatedSnap = await userRef.get()
@@ -250,9 +330,9 @@ export async function searchStores(query: string) {
     return stores
   }
 
-  return stores.filter((store: any) => {
-    const name = (store.name || "").toLowerCase()
-    const description = (store.description || "").toLowerCase()
+  return stores.filter((store) => {
+    const name = typeof store.name === "string" ? store.name.toLowerCase() : ""
+    const description = typeof store.description === "string" ? store.description.toLowerCase() : ""
     return name.includes(q) || description.includes(q)
   })
 }
@@ -260,9 +340,26 @@ export async function searchStores(query: string) {
 export async function uploadStoreImage(formData: FormData) {
   const file = formData.get("file") as File
   const storeId = formData.get("storeId") as string
+  const callerId = formData.get("callerId") as string
 
   if (!file || !storeId) {
     return { success: false, error: "Missing file or store ID" }
+  }
+
+  // Ownership check
+  if (callerId && callerId !== storeId) {
+    return { success: false, error: "ليس لديك صلاحية" }
+  }
+
+  // Validate file type
+  const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+  if (!allowedTypes.includes(file.type)) {
+    return { success: false, error: "نوع الملف غير مدعوم" }
+  }
+
+  // Validate file size (5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, error: "الملف أكبر من 5MB" }
   }
 
   try {
@@ -279,7 +376,7 @@ export async function uploadStoreImage(formData: FormData) {
       })
 
     if (error) {
-      console.error("[v0] Storage upload error details:", JSON.stringify(error, null, 2))
+      logError("[v0] Storage upload error details:", error)
       return { success: false, error: error.message }
     }
 
@@ -288,8 +385,8 @@ export async function uploadStoreImage(formData: FormData) {
     } = supabase.storage.from("product-images").getPublicUrl(data.path)
 
     return { success: true, url: publicUrl }
-  } catch (error: any) {
-    console.error("[v0] Server upload error:", error)
-    return { success: false, error: error?.message || "Internal server error during upload" }
+  } catch (error: unknown) {
+    logError("[v0] Server upload error:", error)
+    return { success: false, error: getErrorMessage(error, "Internal server error during upload") }
   }
 }

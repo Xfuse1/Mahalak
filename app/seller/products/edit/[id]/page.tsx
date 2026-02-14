@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { useEffect, useState } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "../../../../../components/seller-header"
 import { useAuth } from "../../../../../lib/auth-context"
@@ -15,27 +15,94 @@ import { Upload } from "lucide-react"
 import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import Image from "next/image"
-import { getSubcategoriesForStore } from "../../../../../lib/mock-data"
+import { fetchStoreSubcategories, type SubcategoryItem } from "../../../../../lib/firebase/categories"
 import { useToast } from "@/components/ui/toast"
+import { useLanguage } from "../../../../../lib/language-context"
 
-export default function EditProductPage({ params }: { params: { id: string } }) {
-  // Next.js 14+: params may be a Promise, unwrap with React.use()
-  const unwrappedParams = typeof params === "object" && "then" in params
-    ? React.use(params as unknown as Promise<{ id: string }>)
-    : (params as { id: string });
-  const { id } = unwrappedParams;
+type EditableProduct = {
+  id: string
+  store_id: string
+  name: string
+  description: string
+  price: number
+  stock: number
+  category?: string
+  image_url?: string
+  barcode?: string
+}
+
+export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const toast = useToast()
+  const { t } = useLanguage()
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingProduct, setIsLoadingProduct] = useState(true)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [product, setProduct] = useState<any>(null)
+  const [product, setProduct] = useState<EditableProduct | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
   const [customCategory, setCustomCategory] = useState<string>("")
+  const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([])
+  const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
+
+  const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
+    PRODUCT_NOT_FOUND: {
+      ar: "المنتج غير موجود",
+      en: "Product not found",
+    },
+    UNAUTHORIZED_PRODUCT_ACCESS: {
+      ar: "ليس لديك صلاحية لتعديل هذا المنتج",
+      en: "You are not authorized to edit this product",
+    },
+    PRICE_MUST_BE_POSITIVE: {
+      ar: "السعر يجب أن يكون أكبر من صفر",
+      en: "Price must be greater than zero",
+    },
+    STOCK_MUST_BE_POSITIVE: {
+      ar: "الكمية يجب أن تكون أكبر من صفر",
+      en: "Stock must be greater than zero",
+    },
+    UPDATE_PRODUCT_FAILED: {
+      ar: "فشل تحديث المنتج",
+      en: "Failed to update product",
+    },
+    MISSING_FILE_OR_STORE_ID: {
+      ar: "بيانات رفع الصورة غير مكتملة",
+      en: "Missing image upload data",
+    },
+    UNAUTHORIZED_IMAGE_UPLOAD: {
+      ar: "ليس لديك صلاحية لرفع صورة لهذا المتجر",
+      en: "You are not authorized to upload an image for this store",
+    },
+    UNSUPPORTED_IMAGE_TYPE: {
+      ar: "نوع الصورة غير مدعوم",
+      en: "Unsupported image type",
+    },
+    IMAGE_TOO_LARGE: {
+      ar: "حجم الصورة كبير جدًا (الحد الأقصى 5MB)",
+      en: "Image is too large (maximum 5MB)",
+    },
+    IMAGE_UPLOAD_FAILED: {
+      ar: "فشل رفع الصورة",
+      en: "Failed to upload image",
+    },
+    IMAGE_UPLOAD_INTERNAL_ERROR: {
+      ar: "حدث خطأ غير متوقع أثناء رفع الصورة",
+      en: "An unexpected error occurred while uploading the image",
+    },
+  }
+
+  const getProductActionErrorMessage = (errorCode?: string) => {
+    if (errorCode && productActionErrorMessages[errorCode]) {
+      const msg = productActionErrorMessages[errorCode]
+      return t(msg.ar, msg.en)
+    }
+    return t("فشل تحديث المنتج", "Failed to update product")
+  }
 
 
 
@@ -44,10 +111,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       if (!id || !user?.id) return
 
       setIsLoadingProduct(true)
-      const productData = await getProduct(id)
+      const productData = (await getProduct(id)) as EditableProduct | null
 
       if (!productData) {
-        setError("المنتج غير موجود")
+        setError(t("المنتج غير موجود", "Product not found"))
         setIsLoadingProduct(false)
         return
       }
@@ -55,28 +122,44 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       // Verify the product belongs to the seller's store
       const store = await getStoreByUserId(user.id)
       if (!store || store.id !== productData.store_id) {
-        setError("ليس لديك صلاحية لتعديل هذا المنتج")
+        setError(t("ليس لديك صلاحية لتعديل هذا المنتج", "You are not allowed to edit this product"))
         setIsLoadingProduct(false)
         return
       }
 
       setProduct(productData)
-      setImagePreview(productData.image_url)
+      setImagePreview(productData.image_url ?? null)
       
       // Set store category from the store object we already fetched
-      const currentStoreCategory = (store as any)?.category || ""
+      const currentStoreCategory = store?.category || ""
       if (store) {
         setStoreCategory(currentStoreCategory)
       }
 
-      // Check if category is in predefined list for this store type
-      const predefinedCategories = getSubcategoriesForStore(currentStoreCategory).map(c => c.name)
-      if (productData.category && predefinedCategories.includes(productData.category)) {
-        setSelectedCategory(productData.category)
-      } else if (productData.category) {
-        // Custom category - set to "أخرى" and fill custom input
-        setSelectedCategory("أخرى")
-        setCustomCategory(productData.category)
+      // Fetch subcategories from Firestore
+      setIsLoadingSubcategories(true)
+      try {
+        const subs = await fetchStoreSubcategories(currentStoreCategory)
+        setSubcategories(subs)
+        
+        // Check if category is in the fetched subcategories
+        const predefinedNames = subs.map(c => c.name)
+        if (productData.category && predefinedNames.includes(productData.category)) {
+          setSelectedCategory(productData.category)
+        } else if (productData.category) {
+          // Custom category - set to "أخرى" and fill custom input
+          setSelectedCategory("أخرى")
+          setCustomCategory(productData.category)
+        }
+      } catch (err) {
+        console.error("Error fetching subcategories:", err)
+        setSubcategories([{ id: "other", name: "أخرى" }])
+        if (productData.category) {
+          setSelectedCategory("أخرى")
+          setCustomCategory(productData.category)
+        }
+      } finally {
+        setIsLoadingSubcategories(false)
       }
 
       setIsLoadingProduct(false)
@@ -100,18 +183,22 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     setError(null)
 
     try {
+      if (!product) {
+        throw new Error(t("المنتج غير موجود", "Product not found"))
+      }
+
       const formData = new FormData(e.currentTarget)
-      let imageUrl = product.image_url
+      let imageUrl = product.image_url || ""
 
       // التحقق من صحة السعر والكمية
       const price = Number(formData.get("price"))
       const stock = Number(formData.get("stock"))
       
       if (!price || price <= 0) {
-        throw new Error("السعر يجب أن يكون أكبر من صفر")
+        throw new Error(t("السعر يجب أن يكون أكبر من صفر", "Price must be greater than zero"))
       }
       if (!stock || stock <= 0) {
-        throw new Error("الكمية يجب أن تكون أكبر من صفر")
+        throw new Error(t("الكمية يجب أن تكون أكبر من صفر", "Quantity must be greater than zero"))
       }
 
       // Upload new image if selected
@@ -119,17 +206,18 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         const store = await getStoreByUserId(user!.id)
 
         if (!store) {
-          throw new Error("لم يتم العثور على المتجر")
+          throw new Error(t("لم يتم العثور على المتجر", "Store was not found"))
         }
 
         const uploadFormData = new FormData()
         uploadFormData.append("file", imageFile)
         uploadFormData.append("storeId", store.id)
+        uploadFormData.append("callerId", user!.id)
 
         const uploadResult = await uploadProductImage(uploadFormData)
 
         if (!uploadResult.success) {
-          throw new Error(`فشل رفع الصورة: ${uploadResult.error}`)
+          throw new Error(getProductActionErrorMessage(uploadResult.error))
         }
 
         imageUrl = uploadResult.url!
@@ -150,16 +238,17 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         category: finalCategory,
         barcode: (formData.get("barcode") as string)?.trim() || "",
         image_url: imageUrl,
-      })
+      }, user?.id)
 
       if (!result.success) {
-        throw new Error(result.error || "فشل تحديث المنتج")
+        throw new Error(getProductActionErrorMessage(result.error))
       }
 
-      toast.success("تم تحديث المنتج بنجاح")
+      toast.success(t("تم تحديث المنتج بنجاح", "Product updated successfully"))
       router.push("/seller/products")
-    } catch (err: any) {
-      setError(err.message || "حدث خطأ أثناء تحديث المنتج")
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : t("حدث خطأ أثناء تحديث المنتج", "An error occurred while updating the product")
+      setError(errorMessage)
     } finally {
       setIsSaving(false)
     }
@@ -238,7 +327,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
               <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
                 <Upload className="w-8 h-8 text-white" />
               </div>
-              <p className="text-gray-500">جاري التحميل...</p>
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
         </main>
@@ -253,12 +342,12 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4 max-w-3xl">
             <div className="text-center py-12 bg-white rounded-2xl shadow-lg">
-              <p className="text-red-500 text-lg mb-4">{error || "المنتج غير موجود"}</p>
+              <p className="text-red-500 text-lg mb-4">{error || t("المنتج غير موجود", "Product not found")}</p>
               <Button
                 onClick={() => router.push("/seller/products")}
                 className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
               >
-                العودة للمنتجات
+                {t("العودة للمنتجات", "Back to products")}
               </Button>
             </div>
           </div>
@@ -274,20 +363,20 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-            تعديل المنتج
+            {t("تعديل المنتج", "Edit Product")}
           </h1>
 
           <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5" />
-                معلومات المنتج
+                {t("معلومات المنتج", "Product Information")}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <Label htmlFor="name" className="text-gray-700 font-medium">اسم المنتج</Label>
+                  <Label htmlFor="name" className="text-gray-700 font-medium">{t("اسم المنتج", "Product Name")}</Label>
                   <Input
                     id="name"
                     name="name"
@@ -298,7 +387,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </div>
 
                 <div>
-                  <Label htmlFor="description" className="text-gray-700 font-medium">الوصف</Label>
+                  <Label htmlFor="description" className="text-gray-700 font-medium">{t("الوصف", "Description")}</Label>
                   <Textarea
                     id="description"
                     name="description"
@@ -311,7 +400,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="price" className="text-gray-700 font-medium">السعر (جنيه)</Label>
+                    <Label htmlFor="price" className="text-gray-700 font-medium">{t("السعر (جنيه)", "Price (EGP)")}</Label>
                     <Input
                       id="price"
                       name="price"
@@ -324,7 +413,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                     />
                   </div>
                   <div>
-                    <Label htmlFor="stock" className="text-gray-700 font-medium">الكمية المتاحة</Label>
+                    <Label htmlFor="stock" className="text-gray-700 font-medium">{t("الكمية المتاحة", "Available Quantity")}</Label>
                     <Input
                       id="stock"
                       name="stock"
@@ -338,19 +427,19 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </div>
 
                 <div>
-                  <Label htmlFor="barcode" className="text-gray-700 font-medium">الباركود (اختياري)</Label>
+                  <Label htmlFor="barcode" className="text-gray-700 font-medium">{t("الباركود (اختياري)", "Barcode (Optional)")}</Label>
                   <Input
                     id="barcode"
                     name="barcode"
                     defaultValue={product.barcode || ""}
-                    placeholder="مثال: 6221507001016"
+                    placeholder={t("مثال: 6221507001016", "Example: 6221507001016")}
                     className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
                   />
-                  <p className="text-xs text-gray-500 mt-1">رقم الباركود المطبوع على المنتج (إن وجد)</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("رقم الباركود المطبوع على المنتج (إن وجد)", "Barcode printed on the product (if available)")}</p>
                 </div>
 
                 <div>
-                  <Label htmlFor="category" className="text-gray-700 font-medium">قسم المنتج</Label>
+                  <Label htmlFor="category" className="text-gray-700 font-medium">{t("قسم المنتج", "Product Category")}</Label>
                   <Select
                     name="category"
                     value={selectedCategory}
@@ -362,42 +451,52 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                     }}
                   >
                     <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue />
+                      <SelectValue placeholder={t("اختر القسم", "Select category")} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {getSubcategoriesForStore(storeCategory).map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
-                          {cat.icon} {cat.name}
+                      {isLoadingSubcategories ? (
+                        <SelectItem value="_loading" disabled className="rounded-lg">
+                          {t("جاري التحميل...", "Loading...")}
                         </SelectItem>
-                      ))}
+                      ) : subcategories.length > 0 ? (
+                        subcategories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.name} className="rounded-lg">
+                            {cat.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="_empty" disabled className="rounded-lg">
+                          {t("لا توجد فئات", "No categories")}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500 mt-1">اختر القسم المناسب لمنتجك</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("اختر القسم المناسب لمنتجك", "Choose the best category for your product")}</p>
                 </div>
 
                 {/* Custom category input when "أخرى" is selected */}
                 {selectedCategory === "أخرى" && (
                   <div>
-                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">اسم القسم</Label>
+                    <Label htmlFor="customCategory" className="text-gray-700 font-medium">{t("اسم القسم", "Category Name")}</Label>
                     <Input
                       id="customCategory"
                       name="customCategory"
                       value={customCategory}
                       onChange={(e) => setCustomCategory(e.target.value)}
-                      placeholder="أدخل اسم القسم"
+                      placeholder={t("أدخل اسم القسم", "Enter category name")}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                 )}
 
                 <div>
-                  <Label htmlFor="image" className="text-gray-700 font-medium">صورة المنتج</Label>
+                  <Label htmlFor="image" className="text-gray-700 font-medium">{t("صورة المنتج", "Product Image")}</Label>
                   {imagePreview && (
                     <div className="mt-3 mb-4">
                       <div className="relative w-48 h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-200">
                         <Image
                           src={imagePreview || "/placeholder.svg"}
-                          alt="معاينة الصورة"
+                          alt={t("معاينة الصورة", "Image preview")}
                           width={200}
                           height={200}
                           className="w-full h-full object-cover"
@@ -415,9 +514,9 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                           <Upload className="h-5 w-5 text-white" />
                         </div>
                         <p className="text-sm text-gray-600 font-medium">
-                          {imageFile ? imageFile.name : "انقر لتغيير صورة المنتج"}
+                          {imageFile ? imageFile.name : t("انقر لتغيير صورة المنتج", "Click to change product image")}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG, JPEG (حتى 5MB)</p>
+                        <p className="text-xs text-gray-500 mt-1">{t("PNG, JPG, JPEG (حتى 5MB)", "PNG, JPG, JPEG (up to 5MB)")}</p>
                       </div>
                       <input
                         id="image"
@@ -443,7 +542,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                     className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg"
                     disabled={isSaving}
                   >
-                    {isSaving ? "جاري الحفظ..." : "حفظ التعديلات"}
+                    {isSaving ? t("جاري الحفظ...", "Saving...") : t("حفظ التعديلات", "Save Changes")}
                   </Button>
                   <Button
                     type="button"
@@ -451,7 +550,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                     onClick={() => router.push("/seller/products")}
                     className="rounded-xl h-12 border-2 hover:bg-gray-50"
                   >
-                    إلغاء
+                    {t("إلغاء", "Cancel")}
                   </Button>
                 </div>
               </form>

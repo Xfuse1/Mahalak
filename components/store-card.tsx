@@ -6,32 +6,40 @@ import Link from "next/link"
 import { Star, MapPin, Tag, ArrowUpRight } from "lucide-react"
 import { Card, CardContent } from "./ui/card"
 import { Badge } from "./ui/badge"
-import type { Store } from "../lib/mock-data"
 import { useLanguage } from "../lib/language-context"
+import type { StoreListItem } from "@/lib/types/store"
 
 interface StoreCardProps {
-  store: Store
+  store: StoreListItem
 }
 
 const StoreCardComponent = ({ store }: StoreCardProps) => {
   const { t, language } = useLanguage()
   const isRTL = language === "ar"
 
+  // Format address from string or object
+  const formatAddress = (addr: StoreListItem["address"]): string => {
+    if (!addr) return ""
+    if (typeof addr === "string") return addr
+    const parts = [addr.street, addr.city, addr.state].filter(Boolean)
+    return parts.join(", ")
+  }
+
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className="group">
       <Link href={`/store/${store.id}`}>
         <Card className="overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 h-full border-0 bg-white shadow-md group-hover:shadow-blue-500/10">
           <div className="aspect-video relative bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-            {(store as any).activeOffer && (
+            {store.activeOffer && (
               <div className="absolute top-3 left-3 z-10">
                 <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white border-none px-3 py-1.5 flex items-center gap-1.5 shadow-lg animate-pulse">
                   <Tag className="h-3.5 w-3.5" />
-                  {t("عرض خاص", "Special Offer")} {(store as any).activeOffer.discount_percentage}%
+                  {t("عرض خاص", "Special Offer")} {store.activeOffer.discount_percentage}%
                 </Badge>
               </div>
             )}
             <Image
-              src={(store as any).image_url || store.logo || "/placeholder.svg"}
+              src={store.image_url || store.logo || "/placeholder.svg"}
               alt={store.name}
               fill
               className="object-cover transition-transform duration-500 group-hover:scale-110"
@@ -63,9 +71,7 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
                 <MapPin className="h-3.5 w-3.5" />
               </div>
               <span className="line-clamp-1 text-sm">
-                {typeof (store as any).address === 'object' && (store as any).address
-                  ? `${(store as any).address.street ? (store as any).address.street + ' ' : ''}${(store as any).address.city || ''}${(store as any).address.state ? ', ' + (store as any).address.state : ''}`
-                  : (store as any).address || ''}
+                {formatAddress(store.address)}
               </span>
             </div>
 

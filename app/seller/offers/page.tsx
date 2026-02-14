@@ -14,12 +14,14 @@ import { Plus, Edit, Trash2, Tag, Calendar, Package, Layers } from "lucide-react
 import { getStoreOffers, createOffer, updateOffer, deleteOffer } from "../../../lib/actions/offers"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getProductsByStoreId } from "../../../lib/actions/products"
-import { getSubcategoriesForStore } from "../../../lib/mock-data"
+import { fetchStoreSubcategories, type SubcategoryItem } from "../../../lib/firebase/categories"
 import { Badge } from "../../../components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { cn } from "../../../lib/utils"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { logError } from "../../../lib/logger"
+import { useLanguage } from "../../../lib/language-context"
 
 interface Product {
   id: string
@@ -41,10 +43,12 @@ interface Offer {
   product_id?: string
   category?: string
   quantity?: number
+  duration_hours?: number
 }
 
 export default function OffersPage() {
   const { user, isLoading } = useAuth()
+  const { t } = useLanguage()
   const toast = useToast()
   const confirm = useConfirm()
   const router = useRouter()
@@ -54,11 +58,14 @@ export default function OffersPage() {
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
   const [storeId, setStoreId] = useState<string | null>(null)
   const [storeCategory, setStoreCategory] = useState<string>("")
+  const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<string>("")
   const [offerTarget, setOfferTarget] = useState<"all" | "product" | "category">("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [startDateValue, setStartDateValue] = useState("")
+  const [endDateValue, setEndDateValue] = useState("")
   const [isSameDay, setIsSameDay] = useState(false)
   const [durationHours, setDurationHours] = useState<number>(1)
 
@@ -81,23 +88,32 @@ export default function OffersPage() {
         // Get seller's store
         const store = await getStoreByUserId(user.id)
         if (!store) {
-          console.error("[v0] No store found for seller")
+          logError("[v0] No store found for seller")
           setLoading(false)
           return
         }
 
         setStoreId(store.id)
-        setStoreCategory((store as any).category || "")
+        setStoreCategory(store.category || "")
+
+        // Fetch subcategories from Firestore
+        try {
+          const subs = await fetchStoreSubcategories(store.category || "")
+          setSubcategories(subs)
+        } catch (err) {
+          console.error("Error fetching subcategories:", err)
+          setSubcategories([{ id: "other", name: "أخرى" }])
+        }
 
         // Get products for this store
         const storeProducts = await getProductsByStoreId(store.id)
         setProducts(storeProducts as Product[])
 
         // Get offers for this store
-        const storeOffers = await getStoreOffers(store.id)
+        const storeOffers = await getStoreOffers(store.id, user.id)
         setOffers(storeOffers as Offer[])
       } catch (error) {
-        console.error("[v0] Error fetching data:", error)
+        logError("[v0] Error fetching data:", error)
       } finally {
         setLoading(false)
       }
@@ -105,6 +121,10 @@ export default function OffersPage() {
 
     fetchData()
   }, [user?.id])
+
+  useEffect(() => {
+    setIsSameDay(!!startDateValue && !!endDateValue && startDateValue === endDateValue)
+  }, [startDateValue, endDateValue])
 
   if (isLoading || !user || user.role !== "seller") {
     return null
@@ -119,23 +139,23 @@ export default function OffersPage() {
     const productId = formData.get("product") as string
     const quantity = formData.get("quantity") as string
     const discountPercentage = Number(formData.get("discount"))
-    const startDate = formData.get("startDate") as string
-    const endDate = formData.get("endDate") as string
+    const startDate = startDateValue
+    const endDate = endDateValue
     const hours = isSameDay ? durationHours : undefined
     
     // Validation
     if (discountPercentage <= 0 || discountPercentage > 100) {
-      toast.error("نسبة الخصم يجب أن تكون بين 1 و 100")
+      toast.error(t("نسبة الخصم يجب أن تكون بين 1 و 100", "Discount percentage must be between 1 and 100"))
       return
     }
     
     if (offerTarget === "product" && !selectedProduct && !productId) {
-      toast.error("يجب اختيار منتج للعرض")
+      toast.error(t("يجب اختيار منتج للعرض", "You must select a product for this offer"))
       return
     }
     
     if (offerTarget === "category" && !selectedCategory) {
-      toast.error("يجب اختيار قسم للعرض")
+      toast.error(t("يجب اختيار قسم للعرض", "You must select a category for this offer"))
       return
     }
     
@@ -144,7 +164,7 @@ export default function OffersPage() {
       const start = new Date(startDate)
       const end = new Date(endDate)
       if (end < start) {
-        toast.error("تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+        toast.error(t("تاريخ النهاية يجب أن يكون بعد تاريخ البداية", "End date must be after start date"))
         return
       }
     }
@@ -166,34 +186,34 @@ export default function OffersPage() {
     try {
       if (editingOffer) {
         // Update existing offer
-        const result = await updateOffer(editingOffer.id, offerData)
+        const result = await updateOffer(editingOffer.id, offerData, user.id)
         if (result.success) {
           // Refresh offers list
-          const updatedOffers = await getStoreOffers(storeId)
+          const updatedOffers = await getStoreOffers(storeId, user.id)
           setOffers(updatedOffers as Offer[])
           setEditingOffer(null)
           setIsAdding(false)
         } else {
-          toast.error(`فشل تحديث العرض: ${result.error}`)
+          toast.error(`${t("فشل تحديث العرض", "Failed to update offer")}: ${result.error}`)
         }
       } else {
         // Create new offer
         const result = await createOffer({
           store_id: storeId,
           ...offerData,
-        })
+        }, user.id)
         if (result.success) {
           // Refresh offers list
-          const updatedOffers = await getStoreOffers(storeId)
+          const updatedOffers = await getStoreOffers(storeId, user.id)
           setOffers(updatedOffers as Offer[])
           setIsAdding(false)
         } else {
-          toast.error(`فشل إضافة العرض: ${result.error}`)
+          toast.error(`${t("فشل إضافة العرض", "Failed to add offer")}: ${result.error}`)
         }
       }
     } catch (error) {
-      console.error("[v0] Error submitting offer:", error)
-      toast.error("حدث خطأ أثناء حفظ العرض")
+      logError("[v0] Error submitting offer:", error)
+      toast.error(t("حدث خطأ أثناء حفظ العرض", "An error occurred while saving the offer"))
     } finally {
       setSubmitting(false)
     }
@@ -201,27 +221,27 @@ export default function OffersPage() {
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirm({
-      title: "حذف العرض",
-      message: "هل أنت متأكد من حذف هذا العرض؟",
-      confirmText: "حذف",
-      cancelText: "إلغاء",
+      title: t("حذف العرض", "Delete Offer"),
+      message: t("هل أنت متأكد من حذف هذا العرض؟", "Are you sure you want to delete this offer?"),
+      confirmText: t("حذف", "Delete"),
+      cancelText: t("إلغاء", "Cancel"),
       variant: "danger",
     })
     if (!confirmed) return
     if (!storeId) return
 
     try {
-      const result = await deleteOffer(id)
+      const result = await deleteOffer(id, user.id)
       if (result.success) {
         // Refresh offers list
-        const updatedOffers = await getStoreOffers(storeId)
+        const updatedOffers = await getStoreOffers(storeId, user.id)
         setOffers(updatedOffers as Offer[])
       } else {
-        toast.error(`فشل حذف العرض: ${result.error}`)
+        toast.error(`${t("فشل حذف العرض", "Failed to delete offer")}: ${result.error}`)
       }
     } catch (error) {
-      console.error("[v0] Error deleting offer:", error)
-      toast.error("حدث خطأ أثناء حذف العرض")
+      logError("[v0] Error deleting offer:", error)
+      toast.error(t("حدث خطأ أثناء حذف العرض", "An error occurred while deleting the offer"))
     }
   }
 
@@ -240,11 +260,11 @@ export default function OffersPage() {
     // Check same day & hours
     const startD = offer.start_date ? offer.start_date.split("T")[0] : ""
     const endD = offer.end_date ? offer.end_date.split("T")[0] : ""
+    setStartDateValue(startD)
+    setEndDateValue(endD)
     if (startD && endD && startD === endD) {
-      setIsSameDay(true)
-      setDurationHours((offer as any).duration_hours || 1)
+      setDurationHours(offer.duration_hours || 1)
     } else {
-      setIsSameDay(false)
       setDurationHours(1)
     }
     setIsAdding(true)
@@ -265,12 +285,12 @@ export default function OffersPage() {
       const todayDate = new Date()
       todayDate.setHours(0, 0, 0, 0)
       if (todayDate.getTime() < start.getTime()) {
-        return { label: "قادم", className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+        return { label: t("قادم", "Upcoming"), className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
       }
       if (now > offerEnd) {
-        return { label: "منتهي", className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
+        return { label: t("منتهي", "Ended"), className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
       }
-      return { label: "نشط", className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
+      return { label: t("نشط", "Active"), className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
     }
 
     // Normal multi-day logic
@@ -279,12 +299,12 @@ export default function OffersPage() {
     end.setHours(23, 59, 59, 999)
 
     if (nowDate < start) {
-      return { label: "قادم", className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+      return { label: t("قادم", "Upcoming"), className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
     }
     if (now > end) {
-      return { label: "منتهي", className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
+      return { label: t("منتهي", "Ended"), className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
     }
-    return { label: "نشط", className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
+    return { label: t("نشط", "Active"), className: "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" }
   }
 
   const formatDateForInput = (dateString: string) => {
@@ -302,7 +322,7 @@ export default function OffersPage() {
               <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
                 <Tag className="w-8 h-8 text-white" />
               </div>
-              <p className="text-gray-500">جاري التحميل...</p>
+              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
         </main>
@@ -320,9 +340,9 @@ export default function OffersPage() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                العروض الترويجية
+                {t("العروض الترويجية", "Promotional Offers")}
               </h1>
-              <p className="text-gray-600 mt-1">إدارة العروض والخصومات</p>
+              <p className="text-gray-600 mt-1">{t("إدارة العروض والخصومات", "Manage offers and discounts")}</p>
             </div>
             <Button
               onClick={() => {
@@ -330,6 +350,8 @@ export default function OffersPage() {
                 setOfferTarget("all")
                 setSelectedProduct("")
                 setSelectedCategory("")
+                setStartDateValue("")
+                setEndDateValue("")
                 setIsSameDay(false)
                 setDurationHours(1)
                 setIsAdding(!isAdding)
@@ -337,7 +359,7 @@ export default function OffersPage() {
               className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
             >
               <Plus className="me-2 h-4 w-4" />
-              إضافة عرض جديد
+              {t("إضافة عرض جديد", "Add New Offer")}
             </Button>
           </div>
 
@@ -347,36 +369,36 @@ export default function OffersPage() {
               <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Tag className="h-5 w-5" />
-                  {editingOffer ? "تعديل العرض" : "إضافة عرض جديد"}
+                  {editingOffer ? t("تعديل العرض", "Edit Offer") : t("إضافة عرض جديد", "Add New Offer")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <Label htmlFor="title" className="text-gray-700 font-medium">عنوان العرض</Label>
+                    <Label htmlFor="title" className="text-gray-700 font-medium">{t("عنوان العرض", "Offer Title")}</Label>
                     <Input
                       id="title"
                       name="title"
                       required
-                      placeholder="خصم 20% على جميع المنتجات"
+                      placeholder={t("خصم 20% على جميع المنتجات", "20% off all products")}
                       defaultValue={editingOffer?.title}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="description" className="text-gray-700 font-medium">الوصف</Label>
+                    <Label htmlFor="description" className="text-gray-700 font-medium">{t("الوصف", "Description")}</Label>
                     <Textarea
                       id="description"
                       name="description"
                       required
-                      placeholder="عرض خاص لفترة محدودة"
+                      placeholder={t("عرض خاص لفترة محدودة", "Limited-time special offer")}
                       defaultValue={editingOffer?.description}
                       className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                     />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-gray-700 font-medium">تطبيق العرض على</Label>
+                      <Label className="text-gray-700 font-medium">{t("تطبيق العرض على", "Apply Offer To")}</Label>
                       <div className="flex gap-2 mt-1.5">
                         <Button
                           type="button"
@@ -385,7 +407,7 @@ export default function OffersPage() {
                           className={cn("flex-1 rounded-xl h-12", offerTarget === "all" && "bg-blue-600 hover:bg-blue-700")}
                           onClick={() => { setOfferTarget("all"); setSelectedProduct(""); setSelectedCategory("") }}
                         >
-                          جميع المنتجات
+                          {t("جميع المنتجات", "All Products")}
                         </Button>
                         <Button
                           type="button"
@@ -395,7 +417,7 @@ export default function OffersPage() {
                           onClick={() => { setOfferTarget("product"); setSelectedCategory("") }}
                         >
                           <Package className="h-4 w-4 me-1" />
-                          منتج محدد
+                          {t("منتج محدد", "Specific Product")}
                         </Button>
                         <Button
                           type="button"
@@ -405,21 +427,21 @@ export default function OffersPage() {
                           onClick={() => { setOfferTarget("category"); setSelectedProduct("") }}
                         >
                           <Layers className="h-4 w-4 me-1" />
-                          قسم كامل
+                          {t("قسم كامل", "Entire Category")}
                         </Button>
                       </div>
                     </div>
                     <div>
                       {offerTarget === "product" && (
                         <>
-                          <Label htmlFor="product" className="text-gray-700 font-medium">اختر المنتج</Label>
+                          <Label htmlFor="product" className="text-gray-700 font-medium">{t("اختر المنتج", "Choose Product")}</Label>
                           <Select
                             name="product"
                             defaultValue={editingOffer?.product_id || ""}
                             onValueChange={setSelectedProduct}
                           >
                             <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                              <SelectValue placeholder="اختر منتج" />
+                              <SelectValue placeholder={t("اختر منتج", "Select Product")} />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
                               {products.map((product) => (
@@ -436,13 +458,13 @@ export default function OffersPage() {
                       )}
                       {offerTarget === "category" && (
                         <>
-                          <Label className="text-gray-700 font-medium">اختر القسم</Label>
+                          <Label className="text-gray-700 font-medium">{t("اختر القسم", "Choose Category")}</Label>
                           <Select
                             value={selectedCategory}
                             onValueChange={setSelectedCategory}
                           >
                             <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                              <SelectValue placeholder="اختر قسم" />
+                              <SelectValue placeholder={t("اختر قسم", "Select Category")} />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
                               {/* Show categories that have products in this store */}
@@ -450,12 +472,12 @@ export default function OffersPage() {
                                 <SelectItem key={cat} value={cat!}>
                                   <div className="flex items-center gap-2">
                                     <Layers className="h-4 w-4 text-gray-400" />
-                                    {cat} ({products.filter((p) => p.category === cat).length} منتج)
+                                    {cat} ({products.filter((p) => p.category === cat).length} {t("منتج", "products")})
                                   </div>
                                 </SelectItem>
                               ))}
                               {/* Also show all categories based on store type */}
-                              {getSubcategoriesForStore(storeCategory).filter(c => !products.some(p => p.category === c.name)).map((cat) => (
+                              {subcategories.filter(c => c.name !== "أخرى" && !products.some(p => p.category === c.name)).map((cat) => (
                                 <SelectItem key={cat.id} value={cat.name}>
                                   <div className="flex items-center gap-2">
                                     <Layers className="h-4 w-4 text-gray-400" />
@@ -467,7 +489,9 @@ export default function OffersPage() {
                           </Select>
                           {selectedCategory && (
                             <p className="text-xs text-blue-600 mt-1">
-                              سيتم تطبيق الخصم على {products.filter(p => p.category === selectedCategory).length} منتج في هذا القسم
+                              {t("سيتم تطبيق الخصم على", "Discount will be applied to")}{" "}
+                              {products.filter((p) => p.category === selectedCategory).length} {t("منتج", "products")}{" "}
+                              {t("في هذا القسم", "in this category")}
                             </p>
                           )}
                         </>
@@ -475,26 +499,28 @@ export default function OffersPage() {
                       {offerTarget === "all" && (
                         <div className="flex items-center justify-center h-full">
                           <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3 mt-6 text-center w-full">
-                            سيتم تطبيق الخصم على جميع منتجات متجرك
+                            {t("سيتم تطبيق الخصم على جميع منتجات متجرك", "Discount will be applied to all products in your store")}
                           </p>
                         </div>
                       )}
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="quantity" className="text-gray-700 font-medium">الكمية المتاحة للعرض (اختياري)</Label>
+                    <Label htmlFor="quantity" className="text-gray-700 font-medium">
+                      {t("الكمية المتاحة للعرض (اختياري)", "Offer Quantity (Optional)")}
+                    </Label>
                     <Input
                       id="quantity"
                       name="quantity"
                       type="number"
                       min="1"
-                      placeholder="مثال: 100"
+                      placeholder={t("مثال: 100", "Example: 100")}
                       defaultValue={editingOffer?.quantity || ""}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="discount" className="text-gray-700 font-medium">نسبة الخصم (%)</Label>
+                    <Label htmlFor="discount" className="text-gray-700 font-medium">{t("نسبة الخصم (%)", "Discount Percentage (%)")}</Label>
                     <Input
                       id="discount"
                       name="discount"
@@ -506,41 +532,33 @@ export default function OffersPage() {
                       defaultValue={editingOffer?.discount_percentage}
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
-                    <p className="text-xs text-gray-500 mt-1">يجب أن تكون نسبة الخصم بين 1% و 100%</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {t("يجب أن تكون نسبة الخصم بين 1% و 100%", "Discount percentage must be between 1% and 100%")}
+                    </p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="startDate" className="text-gray-700 font-medium">تاريخ البداية</Label>
+                      <Label htmlFor="startDate" className="text-gray-700 font-medium">{t("تاريخ البداية", "Start Date")}</Label>
                       <Input
                         id="startDate"
                         name="startDate"
                         type="date"
                         required
-                        defaultValue={editingOffer ? formatDateForInput(editingOffer.start_date) : ""}
+                        value={startDateValue}
                         className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                        onChange={(e) => {
-                          const endEl = document.getElementById("endDate") as HTMLInputElement
-                          const endVal = endEl?.value
-                          const startVal = e.target.value
-                          setIsSameDay(!!startVal && !!endVal && startVal === endVal)
-                        }}
+                        onChange={(e) => setStartDateValue(e.target.value)}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="endDate" className="text-gray-700 font-medium">تاريخ النهاية</Label>
+                      <Label htmlFor="endDate" className="text-gray-700 font-medium">{t("تاريخ النهاية", "End Date")}</Label>
                       <Input
                         id="endDate"
                         name="endDate"
                         type="date"
                         required
-                        defaultValue={editingOffer ? formatDateForInput(editingOffer.end_date) : ""}
+                        value={endDateValue}
                         className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                        onChange={(e) => {
-                          const startEl = document.getElementById("startDate") as HTMLInputElement
-                          const startVal = startEl?.value
-                          const endVal = e.target.value
-                          setIsSameDay(!!startVal && !!endVal && startVal === endVal)
-                        }}
+                        onChange={(e) => setEndDateValue(e.target.value)}
                       />
                     </div>
                   </div>
@@ -548,9 +566,11 @@ export default function OffersPage() {
                   {isSameDay && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                       <Label htmlFor="durationHours" className="text-amber-800 font-medium flex items-center gap-2">
-                        ⏰ عدد ساعات العرض
+                        {"\u23F0"} {t("عدد ساعات العرض", "Offer Duration Hours")}
                       </Label>
-                      <p className="text-xs text-amber-600 mt-1 mb-2">العرض في نفس اليوم — حدد عدد الساعات (من 1 إلى 24 ساعة)</p>
+                      <p className="text-xs text-amber-600 mt-1 mb-2">
+                        {t("العرض في نفس اليوم - حدد عدد الساعات (من 1 إلى 24 ساعة)", "Same-day offer - set duration in hours (from 1 to 24)")}
+                      </p>
                       <Input
                         id="durationHours"
                         name="durationHours"
@@ -567,7 +587,10 @@ export default function OffersPage() {
                         }}
                         className="mt-1 h-12 rounded-xl border-amber-300 focus:border-amber-500 focus:ring-amber-500 bg-white w-full md:w-48"
                       />
-                      <p className="text-xs text-amber-500 mt-1.5">العرض سيبدأ من الساعة 12:00 صباحاً ويستمر لمدة {durationHours} {durationHours === 1 ? "ساعة" : "ساعات"}</p>
+                      <p className="text-xs text-amber-500 mt-1.5">
+                        {t("العرض سيبدأ من الساعة 12:00 صباحاً ويستمر لمدة", "Offer starts at 12:00 AM and lasts for")}{" "}
+                        {durationHours} {durationHours === 1 ? t("ساعة", "hour") : t("ساعات", "hours")}
+                      </p>
                     </div>
                   )}
                   <div className="flex gap-3 pt-2">
@@ -576,7 +599,11 @@ export default function OffersPage() {
                       className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 px-8 shadow-lg" 
                       disabled={submitting}
                     >
-                      {submitting ? "جاري الحفظ..." : editingOffer ? "حفظ التعديلات" : "إضافة العرض"}
+                      {submitting
+                        ? t("جاري الحفظ...", "Saving...")
+                        : editingOffer
+                          ? t("حفظ التعديلات", "Save Changes")
+                          : t("إضافة العرض", "Add Offer")}
                     </Button>
                     <Button
                       type="button"
@@ -584,11 +611,14 @@ export default function OffersPage() {
                       onClick={() => {
                         setIsAdding(false)
                         setEditingOffer(null)
+                        setStartDateValue("")
+                        setEndDateValue("")
+                        setDurationHours(1)
                       }}
                       disabled={submitting}
                       className="rounded-xl h-12 px-8 border-2"
                     >
-                      إلغاء
+                      {t("إلغاء", "Cancel")}
                     </Button>
                   </div>
                 </form>
@@ -599,7 +629,7 @@ export default function OffersPage() {
           {/* Offers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {offers.map((offer) => {
-              const status = getOfferStatus(offer.start_date, offer.end_date, (offer as any).duration_hours)
+              const status = getOfferStatus(offer.start_date, offer.end_date, offer.duration_hours)
               return (
                 <Card key={offer.id} className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
                   <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
@@ -639,7 +669,7 @@ export default function OffersPage() {
                   <CardContent className="p-5">
                     <div className="space-y-4">
                       <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4">
-                        <span className="text-sm text-gray-600">الخصم:</span>
+                        <span className="text-sm text-gray-600">{t("الخصم:", "Discount:")}</span>
                         <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
                           {offer.discount_percentage}%
                         </span>
@@ -647,39 +677,48 @@ export default function OffersPage() {
                       {offer.product_id && (
                         <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-xl p-3">
                           <Package className="h-4 w-4" />
-                          <span>المنتج: {products.find(p => p.id === offer.product_id)?.name || "منتج محدد"}</span>
+                          <span>
+                            {t("المنتج:", "Product:")} {products.find((p) => p.id === offer.product_id)?.name || t("منتج محدد", "Specific Product")}
+                          </span>
                         </div>
                       )}
-                      {(offer as any).category && !(offer as any).product_id && (
+                      {offer.category && !offer.product_id && (
                         <div className="flex items-center gap-2 text-sm bg-purple-50 rounded-xl p-3">
                           <Layers className="h-4 w-4 text-purple-600" />
-                          <span className="font-medium text-purple-700">القسم: {(offer as any).category}</span>
-                          <span className="text-purple-500 text-xs">({products.filter(p => p.category === (offer as any).category).length} منتج)</span>
+                          <span className="font-medium text-purple-700">{t("القسم:", "Category:")} {offer.category}</span>
+                          <span className="text-purple-500 text-xs">
+                            ({products.filter((p) => p.category === offer.category).length} {t("منتج", "products")})
+                          </span>
                         </div>
                       )}
-                      {!offer.product_id && !(offer as any).category && (
+                      {!offer.product_id && !offer.category && (
                         <div className="flex items-center gap-2 text-sm text-gray-500 bg-blue-50 rounded-xl p-3">
                           <Package className="h-4 w-4 text-blue-500" />
-                          <span className="text-blue-600 font-medium">جميع المنتجات</span>
+                          <span className="text-blue-600 font-medium">{t("جميع المنتجات", "All Products")}</span>
                         </div>
                       )}
                       {offer.quantity && (
                         <div className="flex items-center gap-2 text-sm text-gray-500 bg-orange-50 rounded-xl p-3">
-                          <span className="font-medium text-orange-600">الكمية المتاحة: {offer.quantity}</span>
+                          <span className="font-medium text-orange-600">
+                            {t("الكمية المتاحة:", "Available Quantity:")} {offer.quantity}
+                          </span>
                         </div>
                       )}
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Calendar className="h-4 w-4" />
-                        <span>من: {formatDateForInput(offer.start_date)}</span>
+                        <span>{t("من:", "From:")} {formatDateForInput(offer.start_date)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Calendar className="h-4 w-4" />
-                        <span>إلى: {formatDateForInput(offer.end_date)}</span>
+                        <span>{t("إلى:", "To:")} {formatDateForInput(offer.end_date)}</span>
                       </div>
-                      {(offer as any).duration_hours && formatDateForInput(offer.start_date) === formatDateForInput(offer.end_date) && (
+                      {offer.duration_hours && formatDateForInput(offer.start_date) === formatDateForInput(offer.end_date) && (
                         <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded-xl p-2">
-                          <span>⏰</span>
-                          <span>مدة العرض: {(offer as any).duration_hours} {(offer as any).duration_hours === 1 ? "ساعة" : "ساعات"}</span>
+                          <span>{"\u23F0"}</span>
+                          <span>
+                            {t("مدة العرض:", "Offer Duration:")} {offer.duration_hours}{" "}
+                            {offer.duration_hours === 1 ? t("ساعة", "hour") : t("ساعات", "hours")}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -696,13 +735,13 @@ export default function OffersPage() {
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mb-6">
                   <Tag className="h-10 w-10 text-gray-400" />
                 </div>
-                <p className="text-gray-500 text-lg mb-6">لا توجد عروض حالياً</p>
+                <p className="text-gray-500 text-lg mb-6">{t("لا توجد عروض حالياً", "No offers available right now")}</p>
                 <Button 
                   onClick={() => setIsAdding(true)} 
                   className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
                 >
                   <Plus className="me-2 h-4 w-4" />
-                  إضافة عرض جديد
+                  {t("إضافة عرض جديد", "Add New Offer")}
                 </Button>
               </CardContent>
             </Card>

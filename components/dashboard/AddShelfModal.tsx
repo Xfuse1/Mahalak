@@ -61,7 +61,7 @@ export default function AddShelfModal() {
         // Save layout to DB
         const { shelves, placements } = useProductStore.getState();
         if (storeId) {
-            saveSupermarketLayout(storeId, shelves, placements);
+            saveSupermarketLayout(storeId, shelves, placements, storeId);
         }
 
         toggleAddShelfModal(false);

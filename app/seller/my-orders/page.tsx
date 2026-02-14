@@ -12,6 +12,7 @@ import Link from "next/link"
 import { getCustomerOrders } from "../../../lib/actions/orders"
 import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../../components/order-tracking-timeline"
+import { logError } from "../../../lib/logger"
 
 // Lazy load tracking modal (only opens on user action)
 const OrderTrackingModal = dynamic(
@@ -76,7 +77,7 @@ export default function SellerMyOrdersPage() {
         const data = await getCustomerOrders(user.id)
         setOrders(data as Order[])
       } catch (error) {
-        console.error("[v0] Error fetching orders:", error)
+        logError("[v0] Error fetching orders:", error)
         setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
       } finally {
         setOrdersLoading(false)
@@ -146,7 +147,7 @@ export default function SellerMyOrdersPage() {
                 <Link href="/seller/dashboard" className="hover:text-blue-600 transition-colors">
                   {t("لوحة التحكم", "Dashboard")}
                 </Link>
-                <ArrowRight className="h-4 w-4 rotate-180" />
+                <ArrowRight className="h-4 w-4 rotate-180 rtl:rotate-0" />
                 <span className="text-gray-800">{t("طلباتي كمشتري", "My Orders")}</span>
               </div>
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
@@ -253,7 +254,7 @@ export default function SellerMyOrdersPage() {
                             setIsTrackingModalOpen(true)
                           }}
                         >
-                          <Eye className="h-4 w-4 ml-2" />
+                          <Eye className="h-4 w-4 ms-2" />
                           {t("تتبع الطلب", "Track Order")}
                         </Button>
                       </div>

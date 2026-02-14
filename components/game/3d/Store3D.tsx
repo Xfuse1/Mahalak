@@ -5,10 +5,12 @@ import * as THREE from 'three';
 import Link from 'next/link';
 import { useProductStore } from '../../../lib/stores/product-store';
 import { useCartStore } from '../../../lib/stores/cart-store';
-import { getProducts } from '../../../lib/actions/products';
+import { getProductsByStoreId } from '../../../lib/actions/products';
 import { getSupermarketLayout } from '../../../lib/actions/layout';
 import { getStoreByUserId } from '../../../lib/actions/stores';
 import { useAuth } from '../../../lib/auth-context';
+import { useLanguage } from '../../../lib/language-context';
+import { logError } from '../../../lib/logger';
 import { LayoutGrid } from 'lucide-react';
 
 type SimProduct = {
@@ -23,6 +25,52 @@ type SimProduct = {
     color: number;
     label: string;
     pattern?: string;
+};
+
+type StoreProductRecord = {
+    id?: string;
+    name?: string;
+    description?: string;
+    price?: number;
+    category?: string;
+    image_url?: string | null;
+    store_id?: string;
+    stores?: { name?: string } | null;
+    simulator_section?: string;
+};
+
+type RuntimeShelf = {
+    shelfId: string;
+    type: string;
+    position: { x: number; y: number; z: number };
+    rotation?: { x?: number; y?: number; z?: number };
+    object3D?: THREE.Group;
+    placementCount?: number;
+};
+
+type RuntimePlacement = {
+    placementId: string;
+    shelfId: string;
+    productId: string;
+    position?: { x: number; y: number; z: number };
+    rotation?: { x: number; y: number; z: number };
+    quantity?: number;
+};
+
+type LayoutData = {
+    shelves: RuntimeShelf[];
+    placements?: RuntimePlacement[];
+};
+
+type TouchLookState = {
+    dx: number;
+    dy: number;
+    lastX?: number;
+};
+
+type InstancedProductUserData = {
+    clickable: boolean;
+    instanceMetadata: SimProduct[];
 };
 
 function normalizeCategory(categoryValue?: string, sectionValue?: string) {
@@ -85,10 +133,22 @@ function pickPattern(seed: string) {
     return fallbackPatterns[idx];
 }
 
+function isLayoutData(value: unknown): value is LayoutData {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const candidate = value as { shelves?: unknown; placements?: unknown };
+    return Array.isArray(candidate.shelves) && (candidate.placements === undefined || Array.isArray(candidate.placements));
+}
+
 export default function SupermarketSimulator() {
     const mountRef = useRef<HTMLDivElement>(null);
     const { items: cartItems, addItem, decrementItem, clear } = useCartStore();
     const { user } = useAuth();
+    const { t, language } = useLanguage();
+    const isArabic = language === 'ar';
+    const fallbackProductName = isArabic ? 'منتج' : 'Product';
+    const dragToAddMessage = isArabic ? 'اسحب لأسفل للإضافة' : 'Drag down to add';
     const total = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
     const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems]);
     const [money, setMoney] = useState(500);
@@ -111,8 +171,9 @@ export default function SupermarketSimulator() {
     // Refs for accessing latest state inside event listeners without re-binding
     const stateRef = useRef({ money, total, isLocked: isLockedState });
     const lockPointerRef = useRef<(posX?: number, posZ?: number) => void>(() => { });
-    const heldProductRef = useRef<any>(null);
+    const heldProductRef = useRef<SimProduct | null>(null);
     const heldMeshRef = useRef<THREE.Mesh | null>(null);
+    const layoutDataRef = useRef<LayoutData | null>(null);
     useEffect(() => { stateRef.current = { money, total, isLocked: isLockedState }; }, [money, total, isLockedState]);
 
     const keysRef = useRef<Record<string, boolean>>({});
@@ -125,54 +186,49 @@ export default function SupermarketSimulator() {
     }, []);
 
     const joystickRef = useRef({ x: 0, y: 0, active: false });
-    const touchLookRef = useRef({ dx: 0, dy: 0 });
+    const touchLookRef = useRef<TouchLookState>({ dx: 0, dy: 0 });
 
-    const departments = [
-        { id: 'produce', label: 'الخضروات والفواكه', icon: '🍎', x: 20, z: 15 },
-        { id: 'bakery', label: 'المخبز الطازج', icon: '🍞', x: -20, z: 15 },
-        { id: 'dairy', label: 'الألبان والأجبان', icon: '🥛', x: 20, z: -15 },
-        { id: 'meat', label: 'اللحوم والأسماك', icon: '🥩', x: -20, z: -15 },
-        { id: 'beauty', label: 'الصحة والجمال', icon: '🧴', x: 0, z: -35 },
-        { id: 'grocery', label: 'البقالة العامة', icon: '🥫', x: 0, z: 10 }
-    ];
+    const departments = useMemo(() => ([
+        { id: 'produce', label: t('الخضروات والفواكه', 'Fresh Produce'), icon: '🍎', x: 20, z: 15 },
+        { id: 'bakery', label: t('المخبز الطازج', 'Fresh Bakery'), icon: '🍞', x: -20, z: 15 },
+        { id: 'dairy', label: t('الألبان والأجبان', 'Dairy & Cheese'), icon: '🥛', x: 20, z: -15 },
+        { id: 'meat', label: t('اللحوم والأسماك', 'Meat & Seafood'), icon: '🥩', x: -20, z: -15 },
+        { id: 'beauty', label: t('الصحة والجمال', 'Health & Beauty'), icon: '🧴', x: 0, z: -35 },
+        { id: 'grocery', label: t('البقالة العامة', 'General Grocery'), icon: '🥫', x: 0, z: 10 }
+    ]), [t]);
 
     useEffect(() => {
         let active = true;
 
         (async () => {
             try {
-                // Fetch Products
-                const products = await getProducts();
-
                 // Fetch User Store & Layout (For Seller Preview)
-                let fetchedLayout = null;
+                let fetchedLayout: LayoutData | null = null;
+                let products: StoreProductRecord[] = [];
 
                 if (user?.id) {
                     try {
                         const userStore = await getStoreByUserId(user.id);
                         if (userStore) {
-                            const layoutRes = await getSupermarketLayout(userStore.id);
-                            if (layoutRes.success && layoutRes.data) {
+                            // Fetch only this store's products
+                            const storeProducts = await getProductsByStoreId(userStore.id);
+                            products = Array.isArray(storeProducts) ? (storeProducts as StoreProductRecord[]) : [];
+                            const layoutRes = await getSupermarketLayout(userStore.id, user.id);
+                            if (layoutRes.success && isLayoutData(layoutRes.data)) {
                                 fetchedLayout = layoutRes.data;
                             }
                         }
-                    } catch (err) {
-                        console.error("Error fetching user store:", err);
+                    } catch (_err) {
+                        // Failed to fetch user store
                     }
                 }
 
-                // Store layout in global/ref for the render effect to access
-                // Since we can't easily pass it to the next effect without state, and state triggers re-render...
-                // We will attach it to the window or a useRef?
-                // Better: Use a dedicated state for layout and add it to the dependency of the render effect
-                // But the render effect is huge.
-                // Hack: Attach to `window.simLayout` or similar just for this pass, or use a Ref.
-                (window as any).simLayoutData = fetchedLayout;
+                layoutDataRef.current = fetchedLayout;
 
                 if (!active) return;
 
-                const normalized = Array.isArray(products) ? products.slice(0, 160).map((product: any, index: number) => {
-                    const name = product?.name || 'منتج';
+                const normalized = Array.isArray(products) ? products.slice(0, 160).map((product: StoreProductRecord, index: number) => {
+                    const name = product?.name || fallbackProductName;
                     const id = product?.id || `product_${index}`;
                     const category = normalizeCategory(product?.category, product?.simulator_section);
                     const color = hashToColor(`${id}_${name}`);
@@ -194,7 +250,7 @@ export default function SupermarketSimulator() {
 
                 setCatalog(normalized);
             } catch (error) {
-                console.error('[simulator] Failed to load data:', error);
+                logError('[simulator] Failed to load data:', error);
                 if (active) {
                     setCatalog([]);
                 }
@@ -208,7 +264,7 @@ export default function SupermarketSimulator() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [fallbackProductName, user?.id]);
 
     useEffect(() => {
         if (!mountRef.current || !catalogLoaded) return;
@@ -222,7 +278,7 @@ export default function SupermarketSimulator() {
             geometry: THREE.BufferGeometry,
             material: THREE.Material,
             matrices: THREE.Matrix4[],
-            metadata: any[]
+            metadata: SimProduct[]
         }>();
 
         const shelfInstancingMap = new Map<string, {
@@ -357,6 +413,7 @@ export default function SupermarketSimulator() {
 
         const productAssets = new Map<string, THREE.Material>();
         const textureCache = new Map<string, THREE.Texture>();
+        const fallbackTextures: THREE.Texture[] = [];
         const textureLoader = new THREE.TextureLoader();
         textureLoader.setCrossOrigin('anonymous');
 
@@ -660,7 +717,7 @@ export default function SupermarketSimulator() {
 
             ctx.fillStyle = '#c62828';
             ctx.font = isProduce ? 'bold 14px sans-serif' : 'bold 18px sans-serif';
-            ctx.fillText(`$${info.price.toFixed(2)}`, prX, prY + 6);
+            ctx.fillText(`${info.price.toFixed(2)} EGP`, prX, prY + 6);
 
             const tex = new THREE.CanvasTexture(canvas);
             tex.anisotropy = 4;
@@ -695,6 +752,7 @@ export default function SupermarketSimulator() {
 
         productLibrary.forEach((info) => {
             const fallback = createFallbackTexture(info);
+            fallbackTextures.push(fallback);
             const mat = isMobileDevice
                 ? new THREE.MeshStandardMaterial({
                     map: fallback,
@@ -989,7 +1047,10 @@ export default function SupermarketSimulator() {
                 } else {
                     geom = new THREE.BoxGeometry(0.32, 0.48, 0.22);
                 }
-                geom.translate(0, (geom as any).parameters?.height / 2 || 0.24, 0);
+                geom.computeBoundingBox();
+                const box = geom.boundingBox;
+                const height = box ? box.max.y - box.min.y : 0.48;
+                geom.translate(0, height / 2, 0);
 
                 productInstancingMap.set(info.id, {
                     geometry: geom,
@@ -1001,7 +1062,7 @@ export default function SupermarketSimulator() {
 
             const entry = productInstancingMap.get(info.id)!;
             entry.matrices.push(worldMatrix.clone());
-            entry.metadata.push({ ...info, clickable: true });
+            entry.metadata.push({ ...info });
         }
 
         // --- Helper: Create Department Sign ---
@@ -1010,6 +1071,7 @@ export default function SupermarketSimulator() {
             signCanvas.width = 1024;
             signCanvas.height = 256;
             const sCtx = signCanvas.getContext('2d')!;
+            const signText = isArabic ? textAr : textEn;
 
             // Background - Premium Dark Gold Glossy
             const grad = sCtx.createLinearGradient(0, 0, 0, 256);
@@ -1024,16 +1086,12 @@ export default function SupermarketSimulator() {
             sCtx.lineWidth = 15;
             sCtx.strokeRect(10, 10, 1004, 236);
 
-            // Text Arabic
+            // Text
             sCtx.fillStyle = '#aa8833';
             sCtx.font = 'bold 80px sans-serif';
             sCtx.textAlign = 'center';
-            sCtx.direction = 'rtl';
-            sCtx.fillText(textAr, 512, 110);
-
-            // Text English
-            sCtx.font = '50px sans-serif';
-            sCtx.fillText(textEn, 512, 180);
+            sCtx.direction = isArabic ? 'rtl' : 'ltr';
+            sCtx.fillText(signText, 512, 150);
 
             const tex = new THREE.CanvasTexture(signCanvas);
             const signGeom = new THREE.PlaneGeometry(6, 1.5);
@@ -1285,7 +1343,7 @@ export default function SupermarketSimulator() {
 
         // --- DYNAMIC STORE LAYOUT FROM DB ---
 
-        function renderDynamicShelf(shelf: any) {
+        function renderDynamicShelf(shelf: RuntimeShelf) {
             const group = new THREE.Group();
             const { x, y, z } = shelf.position;
             const rotY = shelf.rotation ? shelf.rotation.y : 0; // Map editor Y rotation
@@ -1347,8 +1405,8 @@ export default function SupermarketSimulator() {
             shelf.object3D = group;
         }
 
-        function renderDynamicProduct(placement: any, shelves: any[]) {
-            const shelf = shelves.find((s: any) => s.shelfId === placement.shelfId);
+        function renderDynamicProduct(placement: RuntimePlacement, shelves: RuntimeShelf[]) {
+            const shelf = shelves.find((s) => s.shelfId === placement.shelfId);
             if (!shelf || !shelf.object3D) return;
 
             const productInfo = catalog.find((p) => p.id === placement.productId);
@@ -1405,13 +1463,12 @@ export default function SupermarketSimulator() {
             registerProductInstance(productInfo, worldMat);
         }
 
-        const layoutData = (window as any).simLayoutData;
-        const useCustomLayout = layoutData && layoutData.shelves && layoutData.shelves.length > 0;
+        const layoutData = layoutDataRef.current;
 
-        if (useCustomLayout) {
-            layoutData.shelves.forEach((s: any) => renderDynamicShelf(s));
+        if (layoutData?.shelves?.length) {
+            layoutData.shelves.forEach((s) => renderDynamicShelf(s));
             if (layoutData.placements) {
-                layoutData.placements.forEach((p: any) => renderDynamicProduct(p, layoutData.shelves));
+                layoutData.placements.forEach((p) => renderDynamicProduct(p, layoutData.shelves));
             }
 
             // Still add Cashier and Dept Signs if needed, or rely on user adding them?
@@ -1473,9 +1530,11 @@ export default function SupermarketSimulator() {
             imesh.castShadow = !isMobileDevice;
             imesh.receiveShadow = !isMobileDevice;
 
-            // Store metadata on the Mesh itself for simple retrieval
-            (imesh as any).instanceMetadata = entry.metadata;
-            imesh.userData = { clickable: true };
+            // Store metadata on userData for safe typed retrieval later.
+            imesh.userData = {
+                clickable: true,
+                instanceMetadata: entry.metadata,
+            } satisfies InstancedProductUserData;
 
             scene.add(imesh);
             clickableObjs.push(imesh);
@@ -2006,7 +2065,8 @@ export default function SupermarketSimulator() {
             if (intersect) {
                 const mesh = intersect.object as THREE.Mesh;
                 if (mesh instanceof THREE.InstancedMesh && intersect.instanceId !== undefined) {
-                    nextHover = (mesh as any).instanceMetadata?.[intersect.instanceId] || null;
+                    const metadata = (mesh.userData as Partial<InstancedProductUserData>).instanceMetadata;
+                    nextHover = metadata?.[intersect.instanceId] || null;
                 } else if (mesh.userData?.clickable) {
                     nextHover = mesh.userData as SimProduct;
                 }
@@ -2035,10 +2095,11 @@ export default function SupermarketSimulator() {
 
                 // 2. Otherwise, check for swipe-to-look
                 if (touchLookRef.current.dx === 0) { // Only if not currently processing
-                    const dx = touch.clientX - (touchLookRef.current as any).lastX || 0;
+                    const previousX = touchLookRef.current.lastX ?? touch.clientX;
+                    const dx = touch.clientX - previousX;
                     touchLookRef.current.dx = dx;
                 }
-                (touchLookRef.current as any).lastX = touch.clientX;
+                touchLookRef.current.lastX = touch.clientX;
             }
         };
 
@@ -2065,12 +2126,13 @@ export default function SupermarketSimulator() {
                 const mesh = intersect.object as THREE.Mesh;
 
                 if (mesh.userData.clickable) {
-                    let p;
+                    let p: SimProduct | null = null;
                     // If it's an InstancedMesh, retrieve metadata by id
                     if (mesh instanceof THREE.InstancedMesh && intersect.instanceId !== undefined) {
-                        p = (mesh as any).instanceMetadata[intersect.instanceId];
+                        const metadata = (mesh.userData as Partial<InstancedProductUserData>).instanceMetadata;
+                        p = metadata?.[intersect.instanceId] || null;
                     } else {
-                        p = mesh.userData;
+                        p = mesh.userData as SimProduct;
                     }
 
                     if (p && p.price) {
@@ -2096,7 +2158,7 @@ export default function SupermarketSimulator() {
         const handleTouchStart = (e: TouchEvent) => {
             if (e.touches.length > 0) {
                 const touch = e.touches[0];
-                (touchLookRef.current as any).lastX = touch.clientX;
+                touchLookRef.current.lastX = touch.clientX;
                 onDown(touch.clientX, touch.clientY);
             }
         };
@@ -2134,7 +2196,7 @@ export default function SupermarketSimulator() {
             } else {
                 // If it was a quick click and we are on mobile or simple mode, add it anyway?
                 // Actually, let's stick to the button for clarity.
-                setMessage("اسحب لأسفل للإضافة");
+                setMessage(dragToAddMessage);
                 setTimeout(() => setMessage(''), 800);
             }
 
@@ -2167,28 +2229,130 @@ export default function SupermarketSimulator() {
         }
         window.addEventListener('resize', handleResize);
 
+        const disposedTextures = new Set<THREE.Texture>();
+        const disposedMaterials = new Set<THREE.Material>();
+        const disposedGeometries = new Set<THREE.BufferGeometry>();
+
+        const disposeTexture = (texture?: THREE.Texture | null) => {
+            if (!texture || disposedTextures.has(texture)) return;
+            disposedTextures.add(texture);
+            texture.dispose();
+        };
+
+        const disposeGeometry = (geometry?: THREE.BufferGeometry | null) => {
+            if (!geometry || disposedGeometries.has(geometry)) return;
+            disposedGeometries.add(geometry);
+            geometry.dispose();
+        };
+
+        const materialTextureKeys = [
+            'map',
+            'alphaMap',
+            'aoMap',
+            'bumpMap',
+            'displacementMap',
+            'emissiveMap',
+            'envMap',
+            'lightMap',
+            'metalnessMap',
+            'normalMap',
+            'roughnessMap',
+            'specularMap',
+            'clearcoatMap',
+            'clearcoatNormalMap',
+            'clearcoatRoughnessMap',
+            'iridescenceMap',
+            'iridescenceThicknessMap',
+            'sheenColorMap',
+            'sheenRoughnessMap',
+            'specularColorMap',
+            'specularIntensityMap',
+            'thicknessMap',
+            'transmissionMap',
+        ] as const;
+
+        const disposeMaterial = (material?: THREE.Material | null) => {
+            if (!material || disposedMaterials.has(material)) return;
+            disposedMaterials.add(material);
+
+            const matWithMaps = material as THREE.Material & Record<string, unknown>;
+            materialTextureKeys.forEach((key) => {
+                const value = matWithMaps[key];
+                if (value instanceof THREE.Texture) {
+                    disposeTexture(value);
+                }
+            });
+
+            material.dispose();
+        };
+
         return () => {
+            cancelAnimationFrame(animationId);
+
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
-            window.removeEventListener('mousedown', handleMouseDown);
             window.removeEventListener('mouseup', handleMouseUp);
-            window.removeEventListener('touchstart', handleTouchStart);
             window.removeEventListener('touchend', handleTouchEnd);
+            renderer.domElement.removeEventListener('mousedown', handleMouseDown);
+            renderer.domElement.removeEventListener('touchstart', handleTouchStart);
             renderer.domElement.removeEventListener('click', onCanvasClick);
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('touchmove', onTouchMove);
-            document.removeEventListener('touchmove', onTouchMove);
+
             if (heldMeshRef.current) {
                 camera.remove(heldMeshRef.current);
+                disposeGeometry(heldMeshRef.current.geometry);
                 heldMeshRef.current = null;
             }
             heldProductRef.current = null;
-            cancelAnimationFrame(animationId);
-            mountRef.current?.removeChild(renderer.domElement);
+
+            scene.traverse((obj) => {
+                const node = obj as THREE.Object3D & {
+                    geometry?: THREE.BufferGeometry;
+                    material?: THREE.Material | THREE.Material[];
+                };
+
+                if (node.geometry) {
+                    disposeGeometry(node.geometry);
+                }
+
+                if (Array.isArray(node.material)) {
+                    node.material.forEach((material) => disposeMaterial(material));
+                } else {
+                    disposeMaterial(node.material);
+                }
+            });
+
+            textureCache.forEach((texture) => disposeTexture(texture));
+            textureCache.clear();
+
+            fallbackTextures.forEach((texture) => disposeTexture(texture));
+            [
+                marbleTex,
+                woodTex,
+                leafTex,
+                stoneTex,
+                artTex1,
+                artTex2,
+                artTex3,
+            ].forEach((texture) => disposeTexture(texture));
+
+            productAssets.forEach((material) => disposeMaterial(material));
+            productAssets.clear();
+
+            scene.clear();
+            camera.clear();
+
+            if (mountRef.current?.contains(renderer.domElement)) {
+                mountRef.current.removeChild(renderer.domElement);
+            }
+            renderer.renderLists.dispose();
+            (renderer as THREE.WebGLRenderer & { forceContextLoss?: () => void }).forceContextLoss?.();
             renderer.dispose();
+            rendererRef.current = null;
         }
-    }, [catalogLoaded]);
+    }, [catalogLoaded, dragToAddMessage, isArabic]);
 
     const handleCheckout = () => {
         if (total === 0) return;
@@ -2211,13 +2375,32 @@ export default function SupermarketSimulator() {
         const group = basketContentsRef.current;
         if (!group) return;
 
+        const disposeCartItem = (object: THREE.Object3D) => {
+            const node = object as THREE.Object3D & {
+                geometry?: THREE.BufferGeometry;
+                material?: THREE.Material | THREE.Material[];
+            };
+
+            if (node.geometry) {
+                node.geometry.dispose();
+            }
+
+            if (Array.isArray(node.material)) {
+                node.material.forEach((material) => material.dispose());
+            } else {
+                node.material?.dispose();
+            }
+        };
+
         // Clear previous visual items
         while (group.children.length > 0) {
-            group.remove(group.children[0]);
+            const child = group.children[0];
+            group.remove(child);
+            disposeCartItem(child);
         }
 
         let renderIndex = 0;
-        cartItems.forEach((item: any) => {
+        cartItems.forEach((item) => {
             const count = item.quantity || 1;
             for (let i = 0; i < count; i++) {
                 const geom = item.category === 'produce'
@@ -2241,6 +2424,14 @@ export default function SupermarketSimulator() {
                 renderIndex += 1;
             }
         });
+
+        return () => {
+            while (group.children.length > 0) {
+                const child = group.children[0];
+                group.remove(child);
+                disposeCartItem(child);
+            }
+        };
     }, [cartItems]);
 
     return (
@@ -2263,19 +2454,20 @@ export default function SupermarketSimulator() {
                 zIndex: 1
             }} />
 
-            {/* FPS Counter */}
-            <div style={{
-                position: 'absolute',
-                top: 10,
-                right: 10,
-                color: '#0f0',
-                fontFamily: 'monospace',
-                fontWeight: 'bold',
-                textShadow: '1px 1px 2px #000',
-                zIndex: 100
-            }}>
-                FPS: {fps}
-            </div>
+            {process.env.NODE_ENV === 'development' && (
+                <div style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    color: '#0f0',
+                    fontFamily: 'monospace',
+                    fontWeight: 'bold',
+                    textShadow: '1px 1px 2px #000',
+                    zIndex: 100
+                }}>
+                    FPS: {fps}
+                </div>
+            )}
 
             {/* Specialization Badge - Centered and Responsive */}
             <div style={{
@@ -2303,8 +2495,8 @@ export default function SupermarketSimulator() {
             }}>
                 <span style={{ color: '#4A90E2', fontSize: '10px' }}>●</span>
                 <span style={{ display: 'flex', gap: '5px' }}>
-                    <span className="badge-desktop">SUPERMARKET SIMULATION |</span>
-                    <span>سوبرماركت فقط</span>
+                    <span className="badge-desktop">{t('محاكاة السوبرماركت |', 'SUPERMARKET SIMULATION |')}</span>
+                    <span>{t('سوبرماركت فقط', 'Supermarket Only')}</span>
                 </span>
             </div>
 
@@ -2377,7 +2569,7 @@ export default function SupermarketSimulator() {
                     backdropFilter: 'blur(10px)',
                     WebkitBackdropFilter: 'blur(10px)',
                     zIndex: 120,
-                    direction: 'rtl',
+                    direction: isArabic ? 'rtl' : 'ltr',
                     fontFamily: 'sans-serif'
                 }}>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -2401,7 +2593,7 @@ export default function SupermarketSimulator() {
                                 {hoveredProduct.name}
                             </div>
                             <div style={{ fontSize: '12px', color: '#bdbdbd', marginTop: '4px' }}>
-                                {hoveredProduct.store_name || 'المتجر'}
+                                {hoveredProduct.store_name || t('المتجر', 'Store')}
                             </div>
                             <div style={{
                                 fontSize: '12px',
@@ -2411,11 +2603,11 @@ export default function SupermarketSimulator() {
                                 maxHeight: '3.6em',
                                 overflow: 'hidden'
                             }}>
-                                {hoveredProduct.description || 'بدون وصف'}
+                                {hoveredProduct.description || t('بدون وصف', 'No description')}
                             </div>
                             <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ fontWeight: 'bold', color: '#ffeb3b', fontSize: '16px' }}>
-                                    ${hoveredProduct.price.toFixed(2)}
+                                    {hoveredProduct.price.toFixed(2)} EGP
                                 </div>
                                 <button
                                     onClick={(e) => {
@@ -2447,7 +2639,7 @@ export default function SupermarketSimulator() {
                                         boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)'
                                     }}
                                 >
-                                    إضافة للسلة
+                                    {t('إضافة للسلة', 'Add to Cart')}
                                 </button>
                             </div>
                         </div>
@@ -2490,7 +2682,7 @@ export default function SupermarketSimulator() {
                             cursor: 'pointer'
                         }}
                     >
-                        🏠 العودة للموقع
+                        {t('🏠 العودة للموقع', '🏠 Back to Site')}
                     </Link>
 
                     {/* Cart FAB */}
@@ -2514,7 +2706,7 @@ export default function SupermarketSimulator() {
                             fontSize: '24px',
                             position: 'relative'
                         }}
-                        title="فتح السلة"
+                        title={t('فتح السلة', 'Open Cart')}
                     >
                         🛒
                         {cartCount > 0 && (
@@ -2553,14 +2745,14 @@ export default function SupermarketSimulator() {
                     borderRadius: '20px',
                     width: 'calc(100% - 40px)',
                     maxWidth: '350px',
-                    direction: 'rtl',
+                    direction: isArabic ? 'rtl' : 'ltr',
                     fontFamily: 'sans-serif',
                     border: '1px solid rgba(255,255,255,0.2)',
                     boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
                     zIndex: 110
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
-                        <h2 style={{ margin: 0, color: '#e53935', fontSize: '22px' }}>🛒 السلة</h2>
+                        <h2 style={{ margin: 0, color: '#e53935', fontSize: '22px' }}>{t('🛒 السلة', '🛒 Cart')}</h2>
                         <button
                             onClick={() => setIsCartMinimized(true)}
                             style={{
@@ -2582,8 +2774,8 @@ export default function SupermarketSimulator() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', fontSize: '18px' }}>
-                        <span style={{ opacity: 0.8 }}>المجموع:</span>
-                        <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>${total.toFixed(2)}</span>
+                        <span style={{ opacity: 0.8 }}>{t('المجموع:', 'Total:')}</span>
+                        <span style={{ color: '#ffeb3b', fontWeight: 'bold' }}>{total.toFixed(2)} EGP</span>
                     </div>
 
                     <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px', marginBottom: '20px' }}>
@@ -2591,29 +2783,29 @@ export default function SupermarketSimulator() {
                             <div key={item.id} style={{ fontSize: '14px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '6px', opacity: 0.9 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <span>• {item.name}</span>
-                                    <span style={{ color: '#ffeb3b', fontSize: '12px' }}>${item.price}</span>
+                                    <span style={{ color: '#ffeb3b', fontSize: '12px' }}>{item.price} EGP</span>
                                     <span style={{ color: '#9e9e9e', fontSize: '12px' }}>x{item.quantity}</span>
                                 </div>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.id); }}
                                     style={{ background: 'rgba(239, 83, 80, 0.2)', color: '#ef5350', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontSize: '12px' }}
                                 >
-                                    إرجاع
+                                    {t('إرجاع', 'Remove')}
                                 </button>
                             </div>
                         ))}
-                        {cartItems.length === 0 && <div style={{ textAlign: 'center', opacity: 0.5, padding: '10px' }}>السلة فارغة</div>}
+                        {cartItems.length === 0 && <div style={{ textAlign: 'center', opacity: 0.5, padding: '10px' }}>{t('السلة فارغة', 'Cart is empty')}</div>}
                     </div>
 
                     <button onClick={handleCheckout} style={{
                         width: '100%', padding: '14px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)'
                     }}>
-                        تأكيد ودفع الحساب
+                        {t('تأكيد ودفع الحساب', 'Checkout and Pay')}
                     </button>
                     <button onClick={handleReset} style={{
                         width: '100%', padding: '10px', background: 'transparent', color: '#ef5350', border: '1px solid rgba(239, 83, 80, 0.5)', borderRadius: '10px', cursor: 'pointer', marginTop: '12px', fontSize: '14px'
                     }}>
-                        إفراغ السلة
+                        {t('إفراغ السلة', 'Clear Cart')}
                     </button>
                 </div>
             )}
@@ -2624,12 +2816,12 @@ export default function SupermarketSimulator() {
                     background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999
                 }}>
                     <div style={{ background: '#222', padding: '40px', borderRadius: '20px', textAlign: 'center', border: '2px solid #4caf50' }}>
-                        <h1 style={{ color: '#4caf50', margin: 0 }}>شكراً لزيارتكم!</h1>
-                        <p style={{ color: '#ccc', margin: '20px 0' }}>تم خصم المبلغ بنجاح</p>
+                        <h1 style={{ color: '#4caf50', margin: 0 }}>{t('شكراً لزيارتكم!', 'Thanks for visiting!')}</h1>
+                        <p style={{ color: '#ccc', margin: '20px 0' }}>{t('تم خصم المبلغ بنجاح', 'Payment deducted successfully')}</p>
                         <button onClick={() => setShowCheckout(false)} style={{
                             padding: '10px 30px', background: '#2196f3', border: 'none', color: 'white', borderRadius: '5px', cursor: 'pointer', fontSize: '18px'
                         }}>
-                            متابعة
+                            {t('متابعة', 'Continue')}
                         </button>
                     </div>
                 </div>
@@ -2691,8 +2883,10 @@ export default function SupermarketSimulator() {
                         border: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', color: 'white',
                         maxWidth: '90vw', width: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
                     }}>
-                        <h2 style={{ margin: '0 0 10px 0', color: '#4A90E2' }}>أهلاً بك في المتجر الذكي</h2>
-                        <p style={{ margin: '0 0 20px 0', fontSize: '14px', opacity: 0.8 }}>اختر قسماً للانتقال إليه فوراً، أو اضغط في أي مكان للبدء من المدخل:</p>
+                        <h2 style={{ margin: '0 0 10px 0', color: '#4A90E2' }}>{t('أهلاً بك في المتجر الذكي', 'Welcome to the Smart Store')}</h2>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '14px', opacity: 0.8 }}>
+                            {t('اختر قسماً للانتقال إليه فوراً، أو اضغط في أي مكان للبدء من المدخل:', 'Choose a section for instant teleport, or click anywhere to start from the entrance:')}
+                        </p>
 
                         <div style={{
                             display: 'grid',
@@ -2732,7 +2926,9 @@ export default function SupermarketSimulator() {
                         </div>
 
                         <div style={{ marginTop: '25px', fontSize: '12px', opacity: 0.6 }}>
-                            {isMobile ? 'استخدم عصا التحكم للحركة، واسحب في أي مكان للنظر' : 'استخدم WASD أو الأسهم للحركة، والماوس للنظر'}
+                            {isMobile
+                                ? t('استخدم عصا التحكم للحركة، واسحب في أي مكان للنظر', 'Use the joystick to move and drag anywhere to look')
+                                : t('استخدم WASD أو الأسهم للحركة، والماوس للنظر', 'Use WASD or arrow keys to move, and mouse to look')}
                         </div>
                     </div>
                 </div>

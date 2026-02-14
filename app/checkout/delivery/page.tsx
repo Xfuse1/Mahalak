@@ -44,7 +44,12 @@ export default function DeliveryPage() {
 
   // Get items based on mode
   const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const total = items.reduce((sum, item) => {
+    const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+      ? item.price - (item.price * item.discount_percentage / 100)
+      : item.price
+    return sum + discountedPrice * item.quantity
+  }, 0)
 
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null)
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null)
@@ -64,8 +69,8 @@ export default function DeliveryPage() {
         ])
         setDrivers(fetchedDrivers)
         setDriverCommission(commission)
-      } catch (error) {
-        console.error("Error fetching data:", error)
+      } catch {
+        // Error handled silently
       } finally {
         setLoadingDrivers(false)
       }
@@ -133,6 +138,12 @@ export default function DeliveryPage() {
       return
     }
 
+    if (!selectedDriverData) {
+      toast.error(t("السائق المختار لم يعد متاحاً", "Selected driver is no longer available"))
+      setSelectedDriver(null)
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -153,17 +164,29 @@ export default function DeliveryPage() {
         // Multi-store order: create one order with pickup stops
         const pickupStops: PickupStop[] = storeIds.map((storeId) => {
           const storeGroup = itemsByStore[storeId]
-          const subtotal = storeGroup.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+          const subtotal = storeGroup.items.reduce((sum, item) => {
+            const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+              ? item.price - (item.price * item.discount_percentage / 100)
+              : item.price
+            return sum + discountedPrice * item.quantity
+          }, 0)
           return {
             store_id: storeId,
             store_name: storeGroup.store_name,
-            items: storeGroup.items.map((item) => ({
-              product_id: item.id,
-              name: item.name,
-              quantity: item.quantity,
-              price: item.price,
-              image_url: item.image_url,
-            })),
+            items: storeGroup.items.map((item) => {
+              const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+                ? item.price - (item.price * item.discount_percentage / 100)
+                : item.price
+              return {
+                product_id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                discounted_price: discountedPrice,
+                discount_percentage: item.discount_percentage || 0,
+                image_url: item.image_url,
+              }
+            }),
             subtotal,
             status: "pending" as const,
             confirmed_at: null,
@@ -183,8 +206,8 @@ export default function DeliveryPage() {
           delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
           delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
           delivery_notes: checkoutData.notes,
-          driver_id: selectedDriverData!.id,
-          driver_name: selectedDriverData!.name,
+          driver_id: selectedDriverData.id,
+          driver_name: selectedDriverData.name,
           delivery_price: deliveryPrice,
           driver_commission: driverCommission,
           pickup_stops: pickupStops,
@@ -197,12 +220,17 @@ export default function DeliveryPage() {
         // Single store order: use legacy createOrder
         const [storeId] = storeIds
         const storeItems = itemsByStore[storeId].items
-        const storeTotal = storeItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+        const storeTotal = storeItems.reduce((sum, item) => {
+          const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+            ? item.price - (item.price * item.discount_percentage / 100)
+            : item.price
+          return sum + discountedPrice * item.quantity
+        }, 0)
 
         const result = await createOrder({
           customer_id: user.id,
           store_id: storeId,
-          total: storeTotal + deliveryPrice + driverCommission,
+          total: storeTotal + deliveryPrice,
           delivery_address: fullAddress,
           customer_name: checkoutData.fullName,
           customer_phone: checkoutData.phone,
@@ -214,11 +242,18 @@ export default function DeliveryPage() {
           driver_id: selectedDriverData?.id,
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,
-          items: storeItems.map((item) => ({
-            product_id: item.id,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+          items: storeItems.map((item) => {
+            const discountedPrice = item.discount_percentage && item.discount_percentage > 0
+              ? item.price - (item.price * item.discount_percentage / 100)
+              : item.price
+            return {
+              product_id: item.id,
+              quantity: item.quantity,
+              price: item.price,
+              discounted_price: discountedPrice,
+              discount_percentage: item.discount_percentage || 0,
+            }
+          }),
         })
 
         if (!result.success) {
@@ -236,8 +271,7 @@ export default function DeliveryPage() {
 
       toast.success(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
       router.push("/")
-    } catch (error) {
-      console.error("Error creating order:", error)
+    } catch {
       toast.error(t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
     } finally {
       setIsSubmitting(false)

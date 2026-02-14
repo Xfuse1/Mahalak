@@ -16,14 +16,16 @@ import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
 import { searchProducts, getProducts } from "../../lib/actions/products"
 import { searchStores, getStores } from "../../lib/actions/stores"
+import type { ProductListItem } from "../../lib/types/product"
+import type { StoreListItem } from "../../lib/types/store"
 
 function SearchResults() {
   const searchParams = useSearchParams()
   const query = searchParams.get("q") || ""
   const [activeTab, setActiveTab] = useState("products")
-  const [products, setProducts] = useState<any[]>([])
-  const [stores, setStores] = useState<any[]>([])
-  const [sortedProducts, setSortedProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<ProductListItem[]>([])
+  const [stores, setStores] = useState<StoreListItem[]>([])
+  const [sortedProducts, setSortedProducts] = useState<ProductListItem[]>([])
   const [loading, setLoading] = useState(true)
   const { language, t } = useLanguage()
 
@@ -57,7 +59,7 @@ function SearchResults() {
         setSortedProducts(transformedProducts)
         setStores(storesData)
       } catch (error) {
-        console.error("[v0] Error fetching search results:", error)
+        // Error handled silently - page shows empty results
       } finally {
         setLoading(false)
       }
@@ -260,7 +262,7 @@ export default function SearchPage() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="mt-4 text-gray-500">جاري التحميل...</p>
+            <p className="mt-4 text-gray-500">Loading...</p>
           </div>
         </div>
       }

@@ -18,7 +18,7 @@ import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react
 import type { CheckoutItem } from "@/lib/types/checkout"
 
 export default function CheckoutPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { user, isLoading: authLoading } = useAuth()
   const { items: cartItems } = useCartStore()
   const router = useRouter()
@@ -126,7 +126,7 @@ export default function CheckoutPage() {
         // Try to get address from coordinates using reverse geocoding
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ar`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${language}`
           )
           const data = await response.json()
           
@@ -140,8 +140,7 @@ export default function CheckoutPage() {
               state: prev.state || address.state || address.governorate || "",
             }))
           }
-        } catch (error) {
-          console.error("Error getting address from coordinates:", error)
+        } catch {
           // Location was still saved even if reverse geocoding failed
         }
 
@@ -171,12 +170,21 @@ export default function CheckoutPage() {
     )
   }
 
+  const isValidEgyptianPhone = (phone: string) => {
+    const cleaned = phone.replace(/\s|-/g, "")
+    return /^(01[0125])\d{8}$/.test(cleaned)
+  }
+
   const handleContinue = () => {
     // Mark form as attempted to show validation
     setAttempted(true)
     
     // Validate required fields - location is required, address fields are optional
     if (!formData.fullName || !formData.phone || !formData.latitude || !formData.longitude) {
+      return
+    }
+
+    if (!isValidEgyptianPhone(formData.phone)) {
       return
     }
 
@@ -309,7 +317,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className={`flex items-center gap-2 font-medium ${attempted && !formData.phone ? "text-red-600" : "text-gray-700"}`}>
+                <Label htmlFor="phone" className={`flex items-center gap-2 font-medium ${attempted && (!formData.phone || !isValidEgyptianPhone(formData.phone)) ? "text-red-600" : "text-gray-700"}`}>
                   <Phone className="h-4 w-4" />
                   {t("رقم الهاتف", "Phone Number")} *
                 </Label>
@@ -321,10 +329,13 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أدخل رقم هاتفك", "Enter your phone number")}
                   required
-                  className={`h-12 rounded-xl ${attempted && !formData.phone ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
+                  className={`h-12 rounded-xl ${attempted && (!formData.phone || !isValidEgyptianPhone(formData.phone)) ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
                 />
                 {attempted && !formData.phone && (
                   <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
+                )}
+                {attempted && formData.phone && !isValidEgyptianPhone(formData.phone) && (
+                  <p className="text-sm text-red-600">{t("رقم هاتف مصري غير صحيح (مثال: 01012345678)", "Invalid Egyptian phone number (e.g. 01012345678)")}</p>
                 )}
               </div>
 
@@ -349,12 +360,12 @@ export default function CheckoutPage() {
                 >
                   {isGettingLocation ? (
                     <>
-                      <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                      <Loader2 className="ms-2 h-5 w-5 animate-spin" />
                       {t("جاري تحديد الموقع...", "Getting location...")}
                     </>
                   ) : (
                     <>
-                      <Navigation className="ml-2 h-5 w-5" />
+                      <Navigation className="ms-2 h-5 w-5" />
                       {t("استخدم موقعي الحالي", "Use My Current Location")}
                     </>
                   )}

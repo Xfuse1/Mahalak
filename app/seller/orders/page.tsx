@@ -13,6 +13,7 @@ import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, reject
 import type { PickupStop } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
+import { logError } from "../../../lib/logger"
 import {
   Dialog,
   DialogContent,
@@ -57,23 +58,37 @@ type Order = {
   order_items: OrderItem[]
 }
 
+type MultiStoreOrder = {
+  id: string
+  status: string
+  total: number
+  created_at?: string
+  customer_name?: string
+  customer_phone?: string
+  driver_name?: string
+  delivery_address?: string
+  pickup_stops?: PickupStop[]
+  my_stop: PickupStop
+}
+
 export default function SellerOrdersPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const toast = useToast()
   const [orders, setOrders] = useState<Order[]>([])
-  const [multiOrders, setMultiOrders] = useState<any[]>([])
+  const [multiOrders, setMultiOrders] = useState<MultiStoreOrder[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
   const [filter, setFilter] = useState("all")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [selectedMultiOrder, setSelectedMultiOrder] = useState<any | null>(null)
+  const [selectedMultiOrder, setSelectedMultiOrder] = useState<MultiStoreOrder | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isMultiDetailsOpen, setIsMultiDetailsOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState("")
+  const [storeId, setStoreId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -90,29 +105,29 @@ export default function SellerOrdersPage() {
       setLoadingOrders(true)
       const store = await getStoreByUserId(user.id)
       if (store) {
+        setStoreId(store.id)
         const [data, multiData] = await Promise.all([
-          getStoreOrders(store.id) as Promise<Order[]>,
+          getStoreOrders(store.id, user.id) as Promise<Order[]>,
           getMultiStoreOrdersForStore(store.id),
         ])
+        const nextMultiOrders = multiData.success ? (multiData.orders as MultiStoreOrder[]) : []
         setOrders(data)
-        if (multiData.success) {
-          setMultiOrders(multiData.orders)
-        }
+        setMultiOrders(nextMultiOrders)
 
         setSelectedOrder(prev => {
           if (!prev) return null
           return data.find(o => o.id === prev.id) || prev
         })
-        setSelectedMultiOrder((prev: any) => {
+        setSelectedMultiOrder((prev) => {
           if (!prev) return null
-          return multiData.orders?.find((o: any) => o.id === prev.id) || prev
+          return nextMultiOrders.find((o) => o.id === prev.id) || prev
         })
       } else {
         setOrders([])
         setMultiOrders([])
       }
     } catch (error) {
-      console.error("Error fetching orders:", error)
+      logError("Error fetching orders:", error)
       setOrders([])
       setMultiOrders([])
     } finally {
@@ -134,10 +149,16 @@ export default function SellerOrdersPage() {
     const statusMap: Record<string, string> = {
       pending: t("قيد المراجعة", "Under Review"),
       reviewing: t("قيد المراجعة", "Under Review"),
-      confirmed: t("تم التاكيد", "Confirmed"),
+      processing: t("قيد التجهيز", "Processing"),
+      confirmed: t("تم التأكيد", "Confirmed"),
+      shipped: t("تم الشحن", "Shipped"),
       on_the_way: t("في الطريق", "On the Way"),
+      picking_up: t("قيد الاستلام", "Picking Up"),
+      picked_up: t("تم الاستلام", "Picked Up"),
       delivered: t("تم التوصيل", "Delivered"),
       cancelled: t("ملغي", "Cancelled"),
+      driver_rejected: t("رفض السائق", "Driver Rejected"),
+      driver_changed: t("تم تغيير السائق", "Driver Changed"),
     }
     return statusMap[status] || status
   }
@@ -146,13 +167,17 @@ export default function SellerOrdersPage() {
     const colorMap: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
       reviewing: "bg-yellow-100 text-yellow-800",
+      processing: "bg-blue-100 text-blue-800",
       confirmed: "bg-blue-100 text-blue-800",
+      shipped: "bg-indigo-100 text-indigo-800",
       on_the_way: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
       picked_up: "bg-indigo-100 text-indigo-800",
       rejected: "bg-red-100 text-red-800",
       picking_up: "bg-purple-100 text-purple-800",
+      driver_rejected: "bg-red-100 text-red-800",
+      driver_changed: "bg-orange-100 text-orange-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
   }
@@ -167,6 +192,14 @@ export default function SellerOrdersPage() {
     return map[status] || status
   }
 
+  const getProductCountLabel = (count: number) => {
+    if (count === 1) return t("منتج", "product")
+    if (count === 2) return t("منتجان", "products")
+    if (count >= 3 && count <= 10) return t("منتجات", "products")
+    if (count === 0) return t("منتجات", "products")
+    return t("منتج", "products")
+  }
+
   const handleConfirmMultiOrder = async (orderId: string) => {
     if (!user?.id) return
     setActionLoading(orderId)
@@ -178,7 +211,7 @@ export default function SellerOrdersPage() {
         toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (error) {
-      console.error("Error confirming:", error)
+      logError("Error confirming:", error)
     }
     setActionLoading(null)
   }
@@ -201,7 +234,7 @@ export default function SellerOrdersPage() {
         toast.error(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (error) {
-      console.error("Error rejecting:", error)
+      logError("Error rejecting:", error)
     }
     setActionLoading(null)
     setRejectOrderId(null)
@@ -260,7 +293,7 @@ export default function SellerOrdersPage() {
                   disabled={loadingOrders}
                   className="rounded-xl"
                 >
-                  <RefreshCw className={`h-4 w-4 ml-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ms-2 ${loadingOrders ? 'animate-spin' : ''}`} />
                   {t("تحديث", "Refresh")}
                 </Button>
               </div>
@@ -318,7 +351,7 @@ export default function SellerOrdersPage() {
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
                               <p className="text-sm text-gray-500">
                                 {order.customer_name || order.profiles?.full_name || order.profiles?.email || t("عميل غير معروف", "Unknown Customer")} •{" "}
-                                {order.order_items.length} {t("منتج", "product")}
+                                {order.order_items.length} {getProductCountLabel(order.order_items.length)}
                               </p>
                             </div>
                           </div>
@@ -337,7 +370,7 @@ export default function SellerOrdersPage() {
                                 setIsDetailsOpen(true)
                               }}
                             >
-                              <Eye className="w-4 h-4 ml-2" />
+                              <Eye className="w-4 h-4 ms-2" />
                               {t("عرض التفاصيل", "View Details")}
                             </Button>
                           </div>
@@ -346,7 +379,7 @@ export default function SellerOrdersPage() {
                           <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
                           <div className="flex items-center gap-4">
                             <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{Number(order.total).toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span></p>
-                            <OrderStatusSelector orderId={order.id} currentStatus={order.status} onUpdated={loadOrders} />
+                            <OrderStatusSelector orderId={order.id} currentStatus={order.status} callerId={storeId || ""} callerRole="seller" onUpdated={loadOrders} />
                           </div>
                         </div>
                       </div>
@@ -370,8 +403,8 @@ export default function SellerOrdersPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <div className="space-y-4">
-                  {multiOrders.map((order: any) => {
-                    const myStop: PickupStop = order.my_stop
+                  {multiOrders.map((order) => {
+                    const myStop = order.my_stop
                     return (
                       <div key={order.id} className="border border-purple-100 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 bg-white">
                         <div className="flex items-center justify-between mb-4">
@@ -382,7 +415,7 @@ export default function SellerOrdersPage() {
                             <div>
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
                               <p className="text-sm text-gray-500">
-                                {order.customer_name || t("عميل", "Customer")} • {myStop.items.length} {t("منتج", "product")} • {t("المجموع:", "Subtotal:")} {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
+                                {order.customer_name || t("عميل", "Customer")} • {myStop.items.length} {getProductCountLabel(myStop.items.length)} • {t("المجموع:", "Subtotal:")} {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
                               </p>
                               <p className="text-xs text-gray-400 mt-1">
                                 {t("السائق:", "Driver:")} {order.driver_name || "-"}
@@ -401,7 +434,7 @@ export default function SellerOrdersPage() {
 
                         {/* Items preview */}
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {myStop.items.map((item: any, idx: number) => (
+                          {myStop.items.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
                               {item.image_url && (
                                 <div className="relative w-6 h-6 rounded overflow-hidden">
@@ -425,7 +458,7 @@ export default function SellerOrdersPage() {
                               setIsMultiDetailsOpen(true)
                             }}
                           >
-                            <Eye className="w-4 h-4 ml-2" />
+                            <Eye className="w-4 h-4 ms-2" />
                             {t("عرض التفاصيل", "View Details")}
                           </Button>
                           {myStop.status === "pending" && (
@@ -435,7 +468,7 @@ export default function SellerOrdersPage() {
                                 disabled={actionLoading === order.id}
                                 className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-xl"
                               >
-                                <CheckCircle className="w-4 h-4 ml-2" />
+                                <CheckCircle className="w-4 h-4 ms-2" />
                                 {actionLoading === order.id ? t("جاري...", "Processing...") : t("تأكيد الطلب", "Confirm Order")}
                               </Button>
                               <Button
@@ -444,7 +477,7 @@ export default function SellerOrdersPage() {
                                 variant="outline"
                                 className="flex-1 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
                               >
-                                <XCircle className="w-4 h-4 ml-2" />
+                                <XCircle className="w-4 h-4 ms-2" />
                                 {t("رفض", "Reject")}
                               </Button>
                             </>
@@ -542,7 +575,7 @@ export default function SellerOrdersPage() {
                       <div className="bg-gray-50 grid grid-cols-4 p-3 text-xs font-bold text-gray-500 border-b">
                         <div className="col-span-2">{t("المنتج", "Product")}</div>
                         <div className="text-center">{t("الكمية", "Qty")}</div>
-                        <div className="text-left">{t("الإجمالي", "Total")}</div>
+                        <div className="text-end">{t("الإجمالي", "Total")}</div>
                       </div>
                       <div className="divide-y">
                         {selectedOrder.order_items.map((item) => (
@@ -559,7 +592,7 @@ export default function SellerOrdersPage() {
                               <p className="font-medium line-clamp-1">{item.products.name}</p>
                             </div>
                             <div className="text-center">x{item.quantity}</div>
-                            <div className="text-left font-bold text-[#1F478B]">
+                            <div className="text-end font-bold text-[#1F478B]">
                               {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
                             </div>
                           </div>
@@ -576,7 +609,7 @@ export default function SellerOrdersPage() {
                         {getStatusText(selectedOrder.status)}
                       </span>
                     </div>
-                    <div className="text-left">
+                    <div className="text-end">
                       <p className="text-sm text-gray-600">{t("الإجمالي الكلي", "Grand Total")}</p>
                       <p className="text-2xl font-black text-[#1F478B]">
                         {Number(selectedOrder.total).toLocaleString()} {t("جنيه", "EGP")}
@@ -588,6 +621,8 @@ export default function SellerOrdersPage() {
                     <OrderStatusSelector
                       orderId={selectedOrder.id}
                       currentStatus={selectedOrder.status}
+                      callerId={storeId || ""}
+                      callerRole="seller"
                       onUpdated={loadOrders}
                     />
                   </div>
@@ -670,10 +705,10 @@ export default function SellerOrdersPage() {
                         <div className="bg-gray-50 grid grid-cols-4 p-3 text-xs font-bold text-gray-500 border-b">
                           <div className="col-span-2">{t("المنتج", "Product")}</div>
                           <div className="text-center">{t("الكمية", "Qty")}</div>
-                          <div className="text-left">{t("الإجمالي", "Total")}</div>
+                          <div className="text-end">{t("الإجمالي", "Total")}</div>
                         </div>
                         <div className="divide-y">
-                          {myStop.items.map((item: any, idx: number) => (
+                          {myStop.items.map((item, idx) => (
                             <div key={idx} className="grid grid-cols-4 p-3 items-center text-sm">
                               <div className="col-span-2 flex items-center gap-3">
                                 {item.image_url && (
@@ -684,7 +719,7 @@ export default function SellerOrdersPage() {
                                 <p className="font-medium line-clamp-1">{item.name}</p>
                               </div>
                               <div className="text-center">x{item.quantity}</div>
-                              <div className="text-left font-bold text-purple-600">
+                              <div className="text-end font-bold text-purple-600">
                                 {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
                               </div>
                             </div>
@@ -724,7 +759,7 @@ export default function SellerOrdersPage() {
                             {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
                           </p>
                         </div>
-                        <div className="text-left">
+                        <div className="text-end">
                           <p className="text-sm text-gray-600">{t("إجمالي الطلب الكلي", "Order Grand Total")}</p>
                           <p className="text-xl font-black text-gray-800">
                             {Number(selectedMultiOrder.total).toLocaleString()} {t("جنيه", "EGP")}
@@ -773,7 +808,7 @@ export default function SellerOrdersPage() {
                     onClick={handleRejectMultiOrder}
                     className="flex-1 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-xl text-white"
                   >
-                    <XCircle className="w-4 h-4 ml-2" />
+                    <XCircle className="w-4 h-4 ms-2" />
                     {t("تأكيد الرفض", "Confirm Rejection")}
                   </Button>
                   <Button
@@ -792,3 +827,4 @@ export default function SellerOrdersPage() {
     </div>
   )
 }
+

@@ -120,7 +120,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
         setProducts(transformedProducts)
         setLoading(false)
       } catch (error) {
-        console.error("[v0] Error fetching store data:", error)
         setLoading(false)
         setStore(null)
       }
@@ -157,7 +156,7 @@ export default function StorePage({ params }: { params: { id: string } }) {
             setUserStoreReview(null)
           }
         } catch (err) {
-          console.error("[v0] Error fetching user store review:", err)
+          // Silently handle review fetch error
         }
       })()
 
@@ -280,8 +279,8 @@ export default function StorePage({ params }: { params: { id: string } }) {
               </div>
 
               <div className="space-y-4 min-w-0">
-                <h1 className="text-2xl md:text-4xl font-bold break-all">{store.name}</h1>
-                <p className="text-gray-600 text-base md:text-lg leading-relaxed break-all">{store.description}</p>
+                <h1 className="text-2xl md:text-4xl font-bold break-words">{store.name}</h1>
+                <p className="text-gray-600 text-base md:text-lg leading-relaxed break-words">{store.description}</p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
                     <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
@@ -318,7 +317,6 @@ export default function StorePage({ params }: { params: { id: string } }) {
                                   toast.error(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
                                 }
                               } catch (err: any) {
-                                console.error("[v0] Error submitting store review:", err)
                                 toast.error(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
                               } finally {
                                 setSubmittingReview(false)
@@ -345,24 +343,24 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button onClick={handleWhatsApp} className="flex-1 bg-green-600 hover:bg-green-700 w-full">
-                    <MessageCircle className="ml-2 h-5 w-5" />
+                    <MessageCircle className="ms-2 h-5 w-5" />
                     {t("تواصل واتساب", "WhatsApp")}
                   </Button>
                   <Button onClick={handleCall} variant="outline" className="flex-1 bg-transparent w-full">
-                    <Phone className="ml-2 h-5 w-5" />
+                    <Phone className="ms-2 h-5 w-5" />
                     {t("اتصال", "Call")}
                   </Button>
                 </div>
                 <Sheet open={isPolicySheetOpen} onOpenChange={setIsPolicySheetOpen}>
                   <SheetTrigger asChild>
                     <Button variant="outline" className="flex-1 bg-transparent w-full">
-                      <FileText className="ml-2 h-5 w-5" />
+                      <FileText className="ms-2 h-5 w-5" />
                       {t("سياسات المتجر", "Store Policies")}
                     </Button>
                   </SheetTrigger>
                   <SheetContent>
                     <SheetHeader className="pe-10">
-                      <SheetTitle className="text-right">{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
+                      <SheetTitle className={isRTL ? "text-right" : "text-left"}>{t("سياسات متجر", "Store Policies")} {store.name}</SheetTitle>
                     </SheetHeader>
                     <div className="py-4 px-4 overflow-y-auto h-full">
                       {store.return_policy ? (

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui
 import { Box, LayoutGrid, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { Button } from "../../../components/ui/button"
-import { getStoreByUserId } from "../../../lib/actions/stores"
+import { getStoreByUserId, type Store } from "../../../lib/actions/stores"
 import { initialProducts, initialShelves, sections } from "../../../lib/mock/supermarket-data"
 
 // Dashboard components - lazy loaded
@@ -23,9 +23,23 @@ const ShelfManager = dynamic(() => import("../../../components/dashboard/ShelfMa
 const ProductModal = dynamic(() => import("../../../components/dashboard/ProductModal"), { ssr: false })
 const AddShelfModal = dynamic(() => import("../../../components/dashboard/AddShelfModal"), { ssr: false })
 import { useProductStore } from "../../../lib/stores/product-store"
-import { getProducts } from "../../../lib/actions/products"
+import { getProductsByStoreId } from "../../../lib/actions/products"
 import { getSupermarketLayout } from "../../../lib/actions/layout"
-import { Product, SectionType } from "../../../lib/types/product-management"
+import { Placement, Product, SectionType } from "../../../lib/types/product-management"
+import { logError } from "../../../lib/logger"
+
+type StoreCatalogProduct = {
+    id: string
+    name?: string
+    name_en?: string
+    category?: string
+    simulator_section?: string
+    image_url?: string
+    price?: number
+    stores?: {
+        name?: string
+    }
+}
 
 export default function Supermarket3DPage() {
     const { user, isLoading } = useAuth()
@@ -50,21 +64,10 @@ export default function Supermarket3DPage() {
             return;
         }
 
-        async function verifyAccess() {
-            if (user?.role === "seller") return;
-
-            const store = await getStoreByUserId(user!.id);
-            if (!store) {
-                router.push("/")
-            }
-        }
-
-        verifyAccess();
-
         async function checkStoreAndLoadProducts() {
             if (user?.id) {
                 try {
-                    const store = await getStoreByUserId(user.id) as any;
+                    const store: Store | null = await getStoreByUserId(user.id);
                     if (store) {
                         setStoreId(store.id);
 
@@ -74,10 +77,13 @@ export default function Supermarket3DPage() {
                         if (!isSupermarket) {
                             setAccessDenied(true)
                         } else {
-                            const realProducts = await getProducts();
+                            const realProductsResponse = await getProductsByStoreId(store.id);
+                            const realProducts: StoreCatalogProduct[] = Array.isArray(realProductsResponse)
+                                ? (realProductsResponse as StoreCatalogProduct[])
+                                : [];
 
                             // Map real products to 3D layout format
-                            const mappedProducts: Product[] = realProducts.map((p: any) => ({
+                            const mappedProducts: Product[] = realProducts.map((p: StoreCatalogProduct) => ({
                                 id: p.id,
                                 nameAR: p.name || "",
                                 nameEN: p.name_en || p.name || "",
@@ -121,7 +127,7 @@ export default function Supermarket3DPage() {
                             // Group products by their simulator_section or mapped section
                             const productsBySection: Record<string, Product[]> = {};
                             mappedProducts.forEach((product) => {
-                                const realProduct = realProducts.find((p: any) => p.id === product.id);
+                                const realProduct = realProducts.find((p: StoreCatalogProduct) => p.id === product.id);
                                 // Prioritize simulator_section from database, then fall back to category mapping
                                 const simulatorSection = realProduct?.simulator_section;
                                 const dbCategory = (realProduct?.category || '').toLowerCase();
@@ -133,7 +139,7 @@ export default function Supermarket3DPage() {
                             });
 
                             // Generate placements for each product on appropriate shelves
-                            const autoPlacements: any[] = [];
+                            const autoPlacements: Placement[] = [];
                             const shelvesData = initialShelves;
 
                             Object.entries(productsBySection).forEach(([section, products]) => {
@@ -167,9 +173,12 @@ export default function Supermarket3DPage() {
 
                             setPlacements(autoPlacements);
                         }
+                    } else {
+                        router.push("/")
+                        return
                     }
                 } catch (error) {
-                    console.error("Error checking store and loading products:", error)
+                    logError("Error checking store and loading products:", error)
                 } finally {
                     setIsCheckingStore(false)
                 }
@@ -212,7 +221,7 @@ export default function Supermarket3DPage() {
                             </p>
                             <Button asChild className="w-full bg-[#1F478B] hover:bg-[#1a3a70]">
                                 <Link href="/seller/dashboard">
-                                    <ArrowRight className="ml-2 h-5 w-5" />
+                                    <ArrowRight className="ms-2 h-5 w-5" />
                                     {t("العودة للوحة التحكم", "Back to Dashboard")}
                                 </Link>
                             </Button>
@@ -242,7 +251,7 @@ export default function Supermarket3DPage() {
 
                 <div className="flex-1 flex overflow-hidden">
                     {/* Left Sidebar: Sections */}
-                    <div className="w-80 border-l border-gray-100 bg-white flex flex-col shrink-0">
+                    <div className="w-80 border-s border-gray-100 bg-white flex flex-col shrink-0">
                         <div className="p-6 border-b border-gray-50 flex items-center justify-between">
                             <h2 className="font-bold text-gray-900">{t("أقسام المتجر", "Store Sections")}</h2>
                         </div>
@@ -261,8 +270,15 @@ export default function Supermarket3DPage() {
                                     <LayoutGrid className="w-10 h-10 text-blue-200" />
                                 </div>
                                 <div className="max-w-xs">
-                                    <h2 className="text-xl font-bold text-gray-900 mb-2">ابدأ التنظيم</h2>
-                                    <p className="text-gray-500">اختر أحد أقسام المتجر من القائمة الجانبية لبدء إدارة وتوزيع المنتجات على الرفوف.</p>
+                                    <h2 className="text-xl font-bold text-gray-900 mb-2">
+                                        {t("\u0627\u0628\u062F\u0623 \u0627\u0644\u062A\u0646\u0638\u064A\u0645", "Start Organizing")}
+                                    </h2>
+                                    <p className="text-gray-500">
+                                        {t(
+                                            "\u0627\u062E\u062A\u0631 \u0623\u062D\u062F \u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u0645\u062A\u062C\u0631 \u0645\u0646 \u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u062C\u0627\u0646\u0628\u064A\u0629 \u0644\u0628\u062F\u0621 \u0625\u062F\u0627\u0631\u0629 \u0648\u062A\u0648\u0632\u064A\u0639 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A \u0639\u0644\u0649 \u0627\u0644\u0631\u0641\u0648\u0641.",
+                                            "Choose a store section from the sidebar to start managing and distributing products on shelves.",
+                                        )}
+                                    </p>
                                 </div>
                             </div>
                         )}

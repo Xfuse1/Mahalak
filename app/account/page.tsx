@@ -14,6 +14,7 @@ import { Label } from "../../components/ui/label"
 import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
+import { logError } from "../../lib/logger"
 import { getStoreByUserId } from "../../lib/actions/stores"
 import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreOrders } from "../../lib/actions/orders"
 import type { PickupStop } from "../../lib/actions/orders"
@@ -60,12 +61,23 @@ type RejectedOrder = {
   created_at?: string
 }
 
+type MultiStoreOrder = {
+  id: string
+  created_at: string
+  total: number
+  status: string
+  delivery_address?: string
+  timeline?: TimelineEntry[]
+  driver_name?: string
+  pickup_stops: PickupStop[]
+}
+
 export default function AccountPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
-  const [multiOrders, setMultiOrders] = useState<any[]>([])
+  const [multiOrders, setMultiOrders] = useState<MultiStoreOrder[]>([])
   const [rejectedOrders, setRejectedOrders] = useState<RejectedOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
@@ -91,7 +103,7 @@ export default function AccountPage() {
       if (dataResult.status === "fulfilled") {
         setOrders(dataResult.value as Order[])
       } else {
-        console.error("[v0] Error fetching customer orders:", dataResult.reason)
+        logError("[v0] Error fetching customer orders:", dataResult.reason)
       }
       
       if (rejectedResult.status === "fulfilled" && rejectedResult.value.success) {
@@ -99,7 +111,7 @@ export default function AccountPage() {
       }
       
       if (multiResult.status === "fulfilled" && multiResult.value.success) {
-        setMultiOrders(multiResult.value.orders)
+        setMultiOrders(multiResult.value.orders as MultiStoreOrder[])
       }
       
       // Only show error if ALL fetches failed
@@ -107,7 +119,7 @@ export default function AccountPage() {
         setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
       }
     } catch (error) {
-      console.error("[v0] Error fetching orders:", error)
+      logError("[v0] Error fetching orders:", error)
       setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
     } finally {
       setOrdersLoading(false)
@@ -408,11 +420,11 @@ export default function AccountPage() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-4">
-                      {multiOrders.map((order: any) => {
-                        const stops: PickupStop[] = order.pickup_stops || []
-                        const activeStops = stops.filter((s: PickupStop) => s.status !== "rejected")
-                        const confirmedCount = stops.filter((s: PickupStop) => s.status === "confirmed" || s.status === "picked_up").length
-                        const pickedCount = stops.filter((s: PickupStop) => s.status === "picked_up").length
+                      {multiOrders.map((order) => {
+                        const stops = order.pickup_stops || []
+                        const activeStops = stops.filter((s) => s.status !== "rejected")
+                        const confirmedCount = stops.filter((s) => s.status === "confirmed" || s.status === "picked_up").length
+                        const pickedCount = stops.filter((s) => s.status === "picked_up").length
                         
                         return (
                           <div key={order.id} className="bg-white border border-purple-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all">
@@ -438,7 +450,7 @@ export default function AccountPage() {
 
                             {/* Stops */}
                             <div className="p-5 space-y-3">
-                              {stops.map((stop: PickupStop, idx: number) => (
+                              {stops.map((stop, idx) => (
                                 <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${
                                   stop.status === "confirmed" ? "bg-green-50 border-green-200" :
                                   stop.status === "picked_up" ? "bg-indigo-50 border-indigo-200" :
@@ -513,13 +525,13 @@ export default function AccountPage() {
                                       status: order.status,
                                       delivery_address: order.delivery_address || "",
                                       timeline: order.timeline,
-                                      order_items: (order.pickup_stops || []).flatMap((stop: PickupStop) => stop.items.map((item: any) => ({
+                                      order_items: stops.flatMap((stop) => stop.items.map((item) => ({
                                         id: item.product_id,
                                         quantity: item.quantity,
                                         price: item.price,
                                         products: { id: item.product_id, name: item.name, image_url: item.image_url || "" },
                                       }))),
-                                      stores: { id: "multi", name: stops.map((s: PickupStop) => s.store_name).join(" + ") },
+                                      stores: { id: "multi", name: stops.map((s) => s.store_name).join(" + ") },
                                     })
                                     setIsTrackingModalOpen(true)
                                   }}
@@ -685,15 +697,15 @@ export default function AccountPage() {
 
                       try {
                         if (!user?.id) return
-                        const res = await updateProfile(user.id, { full_name: name, phone })
+                        const res = await updateProfile(user.id, { full_name: name, phone }, user.id)
                         if (res && res.success) {
                           // refresh the page so AuthProvider reloads profile and UI reflects changes
                           router.refresh()
                         } else {
-                          console.error("[v0] Failed to update profile:", res?.error)
+                          logError("[v0] Failed to update profile:", res?.error)
                         }
                       } catch (err) {
-                        console.error("[v0] Error submitting profile form:", err)
+                        logError("[v0] Error submitting profile form:", err)
                       }
                     }}
                   >
@@ -744,14 +756,14 @@ export default function AccountPage() {
                       const street = (fd.get("street") as string) || ""
 
                       try {
-                        const res = await updateProfile(user.id, { street, city, country })
+                        const res = await updateProfile(user.id, { street, city, country }, user.id)
                         if (res && res.success) {
                           router.refresh()
                         } else {
-                          console.error("[v0] Failed to update address:", res?.error)
+                          logError("[v0] Failed to update address:", res?.error)
                         }
                       } catch (err) {
-                        console.error("[v0] Error saving address:", err)
+                        logError("[v0] Error saving address:", err)
                       }
                     }}
                   >

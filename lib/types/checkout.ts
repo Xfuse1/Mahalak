@@ -8,5 +8,6 @@ export type CheckoutItem = {
   store_name?: string
   description?: string
   quantity: number
+  stock?: number
   discount_percentage?: number
 }

@@ -25,6 +25,19 @@ export async function getUserStoreReview(storeId: string, customerId: string) {
 
 export async function upsertStoreReview(storeId: string, customerId: string, rating: number, comment?: string) {
   const db = getAdminDb()
+
+  // التحقق من أن العميل أجرى طلباً واحداً على الأقل من هذا المتجر
+  const ordersSnap = await db.collection("orders")
+    .where("customer_id", "==", customerId)
+    .where("store_id", "==", storeId)
+    .where("status", "==", "delivered")
+    .limit(1)
+    .get()
+
+  if (ordersSnap.empty) {
+    return { success: false, average: null, error: "يجب الشراء من المتجر قبل تقييمه" }
+  }
+
   const r = Math.max(1, Math.min(5, Math.round(Number(rating))))
   const now = new Date().toISOString()
 
@@ -44,7 +57,7 @@ export async function upsertStoreReview(storeId: string, customerId: string, rat
         updated_at: now
       })
     } else {
-      const newDoc = await db.collection("store_reviews").add({
+      await db.collection("store_reviews").add({
         store_id: storeId,
         customer_id: customerId,
         rating: r,

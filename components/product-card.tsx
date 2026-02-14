@@ -4,12 +4,24 @@ import Image from "next/image"
 import Link from "next/link"
 import { Star, ShoppingBag, Tag } from "lucide-react"
 import { Card, CardContent } from "./ui/card"
-import type { Product } from "../lib/mock-data"
 import { useLanguage } from "../lib/language-context"
 import { memo } from "react"
 
+interface ProductCardProduct {
+  id: string
+  name: string
+  price: number
+  rating: number
+  image?: string | null
+  image_url?: string | null
+  category?: string
+  storeName?: string
+  stores?: { name: string } | null
+  discount_percentage?: number
+}
+
 interface ProductCardProps {
-  product: Product & { discount_percentage?: number }
+  product: ProductCardProduct
 }
 
 function ProductCardComponent({ product }: ProductCardProps) {
@@ -27,7 +39,7 @@ function ProductCardComponent({ product }: ProductCardProps) {
         <Card className="overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 h-full border-0 bg-white shadow-md group-hover:shadow-blue-500/10">
           <div className="aspect-square relative bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
             <Image
-              src={(product as any).image_url || product.image || "/placeholder.svg"}
+              src={product.image_url || product.image || "/placeholder.svg"}
               alt={product.name}
               fill
               className="object-cover transition-transform duration-500 group-hover:scale-110"

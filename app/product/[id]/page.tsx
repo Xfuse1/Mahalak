@@ -7,7 +7,7 @@ import { BackButton } from "@/components/back-button"
 import { Star, MessageCircle, Phone, ShoppingCart, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { notFound, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useEffect, useState } from "react"
@@ -66,7 +66,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         const productData = await getProduct(id) as Product | null
 
         if (!productData) {
-          notFound()
+          setProduct(null)
+          setLoading(false)
           return
         }
 
@@ -84,8 +85,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         setRelatedProducts(related as Product[])
 
         setLoading(false)
-      } catch (error) {
-        console.error("[v0] Error fetching product:", error)
+      } catch (_error) {
         setProduct(null)
         setLoading(false)
       }
@@ -108,8 +108,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         } else {
           setUserReview(null)
         }
-      } catch (err) {
-        console.error('[v0] Error fetching user review:', err)
+      } catch (_err) {
+        // silently fail — review fetch is non-critical
       }
     })()
 
@@ -189,8 +189,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         price: product.price,
         contact_method: "whatsapp",
       })
-    } catch (error) {
-      console.error("[v0] Error saving WhatsApp inquiry:", error)
+    } catch (_error) {
+      // silently fail — analytics tracking is non-critical
     }
 
     const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
@@ -249,11 +249,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         price: product.price,
         contact_method: "call",
       })
-    } catch (error) {
-      console.error("[v0] Error saving call inquiry:", error)
+    } catch (_error) {
+      // silently fail — analytics tracking is non-critical
     }
 
-    const phone = product.stores?.phone || "01055161600"
+    const phone = product.stores?.phone
+    if (!phone) {
+      toast.error(t("رقم الهاتف غير متوفر لهذا المتجر", "Phone number not available for this store"))
+      return
+    }
     window.location.href = `tel:${phone}`
   }
 
@@ -290,7 +294,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   <span className="font-bold text-lg text-amber-700">{product.rating}</span>
                 </div>
                   {/* User review (one per user per product) - interactive stars */}
-                <div className="flex items-center gap-1 mr-3">
+                <div className="flex items-center gap-1 me-3">
                   {[1, 2, 3, 4, 5].map((n) => {
                     const filled = userReview ? n <= userReview : n <= Math.round(product.rating)
                     return (
@@ -312,8 +316,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                               setProduct((p) => (p ? { ...p, rating: res.average } : p))
                             }
                             setUserReview(n)
-                          } catch (err) {
-                            console.error('[v0] Error saving review:', err)
+                          } catch (_err) {
+                            // handled by UI state
                           } finally {
                             setSubmittingReview(false)
                           }
@@ -375,7 +379,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <MessageCircle className="ml-2 h-6 w-6" />
+                  <MessageCircle className="ms-2 h-6 w-6" />
                   {t("تواصل واتساب", "WhatsApp")}
                 </Button>
                 <Button
@@ -384,7 +388,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   className="flex-1 rounded-xl border-2 hover:bg-gray-50 h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Phone className="ml-2 h-6 w-6" />
+                  <Phone className="ms-2 h-6 w-6" />
                   {t("اتصال", "Call")}
                 </Button>
               </div>
@@ -409,7 +413,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       description: product.description,
                       quantity: 1,
                       stock: product.stock,
-                      discount_percentage: (product as any).discount_percentage || 0,
+                      discount_percentage: product.discount_percentage || 0,
                     }
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
                     router.push("/checkout?mode=buynow")
@@ -417,7 +421,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
-                  <Zap className="ml-2 h-6 w-6" />
+                  <Zap className="ms-2 h-6 w-6" />
                   {t("اشتري الآن", "Buy Now")}
                 </Button>
                 <Button
@@ -431,7 +435,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       store_id: product.store_id,
                       store_name: product.stores?.name,
                       description: product.description,
-                      discount_percentage: (product as any).discount_percentage || 0,
+                      discount_percentage: product.discount_percentage || 0,
                       stock: product.stock,
                     })
                   }}
@@ -439,7 +443,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   className="flex-1 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl h-14 text-lg transition-all hover:scale-[1.02]"
                   disabled={product.stock === 0}
                 >
-                  <ShoppingCart className="ml-2 h-6 w-6" />
+                  <ShoppingCart className="ms-2 h-6 w-6" />
                   {t("أضف للسلة", "Add to Cart")}
                 </Button>
               </div>

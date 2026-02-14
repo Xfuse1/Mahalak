@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
+import { logError } from "../logger"
 
 export type Notification = {
   id: string
@@ -40,7 +41,7 @@ export async function createNotification(data: {
 
     return { success: true, id: notificationRef.id }
   } catch (error: any) {
-    console.error("[v0] Error creating notification:", error)
+    logError("[v0] Error creating notification:", error)
     return { success: false, error: error?.message || "Failed to create notification" }
   }
 }
@@ -82,7 +83,7 @@ export async function getUserNotifications(userId: string, limit: number = 20): 
     
     return notifications.slice(0, limit)
   } catch (error) {
-    console.error("[v0] Error fetching notifications:", error)
+    logError("[v0] Error fetching notifications:", error)
     return []
   }
 }
@@ -99,7 +100,7 @@ export async function getUnreadNotificationsCount(userId: string): Promise<numbe
 
     return snapshot.size
   } catch (error) {
-    console.error("[v0] Error counting notifications:", error)
+    logError("[v0] Error counting notifications:", error)
     return 0
   }
 }
@@ -115,8 +116,40 @@ export async function markNotificationAsRead(notificationId: string) {
 
     return { success: true }
   } catch (error: any) {
-    console.error("[v0] Error marking notification as read:", error)
+    logError("[v0] Error marking notification as read:", error)
     return { success: false, error: error?.message }
+  }
+}
+
+// Mark all unread notifications as read for a user
+export async function markAllNotificationsAsRead(userId: string) {
+  try {
+    const db = getAdminDb()
+    const unreadSnapshot = await db
+      .collection("notifications")
+      .where("user_id", "==", userId)
+      .where("is_read", "==", false)
+      .get()
+
+    if (unreadSnapshot.empty) {
+      return { success: true, updated: 0 }
+    }
+
+    const batch = db.batch()
+    const readAt = new Date().toISOString()
+
+    unreadSnapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        is_read: true,
+        read_at: readAt,
+      })
+    })
+
+    await batch.commit()
+    return { success: true, updated: unreadSnapshot.size }
+  } catch (error: any) {
+    logError("[v0] Error marking all notifications as read:", error)
+    return { success: false, error: error?.message || "Failed to mark all notifications as read" }
   }
 }
 

@@ -2,8 +2,20 @@
 
 import { getAdminDb } from "../firebase/admin"
 import { revalidatePath } from "next/cache"
+import { logError } from "../logger"
+import type { Placement, Shelf } from "../types/product-management"
 
-export async function saveSupermarketLayout(storeId: string, shelves: any[], placements: any[]) {
+export async function saveSupermarketLayout(
+    storeId: string,
+    shelves: Shelf[],
+    placements: Placement[],
+    callerId?: string,
+) {
+    // Ownership check
+    if (callerId && callerId !== storeId) {
+        return { success: false, error: "ليس لديك صلاحية لتعديل هذا التخطيط" }
+    }
+
     const db = getAdminDb();
     const docRef = db.collection("supermarket_layouts").doc(storeId);
 
@@ -16,13 +28,19 @@ export async function saveSupermarketLayout(storeId: string, shelves: any[], pla
 
         revalidatePath("/seller/supermarket-3d");
         return { success: true };
-    } catch (error: any) {
-        console.error("[Layout Action] Error saving layout:", error);
-        return { success: false, error: error.message };
+    } catch (error: unknown) {
+        logError("[Layout Action] Error saving layout:", error);
+        const message = error instanceof Error ? error.message : "Failed to save layout";
+        return { success: false, error: message };
     }
 }
 
-export async function getSupermarketLayout(storeId: string) {
+export async function getSupermarketLayout(storeId: string, callerId?: string) {
+    // Ownership check
+    if (!callerId || callerId !== storeId) {
+        return { success: false, error: "UNAUTHORIZED_LAYOUT_ACCESS", data: null };
+    }
+
     const db = getAdminDb();
     const docSnap = await db.collection("supermarket_layouts").doc(storeId).get();
 

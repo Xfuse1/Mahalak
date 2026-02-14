@@ -7,18 +7,19 @@ import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
 import { LanguageSwitcher } from "./language-switcher"
-import { useTranslation } from "react-i18next"
+import { useLanguage } from "../lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { useEffect, useState } from "react"
-import { getUnreadNotificationsCount, getUserNotifications, markNotificationAsRead, type Notification } from "@/lib/actions/notifications"
+import { getUnreadNotificationsCount, getUserNotifications, markAllNotificationsAsRead, markNotificationAsRead, type Notification } from "@/lib/actions/notifications"
 import { isSimulatorEnabled } from "@/lib/actions/delivery"
 
 export function Header() {
   const { user, logout } = useAuth()
   const router = useRouter()
-  const { t } = useTranslation("common")
+  const { t, language } = useLanguage()
   const { items } = useCartStore()
   const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
+  const notificationLocale = language === "ar" ? "ar-EG" : "en-US"
 
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
@@ -137,7 +138,7 @@ export function Header() {
                 title="3D Market"
               >
                 <Cuboid className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="font-bold hidden md:inline ml-2">3D Market</span>
+                <span className="font-bold hidden md:inline ms-2">3D Market</span>
               </Button>
             )}
 
@@ -197,7 +198,7 @@ export function Header() {
                               <Bell className="h-5 w-5 text-white" />
                             </div>
                             <h3 className="font-extrabold text-gray-900 text-xl">
-                              {t("notifications", "الإشعارات")}
+                              {t("الإشعارات", "Notifications")}
                             </h3>
                           </div>
                           <button
@@ -211,15 +212,15 @@ export function Header() {
                           {loadingNotifications ? (
                             <div className="p-10 text-center">
                               <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                              <p className="text-gray-500 font-medium">{t("loading", "جاري التحميل...")}</p>
+                              <p className="text-gray-500 font-medium">{t("جاري التحميل...", "Loading...")}</p>
                             </div>
                           ) : notifications.length === 0 ? (
                             <div className="p-12 text-center">
                               <div className="bg-gray-50 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Bell className="h-8 w-8 text-gray-300" />
                               </div>
-                              <p className="text-gray-500 font-medium">{t("noNotifications", "لا توجد إشعارات حالياً")}</p>
-                              <p className="text-gray-400 text-sm mt-1">{t("stayTuned", "سنوافيك بكل جديد هنا")}</p>
+                              <p className="text-gray-500 font-medium">{t("لا توجد إشعارات حالياً", "No notifications")}</p>
+                              <p className="text-gray-400 text-sm mt-1">{t("سنوافيك بكل جديد هنا", "Stay tuned for updates")}</p>
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-50">
@@ -243,7 +244,7 @@ export function Header() {
                                           {notification.title}
                                         </p>
                                         {!notification.is_read && (
-                                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-pulse flex-shrink-0 ml-2" />
+                                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-pulse flex-shrink-0 ms-2" />
                                         )}
                                       </div>
                                       <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
@@ -252,7 +253,7 @@ export function Header() {
                                       <div className="flex items-center gap-2 mt-2">
                                         <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
                                           {notification.created_at
-                                            ? new Date(notification.created_at).toLocaleDateString("ar-EG", {
+                                            ? new Date(notification.created_at).toLocaleDateString(notificationLocale, {
                                               day: "numeric",
                                               month: "short",
                                               hour: "2-digit",
@@ -273,12 +274,18 @@ export function Header() {
                           <div className="p-3 bg-gray-50/50 border-t border-gray-100 text-center">
                             <button
                               className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-4 rounded-xl hover:bg-blue-100/50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Logic for view all or mark all read
+                              onClick={async (e) => {
+                                e.stopPropagation()
+                                if (!user?.id) return
+
+                                const result = await markAllNotificationsAsRead(user.id)
+                                if (!result.success) return
+
+                                setNotifications((prev) => prev.map((notification) => ({ ...notification, is_read: true })))
+                                setUnreadCount(0)
                               }}
                             >
-                              {t("viewAll", "عرض جميع الإشعارات")}
+                              {t("عرض جميع الإشعارات", "View All Notifications")}
                             </button>
                           </div>
                         )}
@@ -312,7 +319,7 @@ export function Header() {
                 className="bg-white text-[#1e40af] hover:bg-gray-50 hover:scale-105 active:scale-95 font-bold text-xs md:text-sm px-4 md:px-6 h-9 md:h-10 shadow-lg transition-all duration-300 rounded-xl border-2 border-white/50 hover:border-white"
                 onClick={() => router.push("/auth")}
               >
-                {t("login")}
+                {t("تسجيل الدخول", "Login")}
               </Button>
             )}
           </nav>

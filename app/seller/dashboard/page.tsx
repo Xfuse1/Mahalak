@@ -10,7 +10,8 @@ import { Button } from "../../../components/ui/button"
 import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getDashboardAnalytics, getRecentOrders } from "../../../lib/actions/dashboard"
+import { getDashboardAnalytics, getRecentOrders, type RecentDashboardOrder } from "../../../lib/actions/dashboard"
+import { logError } from "../../../lib/logger"
 
 export default function SellerDashboard() {
   const { user, isLoading } = useAuth()
@@ -21,14 +22,13 @@ export default function SellerDashboard() {
     totalRevenue: 0,
     totalOrders: 0,
     totalProducts: 0,
-    totalMessages: 0,
     topProduct: "",
     topProductSales: 0,
     lowStockProducts: 0,
     averageRating: 0,
     totalReviews: 0,
   })
-  const [recentOrders, setRecentOrders] = useState<any[]>([])
+  const [recentOrders, setRecentOrders] = useState<RecentDashboardOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [store, setStore] = useState<any>(null)
   const [storeApproved, setStoreApproved] = useState<boolean | null>(null)
@@ -67,14 +67,14 @@ export default function SellerDashboard() {
           // Check if store is approved
           setStoreApproved(store.is_approved === true)
           
-          const analyticsData = await getDashboardAnalytics(store.id)
-          const ordersData = await getRecentOrders(store.id, 3)
+          const analyticsData = await getDashboardAnalytics(store.id, user.id)
+          const ordersData = await getRecentOrders(store.id, 3, user.id)
 
           setAnalytics(analyticsData)
           setRecentOrders(ordersData)
         }
       } catch (error) {
-        console.error("[v0] Error fetching dashboard data:", error)
+        logError("[v0] Error fetching dashboard data:", error)
       } finally {
         setLoading(false)
       }
@@ -107,10 +107,16 @@ export default function SellerDashboard() {
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
       pending: { ar: "قيد الانتظار", en: "Pending" },
+      reviewing: { ar: "قيد المراجعة", en: "Reviewing" },
       processing: { ar: "قيد المعالجة", en: "Processing" },
+      confirmed: { ar: "تم التأكيد", en: "Confirmed" },
       shipped: { ar: "تم الشحن", en: "Shipped" },
+      on_the_way: { ar: "في الطريق", en: "On The Way" },
+      picking_up: { ar: "قيد الاستلام", en: "Picking Up" },
       delivered: { ar: "تم التوصيل", en: "Delivered" },
       cancelled: { ar: "ملغي", en: "Cancelled" },
+      driver_rejected: { ar: "رفض السائق", en: "Driver Rejected" },
+      driver_changed: { ar: "تم تغيير السائق", en: "Driver Changed" },
     }
     return statusMap[status] ? t(statusMap[status].ar, statusMap[status].en) : status
   }
@@ -118,10 +124,16 @@ export default function SellerDashboard() {
   const getStatusColor = (status: string) => {
     const colorMap: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
+      reviewing: "bg-yellow-100 text-yellow-800",
       processing: "bg-blue-100 text-blue-800",
+      confirmed: "bg-blue-100 text-blue-800",
       shipped: "bg-purple-100 text-purple-800",
+      on_the_way: "bg-purple-100 text-purple-800",
+      picking_up: "bg-purple-100 text-purple-800",
       delivered: "bg-green-100 text-green-800",
       cancelled: "bg-red-100 text-red-800",
+      driver_rejected: "bg-red-100 text-red-800",
+      driver_changed: "bg-indigo-100 text-indigo-800",
     }
     return colorMap[status] || "bg-gray-100 text-gray-800"
   }
@@ -140,19 +152,19 @@ export default function SellerDashboard() {
             <div className="flex gap-3 flex-wrap">
               <Button asChild variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 hover:border-orange-300 rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 px-6">
                 <Link href="/seller/my-orders">
-                  <ShoppingCart className="ml-2 h-4 w-4" />
+                  <ShoppingCart className="ms-2 h-4 w-4" />
                   {t("طلباتي كمشتري", "My Orders")}
                 </Link>
               </Button>
               <Button asChild className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/pos/qpos">
-                  <Monitor className="ml-2 h-4 w-4" />
+                  <Monitor className="ms-2 h-4 w-4" />
                   {t("نظام QPOS", "QPOS System")}
                 </Link>
               </Button>
               <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/seller/products/new">
-                  <Plus className="ml-2 h-4 w-4" />
+                  <Plus className="ms-2 h-4 w-4" />
                   {t("إضافة منتج", "Add Product")}
                 </Link>
               </Button>
@@ -177,7 +189,7 @@ export default function SellerDashboard() {
                 </p>
                 <Button asChild size="sm" className="mt-3 bg-amber-600 hover:bg-amber-700">
                   <Link href="/seller/settings">
-                    <MapPin className="ml-2 h-4 w-4" />
+                    <MapPin className="ms-2 h-4 w-4" />
                     {t("تحديد الموقع الآن", "Set Location Now")}
                   </Link>
                 </Button>
@@ -277,8 +289,8 @@ export default function SellerDashboard() {
                 <CardContent className="pt-6 pb-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500 mb-2">{t("عدد الرسائل", "Number of Messages")}</p>
-                      <p className="text-2xl font-extrabold text-amber-600">{analytics.totalMessages}</p>
+                      <p className="text-sm text-gray-500 mb-2">{t("عدد التقييمات", "Number of Reviews")}</p>
+                      <p className="text-2xl font-extrabold text-amber-600">{analytics.totalReviews}</p>
                     </div>
                     <div className="bg-gradient-to-br from-amber-500 to-orange-500 p-4 rounded-2xl shadow-lg">
                       <TrendingUp className="h-6 w-6 text-white" />
@@ -329,9 +341,9 @@ export default function SellerDashboard() {
               </CardHeader>
               <CardContent className="space-y-4 p-6">
                 <div className="border-b border-dashed pb-4">
-                  <p className="text-sm text-gray-500 mb-2">{t("عدد الرسائل", "Number of Messages")}</p>
-                  <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{analytics.totalMessages}</p>
-                  <p className="text-xs text-gray-400 mt-1">{t("رسائل من العملاء", "Messages from customers")}</p>
+                  <p className="text-sm text-gray-500 mb-2">{t("عدد التقييمات", "Number of Reviews")}</p>
+                  <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{analytics.totalReviews}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("تقييمات من العملاء", "Reviews from customers")}</p>
                 </div>
                 <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-yellow-50 p-4 rounded-xl">
                   <div>
@@ -382,7 +394,7 @@ export default function SellerDashboard() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-500">
-                          {order.customer} • {order.date}
+                          {order.customer || t("عميل", "Customer")} • {order.date}
                         </p>
                       </div>
                       <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">

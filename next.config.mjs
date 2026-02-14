@@ -23,9 +23,8 @@ const nextConfig = {
   },
   // Optimize production bundle
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'],
-    } : false,
+    // إزالة جميع أنواع console في الإنتاج لمنع تسريب معلومات تقنية
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   // Enable experimental features for better performance
   experimental: {

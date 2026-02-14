@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "../../../components/seller-header"
@@ -10,19 +8,31 @@ import { Button } from "../../../components/ui/button"
 import { Card, CardContent } from "../../../components/ui/card"
 import { getProductsByStoreId, deleteProduct } from "../../../lib/actions/products"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { Edit, Trash2, Plus, Tag } from "lucide-react"
+import { Edit, Trash2, Plus, Tag, Package } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useLanguage } from "../../../lib/language-context"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { logError } from "../../../lib/logger"
+
+type SellerProduct = {
+  id: string
+  name: string
+  price: number
+  stock: number
+  image_url?: string | null
+  category?: string
+  discount_percentage?: number
+  offer_title?: string | null
+}
 
 export default function SellerProductsPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const toast = useToast()
   const confirm = useConfirm()
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<SellerProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
   const { t } = useLanguage()
@@ -50,13 +60,13 @@ export default function SellerProductsPage() {
           return
         }
 
-        setIsStoreApproved((store as any).is_approved === true)
+        setIsStoreApproved(store.is_approved === true)
 
         const storeProducts = await getProductsByStoreId(store.id)
 
-        setProducts(storeProducts)
+        setProducts(Array.isArray(storeProducts) ? (storeProducts as SellerProduct[]) : [])
       } catch (error) {
-        console.error("[v0] Error fetching products:", error)
+        logError("[v0] Error fetching products:", error)
         setProducts([])
       } finally {
         setLoading(false)
@@ -82,7 +92,7 @@ export default function SellerProductsPage() {
       variant: "danger",
     })
     if (confirmed) {
-      const result = await deleteProduct(id)
+      const result = await deleteProduct(id, user?.id)
       if (result.success) {
         setProducts(products.filter((p) => p.id !== id))
       } else {
@@ -121,13 +131,13 @@ export default function SellerProductsPage() {
             {isStoreApproved ? (
               <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/seller/products/new">
-                  <Plus className="ml-2 h-4 w-4" />
+                  <Plus className="ms-2 h-4 w-4" />
                   {t("إضافة منتج جديد", "Add New Product")}
                 </Link>
               </Button>
             ) : (
               <Button disabled className="bg-gray-300 text-gray-500 cursor-not-allowed rounded-xl px-6">
-                <Plus className="ml-2 h-4 w-4" />
+                <Plus className="ms-2 h-4 w-4" />
                 {t("إضافة منتج جديد", "Add New Product")}
               </Button>
             )}
@@ -206,7 +216,7 @@ export default function SellerProductsPage() {
                           className="flex-1 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all"
                           onClick={() => router.push(`/seller/products/edit/${product.id}`)}
                         >
-                          <Edit className="ml-2 h-4 w-4" />
+                          <Edit className="ms-2 h-4 w-4" />
                           {t("تعديل", "Edit")}
                         </Button>
                         <Button
@@ -235,7 +245,7 @@ export default function SellerProductsPage() {
                 </p>
                 <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
                   <Link href="/seller/products/new">
-                    <Plus className="ml-2 h-5 w-5" />
+                    <Plus className="ms-2 h-5 w-5" />
                     {t("إضافة منتج جديد", "Add New Product")}
                   </Link>
                 </Button>
@@ -245,27 +255,5 @@ export default function SellerProductsPage() {
         </div>
       </main>
     </div>
-  )
-}
-
-function Package(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m7.5 4.27 9 5.15" />
-      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-      <path d="m3.3 7 8.7 5 8.7-5" />
-      <path d="M12 22V12" />
-    </svg>
   )
 }

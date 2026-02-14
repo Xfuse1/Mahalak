@@ -13,10 +13,16 @@ import {
 
 export default async function Home() {
   // Fetch data on the server — no loading spinner needed
-  const [allProducts, allStores] = await Promise.all([
-    getProducts(),
-    getStores(),
-  ])
+  let allProducts: Record<string, any>[] = []
+  let allStores: Record<string, any>[] = []
+  try {
+    [allProducts, allStores] = await Promise.all([
+      getProducts(),
+      getStores(),
+    ])
+  } catch {
+    // الصفحة تعمل بدون بيانات بدلاً من التعطل الكامل
+  }
   const featuredProducts = allProducts.slice(0, 6)
   const featuredStores = allStores.slice(0, 4)
 

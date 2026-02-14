@@ -93,7 +93,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
     }
 
     return (
-        <div className="relative pl-2 pr-2">
+        <div className="relative px-2">
             {/* Cancelled Banner */}
             {isCancelled && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center gap-2 text-red-600 animate-in fade-in zoom-in duration-300">

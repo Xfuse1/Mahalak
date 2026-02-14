@@ -3,18 +3,13 @@
 import { Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useTranslation } from "react-i18next"
+import { useLanguage } from "@/lib/language-context"
 
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation()
+  const { setLanguage } = useLanguage()
 
-  const changeLanguage = (lng: string) => {
-    i18n.changeLanguage(lng)
-    // Update document direction
-    document.documentElement.dir = lng === "ar" ? "rtl" : "ltr"
-    document.documentElement.lang = lng
-    // Save to localStorage
-    localStorage.setItem("language", lng)
+  const changeLanguage = (lng: "ar" | "en") => {
+    setLanguage(lng)
   }
 
   return (

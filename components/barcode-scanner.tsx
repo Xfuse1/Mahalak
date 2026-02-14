@@ -2,20 +2,29 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Camera, X, Zap, RotateCcw, CheckCircle2 } from "lucide-react"
+import { useLanguage } from "@/lib/language-context"
+import { logError } from "@/lib/logger"
 
 interface BarcodeScannerProps {
   onScan: (code: string) => void
   onClose: () => void
 }
 
+type ScannerController = {
+  isScanning?: boolean
+  stop: () => Promise<void>
+}
+
 const COOLDOWN_MS = 3000 // 3 seconds cooldown per barcode
 
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
+  const { t, language } = useLanguage()
   const [error, setError] = useState("")
   const [isStarting, setIsStarting] = useState(true)
   const [lastScanned, setLastScanned] = useState("")
   const [showFlash, setShowFlash] = useState(false)
-  const scannerRef = useRef<any>(null)
+  const pageDir = language === "ar" ? "rtl" : "ltr"
+  const scannerRef = useRef<ScannerController | null>(null)
   const cooldownMap = useRef<Map<string, number>>(new Map())
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onScanRef = useRef(onScan)
@@ -91,16 +100,18 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         () => {}
       )
       setIsStarting(false)
-    } catch (err: any) {
-      console.error("[BarcodeScanner] Error:", err)
+    } catch (err: unknown) {
+      logError("[BarcodeScanner] Error:", err)
       setIsStarting(false)
 
-      if (err?.toString?.()?.includes("NotAllowedError")) {
-        setError("لم يتم السماح بالوصول للكاميرا. يرجى السماح بالوصول من إعدادات المتصفح.")
-      } else if (err?.toString?.()?.includes("NotFoundError")) {
-        setError("لم يتم العثور على كاميرا. تأكد من توصيل الكاميرا.")
+      const errorText = String(err)
+
+      if (errorText.includes("NotAllowedError")) {
+        setError(t("لم يتم السماح بالوصول للكاميرا. يرجى السماح بالوصول من إعدادات المتصفح.", "Camera access was denied. Please allow camera access from your browser settings."))
+      } else if (errorText.includes("NotFoundError")) {
+        setError(t("لم يتم العثور على كاميرا. تأكد من توصيل الكاميرا.", "No camera found. Make sure a camera is connected."))
       } else {
-        setError("فشل في تشغيل الكاميرا. تأكد من أن الموقع يعمل على HTTPS.")
+        setError(t("فشل في تشغيل الكاميرا. تأكد من أن الموقع يعمل على HTTPS.", "Failed to start camera. Make sure the site is running on HTTPS."))
       }
     }
   }
@@ -120,14 +131,14 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
   return (
     <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" dir="rtl">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" dir={pageDir}>
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
           <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
             <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-1.5 rounded-lg">
               <Camera className="h-4 w-4 text-white" />
             </div>
-            مسح الباركود
+            {t("مسح الباركود", "Scan Barcode")}
           </h2>
           <button
             onClick={handleClose}
@@ -142,7 +153,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           {isStarting && !error && (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-gray-600 font-medium">جاري تشغيل الكاميرا...</p>
+              <p className="text-gray-600 font-medium">{t("جاري تشغيل الكاميرا...", "Starting camera...")}</p>
             </div>
           )}
 
@@ -157,7 +168,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
                 className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition"
               >
                 <RotateCcw className="h-4 w-4" />
-                إعادة المحاولة
+                {t("إعادة المحاولة", "Retry")}
               </button>
             </div>
           )}
@@ -178,7 +189,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           {!isStarting && !error && (
             <div className="mt-4 flex items-center justify-center gap-2 text-emerald-600">
               <Zap className="h-4 w-4 animate-pulse" />
-              <p className="text-sm font-medium">وجّه الكاميرا نحو الباركود</p>
+              <p className="text-sm font-medium">{t("وجّه الكاميرا نحو الباركود", "Point the camera at the barcode")}</p>
             </div>
           )}
 
@@ -187,7 +198,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             <div className={`mt-3 rounded-xl p-3 text-center transition-all ${showFlash ? "bg-emerald-100 border-2 border-emerald-400" : "bg-emerald-50 border border-emerald-200"}`}>
               <div className="flex items-center justify-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <p className="text-xs text-gray-500">تم إضافة:</p>
+                <p className="text-xs text-gray-500">{t("تم إضافة:", "Added:")}</p>
               </div>
               <p className="text-emerald-700 font-bold font-mono text-lg">{lastScanned}</p>
             </div>
@@ -200,7 +211,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             onClick={handleClose}
             className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 py-2.5 rounded-xl font-medium transition"
           >
-            إغلاق
+            {t("إغلاق", "Close")}
           </button>
         </div>
       </div>

@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { useLanguage } from "@/lib/language-context"
 import { getFirebaseAuth, initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth } from "@/lib/firebase/client"
-import { getUserByPhone, resetUserPassword } from "@/lib/actions/profile"
+import { getUserByPhone, resetUserPassword, generatePasswordResetToken } from "@/lib/actions/profile"
 import { ArrowLeft, ArrowRight, CheckCircle2, Phone, Shield, Loader2, RefreshCw, Lock, Eye, EyeOff } from "lucide-react"
 
 type Step = "phone" | "otp" | "new-password" | "success"
@@ -36,6 +36,7 @@ export default function ForgotPasswordPage() {
   const [userId, setUserId] = useState("")
   const [userEmail, setUserEmail] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [resetToken, setResetToken] = useState("")
   const maxAttempts = 3
 
   // Countdown timer
@@ -115,7 +116,14 @@ export default function ForgotPasswordPage() {
       const result = await verifyPhoneOTP(otpCode)
 
       if (result.success) {
-        setStep("new-password")
+        // Generate a server-side reset token to secure the password reset
+        const tokenResult = await generatePasswordResetToken(userId)
+        if (tokenResult.success && tokenResult.token) {
+          setResetToken(tokenResult.token)
+          setStep("new-password")
+        } else {
+          setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+        }
       } else {
         setError(result.error || t("كود التحقق غير صحيح", "Invalid verification code"))
         if (attempts + 1 >= maxAttempts) {
@@ -177,8 +185,8 @@ export default function ForgotPasswordPage() {
         return
       }
 
-      // Use server action with Firebase Admin SDK to update the correct user's password
-      const result = await resetUserPassword(userId, newPassword)
+      // Use server action with verified reset token to update the password
+      const result = await resetUserPassword(userId, newPassword, resetToken)
       
       if (result.success) {
         setStep("success")

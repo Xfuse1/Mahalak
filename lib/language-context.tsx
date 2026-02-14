@@ -7,6 +7,7 @@ type Language = "ar" | "en"
 
 interface LanguageContextType {
   language: Language
+  setLanguage: (lng: Language) => void
   toggleLanguage: () => void
   t: (ar: string, en: string) => string
 }
@@ -23,16 +24,20 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     document.documentElement.dir = language === "ar" ? "rtl" : "ltr"
   }, [language])
 
+  const setLanguage = (lng: Language) => {
+    i18n.changeLanguage(lng)
+    localStorage.setItem("language", lng)
+  }
+
   const toggleLanguage = () => {
-    const newLanguage = language === "ar" ? "en" : "ar"
-    i18n.changeLanguage(newLanguage)
+    setLanguage(language === "ar" ? "en" : "ar")
   }
 
   const t = (ar: string, en: string) => {
     return language === "ar" ? ar : en
   }
 
-  return <LanguageContext.Provider value={{ language, toggleLanguage, t }}>{children}</LanguageContext.Provider>
+  return <LanguageContext.Provider value={{ language, setLanguage, toggleLanguage, t }}>{children}</LanguageContext.Provider>
 }
 
 export function useLanguage() {

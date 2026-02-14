@@ -21,7 +21,7 @@ export default function ShelfManager() {
         placements,
         removeShelf
     } = useProductStore();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const confirmDialog = useConfirm();
 
     const currentSection = sections.find(s => s.id === selectedSectionId);
@@ -50,7 +50,9 @@ export default function ShelfManager() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{currentSection.nameAR}</h2>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                        {language === 'en' ? currentSection.nameEN : currentSection.nameAR}
+                    </h2>
                     <p className="text-sm text-gray-500">{sectionShelves.length} {t("رف متوفر", "Shelves Available")}</p>
                 </div>
                 <Button

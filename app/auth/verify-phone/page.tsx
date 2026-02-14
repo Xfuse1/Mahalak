@@ -9,6 +9,7 @@ import { Shield, ArrowRight, RefreshCw, Phone, Loader2, CheckCircle2 } from "luc
 import { useLanguage } from "@/lib/language-context"
 import { verifyPhoneOTP, sendPhoneOTP, getOTPCooldownRemaining } from "@/lib/firebase/client"
 import { useAuth } from "@/lib/auth-context"
+import { retrievePendingRegistration } from "@/lib/actions/profile"
 import Link from "next/link"
 
 export default function VerifyPhonePage() {
@@ -106,10 +107,16 @@ export default function VerifyPhonePage() {
       if (result.success) {
         // Customer registration
         if (mode === "register" && role === "customer") {
-          const pendingDataStr = sessionStorage.getItem("pendingCustomerData")
-          if (pendingDataStr) {
+          const token = sessionStorage.getItem("pendingRegistrationToken")
+          if (token) {
             setRegistering(true)
-            const pendingData = JSON.parse(pendingDataStr)
+            const pendingResult = await retrievePendingRegistration(token)
+            if (!pendingResult.success || !pendingResult.data) {
+              setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+              setRegistering(false)
+              return
+            }
+            const pendingData = pendingResult.data
 
             const success = await register(
               pendingData.email,
@@ -120,11 +127,12 @@ export default function VerifyPhonePage() {
               pendingData.street,
               pendingData.city,
               pendingData.country,
-              pendingData.phone
+              pendingData.phone,
+              true // phone verified via OTP
             )
 
             if (success) {
-              sessionStorage.removeItem("pendingCustomerData")
+              sessionStorage.removeItem("pendingRegistrationToken")
               router.push(returnUrl)
             } else {
               setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
@@ -136,10 +144,16 @@ export default function VerifyPhonePage() {
 
         // Seller registration
         if (mode === "register" && role === "seller") {
-          const pendingDataStr = sessionStorage.getItem("pendingSellerData")
-          if (pendingDataStr) {
+          const token = sessionStorage.getItem("pendingRegistrationToken")
+          if (token) {
             setRegistering(true)
-            const pendingData = JSON.parse(pendingDataStr)
+            const pendingResult = await retrievePendingRegistration(token)
+            if (!pendingResult.success || !pendingResult.data) {
+              setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+              setRegistering(false)
+              return
+            }
+            const pendingData = pendingResult.data
 
             const storeAddress = [pendingData.street, pendingData.city, pendingData.country].filter(Boolean).join(", ")
 
@@ -155,8 +169,10 @@ export default function VerifyPhonePage() {
               longitude: pendingData.longitude,
               ownerIdNumber: pendingData.ownerIdNumber || "",
               idCardImageUrl: pendingData.idCardImageUrl || null,
+              idCardImageBackUrl: pendingData.idCardImageBackUrl || null,
               commercialRegisterImageUrl: pendingData.commercialRegisterImageUrl || null,
               taxCardImageUrl: pendingData.taxCardImageUrl || null,
+              taxCardImageBackUrl: pendingData.taxCardImageBackUrl || null,
             }
 
             const success = await register(
@@ -167,11 +183,13 @@ export default function VerifyPhonePage() {
               sellerData,
               pendingData.street,
               pendingData.city,
-              pendingData.country
+              pendingData.country,
+              undefined,
+              true // phone verified via OTP
             )
 
             if (success) {
-              sessionStorage.removeItem("pendingSellerData")
+              sessionStorage.removeItem("pendingRegistrationToken")
               router.push(returnUrl)
             } else {
               setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
@@ -182,7 +200,7 @@ export default function VerifyPhonePage() {
         }
 
         // Other modes
-        sessionStorage.removeItem("pendingSellerData")
+        sessionStorage.removeItem("pendingRegistrationToken")
         router.push(returnUrl)
       } else {
         setAttempts((prev) => prev - 1)

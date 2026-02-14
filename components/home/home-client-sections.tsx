@@ -9,6 +9,8 @@ import Link from "next/link"
 import { Button } from "../ui/button"
 import { Package, Store } from "lucide-react"
 import { memo } from "react"
+import type { ProductListItem } from "@/lib/types/product"
+import type { StoreListItem } from "@/lib/types/store"
 
 // Lazy load below-the-fold components
 const BannerCarousel = dynamic(
@@ -56,18 +58,18 @@ export function CategoriesSection() {
         <div className="overflow-x-auto pb-4 mb-10 scrollbar-hide">
           <div className="flex gap-4 justify-center min-w-max px-2">
             {[
-              { href: "/category/بقالة", color: "from-emerald-400 to-emerald-600", shadow: "emerald", icon: "🛒", ar: "بقالة", en: "Grocery" },
-              { href: "/category/صحة", color: "from-rose-400 to-rose-600", shadow: "rose", icon: "💊", ar: "صحة", en: "Health" },
-              { href: "/category/ملابس", color: "from-violet-400 to-violet-600", shadow: "violet", icon: "👕", ar: "ملابس", en: "Clothing" },
-              { href: "/category/إلكترونيات", color: "from-blue-400 to-blue-600", shadow: "blue", icon: "📱", ar: "إلكترونيات", en: "Electronics" },
-              { href: "/category/أغذية", color: "from-amber-400 to-orange-500", shadow: "orange", icon: "🍔", ar: "أغذية", en: "Food" },
-              { href: "/category/أثاث", color: "from-amber-600 to-amber-800", shadow: "amber", icon: "🪑", ar: "أثاث", en: "Furniture" },
-              { href: "/category/خدمات أخرى", color: "from-slate-500 to-slate-700", shadow: "slate", icon: "⚡", ar: "أخرى", en: "Other Services" },
+              { href: "/category/بقالة", color: "from-emerald-400 to-emerald-600", hoverShadow: "hover:shadow-emerald-500/30", icon: "🛒", ar: "بقالة", en: "Grocery" },
+              { href: "/category/صحة", color: "from-rose-400 to-rose-600", hoverShadow: "hover:shadow-rose-500/30", icon: "💊", ar: "صحة", en: "Health" },
+              { href: "/category/ملابس", color: "from-violet-400 to-violet-600", hoverShadow: "hover:shadow-violet-500/30", icon: "👕", ar: "ملابس", en: "Clothing" },
+              { href: "/category/إلكترونيات", color: "from-blue-400 to-blue-600", hoverShadow: "hover:shadow-blue-500/30", icon: "📱", ar: "إلكترونيات", en: "Electronics" },
+              { href: "/category/أغذية", color: "from-amber-400 to-orange-500", hoverShadow: "hover:shadow-orange-500/30", icon: "🍔", ar: "أغذية", en: "Food" },
+              { href: "/category/أثاث", color: "from-amber-600 to-amber-800", hoverShadow: "hover:shadow-amber-500/30", icon: "🪑", ar: "أثاث", en: "Furniture" },
+              { href: "/category/خدمات أخرى", color: "from-slate-500 to-slate-700", hoverShadow: "hover:shadow-slate-500/30", icon: "⚡", ar: "أخرى", en: "Other Services" },
             ].map((cat) => (
               <Link
                 key={cat.href}
                 href={cat.href}
-                className={`bg-gradient-to-br ${cat.color} text-white p-6 rounded-2xl text-center hover:shadow-2xl hover:shadow-${cat.shadow}-500/30 transition-all transform hover:scale-105 hover:-translate-y-1 min-w-[140px] group`}
+                className={`bg-gradient-to-br ${cat.color} text-white p-6 rounded-2xl text-center hover:shadow-2xl ${cat.hoverShadow} transition-all transform hover:scale-105 hover:-translate-y-1 min-w-[140px] group`}
               >
                 <div className="bg-white/20 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                   {cat.icon}
@@ -118,7 +120,7 @@ export function CategoriesSection() {
   )
 }
 
-export function FeaturedStores({ stores }: { stores: any[] }) {
+export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
   const { t } = useLanguage()
   return (
     <section className="py-16 bg-white">
@@ -142,7 +144,7 @@ export function FeaturedStores({ stores }: { stores: any[] }) {
   )
 }
 
-export function FeaturedProducts({ products }: { products: any[] }) {
+export function FeaturedProducts({ products }: { products: ProductListItem[] }) {
   const { t } = useLanguage()
   return (
     <section className="py-16 bg-gradient-to-b from-gray-50 to-white">

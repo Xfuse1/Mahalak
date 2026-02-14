@@ -3,49 +3,54 @@
 import { useState, useEffect, useCallback, memo } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useTranslation } from "react-i18next"
+import { useLanguage } from "@/lib/language-context"
 import Image from "next/image"
+import Link from "next/link"
+
+const SLIDES_COUNT = 3
 
 const BannerCarouselComponent = () => {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const { t } = useTranslation()
+  const { t, language } = useLanguage()
+  const isRTL = language === "ar"
+  const translateValue = isRTL ? currentSlide * 100 : -(currentSlide * 100)
 
   const slides = [
     {
       id: 1,
-      title: t("banner1Title"),
-      description: t("banner1Desc"),
+      title: t("اكتشف أفضل المنتجات", "Discover the Best Products"),
+      description: t("تسوق من آلاف المنتجات بأفضل الأسعار", "Shop from thousands of products at the best prices"),
       image: "/banner-1.jpg",
     },
     {
       id: 2,
-      title: t("banner2Title"),
-      description: t("banner2Desc"),
+      title: t("متاجر موثوقة بالقرب منك", "Trusted Stores Near You"),
+      description: t("تواصل مع أفضل المتاجر المحلية", "Connect with the best local stores"),
       image: "/banner-2.jpg",
     },
     {
       id: 3,
-      title: t("banner3Title"),
-      description: t("banner3Desc"),
+      title: t("عروض وخصومات حصرية", "Exclusive Deals & Discounts"),
+      description: t("وفر أكثر مع عروضنا المميزة", "Save more with our special offers"),
       image: "/banner-3.jpg",
     },
   ]
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length)
+      setCurrentSlide((prev) => (prev + 1) % SLIDES_COUNT)
     }, 5000)
 
     return () => clearInterval(timer)
-  }, [slides.length])
+  }, [])
 
   const nextSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length)
-  }, [slides.length])
+    setCurrentSlide((prev) => (prev + 1) % SLIDES_COUNT)
+  }, [])
 
   const prevSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)
-  }, [slides.length])
+    setCurrentSlide((prev) => (prev - 1 + SLIDES_COUNT) % SLIDES_COUNT)
+  }, [])
 
   return (
     <div className="relative overflow-hidden">
@@ -54,7 +59,7 @@ const BannerCarouselComponent = () => {
       
       <div
         className="flex transition-transform duration-700 ease-out"
-        style={{ transform: `translateX(${currentSlide * 100}%)` }}
+        style={{ transform: `translateX(${translateValue}%)` }}
       >
         {slides.map((slide, index) => (
           <div key={slide.id} className="min-w-full relative h-[350px] md:h-[450px] lg:h-[500px]">
@@ -88,12 +93,13 @@ const BannerCarouselComponent = () => {
                   
                   {/* CTA Button (optional) */}
                   <div className="mt-8">
-                    <Button 
-                      className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105"
-                      onClick={() => window.location.href = '/search'}
-                    >
-                      {t("browseProducts", "تصفح المنتجات")}
-                    </Button>
+                    <Link href="/search">
+                      <Button 
+                        className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105"
+                      >
+                        {t("تصفح المنتجات", "Browse Products")}
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -106,7 +112,7 @@ const BannerCarouselComponent = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 bg-black/30 backdrop-blur-sm h-12 w-12 rounded-full transition-all hover:scale-110 shadow-lg"
+        className="absolute start-4 md:start-8 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 bg-black/30 backdrop-blur-sm h-12 w-12 rounded-full transition-all hover:scale-110 shadow-lg"
         onClick={prevSlide}
       >
         <ChevronLeft className="h-6 w-6" />
@@ -114,7 +120,7 @@ const BannerCarouselComponent = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 bg-black/30 backdrop-blur-sm h-12 w-12 rounded-full transition-all hover:scale-110 shadow-lg"
+        className="absolute end-4 md:end-8 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 bg-black/30 backdrop-blur-sm h-12 w-12 rounded-full transition-all hover:scale-110 shadow-lg"
         onClick={nextSlide}
       >
         <ChevronRight className="h-6 w-6" />

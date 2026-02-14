@@ -6,30 +6,39 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SellerHeader } from "../../../components/seller-header"
 import { useAuth } from "../../../lib/auth-context"
+import { useLanguage } from "../../../lib/language-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { Label } from "../../../components/ui/label"
 import { Textarea } from "../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
-import { getStoreByUserId, updateStore, createStore, uploadStoreImage } from "../../../lib/actions/stores"
+import { getStoreByUserId, updateStore, createStore, uploadStoreImage, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
+import { logError } from "../../../lib/logger"
 import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
 
+function PhoneVerificationLoading() {
+  const { t } = useLanguage()
+
+  return <div className="flex items-center justify-center p-4">{t("جاري التحميل...", "Loading...")}</div>
+}
+
 // Lazy load phone verification (heavy: Firebase reCAPTCHA)
 const PhoneVerification = dynamic(
   () => import("../../../components/phone-verification").then(m => ({ default: m.PhoneVerification })),
-  { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
+  { ssr: false, loading: () => <PhoneVerificationLoading /> }
 )
 
 export default function SettingsPage() {
   const { user, isLoading } = useAuth()
+  const { t, language } = useLanguage()
   const toast = useToast()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
-  const [store, setStore] = useState<any>(null)
+  const [store, setStore] = useState<Store | null>(null)
   const [isLoadingStore, setIsLoadingStore] = useState(true)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -45,11 +54,18 @@ export default function SettingsPage() {
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [locationSuccess, setLocationSuccess] = useState(false)
+
+  const defaultStoreCategory = t("خدمات أخرى", "Other services")
+  const defaultWorkingDays = t("السبت - الخميس", "Saturday - Thursday")
+  const defaultReturnPolicy = t(
+    "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء",
+    "Products can be returned within 14 days from the purchase date",
+  )
   
   // Get current location function
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError("المتصفح لا يدعم تحديد الموقع")
+      setLocationError(t("المتصفح لا يدعم تحديد الموقع", "Your browser does not support geolocation"))
       return
     }
     
@@ -69,16 +85,16 @@ export default function SettingsPage() {
         setIsGettingLocation(false)
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            setLocationError("تم رفض إذن الموقع. يرجى السماح بالوصول للموقع")
+            setLocationError(t("تم رفض إذن الموقع. يرجى السماح بالوصول للموقع", "Location access was denied. Please allow location permission."))
             break
           case error.POSITION_UNAVAILABLE:
-            setLocationError("معلومات الموقع غير متاحة")
+            setLocationError(t("معلومات الموقع غير متاحة", "Location information is unavailable"))
             break
           case error.TIMEOUT:
-            setLocationError("انتهت مهلة طلب الموقع")
+            setLocationError(t("انتهت مهلة طلب الموقع", "Location request timed out"))
             break
           default:
-            setLocationError("حدث خطأ في تحديد الموقع")
+            setLocationError(t("حدث خطأ في تحديد الموقع", "An error occurred while getting location"))
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -94,16 +110,19 @@ export default function SettingsPage() {
       await updateStore(user.id, {
         latitude: storeLocation.latitude,
         longitude: storeLocation.longitude,
-      })
+      }, user.id)
       setLocationSuccess(true)
       // Update local store state
-      setStore((prev: any) => ({
-        ...prev,
-        latitude: storeLocation.latitude,
-        longitude: storeLocation.longitude,
-      }))
+      setStore((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          latitude: storeLocation.latitude,
+          longitude: storeLocation.longitude,
+        }
+      })
     } catch (error) {
-      setLocationError("حدث خطأ في حفظ الموقع")
+      setLocationError(t("حدث خطأ في حفظ الموقع", "An error occurred while saving location"))
     }
     setIsSaving(false)
   }
@@ -112,15 +131,15 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    category: "خدمات أخرى",
+    category: defaultStoreCategory,
     address: "",
     phone: "",
     open_time: "09:00",
     close_time: "22:00",
-    working_days: "السبت - الخميس",
+    working_days: defaultWorkingDays,
     support_email: "",
     whatsapp_number: "",
-    return_policy: "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"
+    return_policy: defaultReturnPolicy
   })
 
   useEffect(() => {
@@ -146,15 +165,15 @@ export default function SettingsPage() {
         setFormData({
           name: storeData.name || "",
           description: storeData.description || "",
-          category: storeData.category || "خدمات أخرى",
+          category: storeData.category || defaultStoreCategory,
           address: storeData.address || "",
           phone: storeData.phone || "",
           open_time: storeData.open_time || "09:00",
           close_time: storeData.close_time || "22:00",
-          working_days: storeData.working_days || "السبت - الخميس",
+          working_days: storeData.working_days || defaultWorkingDays,
           support_email: storeData.support_email || user?.email || "",
           whatsapp_number: storeData.phone || "",
-          return_policy: storeData.return_policy || "يمكن إرجاع المنتجات خلال 14 يوم من تاريخ الشراء"
+          return_policy: storeData.return_policy || defaultReturnPolicy
         })
       }
       setIsLoadingStore(false)
@@ -194,7 +213,7 @@ export default function SettingsPage() {
     e.preventDefault()
 
     if (!user?.id) {
-      toast.error("لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.")
+      toast.error(t("لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.", "User data was not found. Please log in again."))
       return
     }
 
@@ -208,17 +227,19 @@ export default function SettingsPage() {
         const uploadFormData = new FormData()
         uploadFormData.append("file", imageFile)
         uploadFormData.append("storeId", store?.id || user.id)
+        uploadFormData.append("callerId", user.id)
 
         const uploadResult = await uploadStoreImage(uploadFormData)
 
         if (!uploadResult.success) {
-          throw new Error(uploadResult.error || "فشل رفع الصورة")
+          throw new Error(uploadResult.error || t("فشل رفع الصورة", "Failed to upload image"))
         }
 
         imageUrl = uploadResult.url!
-      } catch (error: any) {
-        console.error("Error uploading image:", error)
-        toast.error("فشل رفع الصورة: " + (error.message || "Unknown error"))
+      } catch (error: unknown) {
+        logError("Error uploading image:", error)
+        const errorMessage = error instanceof Error && error.message ? error.message : t("خطأ غير معروف", "Unknown error")
+        toast.error(t("فشل رفع الصورة: ", "Image upload failed: ") + errorMessage)
         setIsSaving(false)
         setIsUploadingImage(false)
         return
@@ -234,13 +255,14 @@ export default function SettingsPage() {
 
     let result
     if (store?.id) {
-      result = await updateStore(store.id, updateData)
+      result = await updateStore(store.id, updateData, user.id)
     } else {
       // Create new store if missing
-      result = await createStore({
+      const createData: StoreCreateInput = {
         seller_id: user.id,
         ...updateData,
-      } as any)
+      }
+      result = await createStore(createData)
     }
 
     setIsSaving(false)
@@ -248,10 +270,12 @@ export default function SettingsPage() {
     if (result.success) {
       setStore(result.data)
       setImageFile(null)
-      toast.success("تم حفظ الإعدادات بنجاح")
-      window.location.reload() // Force reload to ensure data is fresh
+      if (result.data?.image_url) {
+        setImagePreview(result.data.image_url)
+      }
+      toast.success(t("تم حفظ الإعدادات بنجاح", "Settings saved successfully"))
     } else {
-      toast.error("حدث خطأ أثناء حفظ الإعدادات: " + result.error)
+      toast.error(t("حدث خطأ أثناء حفظ الإعدادات: ", "An error occurred while saving settings: ") + result.error)
     }
   }
 
@@ -262,8 +286,8 @@ export default function SettingsPage() {
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <div className="mb-10">
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">الإعدادات</h1>
-            <p className="text-gray-500 mt-1">إدارة معلومات المتجر والإعدادات</p>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("الإعدادات", "Settings")}</h1>
+            <p className="text-gray-500 mt-1">{t("إدارة معلومات المتجر والإعدادات", "Manage store information and settings")}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -274,19 +298,19 @@ export default function SettingsPage() {
                   <div className="p-2 bg-blue-100 rounded-xl">
                     <Upload className="h-5 w-5 text-blue-600" />
                   </div>
-                  معلومات المتجر
+                  {t("معلومات المتجر", "Store Information")}
                 </CardTitle>
-                <CardDescription>تحديث معلومات المتجر الأساسية</CardDescription>
+                <CardDescription>{t("تحديث معلومات المتجر الأساسية", "Update basic store information")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5 p-6">
                 <div>
-                  <Label htmlFor="storeLogo" className="text-gray-700 font-medium">شعار المتجر</Label>
+                  <Label htmlFor="storeLogo" className="text-gray-700 font-medium">{t("شعار المتجر", "Store Logo")}</Label>
                   <div className="mt-3 flex items-center gap-4">
                     {imagePreview && (
                       <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-blue-200 shadow-md">
                         <Image
                           src={imagePreview || "/placeholder.svg"}
-                          alt="Store logo preview"
+                          alt={t("معاينة شعار المتجر", "Store logo preview")}
                           fill
                           className="object-cover"
                         />
@@ -298,7 +322,9 @@ export default function SettingsPage() {
                         className="flex items-center justify-center gap-3 px-5 py-4 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all"
                       >
                         <Upload className="h-6 w-6 text-blue-600" />
-                        <span className="font-medium text-gray-700">{imagePreview ? "تغيير الشعار" : "رفع شعار المتجر"}</span>
+                        <span className="font-medium text-gray-700">
+                          {imagePreview ? t("تغيير الشعار", "Change Logo") : t("رفع شعار المتجر", "Upload Store Logo")}
+                        </span>
                       </Label>
                       <Input
                         id="storeLogo"
@@ -307,17 +333,17 @@ export default function SettingsPage() {
                         onChange={handleImageChange}
                         className="hidden"
                       />
-                      <p className="text-xs text-gray-500 mt-2">PNG, JPG, GIF حتى 5MB</p>
+                      <p className="text-xs text-gray-500 mt-2">{t("PNG, JPG, GIF حتى 5MB", "PNG, JPG, GIF up to 5MB")}</p>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="storeName" className="text-gray-700 font-medium">اسم المتجر</Label>
+                  <Label htmlFor="storeName" className="text-gray-700 font-medium">{t("اسم المتجر", "Store Name")}</Label>
                   <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <Label htmlFor="storeDescription" className="text-gray-700 font-medium">وصف المتجر</Label>
+                  <Label htmlFor="storeDescription" className="text-gray-700 font-medium">{t("وصف المتجر", "Store Description")}</Label>
                   <Textarea
                     id="storeDescription"
                     name="description"
@@ -328,7 +354,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="storeCategory" className="text-gray-700 font-medium">فئة المتجر</Label>
+                  <Label htmlFor="storeCategory" className="text-gray-700 font-medium">{t("فئة المتجر", "Store Category")}</Label>
                   <div className="relative mt-2">
                     <Input
                       id="storeCategory"
@@ -336,11 +362,11 @@ export default function SettingsPage() {
                       disabled
                       className="bg-gray-100 cursor-not-allowed h-12 rounded-xl"
                     />
-                    <p className="text-xs text-gray-500 mt-1">لا يمكن تغيير فئة المتجر بعد الإنشاء</p>
+                    <p className="text-xs text-gray-500 mt-1">{t("لا يمكن تغيير فئة المتجر بعد الإنشاء", "Store category cannot be changed after creation")}</p>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="storeAddress" className="text-gray-700 font-medium">العنوان</Label>
+                  <Label htmlFor="storeAddress" className="text-gray-700 font-medium">{t("العنوان", "Address")}</Label>
                   <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
                 </div>
                 
@@ -348,7 +374,7 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <Label className="text-gray-700 font-medium flex items-center gap-2">
                     <Phone className="h-4 w-4" />
-                    رقم الهاتف
+                    {t("رقم الهاتف", "Phone Number")}
                   </Label>
                   
                   {!isChangingPhone ? (
@@ -368,7 +394,7 @@ export default function SettingsPage() {
                         }}
                         className="h-12 px-4 rounded-xl"
                       >
-                        تغيير الرقم
+                        {t("تغيير الرقم", "Change Number")}
                       </Button>
                     </div>
                   ) : (
@@ -384,7 +410,7 @@ export default function SettingsPage() {
                           }
                         }}
                         isVerified={isPhoneVerified}
-                        language="ar"
+                        language={language}
                       />
                       {!isPhoneVerified && (
                         <Button
@@ -398,11 +424,11 @@ export default function SettingsPage() {
                           }}
                           className="mt-3 text-gray-500"
                         >
-                          إلغاء التغيير
+                          {t("إلغاء التغيير", "Cancel Change")}
                         </Button>
                       )}
                       {isPhoneVerified && (
-                        <p className="text-sm text-green-600 mt-2">✓ تم التحقق من الرقم الجديد. اضغط &quot;حفظ التغييرات&quot; لحفظ التعديلات.</p>
+                        <p className="text-sm text-green-600 mt-2">{t('✓ تم التحقق من الرقم الجديد. اضغط "حفظ التغييرات" لحفظ التعديلات.', '✓ New phone number verified. Click "Save Changes" to keep updates.')}</p>
                       )}
                     </div>
                   )}
@@ -415,17 +441,17 @@ export default function SettingsPage() {
               <CardHeader className="bg-gradient-to-r from-green-50 to-white border-b">
                 <CardTitle className="flex items-center gap-2">
                   <MapPin className="h-5 w-5 text-green-600" />
-                  موقع المتجر
+                  {t("موقع المتجر", "Store Location")}
                 </CardTitle>
-                <CardDescription>حدد الموقع الجغرافي للمتجر</CardDescription>
+                <CardDescription>{t("حدد الموقع الجغرافي للمتجر", "Set the store geographic location")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-6">
                 {/* Current Location Display */}
                 {store?.latitude && store?.longitude && !storeLocation && (
                   <div className="bg-gray-50 rounded-lg p-4 border">
-                    <p className="text-sm font-medium text-gray-700 mb-1">الموقع الحالي</p>
+                    <p className="text-sm font-medium text-gray-700 mb-1">{t("الموقع الحالي", "Current Location")}</p>
                     <p className="text-xs text-gray-500">
-                      Lat: {store.latitude.toFixed(6)}, Lng: {store.longitude.toFixed(6)}
+                      {t("خط العرض", "Lat")}: {store.latitude.toFixed(6)}, {t("خط الطول", "Lng")}: {store.longitude.toFixed(6)}
                     </p>
                   </div>
                 )}
@@ -442,17 +468,17 @@ export default function SettingsPage() {
                     {isGettingLocation ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        جاري تحديد الموقع...
+                        {t("جاري تحديد الموقع...", "Detecting location...")}
                       </>
                     ) : storeLocation ? (
                       <>
                         <CheckCircle className="h-5 w-5 text-green-500" />
-                        تم تحديد الموقع الجديد
+                        {t("تم تحديد الموقع الجديد", "New location selected")}
                       </>
                     ) : (
                       <>
                         <MapPin className="h-5 w-5" />
-                        تحديد موقع المتجر من الجهاز
+                        {t("تحديد موقع المتجر من الجهاز", "Detect store location from device")}
                       </>
                     )}
                   </Button>
@@ -461,9 +487,9 @@ export default function SettingsPage() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-green-700">الموقع الجديد</p>
+                          <p className="text-sm font-medium text-green-700">{t("الموقع الجديد", "New Location")}</p>
                           <p className="text-xs text-green-600">
-                            Lat: {storeLocation.latitude.toFixed(6)}, Lng: {storeLocation.longitude.toFixed(6)}
+                            {t("خط العرض", "Lat")}: {storeLocation.latitude.toFixed(6)}, {t("خط الطول", "Lng")}: {storeLocation.longitude.toFixed(6)}
                           </p>
                         </div>
                         <Button
@@ -476,7 +502,7 @@ export default function SettingsPage() {
                           {isSaving ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            "حفظ الموقع"
+                            t("حفظ الموقع", "Save Location")
                           )}
                         </Button>
                       </div>
@@ -484,7 +510,7 @@ export default function SettingsPage() {
                   )}
                   
                   {locationSuccess && (
-                    <p className="text-sm text-green-600">✓ تم حفظ الموقع بنجاح</p>
+                    <p className="text-sm text-green-600">{t("✓ تم حفظ الموقع بنجاح", "✓ Location saved successfully")}</p>
                   )}
                   
                   {locationError && (
@@ -495,7 +521,7 @@ export default function SettingsPage() {
                   
                   {!store?.latitude && !store?.longitude && !storeLocation && (
                     <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                      ⚠️ لم يتم تحديد موقع المتجر بعد. الموقع مطلوب للموافقة على المتجر.
+                      {t("⚠️ لم يتم تحديد موقع المتجر بعد. الموقع مطلوب للموافقة على المتجر.", "⚠️ Store location is not set yet. Location is required for store approval.")}
                     </p>
                   )}
                 </div>
@@ -505,13 +531,13 @@ export default function SettingsPage() {
             {/* Working Hours */}
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-                <CardTitle>ساعات العمل</CardTitle>
-                <CardDescription>حدد أوقات عمل المتجر</CardDescription>
+                <CardTitle>{t("ساعات العمل", "Working Hours")}</CardTitle>
+                <CardDescription>{t("حدد أوقات عمل المتجر", "Set store working hours")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5 p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="openTime" className="text-gray-700 font-medium">وقت الفتح</Label>
+                    <Label htmlFor="openTime" className="text-gray-700 font-medium">{t("وقت الفتح", "Opening Time")}</Label>
                     <Input
                       id="openTime"
                       name="open_time"
@@ -523,7 +549,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="closeTime" className="text-gray-700 font-medium">وقت الإغلاق</Label>
+                    <Label htmlFor="closeTime" className="text-gray-700 font-medium">{t("وقت الإغلاق", "Closing Time")}</Label>
                     <Input
                       id="closeTime"
                       name="close_time"
@@ -536,7 +562,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="workingDays" className="text-gray-700 font-medium">أيام العمل</Label>
+                  <Label htmlFor="workingDays" className="text-gray-700 font-medium">{t("أيام العمل", "Working Days")}</Label>
                   <Input
                     id="workingDays"
                     name="working_days"
@@ -552,12 +578,12 @@ export default function SettingsPage() {
             {/* Customer Service */}
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-                <CardTitle>خدمة العملاء</CardTitle>
-                <CardDescription>معلومات التواصل مع العملاء</CardDescription>
+                <CardTitle>{t("خدمة العملاء", "Customer Service")}</CardTitle>
+                <CardDescription>{t("معلومات التواصل مع العملاء", "Customer contact information")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5 p-6">
                 <div>
-                  <Label htmlFor="supportEmail" className="text-gray-700 font-medium">البريد الإلكتروني للدعم</Label>
+                  <Label htmlFor="supportEmail" className="text-gray-700 font-medium">{t("البريد الإلكتروني للدعم", "Support Email")}</Label>
                   <Input
                     id="supportEmail"
                     name="support_email"
@@ -569,7 +595,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="whatsappNumber" className="text-gray-700 font-medium">رقم واتساب</Label>
+                  <Label htmlFor="whatsappNumber" className="text-gray-700 font-medium">{t("رقم واتساب", "WhatsApp Number")}</Label>
                   <Input
                     id="whatsappNumber"
                     name="whatsapp_number"
@@ -578,10 +604,10 @@ export default function SettingsPage() {
                     disabled
                     className="mt-2 h-12 rounded-xl bg-gray-100 border-gray-200 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-500 mt-1">رقم الواتساب هو نفس رقم الهاتف</p>
+                  <p className="text-xs text-gray-500 mt-1">{t("رقم الواتساب هو نفس رقم الهاتف", "WhatsApp number is the same as phone number")}</p>
                 </div>
                 <div>
-                  <Label htmlFor="returnPolicy" className="text-gray-700 font-medium">سياسة الإرجاع</Label>
+                  <Label htmlFor="returnPolicy" className="text-gray-700 font-medium">{t("سياسة الإرجاع", "Return Policy")}</Label>
                   <Textarea
                     id="returnPolicy"
                     name="return_policy"
@@ -596,7 +622,7 @@ export default function SettingsPage() {
 
             <div className="flex justify-end pb-8">
               <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3 text-lg" disabled={isSaving || isUploadingImage}>
-                {isUploadingImage ? "جاري رفع الصورة..." : isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}
+                {isUploadingImage ? t("جاري رفع الصورة...", "Uploading image...") : isSaving ? t("جاري الحفظ...", "Saving...") : t("حفظ التغييرات", "Save Changes")}
               </Button>
             </div>
           </form>

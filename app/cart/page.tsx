@@ -9,6 +9,7 @@ import { ShoppingBag, Plus, Minus, Trash2, ArrowLeft, ShoppingCart, Tag } from "
 import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -18,6 +19,18 @@ export default function CartPage() {
   const { items, addItem, decrementItem, removeItem, clear } = useCartStore()
   const { user } = useAuth()
   const router = useRouter()
+  const confirm = useConfirm()
+
+  const handleClearCart = async () => {
+    const confirmed = await confirm({
+      title: t("إفراغ السلة", "Clear Cart"),
+      message: t("هل أنت متأكد من إفراغ السلة؟", "Are you sure you want to clear the cart?"),
+      confirmText: t("إفراغ", "Clear"),
+      cancelText: t("إلغاء", "Cancel"),
+      variant: "danger",
+    })
+    if (confirmed) clear()
+  }
   
   // Calculate total with discounts
   const total = items.reduce((sum, item) => {
@@ -65,7 +78,7 @@ export default function CartPage() {
                 <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
                   <Link href="/search" className="flex items-center gap-2">
                     {t("تصفح المنتجات", "Browse Products")}
-                    <ArrowLeft className="h-5 w-5" />
+                    <ArrowLeft className="h-5 w-5 rtl:rotate-180" />
                   </Link>
                 </Button>
               </CardContent>
@@ -105,7 +118,7 @@ export default function CartPage() {
 
                         {/* Stock info */}
                         <p className="text-xs text-gray-400">
-                          {t(`المتاح: ${item.stock}`, `Available: ${item.stock}`)}
+                          {t("المتاح:", "Available:")} {item.stock}
                         </p>
                         
                         {/* Quantity Controls */}
@@ -141,7 +154,7 @@ export default function CartPage() {
                           className="text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all"
                           onClick={() => removeItem(item.id)}
                         >
-                          <Trash2 className="h-4 w-4 mr-1" />
+                          <Trash2 className="h-4 w-4 me-1" />
                           {t("حذف", "Remove")}
                         </Button>
                       </div>
@@ -157,7 +170,7 @@ export default function CartPage() {
                     <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{total.toFixed(2)} <span className="text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
                   </div>
                   <div className="flex gap-3">
-                    <Button variant="outline" onClick={clear} className="rounded-xl hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all">
+                    <Button variant="outline" onClick={handleClearCart} className="rounded-xl hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all">
                       {t("إفراغ السلة", "Clear Cart")}
                     </Button>
                     <Button onClick={handleCheckout} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">

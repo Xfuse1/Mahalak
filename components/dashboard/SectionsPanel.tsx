@@ -3,11 +3,13 @@
 import React from 'react';
 import { useProductStore } from '../../lib/stores/product-store';
 import { sections } from '../../lib/mock/supermarket-data';
+import { useLanguage } from '../../lib/language-context';
 import { cn } from '../../lib/utils';
 import { Shelf, Placement, SectionInfo } from '../../lib/types/product-management';
 
 export default function SectionsPanel() {
     const { shelves, placements, selectedSectionId, setSelectedSection } = useProductStore();
+    const { t, language } = useLanguage();
 
     const getProductCountForSection = (sectionId: string) => {
         return placements.filter((p: Placement) => {
@@ -41,12 +43,14 @@ export default function SectionsPanel() {
                             {section.icon}
                         </div>
                         <div className="flex-1">
-                            <div className="font-bold text-sm">{section.nameAR}</div>
+                            <div className="font-bold text-sm">
+                                {language === 'en' ? section.nameEN : section.nameAR}
+                            </div>
                             <div className={cn(
                                 "text-[10px]",
                                 isActive ? "text-blue-100" : "text-gray-400"
                             )}>
-                                {sectionShelves.length} رف | {productCount} منتج
+                                {sectionShelves.length} {t("رف", "shelves")} | {productCount} {t("منتج", "products")}
                             </div>
                         </div>
                     </button>

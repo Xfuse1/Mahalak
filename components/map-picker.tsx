@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
 import { Button } from "./ui/button"
 import { MapPin, Loader2 } from "lucide-react"
+import type { LeafletMouseEvent, Map as LeafletMap, Marker } from "leaflet"
 
 interface MapPickerProps {
   open: boolean
@@ -16,8 +17,8 @@ interface MapPickerProps {
 
 export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.0444, initialLng = 31.2357, language = "ar" }: MapPickerProps) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<any>(null)
-  const markerRef = useRef<any>(null)
+  const mapInstanceRef = useRef<LeafletMap | null>(null)
+  const markerRef = useRef<Marker | null>(null)
   const [selectedPos, setSelectedPos] = useState<{ lat: number; lng: number }>({ lat: initialLat, lng: initialLng })
   const [isLoaded, setIsLoaded] = useState(false)
 
@@ -30,7 +31,7 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
       await import("leaflet/dist/leaflet.css")
 
       // Fix leaflet default icon
-      delete (L.Icon.Default.prototype as any)._getIconUrl
+      delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
         iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
@@ -52,7 +53,7 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
           setSelectedPos({ lat: pos.lat, lng: pos.lng })
         })
 
-        map.on("click", (e: any) => {
+        map.on("click", (e: LeafletMouseEvent) => {
           marker.setLatLng(e.latlng)
           setSelectedPos({ lat: e.latlng.lat, lng: e.latlng.lng })
         })

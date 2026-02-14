@@ -68,9 +68,9 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
   }
 
   const handleVoiceSearch = () => {
-    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      const recognition = new SpeechRecognition()
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (SpeechRecognitionCtor) {
+      const recognition = new SpeechRecognitionCtor()
       recognition.lang = language === "ar" ? "ar-EG" : "en-US"
       recognition.continuous = false
       recognition.interimResults = false
@@ -79,8 +79,12 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
         setIsListening(true)
       }
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript
+      recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
+        const transcript = event.results[0]?.[0]?.transcript ?? ""
+        if (!transcript) {
+          setIsListening(false)
+          return
+        }
         setQuery(transcript)
         setIsListening(false)
       }

@@ -16,12 +16,11 @@ import Link from "next/link"
 import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { EyeOpenIcon, EyeOffIcon } from "../../components/ui/icons"
-import { MapPin, Loader2, CheckCircle, Camera, Upload, X, Map } from "lucide-react"
-import Image from "next/image"
 import dynamic from "next/dynamic"
-import { getUserByPhone } from "../../lib/actions/profile"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog"
-import { Textarea } from "../../components/ui/textarea"
+import { getUserByPhone, storePendingRegistration } from "../../lib/actions/profile"
+import { LoginForm } from "../../components/auth/login-form"
+import { SellerFields } from "../../components/auth/seller-fields"
+import { UploadDialog } from "../../components/auth/upload-dialog"
 
 // Lazy load phone verification (heavy: Firebase reCAPTCHA)
 const PhoneVerification = dynamic(
@@ -29,6 +28,9 @@ const PhoneVerification = dynamic(
   { ssr: false, loading: () => <div className="flex items-center justify-center p-4">جاري التحميل...</div> }
 )
 import { uploadStoreImage, checkStoreNameExists } from "../../lib/actions/stores"
+import { getFirestoreClient } from "../../lib/firebase/client"
+import { collection, getDocs } from "firebase/firestore"
+import type { CategoryItem } from "../../components/auth/seller-fields"
 
 // Lazy load map picker
 const MapPicker = dynamic(
@@ -62,9 +64,12 @@ export default function AuthPage() {
   const [triggerSendOTP, setTriggerSendOTP] = useState(false)
   const [phoneStep, setPhoneStep] = useState<"phone" | "otp" | "verified">("phone")
   
-  // Store type state for "other" option
+  // Store type state
   const [selectedStoreType, setSelectedStoreType] = useState("")
-  const [customStoreType, setCustomStoreType] = useState("")
+  
+  // Categories from Firestore
+  const [storeCategories, setStoreCategories] = useState<CategoryItem[]>([])
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(true)
   
   // Seller document fields
   const [ownerIdNumber, setOwnerIdNumber] = useState("")
@@ -146,26 +151,31 @@ export default function AuthPage() {
   const roleParam = searchParams.get("role") as "customer" | "seller" | null
   const [role, setRole] = useState<"customer" | "seller">(roleParam || "customer")
 
-  // Countries and cities data
+  // Fetch categories from Firestore
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setIsCategoriesLoading(true)
+        const db = getFirestoreClient()
+        const categoriesRef = collection(db, "categories")
+        const snapshot = await getDocs(categoriesRef)
+        const cats: CategoryItem[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name as string,
+        })).filter(cat => cat.name) // filter out any without name
+        setStoreCategories(cats)
+      } catch (err) {
+        console.error("Error fetching categories:", err)
+      } finally {
+        setIsCategoriesLoading(false)
+      }
+    }
+    fetchCategories()
+  }, [])
+
+  // Countries and cities data (حالياً مصر فقط - سيتم إضافة دول أخرى لاحقاً)
   const countriesAndCities: Record<string, string[]> = {
     "مصر": ["القاهرة", "الجيزة", "الإسكندرية", "الشرقية", "الدقهلية", "البحيرة", "المنيا", "المنوفية", "الغربية", "القليوبية", "كفر الشيخ", "سوهاج", "أسيوط", "قنا", "الأقصر", "أسوان", "الفيوم", "بني سويف", "بورسعيد", "الإسماعيلية", "السويس", "دمياط", "شمال سيناء", "جنوب سيناء", "البحر الأحمر", "الوادي الجديد", "مطروح"],
-    "السعودية": ["الرياض", "جدة", "مكة المكرمة", "المدينة المنورة", "الدمام", "الخبر", "الطائف", "تبوك", "أبها", "خميس مشيط"],
-    "الإمارات": ["دبي", "أبو ظبي", "الشارقة", "عجمان", "رأس الخيمة", "الفجيرة", "أم القيوين"],
-    "الأردن": ["عمان", "إربد", "الزرقاء", "العقبة", "السلط", "مادبا"],
-    "العراق": ["بغداد", "البصرة", "أربيل", "الموصل", "كركوك", "النجف"],
-    "الكويت": ["مدينة الكويت", "حولي", "الفروانية", "الأحمدي", "الجهراء"],
-    "قطر": ["الدوحة", "الوكرة", "الخور", "الريان"],
-    "البحرين": ["المنامة", "المحرق", "الرفاع"],
-    "عمان": ["مسقط", "صلالة", "صحار", "نزوى"],
-    "ليبيا": ["طرابلس", "بنغازي", "مصراتة", "الزاوية"],
-    "تونس": ["تونس العاصمة", "صفاقس", "سوسة", "قابس"],
-    "الجزائر": ["الجزائر العاصمة", "وهران", "قسنطينة", "عنابة"],
-    "المغرب": ["الرباط", "الدار البيضاء", "فاس", "مراكش", "طنجة"],
-    "السودان": ["الخرطوم", "أم درمان", "بور سودان"],
-    "اليمن": ["صنعاء", "عدن", "تعز"],
-    "فلسطين": ["القدس", "رام الله", "غزة", "نابلس", "الخليل"],
-    "لبنان": ["بيروت", "طرابلس", "صيدا", "جبيل"],
-    "سوريا": ["دمشق", "حلب", "حمص", "اللاذقية"],
   }
 
   // Handle store name check
@@ -195,8 +205,33 @@ export default function AuthPage() {
     setUploadDialogOpen(true)
   }
   
+  // File validation constants
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+  const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp"]
+
+  const validateFile = (file: File): string | null => {
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      return t(
+        "نوع الملف غير مدعوم. الأنواع المسموحة: JPEG, PNG, WebP",
+        "Unsupported file type. Allowed types: JPEG, PNG, WebP"
+      )
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return t(
+        "حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت",
+        "File is too large. Maximum size is 5MB"
+      )
+    }
+    return null
+  }
+
   // Handle file from upload or camera
   const handleUploadedFile = (file: File) => {
+    const validationError = validateFile(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     const reader = new FileReader()
     reader.onloadend = () => {
       const preview = reader.result as string
@@ -233,12 +268,6 @@ export default function AuthPage() {
     e.target.value = ""
   }
 
-  const handleCameraInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleUploadedFile(file)
-    e.target.value = ""
-  }
-
   const removeImage = (target: string) => {
     switch (target) {
       case "idCardFront":
@@ -268,6 +297,12 @@ export default function AuthPage() {
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      const validationError = validateFile(file)
+      if (validationError) {
+        setError(validationError)
+        e.target.value = ""
+        return
+      }
       setStoreLogo(file)
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -354,6 +389,7 @@ export default function AuthPage() {
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
+    setIsLoading(true)
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get("name") as string
@@ -369,6 +405,7 @@ export default function AuthPage() {
     // Name validation
     if (!name || name.trim().length < 3) {
       setError(t("الاسم يجب أن يكون 3 أحرف على الأقل", "Name must be at least 3 characters"))
+      setIsLoading(false)
       return
     }
 
@@ -376,6 +413,7 @@ export default function AuthPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!email || !emailRegex.test(email)) {
       setError(t("يرجى إدخال بريد إلكتروني صحيح", "Please enter a valid email address"))
+      setIsLoading(false)
       return
     }
 
@@ -384,6 +422,7 @@ export default function AuthPage() {
       const phoneRegex = /^(01[0125])\d{8}$/
       if (!customerPhone || !phoneRegex.test(customerPhone)) {
         setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
+        setIsLoading(false)
         return
       }
       
@@ -391,14 +430,14 @@ export default function AuthPage() {
       const phoneCheck = await getUserByPhone(customerPhone)
       if (phoneCheck.success) {
         setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        setIsLoading(false)
         return
       }
 
       // If phone is not verified yet, redirect to verify page
       if (!isCustomerPhoneVerified && customerPhoneStep === "phone") {
-        setIsLoading(true)
         
-        // Save customer data to session storage for later
+        // Store registration data server-side (password never touches sessionStorage)
         const pendingData = {
           email,
           password,
@@ -409,7 +448,14 @@ export default function AuthPage() {
           country,
           role: "customer",
         }
-        sessionStorage.setItem("pendingCustomerData", JSON.stringify(pendingData))
+        const storeResult = await storePendingRegistration(pendingData)
+        if (!storeResult.success || !storeResult.token) {
+          setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+          setIsLoading(false)
+          return
+        }
+        // Only store the token in sessionStorage, not the password
+        sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
         
         // Format phone and redirect to verify page
         const formattedPhone = customerPhone.startsWith("+") ? customerPhone : `+2${customerPhone}`
@@ -421,6 +467,7 @@ export default function AuthPage() {
       // If we're in OTP step, wait for verification
       if (!isCustomerPhoneVerified && customerPhoneStep === "otp") {
         setError(t("يرجى إدخال كود التحقق أولاً", "Please enter the verification code first"))
+        setIsLoading(false)
         return
       }
     }
@@ -428,28 +475,34 @@ export default function AuthPage() {
     // Address validation
     if (!street || street.trim().length < 2) {
       setError(t("يرجى إدخال عنوان الشارع", "Please enter the street address"))
+      setIsLoading(false)
       return
     }
     if (!city || city.trim().length < 2) {
       setError(t("يرجى إدخال اسم المدينة", "Please enter the city name"))
+      setIsLoading(false)
       return
     }
     if (!country || country.trim().length < 2) {
       setError(t("يرجى إدخال اسم الدولة", "Please enter the country name"))
+      setIsLoading(false)
       return
     }
 
     // Password validation
     if (!password || password.length < 6) {
       setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+      setIsLoading(false)
       return
     }
     if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
       setError(t("كلمة المرور يجب أن تحتوي على حرف ورقم على الأقل", "Password must contain at least one letter and one number"))
+      setIsLoading(false)
       return
     }
     if (password !== confirmPassword) {
       setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
+      setIsLoading(false)
       return
     }
 
@@ -458,13 +511,13 @@ export default function AuthPage() {
       const phone = sellerPhone
       const storeName = formData.get("storeName") as string
       const storeDescription = formData.get("storeDescription") as string
-      // Use custom store type if "خدمات أخرى" is selected
-      const storeType = selectedStoreType === "خدمات أخرى" ? customStoreType : selectedStoreType
+      const storeType = selectedStoreType
 
       // Seller phone validation
       const sellerPhoneRegex = /^(01[0125])\d{8}$/
       if (!phone || !sellerPhoneRegex.test(phone)) {
         setError(t("يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)", "Please enter a valid Egyptian phone number (e.g., 01012345678)"))
+        setIsLoading(false)
         return
       }
       
@@ -472,62 +525,66 @@ export default function AuthPage() {
       const sellerPhoneCheck = await getUserByPhone(phone)
       if (sellerPhoneCheck.success) {
         setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        setIsLoading(false)
         return
       }
       
       // Seller document validations
       if (!ownerIdNumber || ownerIdNumber.length !== 14) {
         setError(t("رقم البطاقة يجب أن يكون 14 رقم بالضبط", "ID card number must be exactly 14 digits"))
+        setIsLoading(false)
         return
       }
       if (!idCardImageFront) {
         setError(t("يرجى رفع صورة وجه البطاقة", "Please upload the front side of the ID card"))
+        setIsLoading(false)
         return
       }
       if (!idCardImageBack) {
         setError(t("يرجى رفع صورة ظهر البطاقة", "Please upload the back side of the ID card"))
+        setIsLoading(false)
         return
       }
 
       // Store name validation
       if (!storeName || storeName.trim().length < 3) {
         setError(t("اسم المتجر يجب أن يكون 3 أحرف على الأقل", "Store name must be at least 3 characters"))
+        setIsLoading(false)
         return
       }
       
       // Check store name uniqueness
       if (storeNameExists) {
         setError(t("اسم المتجر مسجل بالفعل. يرجى اختيار اسم آخر", "Store name is already taken. Please choose a different name"))
+        setIsLoading(false)
         return
       }
 
       // Store description validation
       if (!storeDescription || storeDescription.trim().length < 10) {
         setError(t("وصف المتجر يجب أن يكون 10 أحرف على الأقل", "Store description must be at least 10 characters"))
+        setIsLoading(false)
         return
       }
 
       // Store type validation
       if (!storeType) {
         setError(t("يرجى اختيار نوع المتجر", "Please select a store type"))
+        setIsLoading(false)
         return
       }
       
       // التحقق من رفع لوجو المتجر
       if (!storeLogo) {
         setError(t("يرجى رفع لوجو المتجر", "Please upload a store logo"))
+        setIsLoading(false)
         return
       }
       
-      // Validate custom store type when "خدمات أخرى" is selected
-      if (selectedStoreType === "خدمات أخرى" && !customStoreType.trim()) {
-        setError(t("يرجى تحديد نوع المتجر", "Please specify the store type"))
-        return
-      }
+
 
       // If phone is not verified yet, trigger OTP send and redirect to verify page
       if (!isPhoneVerified && phoneStep === "phone") {
-        setIsLoading(true)
         
         // Upload logo and document images to Supabase first (base64 is too large for sessionStorage)
         const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
@@ -555,7 +612,7 @@ export default function AuthPage() {
           uploadFile(taxCardImageBack, "tax-card-back"),
         ])
         
-        // Save seller data to session storage for later
+        // Store registration data server-side (password never touches sessionStorage)
         const pendingData = {
           email,
           password,
@@ -577,7 +634,14 @@ export default function AuthPage() {
           latitude: storeLocation?.latitude,
           longitude: storeLocation?.longitude,
         }
-        sessionStorage.setItem("pendingSellerData", JSON.stringify(pendingData))
+        const storeResult = await storePendingRegistration(pendingData)
+        if (!storeResult.success || !storeResult.token) {
+          setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+          setIsLoading(false)
+          return
+        }
+        // Only store the token in sessionStorage, not the password
+        sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
         
         // Format phone and redirect to verify page (OTP will be sent there)
         const formattedPhone = phone.startsWith("+") ? phone : `+2${phone}`
@@ -590,6 +654,7 @@ export default function AuthPage() {
       // If we're in OTP step, wait for verification
       if (!isPhoneVerified && phoneStep === "otp") {
         setError(t("يرجى إدخال كود التحقق أولاً", "Please enter the verification code first"))
+        setIsLoading(false)
         return
       }
 
@@ -598,8 +663,6 @@ export default function AuthPage() {
       
       sellerData = { phone, storeName, storeDescription, storeType, storeLogo, address: storeAddress, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
     }
-
-    setIsLoading(true)
 
     try {
       setIsLoggingIn(true)
@@ -690,55 +753,13 @@ export default function AuthPage() {
                 )}
 
                 <TabsContent value="login">
-                  <form onSubmit={handleLogin} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="login-emailOrPhone" className="text-base font-medium text-gray-700">
-                        {t("البريد الإلكتروني أو رقم الهاتف", "Email or Phone Number")}
-                      </Label>
-                      <Input
-                        id="login-emailOrPhone"
-                        name="emailOrPhone"
-                        type="text"
-                        required
-                        placeholder={t("example@email.com أو 01012345678", "example@email.com or 01012345678")}
-                        className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="login-password" className="text-base font-medium text-gray-700">
-                          {t("كلمة المرور", "Password")}
-                        </Label>
-                        <Link href="/auth/forgot-password" className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline transition-colors">
-                          {t("هل نسيت كلمة السر؟", "Forgot Password?")}
-                        </Link>
-                      </div>
-                      <div className="relative group">
-                        <Input
-                          id="login-password"
-                          name="password"
-                          type={showPassword ? "text" : "password"}
-                          required
-                          placeholder="••••••••"
-                          className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all pr-12"
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 hover:text-gray-600 transition-colors"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
-                        </button>
-                      </div>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? t("جاري تسجيل الدخول...", "Logging in...") : t("تسجيل الدخول", "Login")}
-                    </Button>
-                  </form>
+                  <LoginForm
+                    onSubmit={handleLogin}
+                    isLoading={isLoading}
+                    showPassword={showPassword}
+                    setShowPassword={setShowPassword}
+                    t={t}
+                  />
                 </TabsContent>
 
                 <TabsContent value="register">
@@ -777,6 +798,7 @@ export default function AuthPage() {
                         onVerified={setIsCustomerPhoneVerified}
                         isVerified={isCustomerPhoneVerified}
                         language={language}
+                        recaptchaId="recaptcha-container-customer"
                         triggerSendOTP={triggerCustomerSendOTP}
                         onOTPSent={(success, error) => {
                           setTriggerCustomerSendOTP(false)
@@ -847,369 +869,45 @@ export default function AuthPage() {
                     </div>
 
                     {role === "seller" && (
-                      <>
-                        <PhoneVerification
-                          phoneNumber={sellerPhone}
-                          onPhoneChange={setSellerPhone}
-                          onVerified={setIsPhoneVerified}
-                          isVerified={isPhoneVerified}
-                          language={language}
-                          triggerSendOTP={triggerSendOTP}
-                          onOTPSent={(success, error) => {
-                            setTriggerSendOTP(false)
-                            if (!success && error) {
-                              setError(error)
-                            }
-                          }}
-                          onStepChange={setPhoneStep}
-                        />
-                        <div className="space-y-2">
-                          <Label htmlFor="register-storeName" className="text-base">
-                            {t("اسم المتجر", "Store Name")} <span className="text-red-500">*</span>
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              id="register-storeName"
-                              name="storeName"
-                              type="text"
-                              required
-                              placeholder={t("متجر الإلكترونيات", "Electronics Store")}
-                              className={`h-12 ${storeNameExists ? "border-red-500 focus:border-red-500" : ""}`}
-                              onChange={(e) => handleStoreNameChange(e.target.value)}
-                            />
-                            {isCheckingStoreName && (
-                              <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                              </div>
-                            )}
-                          </div>
-                          {storeNameExists && (
-                            <p className="text-xs text-red-500 mt-1">
-                              {t("اسم المتجر مسجل بالفعل. يرجى اختيار اسم آخر", "Store name is already taken. Please choose a different name")}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="register-storeDescription" className="text-base">
-                            {t("وصف المتجر", "Store Description")} <span className="text-red-500">*</span>
-                          </Label>
-                          <Textarea
-                            id="register-storeDescription"
-                            name="storeDescription"
-                            required
-                            dir="auto"
-                            placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
-                            className="min-h-[80px] resize-none"
-                            style={{ textAlign: "right", unicodeBidi: "plaintext" } as React.CSSProperties}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="register-storeType" className="text-base">
-                            {t("نوع المتجر", "Store Type")} <span className="text-red-500">*</span>
-                          </Label>
-                          <Select 
-                            name="storeType" 
-                            required
-                            value={selectedStoreType}
-                            onValueChange={(value) => {
-                              setSelectedStoreType(value)
-                              if (value !== "خدمات أخرى") {
-                                setCustomStoreType("")
-                              }
-                            }}
-                          >
-                            <SelectTrigger id="register-storeType" className="h-12">
-                              <SelectValue placeholder={t("اختر نوع المتجر", "Choose store type")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="بقالة">{t("بقالة", "Grocery")}</SelectItem>
-                              <SelectItem value="صحة">{t("صحة", "Health")}</SelectItem>
-                              <SelectItem value="ملابس">{t("ملابس", "Clothing")}</SelectItem>
-                              <SelectItem value="إلكترونيات">{t("إلكترونيات", "Electronics")}</SelectItem>
-                              <SelectItem value="أغذية">{t("أغذية", "Food")}</SelectItem>
-                              <SelectItem value="أثاث">{t("أثاث", "Furniture")}</SelectItem>
-                              <SelectItem value="خدمات أخرى">{t("خدمات أخرى", "Other Services")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {/* Custom Store Type - shown when "Other Services" is selected */}
-                        {selectedStoreType === "خدمات أخرى" && (
-                          <div className="space-y-2">
-                            <Label htmlFor="register-customStoreType" className="text-base">
-                              {t("حدد نوع المتجر", "Specify Store Type")} <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                              id="register-customStoreType"
-                              name="customStoreType"
-                              type="text"
-                              required
-                              value={customStoreType}
-                              onChange={(e) => setCustomStoreType(e.target.value)}
-                              placeholder={t("مثال: مستلزمات حيوانات أليفة", "Example: Pet Supplies")}
-                              className="h-12"
-                            />
-                          </div>
-                        )}
-                        
-                        {/* Store Logo Upload */}
-                        <div className="space-y-2">
-                          <Label htmlFor="register-storeLogo" className="text-base">
-                            {t("لوجو المتجر", "Store Logo")} <span className="text-red-500">*</span>
-                          </Label>
-                          <div className="flex flex-col items-center gap-4">
-                            {storeLogoPreview ? (
-                              <div className="relative">
-                                <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                  <Image
-                                    src={storeLogoPreview}
-                                    alt="Store Logo Preview"
-                                    width={96}
-                                    height={96}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={removeStoreLogo}
-                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
-                            ) : (
-                              <label
-                                htmlFor="register-storeLogo"
-                                className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <span className="text-sm text-gray-500">{t("اضغط لرفع لوجو المتجر", "Click to upload store logo")}</span>
-                                <span className="text-xs text-gray-400 mt-1">{t("PNG, JPG حتى 2MB", "PNG, JPG up to 2MB")}</span>
-                              </label>
-                            )}
-                            <input
-                              id="register-storeLogo"
-                              name="storeLogo"
-                              type="file"
-                              accept="image/png, image/jpeg, image/jpg, image/webp"
-                              onChange={handleLogoChange}
-                              className="hidden"
-                            />
-                          </div>
-                        </div>
-                        
-                        {/* Owner ID Card Number */}
-                        <div className="space-y-2">
-                          <Label htmlFor="register-ownerIdNumber" className="text-base">
-                            {t("رقم بطاقة صاحب المتجر", "Store Owner ID Card Number")} <span className="text-red-500">*</span>
-                          </Label>
-                          <Input
-                            id="register-ownerIdNumber"
-                            name="ownerIdNumber"
-                            type="text"
-                            dir="ltr"
-                            required
-                            value={ownerIdNumber}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, "")
-                              setOwnerIdNumber(val)
-                            }}
-                            placeholder="12345678901234"
-                            className={`h-12 ${ownerIdNumber.length > 0 && ownerIdNumber.length !== 14 ? "border-red-400" : ownerIdNumber.length === 14 ? "border-green-400" : ""}`}
-                            maxLength={14}
-                          />
-                          <p className={`text-xs ${ownerIdNumber.length > 0 && ownerIdNumber.length !== 14 ? "text-red-500" : "text-gray-500"}`}>
-                            {ownerIdNumber.length > 0
-                              ? t(`${ownerIdNumber.length}/14 رقم`, `${ownerIdNumber.length}/14 digits`)
-                              : t("أدخل الرقم القومي المكون من 14 رقم", "Enter the 14-digit national ID number")}
-                          </p>
-                        </div>
-                        
-                        {/* ID Card Images (Front & Back) */}
-                        <div className="space-y-3">
-                          <Label className="text-base">
-                            {t("صورة البطاقة (وجه وظهر)", "ID Card Images (Front & Back)")} <span className="text-red-500">*</span>
-                          </Label>
-                          <div className="grid grid-cols-2 gap-3">
-                            {/* Front */}
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-500 font-medium text-center">{t("الوجه", "Front")}</p>
-                              {idCardImageFrontPreview ? (
-                                <div className="relative">
-                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                    <Image src={idCardImageFrontPreview} alt="ID Card Front" width={200} height={112} className="w-full h-full object-cover" />
-                                  </div>
-                                  <button type="button" onClick={() => removeImage("idCardFront")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => openUploadDialog("idCardFront")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                                  <span className="text-xs text-gray-500">{t("صورة الوجه", "Front side")}</span>
-                                </button>
-                              )}
-                            </div>
-                            {/* Back */}
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-500 font-medium text-center">{t("الظهر", "Back")}</p>
-                              {idCardImageBackPreview ? (
-                                <div className="relative">
-                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                    <Image src={idCardImageBackPreview} alt="ID Card Back" width={200} height={112} className="w-full h-full object-cover" />
-                                  </div>
-                                  <button type="button" onClick={() => removeImage("idCardBack")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => openUploadDialog("idCardBack")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                                  <span className="text-xs text-gray-500">{t("صورة الظهر", "Back side")}</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Commercial Register Image (Optional) */}
-                        <div className="space-y-2">
-                          <Label className="text-base">
-                            {t("صورة السجل التجاري", "Commercial Register Image")}
-                            <span className="text-xs text-gray-400 mr-2">({t("اختياري", "Optional")})</span>
-                          </Label>
-                          <div className="flex flex-col items-center gap-3">
-                            {commercialRegisterImagePreview ? (
-                              <div className="relative w-full">
-                                <div className="w-full h-32 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                  <Image src={commercialRegisterImagePreview} alt="Commercial Register" width={300} height={128} className="w-full h-full object-cover" />
-                                </div>
-                                <button type="button" onClick={() => removeImage("commercialRegister")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button type="button" onClick={() => openUploadDialog("commercialRegister")} className="w-full h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                <Upload className="h-8 w-8 text-gray-400 mb-1" />
-                                <span className="text-sm text-gray-500">{t("اضغط لرفع صورة أو فتح الكاميرا", "Click to upload or open camera")}</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Tax Card Images (Front & Back, Optional) */}
-                        <div className="space-y-3">
-                          <Label className="text-base">
-                            {t("صورة البطاقة الضريبية (وجه وظهر)", "Tax Card Images (Front & Back)")}
-                            <span className="text-xs text-gray-400 mr-2">({t("اختياري", "Optional")})</span>
-                          </Label>
-                          <div className="grid grid-cols-2 gap-3">
-                            {/* Front */}
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-500 font-medium text-center">{t("الوجه", "Front")}</p>
-                              {taxCardImageFrontPreview ? (
-                                <div className="relative">
-                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                    <Image src={taxCardImageFrontPreview} alt="Tax Card Front" width={200} height={112} className="w-full h-full object-cover" />
-                                  </div>
-                                  <button type="button" onClick={() => removeImage("taxCardFront")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => openUploadDialog("taxCardFront")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                                  <span className="text-xs text-gray-500">{t("صورة الوجه", "Front side")}</span>
-                                </button>
-                              )}
-                            </div>
-                            {/* Back */}
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-500 font-medium text-center">{t("الظهر", "Back")}</p>
-                              {taxCardImageBackPreview ? (
-                                <div className="relative">
-                                  <div className="w-full h-28 rounded-xl overflow-hidden border-2 border-blue-200 shadow-md">
-                                    <Image src={taxCardImageBackPreview} alt="Tax Card Back" width={200} height={112} className="w-full h-full object-cover" />
-                                  </div>
-                                  <button type="button" onClick={() => removeImage("taxCardBack")} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors shadow-md">
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => openUploadDialog("taxCardBack")} className="w-full h-28 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                                  <span className="text-xs text-gray-500">{t("صورة الظهر", "Back side")}</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Store Location */}
-                        <div className="space-y-2">
-                          <Label className="text-base">
-                            {t("موقع المتجر (اختياري)", "Store Location (Optional)")}
-                          </Label>
-                          <div className="flex flex-col gap-3">
-                            <div className="grid grid-cols-2 gap-3">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={getCurrentLocation}
-                                disabled={isGettingLocation}
-                                className="h-12 flex items-center justify-center gap-2"
-                              >
-                                {isGettingLocation ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    <span className="text-xs">{t("جاري...", "Getting...")}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <MapPin className="h-4 w-4" />
-                                    <span className="text-xs">{t("الموقع الحالي", "Current Location")}</span>
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowMapPicker(true)}
-                                className="h-12 flex items-center justify-center gap-2"
-                              >
-                                <Map className="h-4 w-4" />
-                                <span className="text-xs">{t("اختر من الخريطة", "Pick from Map")}</span>
-                              </Button>
-                            </div>
-                            
-                            {storeLocation && (
-                              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
-                                <div className="flex items-center gap-2 text-green-700">
-                                  <CheckCircle className="h-4 w-4" />
-                                  <span className="font-medium">{t("تم تحديد الموقع بنجاح", "Location captured successfully")}</span>
-                                </div>
-                                <div className="mt-1 text-green-600 text-xs">
-                                  Lat: {storeLocation.latitude.toFixed(6)}, Lng: {storeLocation.longitude.toFixed(6)}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {locationError && (
-                              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
-                                {locationError}
-                              </div>
-                            )}
-                            
-                            <p className="text-xs text-gray-500">
-                              {t("يمكنك تحديد الموقع لاحقاً من إعدادات المتجر", "You can set location later from store settings")}
-                            </p>
-                          </div>
-                        </div>
-                      </>
+                      <SellerFields
+                        t={t}
+                        isRTL={isRTL}
+                        language={language}
+                        setError={setError}
+                        categories={storeCategories}
+                        isCategoriesLoading={isCategoriesLoading}
+                        sellerPhone={sellerPhone}
+                        setSellerPhone={setSellerPhone}
+                        isPhoneVerified={isPhoneVerified}
+                        setIsPhoneVerified={setIsPhoneVerified}
+                        triggerSendOTP={triggerSendOTP}
+                        setTriggerSendOTP={setTriggerSendOTP}
+                        phoneStep={phoneStep}
+                        setPhoneStep={setPhoneStep}
+                        handleStoreNameChange={handleStoreNameChange}
+                        isCheckingStoreName={isCheckingStoreName}
+                        storeNameExists={storeNameExists}
+                        selectedStoreType={selectedStoreType}
+                        setSelectedStoreType={setSelectedStoreType}
+
+                        storeLogoPreview={storeLogoPreview}
+                        handleLogoChange={handleLogoChange}
+                        removeStoreLogo={removeStoreLogo}
+                        ownerIdNumber={ownerIdNumber}
+                        setOwnerIdNumber={setOwnerIdNumber}
+                        idCardImageFrontPreview={idCardImageFrontPreview}
+                        idCardImageBackPreview={idCardImageBackPreview}
+                        commercialRegisterImagePreview={commercialRegisterImagePreview}
+                        taxCardImageFrontPreview={taxCardImageFrontPreview}
+                        taxCardImageBackPreview={taxCardImageBackPreview}
+                        removeImage={removeImage}
+                        openUploadDialog={openUploadDialog}
+                        storeLocation={storeLocation}
+                        getCurrentLocation={getCurrentLocation}
+                        isGettingLocation={isGettingLocation}
+                        locationError={locationError}
+                        setShowMapPicker={setShowMapPicker}
+                      />
                     )}
 
                     <div className="space-y-2">
@@ -1223,11 +921,11 @@ export default function AuthPage() {
                           type={showPassword ? "text" : "password"}
                           required
                           placeholder="••••••••"
-                          className="h-12 pr-10"
+                          className="h-12 pe-10"
                         />
                         <button
                           type="button"
-                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          className="absolute inset-y-0 end-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
@@ -1245,11 +943,11 @@ export default function AuthPage() {
                           type={showPassword ? "text" : "password"}
                           required
                           placeholder="••••••••"
-                          className="h-12 pr-10"
+                          className="h-12 pe-10"
                         />
                         <button
                           type="button"
-                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
+                          className="absolute inset-y-0 end-0 flex items-center px-3 text-gray-500 group-hover:text-gray-700"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
@@ -1273,56 +971,13 @@ export default function AuthPage() {
 
       <Footer />
       
-      {/* Upload Method Dialog */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              {t("اختر طريقة الرفع", "Choose Upload Method")}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 p-4">
-            <button
-              type="button"
-              onClick={() => {
-                setUploadDialogOpen(false)
-                setTimeout(() => fileInputRef.current?.click(), 100)
-              }}
-              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
-            >
-              <Upload className="h-10 w-10 text-blue-500" />
-              <span className="text-sm font-medium text-gray-700">{t("رفع صورة", "Upload Image")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setUploadDialogOpen(false)
-                setTimeout(() => cameraInputRef.current?.click(), 100)
-              }}
-              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
-            >
-              <Camera className="h-10 w-10 text-blue-500" />
-              <span className="text-sm font-medium text-gray-700">{t("فتح الكاميرا", "Open Camera")}</span>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Hidden file inputs for upload/camera */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png, image/jpeg, image/jpg, image/webp"
-        onChange={handleFileInputChange}
-        className="hidden"
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleCameraInputChange}
-        className="hidden"
+      <UploadDialog
+        t={t}
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        fileInputRef={fileInputRef}
+        cameraInputRef={cameraInputRef}
+        onFileChange={handleFileInputChange}
       />
       
       {/* Map Picker Dialog */}

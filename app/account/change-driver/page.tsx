@@ -14,6 +14,7 @@ import { Star, Truck, CheckCircle, Loader2, User, Car, AlertTriangle } from "luc
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 import { changeOrderDriver } from "@/lib/actions/orders"
 import { useToast } from "@/components/ui/toast"
+import { logError } from "@/lib/logger"
 
 export default function ChangeDriverPage() {
   const { t } = useLanguage()
@@ -46,7 +47,7 @@ export default function ChangeDriverPage() {
         setDrivers(availableDrivers)
         setDriverCommission(commission)
       } catch (error) {
-        console.error("Error fetching data:", error)
+        logError("Error fetching data:", error)
       } finally {
         setLoadingDrivers(false)
       }
@@ -105,7 +106,7 @@ export default function ChangeDriverPage() {
         setError(result.error || t("حدث خطأ", "An error occurred"))
       }
     } catch (err) {
-      console.error("Error changing driver:", err)
+      logError("Error changing driver:", err)
       setError(t("حدث خطأ أثناء تغيير السائق", "Error changing driver"))
     } finally {
       setIsSubmitting(false)
