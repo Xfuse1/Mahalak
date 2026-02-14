@@ -538,6 +538,10 @@ export default function QPOSPage() {
       setError(t("يرجى إدخال اسم المنتج والسعر", "Please enter product name and price"))
       return
     }
+    if (!quickAddCategory.trim()) {
+      setError(t("يرجى اختيار الفئة", "Please select a category"))
+      return
+    }
 
     setQuickAddLoading(true)
     setError("")
@@ -547,7 +551,7 @@ export default function QPOSPage() {
         name: quickAddName.trim(),
         price: Number(quickAddPrice),
         stock: Number(quickAddStock) || 1,
-        category: quickAddCategory.trim() || storeSubcategories[0]?.name || t("عام", "General"),
+        category: quickAddCategory.trim(),
         barcode: quickAddBarcode.trim() || undefined,
         store_id: store.id,
       }, user!.id)
@@ -1126,65 +1130,42 @@ export default function QPOSPage() {
             </div>
 
             <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto bg-gray-50">
-              {/* Payment Method */}
+              {/* Amount Paid (Cash) */}
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-2">{t("طريقة الدفع", "Payment Method")}</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <Banknote className="h-4 w-4 text-emerald-600" />
+                  <label className="text-gray-700 text-sm font-medium">{t("الدفع نقدي", "Cash Payment")}</label>
+                </div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("المبلغ المدفوع", "Amount Paid")}</label>
+                <input
+                  type="number"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  placeholder={total.toFixed(2)}
+                  className="w-full h-12 bg-white text-gray-800 text-lg font-semibold rounded-xl px-4 border-2 border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  autoFocus
+                />
+                {/* Quick amount buttons */}
+                <div className="flex gap-2 mt-2">
                   {[
-                    { value: "cash" as const, label: t("نقدي", "Cash"), icon: Banknote },
-                    { value: "card" as const, label: t("بطاقة", "Card"), icon: CreditCard },
-                    { value: "wallet" as const, label: t("محفظة", "Wallet"), icon: Wallet },
-                  ].map(({ value, label, icon: Icon }) => (
-                    <button
-                      key={value}
-                      onClick={() => setPaymentMethod(value)}
-                      className={`p-3 rounded-xl flex flex-col items-center gap-1.5 transition-all ${
-                        paymentMethod === value
-                          ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg scale-105"
-                          : "bg-white text-gray-600 hover:bg-gray-100 shadow-sm"
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                      <span className="text-xs font-medium">{label}</span>
-                    </button>
-                  ))}
+                    Math.ceil(total),
+                    Math.ceil(total / 10) * 10,
+                    Math.ceil(total / 50) * 50,
+                    Math.ceil(total / 100) * 100,
+                  ]
+                    .filter((v, i, a) => a.indexOf(v) === i && v >= total)
+                    .slice(0, 4)
+                    .map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setAmountPaid(String(amount))}
+                        className="flex-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium py-1.5 rounded-lg text-sm transition hover:border-emerald-500"
+                      >
+                        {amount}
+                      </button>
+                    ))}
                 </div>
               </div>
-
-              {/* Amount Paid (cash only) */}
-              {paymentMethod === "cash" && (
-                <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("المبلغ المدفوع", "Amount Paid")}</label>
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder={total.toFixed(2)}
-                    className="w-full h-12 bg-white text-gray-800 text-lg font-semibold rounded-xl px-4 border-2 border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    autoFocus
-                  />
-                  {/* Quick amount buttons */}
-                  <div className="flex gap-2 mt-2">
-                    {[
-                      Math.ceil(total),
-                      Math.ceil(total / 10) * 10,
-                      Math.ceil(total / 50) * 50,
-                      Math.ceil(total / 100) * 100,
-                    ]
-                      .filter((v, i, a) => a.indexOf(v) === i && v >= total)
-                      .slice(0, 4)
-                      .map((amount) => (
-                        <button
-                          key={amount}
-                          onClick={() => setAmountPaid(String(amount))}
-                          className="flex-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium py-1.5 rounded-lg text-sm transition hover:border-emerald-500"
-                        >
-                          {amount}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
 
               {/* Customer Info (Optional) */}
               <div className="space-y-2">
@@ -1240,7 +1221,7 @@ export default function QPOSPage() {
                   <span>{t("الإجمالي", "Total")}</span>
                   <span className="text-emerald-600">{total.toFixed(2)} {currencyLabel}</span>
                 </div>
-                {paymentMethod === "cash" && Number(amountPaid) > 0 && (
+                {Number(amountPaid) > 0 && (
                   <div className="flex justify-between text-blue-600 text-sm border-t border-gray-200 pt-1.5">
                     <span>{t("الباقي", "Change")}</span>
                     <span className="font-medium">{change.toFixed(2)} {currencyLabel}</span>
@@ -1255,7 +1236,7 @@ export default function QPOSPage() {
                 onClick={processSale}
                 disabled={
                   processing ||
-                  (paymentMethod === "cash" && (Number(amountPaid) || 0) < total)
+                  ((Number(amountPaid) || 0) < total)
                 }
                 className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-xl hover:shadow-emerald-500/30 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none text-white py-3 rounded-xl font-bold text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
               >
@@ -1674,13 +1655,14 @@ export default function QPOSPage() {
               </div>
 
               <div>
-                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الفئة", "Category")}</label>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الفئة *", "Category *")}</label>
                 <select
                   value={quickAddCategory}
                   onChange={(e) => setQuickAddCategory(e.target.value)}
+                  required
                   className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">{t("اختر الفئة", "Select category")}</option>
+                  <option value="" disabled>{t("اختر الفئة", "Select category")}</option>
                   {storeSubcategories.map((sub) => (
                     <option key={sub.id} value={sub.name}>{sub.name}</option>
                   ))}
@@ -1704,7 +1686,7 @@ export default function QPOSPage() {
             <div className="p-4 border-t border-gray-200 flex gap-3">
               <button
                 onClick={handleQuickAddProduct}
-                disabled={quickAddLoading || !quickAddName.trim() || !quickAddPrice}
+                disabled={quickAddLoading || !quickAddName.trim() || !quickAddPrice || !quickAddCategory.trim()}
                 className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2"
               >
                 {quickAddLoading ? (
