@@ -105,37 +105,51 @@ function normalizeStoreName(name: string) {
 // Helper to extract store from user document
 // Store ID is now the same as User ID (seller_id)
 function extractStore(doc: DocumentSnapshot): Store | null {
-  if (!doc.exists) return null
-  const data = doc.data() as { store?: EmbeddedStoreRecord } | undefined
-  if (!data?.store) return null
-  
+  if (!doc.exists) {
+    console.log(`[debug] Document ${doc.id} does not exist`);
+    return null;
+  }
+  const data = doc.data() as any
+
+  // Requirement: Role must be seller
+  if (data?.role !== "seller") {
+    console.log(`[debug] User ${doc.id} has role ${data?.role}, not seller`);
+    return null;
+  }
+
+  const storeData = data?.store || {}
+
+  // Fallbacks for fields that might be at the root
+  const name = storeData.name || data?.full_name || "متجر غير معروف"
+  const phone = storeData.phone || data?.phone || ""
+  // Combine city and street for address if direct address is missing
+  const cityStreetAddress = [data?.city, data?.street].filter(Boolean).join(", ")
+  const address = storeData.address || cityStreetAddress || ""
+  const description = storeData.description || ""
+
   return serializeData({
     id: doc.id, // Store ID = User ID
     seller_id: doc.id,
-    ...data.store,
-  }) as Store
+    ...storeData,
+    name,
+    phone,
+    address,
+    description,
+  }) as Store;
 }
 
 // Internal implementation
 async function _getStoresImpl(category?: string) {
   const db = getAdminDb()
-  
+
   // Query users who are sellers and have store data
   let query: Query = db.collection("users").where("role", "==", "seller")
 
   const snapshot = await query.get()
-  
+
   // Extract stores from user documents
   let stores: Store[] = snapshot.docs
-    .map((doc) => {
-      const data = doc.data() as { store?: EmbeddedStoreRecord } | undefined
-      if (!data.store) return null
-      return serializeData({
-        id: doc.id, // Store ID = User ID
-        seller_id: doc.id,
-        ...data.store,
-      }) as Store
-    })
+    .map((doc) => extractStore(doc))
     .filter((store): store is Store => store !== null)
 
   // Filter by category if provided
@@ -228,10 +242,10 @@ export async function getStoreByUserId(userId: string) {
 export async function createStore(storeData: StoreCreateInput) {
   const db = getAdminDb()
   const now = new Date().toISOString()
-  
+
   // Store data is embedded in user document
   const userRef = db.collection("users").doc(storeData.seller_id)
-  
+
   const storePayload = {
     name: storeData.name,
     description: storeData.description || "",

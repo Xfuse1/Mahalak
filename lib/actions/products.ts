@@ -26,15 +26,15 @@ type ProductRecord = {
   discount_percentage?: number
   offer_title?: string | null
   stores?:
-    | {
-      id?: string
-      name?: string
-      category?: string
-      phone?: string
-      address?: unknown
-    }
-    | { name?: string }
-    | null
+  | {
+    id?: string
+    name?: string
+    category?: string
+    phone?: string
+    address?: unknown
+  }
+  | { name?: string }
+  | null
   [key: string]: unknown
 }
 
@@ -97,13 +97,17 @@ async function getStoreMap(db: Firestore, storeIds: string[]) {
 
   docs.forEach((doc) => {
     if (doc.exists) {
-      const data = doc.data()
-      if (data?.store) {
-        // Extract store data from user document
+      const data = doc.data() as any
+      if (data?.role === "seller") {
+        const storeData = data.store || {}
+        // Extract store data from user document with root-level fallbacks
         map.set(doc.id, {
           id: doc.id,
           seller_id: doc.id,
-          ...data.store,
+          ...storeData,
+          name: storeData.name || data.full_name || "متجر غير معروف",
+          phone: storeData.phone || data.phone || "",
+          address: storeData.address || [data.city, data.street].filter(Boolean).join(", ") || "",
         })
       }
     }
@@ -113,6 +117,7 @@ async function getStoreMap(db: Firestore, storeIds: string[]) {
 }
 
 function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>) {
+  if (!product.store_id) return product
   const store = storeMap.get(product.store_id)
   if (!store) return product
 
@@ -279,7 +284,7 @@ async function _getProductImpl(id: string) {
       offer_title: null,
     })
   }
-  
+
   // Fetch all offers for this product's store (covers product-specific, category, and store-wide)
   const today = new Date().toISOString().split('T')[0]
   const offersSnapshot = await db.collection("offers")
@@ -287,7 +292,7 @@ async function _getProductImpl(id: string) {
     .get()
   const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
   const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
-  
+
   return serializeData({
     ...productWithStore,
     discount_percentage,
@@ -325,7 +330,7 @@ export async function createProduct(formData: {
         error: PRODUCT_ERROR_CODES.UNAUTHORIZED_STORE_PRODUCT_CREATE,
       }
     }
-    
+
     // التحقق من صحة السعر والكمية على السيرفر
     if (!formData.price || formData.price <= 0) {
       return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
@@ -333,10 +338,10 @@ export async function createProduct(formData: {
     if (!formData.stock || formData.stock <= 0) {
       return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
     }
-    
+
     // التحقق من اعتماد المتجر قبل إنشاء المنتج
     const userDoc = await db.collection("users").doc(formData.store_id).get()
-    
+
     if (userDoc.exists) {
       const userData = userDoc.data()
       const storeData = userData?.store
@@ -344,7 +349,7 @@ export async function createProduct(formData: {
         return { success: false, error: PRODUCT_ERROR_CODES.STORE_NOT_APPROVED }
       }
     }
-    
+
     const docRef = db.collection("products").doc()
     const now = new Date().toISOString()
 
@@ -468,11 +473,14 @@ export async function getProductsByStoreId(storeId: string) {
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
 
   // Fetch active offers for this store
-  const today = new Date().toISOString().split('T')[0]
   const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
-  const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord).filter((offer) =>
-    offer.start_date <= today && offer.end_date >= today
-  )
+  const today = new Date().toISOString()
+  const activeOffers = offersSnapshot.docs
+    .map((doc) => doc.data() as OfferRecord)
+    .filter((offer) => {
+      if (!offer.start_date || !offer.end_date) return false
+      return offer.start_date <= today && offer.end_date >= today
+    })
 
   const enriched = products.map((product) => {
     // Find best offer: product-specific > category-specific > store-wide
@@ -544,7 +552,6 @@ export async function getRelatedProducts(productId: string, category: string, li
   const snapshot = await db
     .collection("products")
     .where("category", "==", category)
-    .orderBy("rating", "desc")
     .limit(queryLimit)
     .get()
   const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
@@ -580,7 +587,7 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
   // Fetch active offers for these products
   const today = new Date().toISOString().split('T')[0]
   const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
-  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer => 
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer =>
     offer.start_date <= today && offer.end_date >= today
   )
 
@@ -600,7 +607,6 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
   // Only fetch a limited number of products from other stores instead of ALL products
   const snapshot = await db.collection("products")
     .where("store_id", "!=", storeId)
-    .orderBy("store_id")
     .limit(limit * 3) // fetch a bit more to allow filtering
     .get()
   const products = snapshot.docs
@@ -621,7 +627,7 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
   const offersSnapshot = await db.collection("offers")
     .where("end_date", ">=", today)
     .get()
-  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer => 
+  const activeOffers = offersSnapshot.docs.map(doc => doc.data()).filter(offer =>
     offer.start_date <= today && offer.end_date >= today
   )
 
@@ -664,7 +670,7 @@ export async function uploadProductImage(formData: FormData) {
     }
 
     const supabase = await createAdminClient()
-    
+
     const fileExt = file.name.split(".").pop()
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `products/${storeId}/${fileName}`

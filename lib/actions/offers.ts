@@ -41,7 +41,6 @@ export async function getStoreOffers(storeId: string, callerId?: string) {
   const snapshot = await db
     .collection("offers")
     .where("store_id", "==", storeId)
-    .orderBy("created_at", "desc")
     .get()
   const offers: OfferRecord[] = snapshot.docs
     .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OfferRecord))

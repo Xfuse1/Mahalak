@@ -120,15 +120,19 @@ export async function getDashboardAnalytics(storeId: string, callerId?: string):
   const productMap = new Map(products.map((product) => [product.id, product] as const))
 
   orderItems.forEach((item) => {
-    // Only count sales for items that belong to a confirmed (delivered) order
-    if (!confirmedOrderIds.has(item.order_id)) return
+    const orderId = item.order_id
+    const productId = item.product_id
+    if (!orderId || !productId) return
 
-    const product = productMap.get(item.product_id)
+    // Only count sales for items that belong to a confirmed (delivered) order
+    if (!confirmedOrderIds.has(orderId)) return
+
+    const product = productMap.get(productId)
     if (!product) return
-    if (!productSales[item.product_id]) {
-      productSales[item.product_id] = { name: product.name || "", quantity: 0 }
+    if (!productSales[productId]) {
+      productSales[productId] = { name: product.name || "", quantity: 0 }
     }
-    productSales[item.product_id].quantity += Number(item.quantity || 0)
+    productSales[productId].quantity += Number(item.quantity || 0)
   })
 
   const topProduct = Object.values(productSales).sort((a, b) => b.quantity - a.quantity)[0] || {
@@ -175,7 +179,6 @@ export async function getRecentOrders(storeId: string, limit = 3, callerId?: str
   const snapshot = await db
     .collection("orders")
     .where("store_id", "==", storeId)
-    .orderBy("created_at", "desc")
     .limit(limit)
     .get()
   const orders: DashboardOrder[] = snapshot.docs.map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
@@ -185,11 +188,14 @@ export async function getRecentOrders(storeId: string, limit = 3, callerId?: str
     orders.map((order) => order.customer_id || ""),
   )
 
-  return orders.map((order) => ({
-    id: order.id.substring(0, 8).toUpperCase(),
-    customer: customerMap.get(order.customer_id || "")?.full_name?.trim() || null,
-    total: Number(order.total || 0),
-    status: order.status || "pending",
-    date: new Date(String(order.created_at || "")).toLocaleDateString("en-CA"),
-  }))
+  return orders.map((order) => {
+    const customerId = order.customer_id || ""
+    return {
+      id: order.id.substring(0, 8).toUpperCase(),
+      customer: customerMap.get(customerId)?.full_name?.trim() || null,
+      total: Number(order.total || 0),
+      status: order.status || "pending",
+      date: new Date(String(order.created_at || "")).toLocaleDateString("en-CA"),
+    }
+  })
 }

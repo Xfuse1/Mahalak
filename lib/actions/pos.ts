@@ -349,7 +349,7 @@ export async function createPOSQuickProduct(data: {
         .where("store_id", "==", data.store_id)
         .where("barcode", "==", normalizedBarcode)
         .get()
-      
+
       if (!existing.empty) {
         return { success: false, error: POS_ERROR.DUPLICATE_BARCODE }
       }
@@ -396,7 +396,6 @@ export async function getPOSSales(storeId: string, limit: number = 50, callerId?
     const snapshot = await db
       .collection("pos_sales")
       .where("store_id", "==", storeId)
-      .orderBy("created_at", "desc")
       .limit(limit)
       .get()
 

@@ -62,17 +62,14 @@ type Offer = {
   end_date: string
 }
 
-export default function StorePage({ params }: { params: { id: string } }) {
+export default function StorePage({ params }: { params: Promise<{ id: string }> }) {
   const { user } = useAuth()
   const router = useRouter()
   const { t, language } = useLanguage()
   const toast = useToast()
 
-  const unwrappedParams =
-    typeof params === "object" && "then" in params
-      ? React.use(params as unknown as Promise<{ id: string }>)
-      : (params as { id: string })
-  const { id } = unwrappedParams
+  const { id } = React.use(params)
+  const isRTL = language === "ar"
 
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -96,10 +93,16 @@ export default function StorePage({ params }: { params: { id: string } }) {
 
         setStore(storeData)
 
-        // Fetch offers and products in parallel instead of sequentially
+        // Fetch offers and products in parallel, handling individual failures
         const [offersData, productsData] = await Promise.all([
-          getStoreOffers(id),
-          getProductsByStoreId(id),
+          getStoreOffers(id).catch((err) => {
+            console.error("[debug] Error fetching store offers:", err)
+            return []
+          }),
+          getProductsByStoreId(id).catch((err) => {
+            console.error("[debug] Error fetching store products:", err)
+            return []
+          }),
         ])
 
         const now = new Date()
