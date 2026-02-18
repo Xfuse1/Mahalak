@@ -248,12 +248,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Use pre-uploaded URL if available, otherwise upload the File
-        if (sellerData.storeLogoUrl) {
+        if (sellerData.storeLogoUrl && result.data) {
           const updateResult = await updateStore(result.data.id, { image_url: sellerData.storeLogoUrl })
           if (!updateResult.success) {
             console.error("[v0] Failed to update store with image URL:", updateResult.error)
           }
-        } else if (sellerData.storeLogo) {
+        } else if (sellerData.storeLogo && result.data) {
           const storeId = result.data.id
           const formData = new FormData()
           formData.append("file", sellerData.storeLogo)

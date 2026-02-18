@@ -329,8 +329,8 @@ export async function updateStore(
     return { success: false, error: "Store data not found" }
   }
 
-  revalidatePath("/seller/settings")
-  revalidatePath(`/store/${id}`)
+  revalidatePath("/seller/settings", "page")
+  revalidatePath(`/store/${id}`, "page")
   revalidateTag("stores")
   revalidateTag(`store-${id}`)
   return { success: true, data: store }

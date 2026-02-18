@@ -371,7 +371,7 @@ export async function createProduct(formData: {
 
     await docRef.set(payload)
 
-    revalidatePath("/seller/products")
+    revalidatePath("/seller/products", "page")
     revalidateTag("products")
     return { success: true, data: { id: docRef.id, ...payload } }
   } catch (error: unknown) {
@@ -434,8 +434,8 @@ export async function updateProduct(
     return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
   }
 
-  revalidatePath("/seller/products")
-  revalidatePath(`/product/${id}`)
+  revalidatePath("/seller/products", "page")
+  revalidatePath(`/product/${id}`, "page")
   revalidateTag("products")
   revalidateTag(`product-${id}`)
   return { success: true, data: mapProduct(updatedSnap) }
@@ -462,7 +462,7 @@ export async function deleteProduct(id: string, callerUserId?: string) {
     return { success: false, error: PRODUCT_ERROR_CODES.DELETE_PRODUCT_FAILED }
   }
 
-  revalidatePath("/seller/products")
+  revalidatePath("/seller/products", "page")
   revalidateTag("products")
   return { success: true }
 }
@@ -562,7 +562,7 @@ export async function getRelatedProducts(productId: string, category: string, li
 
   const storeMap = await getStoreMap(
     db,
-    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
+    filtered.map((product: ProductRecord) => product.store_id).filter((id): id is string => typeof id === "string" && id.length > 0),
   )
 
   return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
@@ -581,7 +581,7 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
 
   const storeMap = await getStoreMap(
     db,
-    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
+    filtered.map((product: ProductRecord) => product.store_id).filter((id): id is string => typeof id === "string" && id.length > 0),
   )
 
   // Fetch active offers for these products
@@ -619,7 +619,7 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
 
   const storeMap = await getStoreMap(
     db,
-    filtered.map((product: ProductRecord) => product.store_id).filter(Boolean),
+    filtered.map((product: ProductRecord) => product.store_id).filter((id): id is string => typeof id === "string" && id.length > 0),
   )
 
   // Fetch only active offers (not all offers)
