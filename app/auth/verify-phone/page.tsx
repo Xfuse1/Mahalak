@@ -99,6 +99,8 @@ export default function VerifyPhonePage() {
       return
     }
 
+    if (registering) return // Prevent duplicate calls
+
     setLoading(true)
     setError("")
 
@@ -110,34 +112,36 @@ export default function VerifyPhonePage() {
           const token = sessionStorage.getItem("pendingRegistrationToken")
           if (token) {
             setRegistering(true)
-            const pendingResult = await retrievePendingRegistration(token)
-            if (!pendingResult.success || !pendingResult.data) {
-              setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+            try {
+              const pendingResult = await retrievePendingRegistration(token)
+              if (!pendingResult.success || !pendingResult.data) {
+                setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+                return
+              }
+              const pendingData = pendingResult.data
+
+              const success = await register(
+                pendingData.email,
+                pendingData.password,
+                pendingData.name,
+                "customer",
+                undefined,
+                pendingData.street,
+                pendingData.city,
+                pendingData.country,
+                pendingData.phone,
+                true // phone verified via OTP
+              )
+
+              if (success) {
+                sessionStorage.removeItem("pendingRegistrationToken")
+                router.push(returnUrl)
+              } else {
+                setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
+              }
+            } finally {
               setRegistering(false)
-              return
             }
-            const pendingData = pendingResult.data
-
-            const success = await register(
-              pendingData.email,
-              pendingData.password,
-              pendingData.name,
-              "customer",
-              undefined,
-              pendingData.street,
-              pendingData.city,
-              pendingData.country,
-              pendingData.phone,
-              true // phone verified via OTP
-            )
-
-            if (success) {
-              sessionStorage.removeItem("pendingRegistrationToken")
-              router.push(returnUrl)
-            } else {
-              setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
-            }
-            setRegistering(false)
             return
           }
         }
@@ -147,54 +151,56 @@ export default function VerifyPhonePage() {
           const token = sessionStorage.getItem("pendingRegistrationToken")
           if (token) {
             setRegistering(true)
-            const pendingResult = await retrievePendingRegistration(token)
-            if (!pendingResult.success || !pendingResult.data) {
-              setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+            try {
+              const pendingResult = await retrievePendingRegistration(token)
+              if (!pendingResult.success || !pendingResult.data) {
+                setError(t("انتهت صلاحية بيانات التسجيل. يرجى إعادة التسجيل", "Registration data expired. Please register again"))
+                return
+              }
+              const pendingData = pendingResult.data
+
+              const storeAddress = [pendingData.street, pendingData.city, pendingData.country].filter(Boolean).join(", ")
+
+              const sellerData = {
+                phone: pendingData.phone,
+                storeName: pendingData.storeName,
+                storeDescription: pendingData.storeDescription,
+                storeType: pendingData.storeType,
+                storeLogo: null as File | null,
+                storeLogoUrl: pendingData.storeLogoUrl || null,
+                address: storeAddress,
+                latitude: pendingData.latitude,
+                longitude: pendingData.longitude,
+                ownerIdNumber: pendingData.ownerIdNumber || "",
+                idCardImageUrl: pendingData.idCardImageUrl || null,
+                idCardImageBackUrl: pendingData.idCardImageBackUrl || null,
+                commercialRegisterImageUrl: pendingData.commercialRegisterImageUrl || null,
+                taxCardImageUrl: pendingData.taxCardImageUrl || null,
+                taxCardImageBackUrl: pendingData.taxCardImageBackUrl || null,
+              }
+
+              const success = await register(
+                pendingData.email,
+                pendingData.password,
+                pendingData.name,
+                "seller",
+                sellerData,
+                pendingData.street,
+                pendingData.city,
+                pendingData.country,
+                undefined,
+                true // phone verified via OTP
+              )
+
+              if (success) {
+                sessionStorage.removeItem("pendingRegistrationToken")
+                router.push(returnUrl)
+              } else {
+                setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
+              }
+            } finally {
               setRegistering(false)
-              return
             }
-            const pendingData = pendingResult.data
-
-            const storeAddress = [pendingData.street, pendingData.city, pendingData.country].filter(Boolean).join(", ")
-
-            const sellerData = {
-              phone: pendingData.phone,
-              storeName: pendingData.storeName,
-              storeDescription: pendingData.storeDescription,
-              storeType: pendingData.storeType,
-              storeLogo: null as File | null,
-              storeLogoUrl: pendingData.storeLogoUrl || null,
-              address: storeAddress,
-              latitude: pendingData.latitude,
-              longitude: pendingData.longitude,
-              ownerIdNumber: pendingData.ownerIdNumber || "",
-              idCardImageUrl: pendingData.idCardImageUrl || null,
-              idCardImageBackUrl: pendingData.idCardImageBackUrl || null,
-              commercialRegisterImageUrl: pendingData.commercialRegisterImageUrl || null,
-              taxCardImageUrl: pendingData.taxCardImageUrl || null,
-              taxCardImageBackUrl: pendingData.taxCardImageBackUrl || null,
-            }
-
-            const success = await register(
-              pendingData.email,
-              pendingData.password,
-              pendingData.name,
-              "seller",
-              sellerData,
-              pendingData.street,
-              pendingData.city,
-              pendingData.country,
-              undefined,
-              true // phone verified via OTP
-            )
-
-            if (success) {
-              sessionStorage.removeItem("pendingRegistrationToken")
-              router.push(returnUrl)
-            } else {
-              setError(t("فشل إنشاء الحساب. حاول مرة أخرى", "Failed to create account. Please try again"))
-            }
-            setRegistering(false)
             return
           }
         }

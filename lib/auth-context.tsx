@@ -58,6 +58,7 @@ interface AuthContextType {
     city?: string,
     country?: string,
     phone?: string,
+    phoneVerified?: boolean,
   ) => Promise<boolean>
   logout: () => void
   isLoading: boolean
