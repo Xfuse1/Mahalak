@@ -25,6 +25,7 @@ type EditableProduct = {
   name: string
   description: string
   price: number
+  cost_price?: number
   stock: number
   category?: string
   image_url?: string
@@ -61,6 +62,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     PRICE_MUST_BE_POSITIVE: {
       ar: "السعر يجب أن يكون أكبر من صفر",
       en: "Price must be greater than zero",
+    },
+    COST_PRICE_MUST_BE_POSITIVE: {
+      ar: "سعر الشراء يجب أن يكون أكبر من صفر",
+      en: "Cost price must be greater than zero",
+    },
+    SELLING_PRICE_BELOW_COST: {
+      ar: "سعر البيع لا يمكن أن يكون أقل من سعر الشراء",
+      en: "Selling price cannot be lower than cost price",
     },
     STOCK_MUST_BE_POSITIVE: {
       ar: "الكمية يجب أن تكون أكبر من صفر",
@@ -192,10 +201,17 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
       // التحقق من صحة السعر والكمية
       const price = Number(formData.get("price"))
+      const costPrice = Number(formData.get("cost_price"))
       const stock = Number(formData.get("stock"))
       
       if (!price || price <= 0) {
-        throw new Error(t("السعر يجب أن يكون أكبر من صفر", "Price must be greater than zero"))
+        throw new Error(t("سعر البيع يجب أن يكون أكبر من صفر", "Selling price must be greater than zero"))
+      }
+      if (!costPrice || costPrice <= 0) {
+        throw new Error(t("سعر الشراء يجب أن يكون أكبر من صفر", "Cost price must be greater than zero"))
+      }
+      if (price < costPrice) {
+        throw new Error(t("سعر البيع لا يمكن أن يكون أقل من سعر الشراء", "Selling price cannot be lower than cost price"))
       }
       if (!stock || stock <= 0) {
         throw new Error(t("الكمية يجب أن تكون أكبر من صفر", "Quantity must be greater than zero"))
@@ -233,8 +249,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       const result = await updateProduct(id, {
         name: formData.get("name") as string,
         description: formData.get("description") as string,
-        price: Number(formData.get("price")),
-        stock: Number(formData.get("stock")),
+        price,
+        cost_price: costPrice,
+        stock,
         category: finalCategory,
         barcode: (formData.get("barcode") as string)?.trim() || "",
         image_url: imageUrl,
@@ -398,9 +415,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="price" className="text-gray-700 font-medium">{t("السعر (جنيه)", "Price (EGP)")}</Label>
+                    <Label htmlFor="price" className="text-gray-700 font-medium">{t("سعر البيع (جنيه)", "Selling Price (EGP)")}</Label>
                     <Input
                       id="price"
                       name="price"
@@ -408,6 +425,19 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       step="0.01"
                       min="0.01"
                       defaultValue={product.price}
+                      required
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cost_price" className="text-gray-700 font-medium">{t("سعر الشراء (جنيه)", "Cost Price (EGP)")}</Label>
+                    <Input
+                      id="cost_price"
+                      name="cost_price"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      defaultValue={product.cost_price ?? product.price}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />

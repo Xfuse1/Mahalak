@@ -6,7 +6,7 @@ import { SellerHeader } from "../../../components/seller-header"
 import { useAuth } from "../../../lib/auth-context"
 import { Button } from "../../../components/ui/button"
 import { Card, CardContent } from "../../../components/ui/card"
-import { getProductsByStoreId, deleteProduct } from "../../../lib/actions/products"
+import { getProductsByStoreId, deleteProduct, updateProduct } from "../../../lib/actions/products"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { Edit, Trash2, Plus, Tag, Package } from "lucide-react"
 import Image from "next/image"
@@ -35,7 +35,29 @@ export default function SellerProductsPage() {
   const [products, setProducts] = useState<SellerProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [isStoreApproved, setIsStoreApproved] = useState<boolean>(true)
+  const [showAddStockModal, setShowAddStockModal] = useState(false)
+  const [stockTargetProduct, setStockTargetProduct] = useState<SellerProduct | null>(null)
+  const [stockToAdd, setStockToAdd] = useState("1")
+  const [isAddingStock, setIsAddingStock] = useState(false)
   const { t } = useLanguage()
+
+  const stockActionErrorMessages: Record<string, { ar: string; en: string }> = {
+    PRODUCT_NOT_FOUND: { ar: "المنتج غير موجود", en: "Product not found" },
+    UNAUTHORIZED_PRODUCT_ACCESS: {
+      ar: "ليس لديك صلاحية لتعديل هذا المنتج",
+      en: "You are not authorized to edit this product",
+    },
+    STOCK_MUST_BE_POSITIVE: { ar: "الكمية يجب أن تكون أكبر من صفر", en: "Stock must be greater than zero" },
+    UPDATE_PRODUCT_FAILED: { ar: "فشل تحديث المنتج", en: "Failed to update product" },
+  }
+
+  const getStockActionErrorMessage = (errorCode?: string) => {
+    if (errorCode && stockActionErrorMessages[errorCode]) {
+      const msg = stockActionErrorMessages[errorCode]
+      return t(msg.ar, msg.en)
+    }
+    return t("فشل تحديث المخزون", "Failed to update stock")
+  }
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -98,6 +120,55 @@ export default function SellerProductsPage() {
       } else {
         toast.error(t("فشل حذف المنتج", "Failed to delete product"))
       }
+    }
+  }
+
+  const openAddStockModal = (product: SellerProduct) => {
+    setStockTargetProduct(product)
+    setStockToAdd("1")
+    setShowAddStockModal(true)
+  }
+
+  const resetAddStockModal = () => {
+    setShowAddStockModal(false)
+    setStockTargetProduct(null)
+    setStockToAdd("1")
+  }
+
+  const handleAddStock = async () => {
+    if (!user?.id || !stockTargetProduct) {
+      toast.error(t("تعذر تحديد المنتج", "Could not identify product"))
+      return
+    }
+
+    const increment = Number(stockToAdd)
+    if (!Number.isFinite(increment) || !Number.isInteger(increment) || increment <= 0) {
+      toast.error(t("الكمية المضافة يجب أن تكون رقمًا صحيحًا أكبر من صفر", "Added quantity must be a positive integer"))
+      return
+    }
+
+    setIsAddingStock(true)
+    try {
+      const result = await updateProduct(
+        stockTargetProduct.id,
+        { stock: stockTargetProduct.stock + increment },
+        user.id,
+      )
+
+      if (!result.success || !result.data) {
+        toast.error(getStockActionErrorMessage(result.error))
+        return
+      }
+
+      const updated = result.data as SellerProduct
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)))
+      toast.success(t("تمت إضافة الكمية بنجاح", "Quantity added successfully"))
+      resetAddStockModal()
+    } catch (error: unknown) {
+      logError("[seller/products] Error adding stock:", error)
+      toast.error(t("حدث خطأ غير متوقع أثناء تحديث المخزون", "An unexpected error occurred while updating stock"))
+    } finally {
+      setIsAddingStock(false)
     }
   }
 
@@ -222,6 +293,15 @@ export default function SellerProductsPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="flex-1 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300 transition-all"
+                          onClick={() => openAddStockModal(product)}
+                        >
+                          <Plus className="ms-2 h-4 w-4" />
+                          {t("إضافة كمية", "Add Qty")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="rounded-xl text-red-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all"
                           onClick={() => handleDelete(product.id)}
                         >
@@ -253,6 +333,63 @@ export default function SellerProductsPage() {
             </Card>
           )}
         </div>
+
+        {showAddStockModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl">
+              <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-800">{t("إضافة كمية للمخزون", "Add Stock Quantity")}</h3>
+                <button
+                  onClick={resetAddStockModal}
+                  className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                  aria-label={t("إغلاق", "Close")}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <p className="font-semibold text-gray-800 truncate">{stockTargetProduct?.name || "-"}</p>
+                  <p className="text-sm text-gray-500">
+                    {t("المخزون الحالي", "Current Stock")}:{" "}
+                    <span className="font-bold text-gray-700">{stockTargetProduct?.stock ?? 0}</span>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    {t("الكمية المضافة *", "Added Quantity *")}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={stockToAdd}
+                    onChange={(e) => setStockToAdd(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
+                <Button
+                  onClick={handleAddStock}
+                  disabled={isAddingStock}
+                  className="flex-1 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-xl"
+                >
+                  {isAddingStock ? t("جاري التحديث...", "Updating...") : t("إضافة الكمية", "Add Quantity")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetAddStockModal}
+                  disabled={isAddingStock}
+                  className="rounded-xl"
+                >
+                  {t("إلغاء", "Cancel")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

@@ -7,12 +7,15 @@ import { getAdminDb } from "../firebase/admin"
 import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
+import { calculateProfitPerUnit } from "../utils/product-pricing"
 
 type ProductRecord = {
   id?: string
   name?: string
   description?: string
   price?: number
+  cost_price?: number
+  profit_per_unit?: number
   category?: string
   stock?: number
   image_url?: string
@@ -62,6 +65,8 @@ type OfferRecord = {
 const PRODUCT_ERROR_CODES = {
   UNAUTHORIZED_STORE_PRODUCT_CREATE: "UNAUTHORIZED_STORE_PRODUCT_CREATE",
   PRICE_MUST_BE_POSITIVE: "PRICE_MUST_BE_POSITIVE",
+  COST_PRICE_MUST_BE_POSITIVE: "COST_PRICE_MUST_BE_POSITIVE",
+  SELLING_PRICE_BELOW_COST: "SELLING_PRICE_BELOW_COST",
   STOCK_MUST_BE_POSITIVE: "STOCK_MUST_BE_POSITIVE",
   STORE_NOT_APPROVED: "STORE_NOT_APPROVED",
   CREATE_PRODUCT_UNEXPECTED_ERROR: "CREATE_PRODUCT_UNEXPECTED_ERROR",
@@ -313,6 +318,7 @@ export async function createProduct(formData: {
   name: string
   description: string
   price: number
+  cost_price: number
   category: string
   stock: number
   image_url?: string
@@ -332,10 +338,16 @@ export async function createProduct(formData: {
     }
 
     // التحقق من صحة السعر والكمية على السيرفر
-    if (!formData.price || formData.price <= 0) {
+    if (!Number.isFinite(formData.price) || formData.price <= 0) {
       return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
     }
-    if (!formData.stock || formData.stock <= 0) {
+    if (!Number.isFinite(formData.cost_price) || formData.cost_price <= 0) {
+      return { success: false, error: PRODUCT_ERROR_CODES.COST_PRICE_MUST_BE_POSITIVE }
+    }
+    if (formData.price < formData.cost_price) {
+      return { success: false, error: PRODUCT_ERROR_CODES.SELLING_PRICE_BELOW_COST }
+    }
+    if (!Number.isFinite(formData.stock) || formData.stock <= 0) {
       return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
     }
 
@@ -357,6 +369,8 @@ export async function createProduct(formData: {
       name: formData.name,
       description: formData.description,
       price: formData.price,
+      cost_price: formData.cost_price,
+      profit_per_unit: calculateProfitPerUnit(formData.price, formData.cost_price),
       category: formData.category,
       stock: formData.stock,
       image_url: formData.image_url || "",
@@ -385,6 +399,7 @@ export async function updateProduct(
     name: string
     description: string
     price: number
+    cost_price: number
     category: string
     stock: number
     image_url: string
@@ -395,31 +410,47 @@ export async function updateProduct(
   callerUserId?: string,
 ) {
   const db = getAdminDb()
-
-  // التحقق من ملكية المنتج
-  if (callerUserId) {
-    const productSnap = await db.collection("products").doc(id).get()
-    if (!productSnap.exists) {
-      return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
-    }
-    const productData = productSnap.data()
-    if (productData?.store_id !== callerUserId) {
-      return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
-    }
+  const productSnap = await db.collection("products").doc(id).get()
+  if (!productSnap.exists) {
+    return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
   }
 
-  // التحقق من صحة السعر والكمية على السيرفر
-  if (formData.price !== undefined && formData.price <= 0) {
+  const existingProduct = productSnap.data() as ProductRecord | undefined
+
+  if (callerUserId && existingProduct?.store_id !== callerUserId) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
+  }
+
+  if (formData.price !== undefined && (!Number.isFinite(formData.price) || formData.price <= 0)) {
     return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
   }
-  if (formData.stock !== undefined && formData.stock <= 0) {
+  if (formData.cost_price !== undefined && (!Number.isFinite(formData.cost_price) || formData.cost_price <= 0)) {
+    return { success: false, error: PRODUCT_ERROR_CODES.COST_PRICE_MUST_BE_POSITIVE }
+  }
+  if (formData.stock !== undefined && (!Number.isFinite(formData.stock) || formData.stock <= 0)) {
     return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
+  }
+
+  const existingPrice = Number(existingProduct?.price)
+  const existingCostPrice = Number(existingProduct?.cost_price ?? existingProduct?.price)
+  const effectivePrice = formData.price ?? existingPrice
+  const effectiveCostPrice = formData.cost_price ?? existingCostPrice
+
+  if (!Number.isFinite(effectivePrice) || effectivePrice <= 0) {
+    return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
+  }
+  if (!Number.isFinite(effectiveCostPrice) || effectiveCostPrice <= 0) {
+    return { success: false, error: PRODUCT_ERROR_CODES.COST_PRICE_MUST_BE_POSITIVE }
+  }
+  if (effectivePrice < effectiveCostPrice) {
+    return { success: false, error: PRODUCT_ERROR_CODES.SELLING_PRICE_BELOW_COST }
   }
 
   const docRef = db.collection("products").doc(id)
 
   const updateData = cleanUndefined({
     ...formData,
+    profit_per_unit: calculateProfitPerUnit(effectivePrice, effectiveCostPrice),
     updated_at: new Date().toISOString(),
   })
 

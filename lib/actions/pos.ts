@@ -4,6 +4,8 @@ import { getAdminDb } from "../firebase/admin"
 import { serializeData } from "../firebase/firestore-helpers"
 import { revalidatePath } from "next/cache"
 import { logError } from "../logger"
+import { calculateProfitPerUnit } from "../utils/product-pricing"
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
 
 // ==================== POS Products ====================
 
@@ -19,11 +21,17 @@ export async function getPOSProducts(storeId: string, callerId?: string) {
 
   const products = snapshot.docs.map((doc) => {
     const data = doc.data()
+    const price = Number(data.price) || 0
+    const costPrice = Number(data.cost_price ?? data.price) || 0
     return serializeData({
       id: doc.id,
       name: data.name || "",
       description: data.description || "",
-      price: Number(data.price) || 0,
+      price,
+      cost_price: costPrice,
+      profit_per_unit: Number.isFinite(Number(data.profit_per_unit))
+        ? Number(data.profit_per_unit)
+        : calculateProfitPerUnit(price, costPrice),
       stock: Number(data.stock) || 0,
       category: data.category || "",
       image_url: data.image_url || "",
@@ -45,6 +53,9 @@ export type POSSaleItem = {
   price: number
   quantity: number
   total: number
+  cost_price?: number
+  profit_per_unit?: number
+  profit_total?: number
   image_url?: string
 }
 
@@ -77,12 +88,22 @@ const POS_ERROR = {
   CREATE_SALE_FAILED: "POS_CREATE_SALE_FAILED",
   QUICK_PRODUCT_NAME_REQUIRED: "POS_QUICK_PRODUCT_NAME_REQUIRED",
   QUICK_PRODUCT_PRICE_INVALID: "POS_QUICK_PRODUCT_PRICE_INVALID",
+  QUICK_PRODUCT_COST_PRICE_INVALID: "POS_QUICK_PRODUCT_COST_PRICE_INVALID",
+  QUICK_PRODUCT_SELLING_PRICE_BELOW_COST: "POS_QUICK_PRODUCT_SELLING_PRICE_BELOW_COST",
   QUICK_PRODUCT_STOCK_INVALID: "POS_QUICK_PRODUCT_STOCK_INVALID",
   STORE_NOT_APPROVED: "POS_STORE_NOT_APPROVED",
   DUPLICATE_BARCODE: "POS_DUPLICATE_BARCODE",
   CREATE_QUICK_PRODUCT_FAILED: "POS_CREATE_QUICK_PRODUCT_FAILED",
   LOAD_SALES_HISTORY_FAILED: "POS_LOAD_SALES_HISTORY_FAILED",
+  LOAD_MONTHLY_SALES_HISTORY_FAILED: "POS_LOAD_MONTHLY_SALES_HISTORY_FAILED",
   LOAD_DAILY_SUMMARY_FAILED: "POS_LOAD_DAILY_SUMMARY_FAILED",
+  PIN_REQUIRED: "POS_PIN_REQUIRED",
+  PIN_INVALID_FORMAT: "POS_PIN_INVALID_FORMAT",
+  PIN_NOT_CONFIGURED: "POS_PIN_NOT_CONFIGURED",
+  PIN_INCORRECT: "POS_PIN_INCORRECT",
+  PIN_SETUP_FAILED: "POS_PIN_SETUP_FAILED",
+  PIN_STATUS_FAILED: "POS_PIN_STATUS_FAILED",
+  PIN_VERIFY_FAILED: "POS_PIN_VERIFY_FAILED",
 } as const
 
 type PosErrorCode = (typeof POS_ERROR)[keyof typeof POS_ERROR]
@@ -120,6 +141,382 @@ function normalizePaymentMethod(value: unknown): POSPaymentMethod {
   return "cash"
 }
 
+type PosPinSecurity = {
+  pinHash: string
+  pinSalt: string
+}
+
+const POS_PIN_PATTERN = /^\d{4,8}$/
+
+function normalizePosPin(pin: string) {
+  return pin.trim()
+}
+
+function isValidPosPin(pin: string) {
+  return POS_PIN_PATTERN.test(pin)
+}
+
+function derivePosPinHash(pin: string, salt: string) {
+  return scryptSync(pin, salt, 64).toString("hex")
+}
+
+function verifyPosPin(pin: string, security: PosPinSecurity) {
+  const expected = Buffer.from(security.pinHash, "hex")
+  const provided = Buffer.from(derivePosPinHash(pin, security.pinSalt), "hex")
+  if (expected.length !== provided.length) return false
+  return timingSafeEqual(expected, provided)
+}
+
+async function getPosPinSecurity(
+  db: FirebaseFirestore.Firestore,
+  storeId: string,
+): Promise<PosPinSecurity | null> {
+  const userDoc = await db.collection("users").doc(storeId).get()
+  if (!userDoc.exists) return null
+
+  const data = userDoc.data() as {
+    pos_pin_hash?: unknown
+    pos_pin_salt?: unknown
+    store?: {
+      pos_pin_hash?: unknown
+      pos_pin_salt?: unknown
+    }
+  } | undefined
+
+  const topLevelPinHash = typeof data?.pos_pin_hash === "string" ? data.pos_pin_hash : ""
+  const topLevelPinSalt = typeof data?.pos_pin_salt === "string" ? data.pos_pin_salt : ""
+  const storePinHash = typeof data?.store?.pos_pin_hash === "string" ? data.store.pos_pin_hash : ""
+  const storePinSalt = typeof data?.store?.pos_pin_salt === "string" ? data.store.pos_pin_salt : ""
+  const pinHash = storePinHash || topLevelPinHash
+  const pinSalt = storePinSalt || topLevelPinSalt
+  if (!pinHash || !pinSalt) return null
+
+  return { pinHash, pinSalt }
+}
+
+async function assertPOSPinAuthorized(
+  db: FirebaseFirestore.Firestore,
+  storeId: string,
+  posPin?: string,
+) {
+  const security = await getPosPinSecurity(db, storeId)
+  if (!security) {
+    throw new Error(POS_ERROR.PIN_NOT_CONFIGURED)
+  }
+
+  const normalizedPin = normalizePosPin(posPin || "")
+  if (!normalizedPin) {
+    throw new Error(POS_ERROR.PIN_REQUIRED)
+  }
+  if (!isValidPosPin(normalizedPin)) {
+    throw new Error(POS_ERROR.PIN_INVALID_FORMAT)
+  }
+  if (!verifyPosPin(normalizedPin, security)) {
+    throw new Error(POS_ERROR.PIN_INCORRECT)
+  }
+}
+
+type PosSaleRecord = {
+  id: string
+  created_at?: unknown
+  total?: unknown
+  total_profit?: unknown
+  cash_collected?: unknown
+  payment_method?: unknown
+  amount_paid?: unknown
+  change?: unknown
+  discount?: unknown
+  items?: unknown
+  [key: string]: unknown
+}
+
+export type POSMonthlySalesHistoryMonth = "current" | "previous"
+
+export type POSMonthlySalesHistory = {
+  month: POSMonthlySalesHistoryMonth
+  startDate: string
+  endDate: string
+  totalSales: number
+  totalRevenue: number
+  netProfit: number
+  sales: Record<string, unknown>[]
+}
+
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
+
+const toCreatedAtIso = (value: unknown) => {
+  if (typeof value === "string" && value) return value
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString()
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: () => Date }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate()
+    if (date instanceof Date && Number.isFinite(date.getTime())) return date.toISOString()
+  }
+  return null
+}
+
+const toCreatedAtMillis = (value: unknown) => {
+  if (typeof value === "string") {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.getTime() : 0
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: () => Date }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate()
+    return date instanceof Date && Number.isFinite(date.getTime()) ? date.getTime() : 0
+  }
+  return 0
+}
+
+const mapSaleDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): PosSaleRecord => ({
+  id: doc.id,
+  ...(doc.data() as Record<string, unknown>),
+})
+
+const resolveMonthRange = (month: POSMonthlySalesHistoryMonth) => {
+  const now = new Date()
+  const monthOffset = month === "previous" ? -1 : 0
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1, 0, 0, 0, 0),
+  )
+  const end = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset + 1, 1, 0, 0, 0, 0) - 1,
+  )
+  return {
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+    startMs: start.getTime(),
+    endMs: end.getTime(),
+  }
+}
+
+const normalizeItems = (items: unknown): Array<Record<string, unknown>> => {
+  if (!Array.isArray(items)) return []
+  return items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+}
+
+const resolveItemCostPrice = (item: Record<string, unknown>, productCostMap: Map<string, number>) => {
+  const itemPrice = Number(item.price) || 0
+  const snapshotCost = Number(item.cost_price)
+  if (Number.isFinite(snapshotCost)) return snapshotCost
+
+  const productId = typeof item.product_id === "string" ? item.product_id : ""
+  if (productId && productCostMap.has(productId)) {
+    return productCostMap.get(productId) ?? itemPrice
+  }
+
+  return itemPrice
+}
+
+const calculateSaleNetProfit = (saleData: Record<string, unknown>, productCostMap: Map<string, number>) => {
+  const explicitTotalProfit = Number(saleData.total_profit)
+  if (Number.isFinite(explicitTotalProfit)) {
+    return roundMoney(explicitTotalProfit)
+  }
+
+  const items = normalizeItems(saleData.items)
+  const itemsProfit = items.reduce((sum, item) => {
+    const quantity = Number(item.quantity) || 0
+    if (quantity <= 0) return sum
+
+    const snapshotItemProfit = Number(item.profit_total)
+    if (Number.isFinite(snapshotItemProfit)) {
+      return sum + snapshotItemProfit
+    }
+
+    const itemPrice = Number(item.price) || 0
+    const itemCostPrice = resolveItemCostPrice(item, productCostMap)
+    const snapshotProfitPerUnit = Number(item.profit_per_unit)
+    const profitPerUnit = Number.isFinite(snapshotProfitPerUnit)
+      ? snapshotProfitPerUnit
+      : calculateProfitPerUnit(itemPrice, itemCostPrice)
+
+    return sum + profitPerUnit * quantity
+  }, 0)
+
+  const discount = Number(saleData.discount) || 0
+  return roundMoney(itemsProfit - discount)
+}
+
+const calculateSaleCashCollected = (saleData: Record<string, unknown>) => {
+  const explicitCashCollected = Number(saleData.cash_collected)
+  if (Number.isFinite(explicitCashCollected)) {
+    return Math.max(0, roundMoney(explicitCashCollected))
+  }
+
+  const paymentMethod = normalizePaymentMethod(saleData.payment_method)
+  if (paymentMethod !== "cash") {
+    return 0
+  }
+
+  const amountPaid = Number(saleData.amount_paid) || 0
+  const change = Number(saleData.change) || 0
+  return Math.max(0, roundMoney(amountPaid - change))
+}
+
+const getStoreCostPriceMap = async (
+  db: FirebaseFirestore.Firestore,
+  storeId: string,
+) => {
+  const costPriceMap = new Map<string, number>()
+  const snapshot = await db
+    .collection("products")
+    .where("store_id", "==", storeId)
+    .get()
+
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data()
+    const price = Number(data.price) || 0
+    const costPriceValue = Number(data.cost_price)
+    const costPrice = Number.isFinite(costPriceValue) ? costPriceValue : price
+    costPriceMap.set(doc.id, costPrice)
+  })
+
+  return costPriceMap
+}
+
+const aggregateSalesDocs = async (
+  docs: FirebaseFirestore.QueryDocumentSnapshot[],
+  db: FirebaseFirestore.Firestore,
+  storeId: string,
+) => {
+  const productCostMap = await getStoreCostPriceMap(db, storeId)
+  let totalRevenue = 0
+  let totalItems = 0
+  let cashSales = 0
+  let cardSales = 0
+  let netProfit = 0
+  let cashInTotal = 0
+
+  docs.forEach((doc) => {
+    const data = doc.data() as Record<string, unknown>
+    totalRevenue += Number(data.total) || 0
+    totalItems += normalizeItems(data.items).reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0),
+      0,
+    )
+
+    const paymentMethod = normalizePaymentMethod(data.payment_method)
+    if (paymentMethod === "cash") {
+      cashSales++
+    } else {
+      cardSales++
+    }
+
+    netProfit += calculateSaleNetProfit(data, productCostMap)
+    cashInTotal += calculateSaleCashCollected(data)
+  })
+
+  const totalSales = docs.length
+  return {
+    totalSales,
+    totalRevenue: roundMoney(totalRevenue),
+    totalItems,
+    cashSales,
+    cardSales,
+    netProfit: roundMoney(netProfit),
+    cashInTotal: roundMoney(cashInTotal),
+    averageOrderValue: totalSales > 0 ? roundMoney(totalRevenue / totalSales) : 0,
+  }
+}
+
+export async function getPOSPinStatus(storeId: string, callerId?: string) {
+  if (callerId && callerId !== storeId) {
+    return { success: false, error: POS_ERROR.UNAUTHORIZED, hasPin: false }
+  }
+
+  try {
+    const db = getAdminDb()
+    const security = await getPosPinSecurity(db, storeId)
+    return { success: true, hasPin: !!security }
+  } catch (error) {
+    logError("[getPOSPinStatus] Error:", error)
+    return { success: false, error: POS_ERROR.PIN_STATUS_FAILED, hasPin: false }
+  }
+}
+
+export async function setPOSAccessPin(storeId: string, pin: string, callerId?: string) {
+  if (callerId && callerId !== storeId) {
+    return { success: false, error: POS_ERROR.UNAUTHORIZED }
+  }
+
+  const normalizedPin = normalizePosPin(pin)
+  if (!isValidPosPin(normalizedPin)) {
+    return { success: false, error: POS_ERROR.PIN_INVALID_FORMAT }
+  }
+
+  try {
+    const db = getAdminDb()
+    const salt = randomBytes(16).toString("hex")
+    const hash = derivePosPinHash(normalizedPin, salt)
+    const now = new Date().toISOString()
+
+    await db.collection("users").doc(storeId).set(
+      {
+        pos_pin_hash: hash,
+        pos_pin_salt: salt,
+        pos_pin_set_at: now,
+        pos_pin_updated_at: now,
+        store: {
+          pos_pin_hash: hash,
+          pos_pin_salt: salt,
+          pos_pin_set_at: now,
+          pos_pin_updated_at: now,
+        },
+        updated_at: now,
+      },
+      { merge: true },
+    )
+
+    return { success: true }
+  } catch (error) {
+    logError("[setPOSAccessPin] Error:", error)
+    return { success: false, error: POS_ERROR.PIN_SETUP_FAILED }
+  }
+}
+
+export async function verifyPOSAccessPin(storeId: string, pin: string, callerId?: string) {
+  if (callerId && callerId !== storeId) {
+    return { success: false, error: POS_ERROR.UNAUTHORIZED }
+  }
+
+  const normalizedPin = normalizePosPin(pin)
+  if (!normalizedPin) {
+    return { success: false, error: POS_ERROR.PIN_REQUIRED }
+  }
+  if (!isValidPosPin(normalizedPin)) {
+    return { success: false, error: POS_ERROR.PIN_INVALID_FORMAT }
+  }
+
+  try {
+    const db = getAdminDb()
+    const security = await getPosPinSecurity(db, storeId)
+    if (!security) {
+      return { success: false, error: POS_ERROR.PIN_NOT_CONFIGURED }
+    }
+
+    if (!verifyPosPin(normalizedPin, security)) {
+      return { success: false, error: POS_ERROR.PIN_INCORRECT }
+    }
+
+    return { success: true }
+  } catch (error) {
+    logError("[verifyPOSAccessPin] Error:", error)
+    return { success: false, error: POS_ERROR.PIN_VERIFY_FAILED }
+  }
+}
+
 export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
   if (callerId && callerId !== saleData.store_id) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED }
@@ -141,6 +538,7 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
       // 1. Read all products inside the transaction (atomic stock check + server-side pricing)
       const productDocs: { ref: FirebaseFirestore.DocumentReference; doc: FirebaseFirestore.DocumentSnapshot; item: POSSaleItem }[] = []
       let calculatedSubtotal = 0
+      let calculatedItemsProfit = 0
       const verifiedItems: POSSaleItem[] = []
 
       for (const item of saleData.items) {
@@ -156,9 +554,21 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         }
         // Use server-side price, not client-sent price
         const serverPrice = Number(productData.price) || 0
+        const serverCostPriceValue = Number(productData.cost_price)
+        const serverCostPrice = Number.isFinite(serverCostPriceValue) ? serverCostPriceValue : serverPrice
+        const profitPerUnit = calculateProfitPerUnit(serverPrice, serverCostPrice)
         const itemTotal = serverPrice * item.quantity
+        const itemProfit = profitPerUnit * item.quantity
         calculatedSubtotal += itemTotal
-        verifiedItems.push({ ...item, price: serverPrice, total: itemTotal })
+        calculatedItemsProfit += itemProfit
+        verifiedItems.push({
+          ...item,
+          price: serverPrice,
+          cost_price: serverCostPrice,
+          profit_per_unit: profitPerUnit,
+          profit_total: roundMoney(itemProfit),
+          total: roundMoney(itemTotal),
+        })
         productDocs.push({ ref: productRef, doc: productDoc, item })
       }
 
@@ -179,6 +589,10 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
       const calculatedChange = saleData.payment_method === "cash"
         ? Math.max(0, (saleData.amount_paid || 0) - calculatedTotal)
         : 0
+      const calculatedTotalProfit = roundMoney(calculatedItemsProfit - discountAmount)
+      const cashCollected = saleData.payment_method === "cash"
+        ? Math.max(0, roundMoney((saleData.amount_paid || 0) - calculatedChange))
+        : 0
 
       // 5. Create POS sale record with server-calculated values
       const saleRef = db.collection("pos_sales").doc()
@@ -186,13 +600,15 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         store_id: saleData.store_id,
         seller_id: saleData.seller_id,
         items: verifiedItems,
-        subtotal: calculatedSubtotal,
-        discount: discountAmount,
+        subtotal: roundMoney(calculatedSubtotal),
+        discount: roundMoney(discountAmount),
         discount_type: saleData.discount_type,
         tax: saleData.tax,
-        total: calculatedTotal,
+        total: roundMoney(calculatedTotal),
+        total_profit: calculatedTotalProfit,
+        cash_collected: cashCollected,
         amount_paid: saleData.payment_method === "cash" ? saleData.amount_paid : calculatedTotal,
-        change: calculatedChange,
+        change: roundMoney(calculatedChange),
         payment_method: saleData.payment_method,
         customer_name: saleData.customer_name || null,
         customer_phone: saleData.customer_phone || null,
@@ -303,9 +719,11 @@ export async function getPOSSaleById(saleId: string): Promise<POSReceiptData | n
 export async function createPOSQuickProduct(data: {
   name: string
   price: number
+  cost_price: number
   stock: number
   category: string
   barcode?: string
+  image_url?: string
   store_id: string
 }, callerId?: string) {
   if (callerId && callerId !== data.store_id) {
@@ -316,13 +734,21 @@ export async function createPOSQuickProduct(data: {
   const normalizedCategory = data.category.trim()
   const normalizedBarcode = data.barcode?.trim() || ""
   const normalizedPrice = Number(data.price)
+  const normalizedCostPrice = Number(data.cost_price)
   const normalizedStock = Number(data.stock)
+  const normalizedImageUrl = data.image_url?.trim() || ""
 
   if (!normalizedName) {
     return { success: false, error: POS_ERROR.QUICK_PRODUCT_NAME_REQUIRED }
   }
   if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
     return { success: false, error: POS_ERROR.QUICK_PRODUCT_PRICE_INVALID }
+  }
+  if (!Number.isFinite(normalizedCostPrice) || normalizedCostPrice <= 0) {
+    return { success: false, error: POS_ERROR.QUICK_PRODUCT_COST_PRICE_INVALID }
+  }
+  if (normalizedPrice < normalizedCostPrice) {
+    return { success: false, error: POS_ERROR.QUICK_PRODUCT_SELLING_PRICE_BELOW_COST }
   }
   if (!Number.isFinite(normalizedStock) || normalizedStock <= 0) {
     return { success: false, error: POS_ERROR.QUICK_PRODUCT_STOCK_INVALID }
@@ -360,10 +786,12 @@ export async function createPOSQuickProduct(data: {
       name: normalizedName,
       description: "",
       price: normalizedPrice,
+      cost_price: normalizedCostPrice,
+      profit_per_unit: calculateProfitPerUnit(normalizedPrice, normalizedCostPrice),
       stock: normalizedStock,
       category: normalizedCategory,
       barcode: normalizedBarcode,
-      image_url: "",
+      image_url: normalizedImageUrl,
       store_id: data.store_id,
       rating: 0,
       rating_count: 0,
@@ -386,82 +814,215 @@ export async function createPOSQuickProduct(data: {
 
 // ==================== POS Sales History ====================
 
-export async function getPOSSales(storeId: string, limit: number = 50, callerId?: string) {
+export async function getPOSSales(storeId: string, limit: number = 50, callerId?: string, posPin?: string) {
   if (callerId && callerId !== storeId) {
     return []
   }
 
   try {
     const db = getAdminDb()
-    const snapshot = await db
-      .collection("pos_sales")
-      .where("store_id", "==", storeId)
-      .limit(limit)
-      .get()
+    await assertPOSPinAuthorized(db, storeId, posPin)
+    const normalizedLimit = Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : 50
 
-    const sales = snapshot.docs
-      .map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
+    try {
+      const snapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .orderBy("created_at", "desc")
+        .limit(normalizedLimit)
+        .get()
 
-    return sales.map(sale => serializeData(sale))
+      const sales = snapshot.docs.map(mapSaleDoc)
+
+      return sales.map((sale) => serializeData(sale))
+    } catch (queryError: unknown) {
+      const message = queryError instanceof Error ? queryError.message : ""
+      const isIndexIssue = message.toLowerCase().includes("requires an index")
+      if (!isIndexIssue) {
+        throw queryError
+      }
+
+      // Fallback for environments where composite index is not created yet.
+      logError("[getPOSSales] Falling back to in-memory sorting:", queryError)
+      const fallbackSnapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .get()
+
+      const sales = fallbackSnapshot.docs
+        .map(mapSaleDoc)
+        .sort((a, b) => toCreatedAtMillis(b.created_at) - toCreatedAtMillis(a.created_at))
+        .slice(0, normalizedLimit)
+
+      return sales.map((sale) => serializeData(sale))
+    }
   } catch (error: any) {
     logError("[getPOSSales] Error:", error)
-    throw new Error(POS_ERROR.LOAD_SALES_HISTORY_FAILED)
+    const code = error instanceof Error && isPosErrorCode(error.message)
+      ? error.message
+      : POS_ERROR.LOAD_SALES_HISTORY_FAILED
+    throw new Error(code)
+  }
+}
+
+export async function getPOSMonthlySalesHistory(
+  storeId: string,
+  month: POSMonthlySalesHistoryMonth = "current",
+  callerId?: string,
+  posPin?: string,
+): Promise<POSMonthlySalesHistory> {
+  const normalizedMonth: POSMonthlySalesHistoryMonth = month === "previous" ? "previous" : "current"
+  const range = resolveMonthRange(normalizedMonth)
+  const emptyResult: POSMonthlySalesHistory = {
+    month: normalizedMonth,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    totalSales: 0,
+    totalRevenue: 0,
+    netProfit: 0,
+    sales: [],
+  }
+
+  if (callerId && callerId !== storeId) {
+    return emptyResult
+  }
+
+  try {
+    const db = getAdminDb()
+    await assertPOSPinAuthorized(db, storeId, posPin)
+    const buildResult = async (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+      const aggregates = await aggregateSalesDocs(docs, db, storeId)
+      const sales = docs
+        .map(mapSaleDoc)
+        .sort((a, b) => toCreatedAtMillis(b.created_at) - toCreatedAtMillis(a.created_at))
+        .map((sale) => serializeData(sale))
+
+      return {
+        month: normalizedMonth,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        totalSales: aggregates.totalSales,
+        totalRevenue: aggregates.totalRevenue,
+        netProfit: aggregates.netProfit,
+        sales,
+      } satisfies POSMonthlySalesHistory
+    }
+
+    try {
+      const snapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .where("created_at", ">=", range.startDate)
+        .where("created_at", "<=", range.endDate)
+        .orderBy("created_at", "desc")
+        .get()
+
+      return await buildResult(snapshot.docs)
+    } catch (queryError: unknown) {
+      const message = queryError instanceof Error ? queryError.message : ""
+      const isIndexIssue = message.toLowerCase().includes("requires an index")
+      if (!isIndexIssue) {
+        throw queryError
+      }
+
+      // Fallback for environments where composite index is not created yet.
+      logError("[getPOSMonthlySalesHistory] Falling back to in-memory month filtering:", queryError)
+      const fallbackSnapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .get()
+
+      const filteredDocs = fallbackSnapshot.docs.filter((doc) => {
+        const createdAtMs = toCreatedAtMillis(doc.data().created_at)
+        return createdAtMs >= range.startMs && createdAtMs <= range.endMs
+      })
+
+      return await buildResult(filteredDocs)
+    }
+  } catch (error) {
+    logError("[getPOSMonthlySalesHistory] Error:", error)
+    const code = error instanceof Error && isPosErrorCode(error.message)
+      ? error.message
+      : POS_ERROR.LOAD_MONTHLY_SALES_HISTORY_FAILED
+    throw new Error(code)
   }
 }
 
 // ==================== POS Daily Summary ====================
 
-export async function getPOSDailySummary(storeId: string, date?: string, callerId?: string) {
+export async function getPOSDailySummary(storeId: string, date?: string, callerId?: string, posPin?: string) {
   if (callerId && callerId !== storeId) {
-    return { date: date || new Date().toISOString().split("T")[0], totalSales: 0, totalRevenue: 0, totalItems: 0, cashSales: 0, cardSales: 0, averageOrderValue: 0 }
+    return {
+      date: date || new Date().toISOString().split("T")[0],
+      totalSales: 0,
+      totalRevenue: 0,
+      totalItems: 0,
+      cashSales: 0,
+      cardSales: 0,
+      averageOrderValue: 0,
+      netProfit: 0,
+      cashInTotal: 0,
+    }
   }
 
   try {
     const db = getAdminDb()
+    await assertPOSPinAuthorized(db, storeId, posPin)
     const targetDate = date || new Date().toISOString().split("T")[0]
     const startOfDay = `${targetDate}T00:00:00.000Z`
     const endOfDay = `${targetDate}T23:59:59.999Z`
+    const summarize = async (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+      const aggregates = await aggregateSalesDocs(docs, db, storeId)
+      return {
+        date: targetDate,
+        totalSales: aggregates.totalSales,
+        totalRevenue: aggregates.totalRevenue,
+        totalItems: aggregates.totalItems,
+        cashSales: aggregates.cashSales,
+        cardSales: aggregates.cardSales,
+        averageOrderValue: aggregates.averageOrderValue,
+        netProfit: aggregates.netProfit,
+        cashInTotal: aggregates.cashInTotal,
+      }
+    }
 
-    // Query only the requested day to avoid loading full store history
-    const snapshot = await db
-      .collection("pos_sales")
-      .where("store_id", "==", storeId)
-      .where("created_at", ">=", startOfDay)
-      .where("created_at", "<=", endOfDay)
-      .get()
+    try {
+      // Query only the requested day to avoid loading full store history
+      const snapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .where("created_at", ">=", startOfDay)
+        .where("created_at", "<=", endOfDay)
+        .get()
+      return await summarize(snapshot.docs)
+    } catch (queryError: unknown) {
+      const message = queryError instanceof Error ? queryError.message : ""
+      const isIndexIssue = message.toLowerCase().includes("requires an index")
+      if (!isIndexIssue) {
+        throw queryError
+      }
 
-    let totalSales = 0
-    let totalRevenue = 0
-    let totalItems = 0
-    let cashSales = 0
-    let cardSales = 0
+      // Fallback for environments where composite index is not created yet.
+      logError("[getPOSDailySummary] Falling back to in-memory date filtering:", queryError)
+      const fallbackSnapshot = await db
+        .collection("pos_sales")
+        .where("store_id", "==", storeId)
+        .get()
 
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data()
-      totalSales++
-      totalRevenue += Number(data.total) || 0
-      totalItems += (data.items || []).reduce(
-        (sum: number, item: any) => sum + (Number(item.quantity) || 0),
-        0
-      )
-      if (data.payment_method === "cash") cashSales++
-      else if (data.payment_method === "card") cardSales++
-    })
+      const filteredDocs = fallbackSnapshot.docs.filter((doc) => {
+        const createdAtIso = toCreatedAtIso(doc.data().created_at)
+        return !!createdAtIso && createdAtIso >= startOfDay && createdAtIso <= endOfDay
+      })
 
-    return {
-      date: targetDate,
-      totalSales,
-      totalRevenue,
-      totalItems,
-      cashSales,
-      cardSales,
-      averageOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
+      return await summarize(filteredDocs)
     }
   } catch (error: any) {
     logError("[getPOSDailySummary] Error:", error)
-    throw new Error(POS_ERROR.LOAD_DAILY_SUMMARY_FAILED)
+    const code = error instanceof Error && isPosErrorCode(error.message)
+      ? error.message
+      : POS_ERROR.LOAD_DAILY_SUMMARY_FAILED
+    throw new Error(code)
   }
 }

@@ -1,19 +1,33 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
+import type { ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
-import { getPOSProducts, createPOSSale, getPOSSales, getPOSDailySummary, createPOSQuickProduct, type POSSaleItem } from "@/lib/actions/pos"
+import {
+  getPOSProducts,
+  createPOSSale,
+  getPOSMonthlySalesHistory,
+  getPOSDailySummary,
+  getPOSPinStatus,
+  setPOSAccessPin,
+  verifyPOSAccessPin,
+  createPOSQuickProduct,
+  type POSSaleItem,
+  type POSMonthlySalesHistoryMonth,
+} from "@/lib/actions/pos"
+import { uploadProductImage, updateProduct } from "@/lib/actions/products"
 import { getStoreByUserId } from "@/lib/actions/stores"
 import { fetchStoreSubcategories, type SubcategoryItem } from "@/lib/firebase/categories"
 import { useLanguage } from "@/lib/language-context"
 import { logError } from "@/lib/logger"
+import { UploadDialog } from "@/components/auth/upload-dialog"
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Receipt, DollarSign,
   BarChart3, Printer, Package, ChevronLeft,
   CreditCard, Banknote, Wallet, AlertTriangle, CheckCircle2, Clock,
-  User, StickyNote, Tag, Grid3X3, Store, MessageCircle, Camera, ScanLine
+  User, StickyNote, Tag, Grid3X3, Store, MessageCircle, Camera, ScanLine, Download
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 
@@ -34,6 +48,8 @@ type Product = {
   id: string
   name: string
   price: number
+  cost_price?: number
+  profit_per_unit?: number
   stock: number
   category: string
   image_url: string
@@ -69,6 +85,20 @@ type DailySummary = {
   cashSales: number
   cardSales: number
   averageOrderValue: number
+  netProfit: number
+  cashInTotal: number
+}
+
+type HistoryMonth = POSMonthlySalesHistoryMonth
+
+type MonthlySalesHistory = {
+  month: HistoryMonth
+  startDate: string
+  endDate: string
+  totalSales: number
+  totalRevenue: number
+  netProfit: number
+  sales: Sale[]
 }
 
 type StoreData = {
@@ -93,6 +123,8 @@ const posErrorMessages: Record<string, PosErrorMessage> = {
   POS_CREATE_SALE_FAILED: { ar: "فشل في إنشاء عملية البيع", en: "Failed to create sale" },
   POS_QUICK_PRODUCT_NAME_REQUIRED: { ar: "اسم المنتج مطلوب", en: "Product name is required" },
   POS_QUICK_PRODUCT_PRICE_INVALID: { ar: "السعر يجب أن يكون أكبر من صفر", en: "Price must be greater than zero" },
+  POS_QUICK_PRODUCT_COST_PRICE_INVALID: { ar: "سعر الشراء يجب أن يكون أكبر من صفر", en: "Cost price must be greater than zero" },
+  POS_QUICK_PRODUCT_SELLING_PRICE_BELOW_COST: { ar: "سعر البيع لا يمكن أن يكون أقل من سعر الشراء", en: "Selling price cannot be lower than cost price" },
   POS_QUICK_PRODUCT_STOCK_INVALID: { ar: "الكمية يجب أن تكون أكبر من صفر", en: "Stock must be greater than zero" },
   POS_STORE_NOT_APPROVED: {
     ar: "متجرك غير معتمد بعد. لا يمكنك إضافة منتجات جديدة حتى يتم اعتماد متجرك من قبل الإدارة.",
@@ -100,9 +132,34 @@ const posErrorMessages: Record<string, PosErrorMessage> = {
   },
   POS_DUPLICATE_BARCODE: { ar: "يوجد منتج بنفس الباركود", en: "A product with this barcode already exists" },
   POS_CREATE_QUICK_PRODUCT_FAILED: { ar: "فشل في إضافة المنتج", en: "Failed to add product" },
+  MISSING_FILE_OR_STORE_ID: { ar: "لم يتم تحديد الصورة أو المتجر", en: "Image file or store ID is missing" },
+  UNAUTHORIZED_IMAGE_UPLOAD: { ar: "ليس لديك صلاحية لرفع الصورة", en: "You are not authorized to upload this image" },
+  UNSUPPORTED_IMAGE_TYPE: { ar: "نوع الصورة غير مدعوم", en: "Unsupported image type" },
+  IMAGE_TOO_LARGE: { ar: "حجم الصورة كبير جداً (الحد الأقصى 5MB)", en: "Image is too large (max 5MB)" },
+  IMAGE_UPLOAD_FAILED: { ar: "فشل رفع الصورة", en: "Failed to upload image" },
+  IMAGE_UPLOAD_INTERNAL_ERROR: { ar: "حدث خطأ أثناء رفع الصورة", en: "An error occurred while uploading image" },
+  PRODUCT_NOT_FOUND: { ar: "المنتج غير موجود", en: "Product not found" },
+  UNAUTHORIZED_PRODUCT_ACCESS: { ar: "ليس لديك صلاحية لتعديل هذا المنتج", en: "You are not authorized to edit this product" },
+  PRICE_MUST_BE_POSITIVE: { ar: "سعر البيع يجب أن يكون أكبر من صفر", en: "Selling price must be greater than zero" },
+  COST_PRICE_MUST_BE_POSITIVE: { ar: "سعر الشراء يجب أن يكون أكبر من صفر", en: "Cost price must be greater than zero" },
+  SELLING_PRICE_BELOW_COST: { ar: "سعر البيع لا يمكن أن يكون أقل من سعر الشراء", en: "Selling price cannot be lower than cost price" },
+  STOCK_MUST_BE_POSITIVE: { ar: "الكمية يجب أن تكون أكبر من صفر", en: "Stock must be greater than zero" },
+  UPDATE_PRODUCT_FAILED: { ar: "فشل تحديث المنتج", en: "Failed to update product" },
   POS_LOAD_SALES_HISTORY_FAILED: { ar: "حدث خطأ أثناء تحميل سجل المبيعات", en: "Failed to load sales history" },
+  POS_LOAD_MONTHLY_SALES_HISTORY_FAILED: { ar: "حدث خطأ أثناء تحميل سجل الشهر", en: "Failed to load monthly sales history" },
   POS_LOAD_DAILY_SUMMARY_FAILED: { ar: "حدث خطأ أثناء تحميل ملخص اليوم", en: "Failed to load daily summary" },
+  POS_PIN_REQUIRED: { ar: "مطلوب إدخال الرقم السري", en: "PIN is required" },
+  POS_PIN_INVALID_FORMAT: { ar: "الرقم السري يجب أن يكون من 4 إلى 8 أرقام", en: "PIN must be 4 to 8 digits" },
+  POS_PIN_NOT_CONFIGURED: { ar: "لم يتم تعيين الرقم السري لنظام QPOS بعد", en: "QPOS PIN is not configured yet" },
+  POS_PIN_INCORRECT: { ar: "الرقم السري غير صحيح", en: "Incorrect PIN" },
+  POS_PIN_SETUP_FAILED: { ar: "فشل حفظ الرقم السري", en: "Failed to save PIN" },
+  POS_PIN_STATUS_FAILED: { ar: "فشل التحقق من حالة الرقم السري", en: "Failed to load PIN status" },
+  POS_PIN_VERIFY_FAILED: { ar: "فشل التحقق من الرقم السري", en: "Failed to verify PIN" },
 }
+
+const MAX_QUICK_ADD_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
+const QUICK_ADD_ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "image/webp"]
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
 // ===================== Main Component =====================
 
@@ -132,25 +189,57 @@ export default function QPOSPage() {
   const [customerPhone, setCustomerPhone] = useState("")
   const [notes, setNotes] = useState("")
   const [lastSale, setLastSale] = useState<Sale | null>(null)
-  const [salesHistory, setSalesHistory] = useState<Sale[]>([])
+  const [historyMonth, setHistoryMonth] = useState<HistoryMonth>("current")
+  const [monthlyHistory, setMonthlyHistory] = useState<Record<HistoryMonth, MonthlySalesHistory | null>>({
+    current: null,
+    previous: null,
+  })
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [processing, setProcessing] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyMonthLoading, setHistoryMonthLoading] = useState<HistoryMonth | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
+  const [hasPOSPin, setHasPOSPin] = useState<boolean | null>(null)
+  const [showPOSPinSetup, setShowPOSPinSetup] = useState(false)
+  const [showPOSPinVerify, setShowPOSPinVerify] = useState(false)
+  const [posPinInput, setPosPinInput] = useState("")
+  const [posPinConfirmInput, setPosPinConfirmInput] = useState("")
+  const [posVerifyPinInput, setPosVerifyPinInput] = useState("")
+  const [pinLoading, setPinLoading] = useState(false)
+  const [pendingProtectedAction, setPendingProtectedAction] = useState<"summary" | "history" | null>(null)
+  const [historySessionPin, setHistorySessionPin] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [showScanner, setShowScanner] = useState(false)
   const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [showEditProduct, setShowEditProduct] = useState(false)
+  const [showAddStock, setShowAddStock] = useState(false)
   const [quickAddBarcode, setQuickAddBarcode] = useState("")
   const [quickAddName, setQuickAddName] = useState("")
   const [quickAddPrice, setQuickAddPrice] = useState("")
+  const [quickAddCostPrice, setQuickAddCostPrice] = useState("")
   const [quickAddStock, setQuickAddStock] = useState("1")
   const [quickAddCategory, setQuickAddCategory] = useState("")
+  const [quickAddImageFile, setQuickAddImageFile] = useState<File | null>(null)
+  const [quickAddImagePreview, setQuickAddImagePreview] = useState<string | null>(null)
+  const [quickAddUploadDialogOpen, setQuickAddUploadDialogOpen] = useState(false)
   const [quickAddLoading, setQuickAddLoading] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editPrice, setEditPrice] = useState("")
+  const [editCostPrice, setEditCostPrice] = useState("")
+  const [editCategory, setEditCategory] = useState("")
+  const [editBarcode, setEditBarcode] = useState("")
+  const [editProductLoading, setEditProductLoading] = useState(false)
+  const [stockTargetProduct, setStockTargetProduct] = useState<Product | null>(null)
+  const [stockToAdd, setStockToAdd] = useState("1")
+  const [addStockLoading, setAddStockLoading] = useState(false)
   const [storeSubcategories, setStoreSubcategories] = useState<SubcategoryItem[]>([])
   const [showMobileCart, setShowMobileCart] = useState(false)
   const isStoreApproved = store?.is_approved === true
   const searchRef = useRef<HTMLInputElement>(null)
+  const quickAddFileInputRef = useRef<HTMLInputElement>(null)
+  const quickAddCameraInputRef = useRef<HTMLInputElement>(null)
   const translatePosError = useCallback(
     (errorCode?: string | null, fallback?: string) => {
       if (!errorCode) {
@@ -172,6 +261,149 @@ export default function QPOSPage() {
   )
   const getErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error && error.message ? translatePosError(error.message, fallback) : fallback
+  const activeMonthlyHistory = monthlyHistory[historyMonth]
+  const activeSalesHistory = activeMonthlyHistory?.sales ?? []
+  const getSaleTimestamp = useCallback((createdAt?: string) => {
+    const parsed = createdAt ? Date.parse(createdAt) : NaN
+    return Number.isFinite(parsed) ? parsed : 0
+  }, [])
+  const sortedActiveSalesHistory = useMemo(
+    () =>
+      [...activeSalesHistory].sort(
+        (a, b) => getSaleTimestamp(b.created_at) - getSaleTimestamp(a.created_at),
+      ),
+    [activeSalesHistory, getSaleTimestamp],
+  )
+  const isValidPinFormat = useCallback((value: string) => /^\d{4,8}$/.test(value.trim()), [])
+
+  const downloadSelectedMonthSalesHistory = useCallback(() => {
+    if (!activeMonthlyHistory) {
+      setError(t("لا توجد بيانات شهرية للتنزيل", "No monthly data available to download"))
+      return
+    }
+
+    if (sortedActiveSalesHistory.length === 0) {
+      setError(t("لا توجد مبيعات للتنزيل في هذا الشهر", "No sales to download for this month"))
+      return
+    }
+
+    const escapeCsv = (value: string | number) => {
+      const text = String(value ?? "")
+      const escaped = text.replace(/"/g, '""')
+      return `"${escaped}"`
+    }
+
+    const monthLabel =
+      historyMonth === "current"
+        ? t("الشهر الحالي", "Current Month")
+        : t("الشهر الماضي", "Previous Month")
+
+    const header = [
+      t("رقم العملية", "Sale Number"),
+      t("التاريخ والوقت", "Date & Time"),
+      t("الإجمالي", "Total"),
+      t("طريقة الدفع", "Payment Method"),
+      t("عدد المنتجات", "Items Count"),
+      t("العميل", "Customer"),
+    ].map(escapeCsv).join(",")
+
+    const rows = sortedActiveSalesHistory.map((sale) => {
+      const paymentLabel =
+        sale.payment_method === "cash"
+          ? t("نقدي", "Cash")
+          : sale.payment_method === "card"
+          ? t("بطاقة", "Card")
+          : t("محفظة", "Wallet")
+
+      return [
+        sale.sale_number || sale.id,
+        sale.created_at ? new Date(sale.created_at).toLocaleString(locale) : "",
+        `${Number(sale.total || 0).toFixed(2)} ${currencyLabel}`,
+        paymentLabel,
+        sale.items?.length || 0,
+        sale.customer_name || "",
+      ]
+        .map(escapeCsv)
+        .join(",")
+    })
+
+    const metaRows = [
+      [t("الفترة", "Period"), monthLabel],
+      [
+        t("المدى الزمني", "Date Range"),
+        `${new Date(activeMonthlyHistory.startDate).toLocaleDateString(locale)} - ${new Date(activeMonthlyHistory.endDate).toLocaleDateString(locale)}`,
+      ],
+      [t("عدد العمليات", "Total Sales"), activeMonthlyHistory.totalSales],
+      [
+        t("إجمالي الإيرادات", "Total Revenue"),
+        `${activeMonthlyHistory.totalRevenue.toFixed(2)} ${currencyLabel}`,
+      ],
+      [t("صافي الربح", "Net Profit"), `${activeMonthlyHistory.netProfit.toFixed(2)} ${currencyLabel}`],
+    ]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n")
+
+    const csv = `\uFEFF${metaRows}\n\n${header}\n${rows.join("\n")}`
+    const fileMonthKey = historyMonth === "current" ? "current-month" : "previous-month"
+    const today = new Date().toISOString().split("T")[0]
+    const fileName = `qpos-sales-${fileMonthKey}-${today}.csv`
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    setSuccess(t("تم تنزيل سجل المبيعات بنجاح", "Sales history downloaded successfully"))
+    setTimeout(() => setSuccess(""), 2500)
+  }, [activeMonthlyHistory, sortedActiveSalesHistory, historyMonth, locale, currencyLabel, t])
+
+  const loadPOSPinStatus = useCallback(
+    async (storeId: string, userId: string) => {
+      const status = await getPOSPinStatus(storeId, userId)
+      if (!status.success) {
+        setError(
+          translatePosError(
+            status.error,
+            t("حدث خطأ أثناء تحميل حالة الرقم السري", "Failed to load PIN status"),
+          ),
+        )
+        setHasPOSPin(null)
+        setShowPOSPinSetup(false)
+        return null
+      }
+
+      setHasPOSPin(status.hasPin)
+      setShowPOSPinSetup(!status.hasPin)
+      return status.hasPin
+    },
+    [t, translatePosError],
+  )
+
+  useEffect(() => {
+    setMonthlyHistory({ current: null, previous: null })
+    setHistoryMonth("current")
+  }, [store?.id])
+
+  useEffect(() => {
+    if (discount === "") return
+
+    const parsedDiscount = Number(discount)
+    if (!Number.isFinite(parsedDiscount)) return
+
+    if (parsedDiscount < 0) {
+      setDiscount("0")
+      return
+    }
+
+    if (discountType === "percentage" && parsedDiscount > 100) {
+      setDiscount("100")
+    }
+  }, [discountType, discount])
 
   // ===================== Load Data =====================
 
@@ -198,6 +430,7 @@ export default function QPOSPage() {
 
         const productsData = await getPOSProducts(storeData.id, user!.id)
         setProducts(productsData as Product[])
+        await loadPOSPinStatus(storeData.id, user!.id)
       } catch (err) {
         logError("[POS] Error loading data:", err)
         setError(t("فشل في تحميل البيانات", "Failed to load data"))
@@ -207,7 +440,7 @@ export default function QPOSPage() {
     }
 
     loadData()
-  }, [user, authLoading, router, t])
+  }, [user, authLoading, router, t, loadPOSPinStatus])
 
   // ===================== Categories =====================
 
@@ -244,26 +477,39 @@ export default function QPOSPage() {
   // ===================== Cart Calculations =====================
 
   const subtotal = useMemo(
-    () => cart.reduce((sum, item) => sum + item.total, 0),
+    () => roundMoney(cart.reduce((sum, item) => sum + item.total, 0)),
     [cart]
   )
 
-  const discountAmount = useMemo(() => {
-    const d = Number(discount) || 0
-    if (discountType === "percentage") {
-      return (subtotal * d) / 100
+  const normalizedDiscountValue = useMemo(() => {
+    const parsedDiscount = Number(discount)
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount <= 0) {
+      return 0
     }
-    return d
-  }, [subtotal, discount, discountType])
+    if (discountType === "percentage") {
+      return Math.min(parsedDiscount, 100)
+    }
+    return parsedDiscount
+  }, [discount, discountType])
+
+  const discountAmount = useMemo(() => {
+    if (normalizedDiscountValue <= 0) {
+      return 0
+    }
+    if (discountType === "percentage") {
+      return roundMoney((subtotal * normalizedDiscountValue) / 100)
+    }
+    return roundMoney(Math.min(normalizedDiscountValue, subtotal))
+  }, [subtotal, normalizedDiscountValue, discountType])
 
   const total = useMemo(
-    () => Math.max(0, subtotal - discountAmount),
+    () => roundMoney(Math.max(0, subtotal - discountAmount)),
     [subtotal, discountAmount]
   )
 
   const change = useMemo(() => {
     const paid = Number(amountPaid) || 0
-    return Math.max(0, paid - total)
+    return roundMoney(Math.max(0, paid - total))
   }, [amountPaid, total])
 
   const cartItemsCount = useMemo(
@@ -369,7 +615,7 @@ export default function QPOSPage() {
         seller_id: user!.id,
         items: saleItems,
         subtotal,
-        discount: discountAmount,
+        discount: normalizedDiscountValue,
         discount_type: discountType,
         tax: 0,
         total,
@@ -412,25 +658,39 @@ export default function QPOSPage() {
 
   // ===================== Load History =====================
 
-  const loadHistory = async () => {
-    if (!store) {
+  const loadHistory = async (verifiedPin: string) => {
+    if (!store || !user) {
       setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
       return
     }
+
     setLoadingHistory(true)
     setError("")
+    setHistoryMonth("current")
     try {
-      const history = await getPOSSales(store.id, 50, user!.id)
-      setSalesHistory(history as Sale[])
+      const history = monthlyHistory.current
+        ? monthlyHistory.current
+        : ((await getPOSMonthlySalesHistory(store.id, "current", user.id, verifiedPin)) as MonthlySalesHistory)
+
+      if (!monthlyHistory.current) {
+        setMonthlyHistory((prev) => ({
+          ...prev,
+          current: {
+            ...history,
+            sales: history.sales || [],
+          },
+        }))
+      }
+
       setShowHistory(true)
-      if (history.length === 0) {
-        setSuccess(t("لا توجد مبيعات مسجلة بعد", "No sales recorded yet"))
+      if (history.totalSales === 0) {
+        setSuccess(t("لا توجد مبيعات مسجلة هذا الشهر", "No sales recorded this month"))
       }
     } catch (err: unknown) {
       logError("[POS] Error loading history:", err)
       const errorMsg = getErrorMessage(
         err,
-        t("حدث خطأ أثناء تحميل سجل المبيعات", "An error occurred while loading sales history"),
+        t("حدث خطأ أثناء تحميل سجل الشهر", "An error occurred while loading monthly sales history"),
       )
       setError(errorMsg)
     } finally {
@@ -438,15 +698,60 @@ export default function QPOSPage() {
     }
   }
 
-  const loadDailySummary = async () => {
-    if (!store) {
+  const handleHistoryMonthChange = async (month: HistoryMonth) => {
+    if (historyMonth === month) {
+      return
+    }
+
+    if (!historySessionPin) {
+      setError(t("مطلوب إدخال الرقم السري", "PIN is required"))
+      return
+    }
+
+    setHistoryMonth(month)
+    if (!store || !user || monthlyHistory[month]) {
+      return
+    }
+
+    setHistoryMonthLoading(month)
+    setError("")
+    try {
+      const history = (await getPOSMonthlySalesHistory(store.id, month, user.id, historySessionPin)) as MonthlySalesHistory
+      setMonthlyHistory((prev) => ({
+        ...prev,
+        [month]: {
+          ...history,
+          sales: history.sales || [],
+        },
+      }))
+
+      if (history.totalSales === 0) {
+        setSuccess(
+          month === "current"
+            ? t("لا توجد مبيعات مسجلة هذا الشهر", "No sales recorded this month")
+            : t("لا توجد مبيعات مسجلة الشهر الماضي", "No sales recorded last month"),
+        )
+      }
+    } catch (err: unknown) {
+      logError(`[POS] Error loading ${month} sales history:`, err)
+      const errorMsg = getErrorMessage(
+        err,
+        t("حدث خطأ أثناء تحميل سجل الشهر", "An error occurred while loading monthly sales history"),
+      )
+      setError(errorMsg)
+    } finally {
+      setHistoryMonthLoading((prev) => (prev === month ? null : prev))
+    }
+  }
+  const loadDailySummary = async (verifiedPin: string) => {
+    if (!store || !user) {
       setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
       return
     }
     setLoadingSummary(true)
     setError("")
     try {
-      const summary = await getPOSDailySummary(store.id, undefined, user!.id)
+      const summary = await getPOSDailySummary(store.id, undefined, user.id, verifiedPin)
       setDailySummary(summary)
       setShowSummary(true)
       if (summary.totalSales === 0) {
@@ -464,6 +769,121 @@ export default function QPOSPage() {
     }
   }
 
+  const openProtectedPOSAction = async (action: "summary" | "history") => {
+    if (!store || !user) {
+      setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
+      return
+    }
+
+    let configured = hasPOSPin
+    if (configured === null) {
+      configured = await loadPOSPinStatus(store.id, user.id)
+    }
+
+    if (configured === null) {
+      return
+    }
+
+    if (!configured) {
+      setPendingProtectedAction(action)
+      setShowPOSPinSetup(true)
+      return
+    }
+
+    setPendingProtectedAction(action)
+    setPosVerifyPinInput("")
+    setShowPOSPinVerify(true)
+  }
+
+  const handleSetupPOSPin = async () => {
+    if (!store || !user) {
+      setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
+      return
+    }
+
+    const normalizedPin = posPinInput.trim()
+    const normalizedConfirmPin = posPinConfirmInput.trim()
+
+    if (!isValidPinFormat(normalizedPin)) {
+      setError(translatePosError("POS_PIN_INVALID_FORMAT", t("الرقم السري غير صالح", "Invalid PIN format")))
+      return
+    }
+    if (normalizedPin !== normalizedConfirmPin) {
+      setError(t("الرقمان السريان غير متطابقين", "PIN values do not match"))
+      return
+    }
+
+    setPinLoading(true)
+    setError("")
+    try {
+      const result = await setPOSAccessPin(store.id, normalizedPin, user.id)
+      if (!result.success) {
+        setError(translatePosError(result.error, t("فشل حفظ الرقم السري", "Failed to save PIN")))
+        return
+      }
+
+      setHasPOSPin(true)
+      setShowPOSPinSetup(false)
+      setPosPinInput("")
+      setPosPinConfirmInput("")
+      setSuccess(t("تم حفظ الرقم السري بنجاح", "PIN saved successfully"))
+      setTimeout(() => setSuccess(""), 2500)
+
+      if (pendingProtectedAction) {
+        setPosVerifyPinInput("")
+        setShowPOSPinVerify(true)
+      }
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ أثناء حفظ الرقم السري", "An error occurred while saving PIN")))
+    } finally {
+      setPinLoading(false)
+    }
+  }
+
+  const handleVerifyPOSPin = async () => {
+    if (!store || !user || !pendingProtectedAction) {
+      setError(t("تعذر تحديد الإجراء المطلوب", "Unable to identify protected action"))
+      return
+    }
+
+    const normalizedPin = posVerifyPinInput.trim()
+    if (!isValidPinFormat(normalizedPin)) {
+      setError(translatePosError("POS_PIN_INVALID_FORMAT", t("الرقم السري غير صالح", "Invalid PIN format")))
+      return
+    }
+
+    setPinLoading(true)
+    setError("")
+    try {
+      const result = await verifyPOSAccessPin(store.id, normalizedPin, user.id)
+      if (!result.success) {
+        if (result.error === "POS_PIN_NOT_CONFIGURED") {
+          setHasPOSPin(false)
+          setShowPOSPinVerify(false)
+          setShowPOSPinSetup(true)
+        }
+        setError(translatePosError(result.error, t("فشل التحقق من الرقم السري", "Failed to verify PIN")))
+        return
+      }
+
+      setShowPOSPinVerify(false)
+      setPosVerifyPinInput("")
+
+      if (pendingProtectedAction === "history") {
+        setHistorySessionPin(normalizedPin)
+        await loadHistory(normalizedPin)
+      } else {
+        await loadDailySummary(normalizedPin)
+      }
+
+      setPendingProtectedAction(null)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ أثناء التحقق من الرقم السري", "An error occurred while verifying PIN")))
+    } finally {
+      setPinLoading(false)
+    }
+  }
+
   // ===================== Print Receipt =====================
 
   const printReceipt = () => {
@@ -472,15 +892,44 @@ export default function QPOSPage() {
 
   // ===================== Send WhatsApp =====================
 
+  const formatPhoneForWhatsApp = useCallback((raw?: string) => {
+    if (!raw) return ""
+
+    let digits = raw.replace(/\D/g, "")
+    if (digits.startsWith("00")) digits = digits.slice(2)
+    if (digits.startsWith("0")) {
+      // Default local numbers to Egypt country code
+      digits = `20${digits.slice(1)}`
+    }
+
+    return digits
+  }, [])
+
+  const lastSaleWhatsAppPhone = useMemo(
+    () => formatPhoneForWhatsApp(lastSale?.customer_phone),
+    [formatPhoneForWhatsApp, lastSale?.customer_phone],
+  )
+
+  const canSendReceiptViaWhatsApp = !!lastSaleWhatsAppPhone && lastSaleWhatsAppPhone.length >= 8
+
   const sendWhatsApp = () => {
     if (!lastSale) return
+    if (!canSendReceiptViaWhatsApp) {
+      setError(
+        t(
+          "لا يمكن إرسال الفاتورة عبر واتساب بدون رقم هاتف العميل. أدخل رقم الهاتف أثناء الدفع أولًا.",
+          "Cannot send receipt via WhatsApp without customer phone number. Enter it during payment first.",
+        ),
+      )
+      return
+    }
     
     // Format receipt message
     let message = `🧾 *${store.name}*\n`
     if (store.address) message += `📍 ${store.address}\n`
     if (store.phone) message += `📞 ${store.phone}\n`
     message += `\n━━━━━━━━━━━━━━━━\n\n`
-    message += `📅 ${new Date(lastSale.created_at).toLocaleDateString(locale)}\n`
+    message += `🕒 ${new Date(lastSale.created_at).toLocaleDateString(locale)}\n`
     message += `🔢 ${t("رقم الفاتورة", "Invoice No.")}: #${lastSale.sale_number}\n\n`
     message += `📦 *${t("المنتجات", "Products")}:*\n`
     
@@ -505,8 +954,220 @@ export default function QPOSPage() {
     message += `🙏 ${t("شكراً لتسوقكم معنا", "Thank you for shopping with us")}`
     
     // Open WhatsApp with message
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`
+    const whatsappUrl = `https://wa.me/${lastSaleWhatsAppPhone}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
+  }
+
+  // ===================== Quick Add Helpers =====================
+
+  const resetQuickAddForm = useCallback(() => {
+    setQuickAddBarcode("")
+    setQuickAddName("")
+    setQuickAddPrice("")
+    setQuickAddCostPrice("")
+    setQuickAddStock("1")
+    setQuickAddCategory("")
+    setQuickAddImageFile(null)
+    setQuickAddImagePreview(null)
+    setQuickAddUploadDialogOpen(false)
+  }, [])
+
+  const validateQuickAddImageFile = useCallback((file: File): string | null => {
+    if (!QUICK_ADD_ALLOWED_FILE_TYPES.includes(file.type)) {
+      return t(
+        "نوع الصورة غير مدعوم. الأنواع المسموحة: JPEG, PNG, WebP",
+        "Unsupported image type. Allowed types: JPEG, PNG, WebP",
+      )
+    }
+    if (file.size > MAX_QUICK_ADD_IMAGE_SIZE) {
+      return t("حجم الصورة كبير جداً. الحد الأقصى 5MB", "Image is too large. Maximum size is 5MB")
+    }
+    return null
+  }, [t])
+
+  const openQuickAddUploadDialog = useCallback(() => {
+    setQuickAddUploadDialogOpen(true)
+  }, [])
+
+  const handleQuickAddUploadedFile = useCallback((file: File) => {
+    const validationError = validateQuickAddImageFile(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setQuickAddImageFile(file)
+      setQuickAddImagePreview(typeof reader.result === "string" ? reader.result : null)
+    }
+    reader.readAsDataURL(file)
+    setError("")
+    setQuickAddUploadDialogOpen(false)
+  }, [validateQuickAddImageFile])
+
+  const handleQuickAddFileInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleQuickAddUploadedFile(file)
+    }
+    e.target.value = ""
+  }, [handleQuickAddUploadedFile])
+
+  const applyUpdatedProductLocally = useCallback((updatedProduct: Product) => {
+    setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? { ...p, ...updatedProduct } : p)))
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === updatedProduct.id
+          ? {
+              ...item,
+              name: updatedProduct.name,
+              price: updatedProduct.price,
+              category: updatedProduct.category,
+              barcode: updatedProduct.barcode,
+              total: item.quantity * updatedProduct.price,
+            }
+          : item,
+      ),
+    )
+  }, [])
+
+  const resetEditProductForm = useCallback(() => {
+    setEditingProduct(null)
+    setEditName("")
+    setEditPrice("")
+    setEditCostPrice("")
+    setEditCategory("")
+    setEditBarcode("")
+  }, [])
+
+  const openEditProductModal = useCallback((product: Product) => {
+    setEditingProduct(product)
+    setEditName(product.name)
+    setEditPrice(String(product.price))
+    setEditCostPrice(String(product.cost_price ?? product.price))
+    setEditCategory(product.category || "")
+    setEditBarcode(product.barcode || "")
+    setShowEditProduct(true)
+    setError("")
+  }, [])
+
+  const handleSaveEditedProduct = async () => {
+    if (!editingProduct || !user) {
+      setError(t("لم يتم العثور على بيانات المنتج", "Product data was not found"))
+      return
+    }
+
+    const normalizedName = editName.trim()
+    const normalizedCategory = editCategory.trim()
+    const sellingPrice = Number(editPrice)
+    const costPrice = Number(editCostPrice)
+
+    if (!normalizedName) {
+      setError(t("يرجى إدخال اسم المنتج", "Please enter product name"))
+      return
+    }
+    if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+      setError(t("سعر البيع يجب أن يكون أكبر من صفر", "Selling price must be greater than zero"))
+      return
+    }
+    if (!Number.isFinite(costPrice) || costPrice <= 0) {
+      setError(t("سعر الشراء يجب أن يكون أكبر من صفر", "Cost price must be greater than zero"))
+      return
+    }
+    if (sellingPrice < costPrice) {
+      setError(t("سعر البيع لا يمكن أن يكون أقل من سعر الشراء", "Selling price cannot be lower than cost price"))
+      return
+    }
+    if (!normalizedCategory) {
+      setError(t("يرجى اختيار الفئة", "Please select a category"))
+      return
+    }
+
+    setEditProductLoading(true)
+    setError("")
+    try {
+      const result = await updateProduct(
+        editingProduct.id,
+        {
+          name: normalizedName,
+          price: sellingPrice,
+          cost_price: costPrice,
+          category: normalizedCategory,
+          barcode: editBarcode.trim() || "",
+        },
+        user.id,
+      )
+
+      if (!result.success || !result.data) {
+        setError(translatePosError(result.error, t("فشل تحديث المنتج", "Failed to update product")))
+        return
+      }
+
+      const updatedProduct = result.data as Product
+      applyUpdatedProductLocally(updatedProduct)
+      setShowEditProduct(false)
+      resetEditProductForm()
+      setSuccess(t("تم تحديث المنتج بنجاح", "Product updated successfully"))
+      setTimeout(() => setSuccess(""), 2500)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ غير متوقع", "An unexpected error occurred")))
+    } finally {
+      setEditProductLoading(false)
+    }
+  }
+
+  const resetAddStockForm = useCallback(() => {
+    setStockTargetProduct(null)
+    setStockToAdd("1")
+  }, [])
+
+  const openAddStockModal = useCallback((product: Product) => {
+    setStockTargetProduct(product)
+    setStockToAdd("1")
+    setShowAddStock(true)
+    setError("")
+  }, [])
+
+  const handleAddStockToProduct = async () => {
+    if (!stockTargetProduct || !user) {
+      setError(t("لم يتم العثور على بيانات المنتج", "Product data was not found"))
+      return
+    }
+
+    const increment = Number(stockToAdd)
+    if (!Number.isFinite(increment) || !Number.isInteger(increment) || increment <= 0) {
+      setError(t("الكمية المضافة يجب أن تكون رقمًا صحيحًا أكبر من صفر", "Added quantity must be a positive integer"))
+      return
+    }
+
+    const newStock = stockTargetProduct.stock + increment
+    setAddStockLoading(true)
+    setError("")
+
+    try {
+      const result = await updateProduct(
+        stockTargetProduct.id,
+        { stock: newStock },
+        user.id,
+      )
+
+      if (!result.success || !result.data) {
+        setError(translatePosError(result.error, t("فشل تحديث المخزون", "Failed to update stock")))
+        return
+      }
+
+      const updatedProduct = result.data as Product
+      applyUpdatedProductLocally(updatedProduct)
+      setShowAddStock(false)
+      resetAddStockForm()
+      setSuccess(t("تمت إضافة الكمية بنجاح", "Quantity added successfully"))
+      setTimeout(() => setSuccess(""), 2500)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, t("حدث خطأ غير متوقع", "An unexpected error occurred")))
+    } finally {
+      setAddStockLoading(false)
+    }
   }
 
   // ===================== Barcode Scanner =====================
@@ -524,6 +1185,7 @@ export default function QPOSPage() {
         setTimeout(() => setError(""), 5000)
         return
       }
+      resetQuickAddForm()
       setQuickAddBarcode(code)
       setShowQuickAdd(true)
       setError(`${t("لا يوجد منتج بالباركود", "No product found with barcode")}: ${code}`)
@@ -534,11 +1196,38 @@ export default function QPOSPage() {
   // ===================== Quick Add Product =====================
 
   const handleQuickAddProduct = async () => {
-    if (!quickAddName.trim() || !quickAddPrice || Number(quickAddPrice) <= 0) {
-      setError(t("يرجى إدخال اسم المنتج والسعر", "Please enter product name and price"))
+    if (!store || !user) {
+      setError(t("لم يتم العثور على بيانات المتجر", "Store data was not found"))
       return
     }
-    if (!quickAddCategory.trim()) {
+
+    const normalizedName = quickAddName.trim()
+    const normalizedCategory = quickAddCategory.trim()
+    const sellingPrice = Number(quickAddPrice)
+    const costPrice = Number(quickAddCostPrice)
+    const normalizedStock = Number(quickAddStock)
+
+    if (!normalizedName) {
+      setError(t("يرجى إدخال اسم المنتج", "Please enter product name"))
+      return
+    }
+    if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+      setError(t("سعر البيع يجب أن يكون أكبر من صفر", "Selling price must be greater than zero"))
+      return
+    }
+    if (!Number.isFinite(costPrice) || costPrice <= 0) {
+      setError(t("سعر الشراء يجب أن يكون أكبر من صفر", "Cost price must be greater than zero"))
+      return
+    }
+    if (sellingPrice < costPrice) {
+      setError(t("سعر البيع لا يمكن أن يكون أقل من سعر الشراء", "Selling price cannot be lower than cost price"))
+      return
+    }
+    if (!Number.isFinite(normalizedStock) || normalizedStock <= 0) {
+      setError(t("الكمية يجب أن تكون أكبر من صفر", "Quantity must be greater than zero"))
+      return
+    }
+    if (!normalizedCategory) {
       setError(t("يرجى اختيار الفئة", "Please select a category"))
       return
     }
@@ -547,14 +1236,33 @@ export default function QPOSPage() {
     setError("")
 
     try {
+      let imageUrl = ""
+
+      if (quickAddImageFile) {
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", quickAddImageFile)
+        uploadFormData.append("storeId", store.id)
+        uploadFormData.append("callerId", user.id)
+
+        const uploadResult = await uploadProductImage(uploadFormData)
+        if (!uploadResult.success) {
+          setError(translatePosError(uploadResult.error, t("فشل رفع الصورة", "Failed to upload image")))
+          return
+        }
+
+        imageUrl = uploadResult.url || ""
+      }
+
       const result = await createPOSQuickProduct({
-        name: quickAddName.trim(),
-        price: Number(quickAddPrice),
-        stock: Number(quickAddStock) || 1,
-        category: quickAddCategory.trim(),
+        name: normalizedName,
+        price: sellingPrice,
+        cost_price: costPrice,
+        stock: normalizedStock,
+        category: normalizedCategory,
         barcode: quickAddBarcode.trim() || undefined,
+        image_url: imageUrl || undefined,
         store_id: store.id,
-      }, user!.id)
+      }, user.id)
 
       if (result.success && result.data) {
         const newProduct = result.data as Product
@@ -563,11 +1271,7 @@ export default function QPOSPage() {
         setSuccess(`${t("تم إضافة", "Added")} "${newProduct.name}" ${t("وإضافته للسلة", "and added to cart")}`)
         setTimeout(() => setSuccess(""), 3000)
         setShowQuickAdd(false)
-        setQuickAddBarcode("")
-        setQuickAddName("")
-        setQuickAddPrice("")
-        setQuickAddStock("1")
-        setQuickAddCategory("")
+        resetQuickAddForm()
       } else {
         setError(translatePosError(result.error, t("فشل في إضافة المنتج", "Failed to add product")))
       }
@@ -599,8 +1303,16 @@ export default function QPOSPage() {
         setShowReceipt(false)
         setShowHistory(false)
         setShowSummary(false)
+        setShowPOSPinVerify(false)
         setShowScanner(false)
         setShowQuickAdd(false)
+        setShowEditProduct(false)
+        setShowAddStock(false)
+        setHistorySessionPin("")
+        setPendingProtectedAction(null)
+        resetQuickAddForm()
+        resetEditProductForm()
+        resetAddStockForm()
       }
       // F4 = Clear cart
       if (e.key === "F4") {
@@ -611,7 +1323,7 @@ export default function QPOSPage() {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [cart, showPayment, clearCart])
+  }, [cart, showPayment, clearCart, resetQuickAddForm, resetEditProductForm, resetAddStockForm])
 
   // ===================== Loading / Auth States =====================
 
@@ -703,7 +1415,7 @@ export default function QPOSPage() {
             )}
           </button>
           <button
-            onClick={loadDailySummary}
+            onClick={() => openProtectedPOSAction("summary")}
             disabled={loadingSummary}
             className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium bg-gradient-to-r from-violet-500 to-violet-600 text-white hover:shadow-xl hover:shadow-violet-500/30 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
@@ -720,7 +1432,7 @@ export default function QPOSPage() {
             )}
           </button>
           <button
-            onClick={loadHistory}
+            onClick={() => openProtectedPOSAction("history")}
             disabled={loadingHistory}
             className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium bg-gradient-to-r from-rose-500 to-rose-600 text-white hover:shadow-xl hover:shadow-rose-500/30 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
@@ -887,8 +1599,34 @@ export default function QPOSPage() {
                 <input
                   type="number"
                   value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
+                  onChange={(e) => {
+                    const nextValue = e.target.value
+                    if (nextValue === "") {
+                      setDiscount("")
+                      return
+                    }
+
+                    const parsedValue = Number(nextValue)
+                    if (!Number.isFinite(parsedValue)) {
+                      return
+                    }
+
+                    if (parsedValue < 0) {
+                      setDiscount("0")
+                      return
+                    }
+
+                    if (discountType === "percentage" && parsedValue > 100) {
+                      setDiscount("100")
+                      return
+                    }
+
+                    setDiscount(nextValue)
+                  }}
                   placeholder="0"
+                  min="0"
+                  max={discountType === "percentage" ? "100" : undefined}
+                  step="0.01"
                   className="flex-1 h-7 bg-gray-50 text-gray-800 rounded-lg text-sm px-2 border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <select
@@ -978,6 +1716,7 @@ export default function QPOSPage() {
                     setTimeout(() => setError(""), 5000)
                     return
                   }
+                  resetQuickAddForm()
                   setShowQuickAdd(true)
                 }}
                 className={`h-9 sm:h-11 px-2 sm:px-3 rounded-xl transition-all flex items-center gap-1.5 ${
@@ -1040,13 +1779,20 @@ export default function QPOSPage() {
                   const outOfStock = product.stock <= 0
 
                   return (
-                    <button
+                    <div
                       key={product.id}
                       onClick={() => !outOfStock && addToCart(product)}
-                      disabled={outOfStock}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && !outOfStock) {
+                          e.preventDefault()
+                          addToCart(product)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
                       className={`relative bg-white rounded-xl p-2 text-right transition-all hover:shadow-lg group ${
                         outOfStock
-                          ? "opacity-50 cursor-not-allowed"
+                          ? "opacity-60 cursor-not-allowed"
                           : "cursor-pointer hover:scale-105"
                       } ${inCart ? "ring-2 ring-emerald-500 shadow-md" : "shadow-sm"}`}
                     >
@@ -1086,6 +1832,29 @@ export default function QPOSPage() {
                         </span>
                       </div>
 
+                      <div className="relative z-20 mt-2 grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditProductModal(product)
+                          }}
+                          className="h-8 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
+                        >
+                          {t("تعديل", "Edit")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openAddStockModal(product)
+                          }}
+                          className="h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition"
+                        >
+                          {t("إضافة كمية", "Add Qty")}
+                        </button>
+                      </div>
+
                       {/* In Cart Badge */}
                       {inCart && (
                         <div className="absolute top-1 left-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
@@ -1095,13 +1864,13 @@ export default function QPOSPage() {
 
                       {/* Out of Stock */}
                       {outOfStock && (
-                        <div className="absolute inset-0 bg-gray-900/70 rounded-xl flex items-center justify-center">
+                        <div className="pointer-events-none absolute inset-0 z-10 bg-gray-900/70 rounded-xl flex items-center justify-center">
                           <span className="text-red-500 text-xs font-bold bg-white px-2 py-1 rounded-lg shadow-lg">
                             {t("نفذ المخزون", "Out of stock")}
                           </span>
                         </div>
                       )}
-                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -1348,8 +2117,20 @@ export default function QPOSPage() {
             <div className="p-3 sm:p-4 border-t flex gap-2">
               <button
                 onClick={sendWhatsApp}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm"
-                title={t("إرسال عبر واتساب", "Send via WhatsApp")}
+                disabled={!canSendReceiptViaWhatsApp}
+                className={`flex-1 py-2 sm:py-2.5 rounded-xl font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition text-xs sm:text-sm ${
+                  canSendReceiptViaWhatsApp
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+                title={
+                  canSendReceiptViaWhatsApp
+                    ? t("إرسال عبر واتساب", "Send via WhatsApp")
+                    : t(
+                        "أدخل رقم هاتف العميل أثناء الدفع لتفعيل إرسال واتساب",
+                        "Enter customer phone during payment to enable WhatsApp sending",
+                      )
+                }
               >
                 <MessageCircle className="h-4 w-4" />
                 {t("واتساب", "WhatsApp")}
@@ -1373,6 +2154,130 @@ export default function QPOSPage() {
         </div>
       )}
 
+      {/* ===== POS PIN Setup Modal ===== */}
+      {showPOSPinSetup && (
+        <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-gray-800 text-lg font-bold">
+                {t("تعيين الرقم السري لـ QPOS", "Set QPOS PIN")}
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                {t(
+                  "هذا الرقم سيُستخدم قبل فتح ملخص اليوم وسجل المبيعات.",
+                  "This PIN will be required before opening daily summary and sales history.",
+                )}
+              </p>
+            </div>
+
+            <div className="p-4 space-y-3 bg-gray-50">
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">
+                  {t("الرقم السري (4-8 أرقام)", "PIN (4-8 digits)")}
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={posPinInput}
+                  onChange={(e) => setPosPinInput(e.target.value.replace(/\D/g, ""))}
+                  className="w-full h-11 bg-white text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                />
+              </div>
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">
+                  {t("تأكيد الرقم السري", "Confirm PIN")}
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={posPinConfirmInput}
+                  onChange={(e) => setPosPinConfirmInput(e.target.value.replace(/\D/g, ""))}
+                  className="w-full h-11 bg-white text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 bg-white flex gap-3">
+              <button
+                onClick={handleSetupPOSPin}
+                disabled={pinLoading}
+                className="flex-1 bg-gradient-to-r from-violet-500 to-violet-600 text-white py-2.5 rounded-xl font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {pinLoading ? t("جارٍ الحفظ...", "Saving...") : t("حفظ الرقم السري", "Save PIN")}
+              </button>
+              <button
+                onClick={() => router.push("/seller/dashboard")}
+                className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
+              >
+                {t("العودة", "Back")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== POS PIN Verify Modal ===== */}
+      {showPOSPinVerify && (
+        <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" dir={pageDir}>
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-gray-800 text-lg font-bold">
+                {t("تحقق من الرقم السري", "Verify PIN")}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowPOSPinVerify(false)
+                  setPendingProtectedAction(null)
+                  setPosVerifyPinInput("")
+                }}
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 bg-gray-50">
+              <p className="text-gray-600 text-sm">
+                {pendingProtectedAction === "history"
+                  ? t("أدخل الرقم السري لفتح سجل المبيعات", "Enter PIN to open sales history")
+                  : t("أدخل الرقم السري لفتح ملخص اليوم", "Enter PIN to open today's summary")}
+              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={posVerifyPinInput}
+                onChange={(e) => setPosVerifyPinInput(e.target.value.replace(/\D/g, ""))}
+                className="w-full h-11 bg-white text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="p-4 border-t border-gray-200 bg-white flex gap-3">
+              <button
+                onClick={handleVerifyPOSPin}
+                disabled={pinLoading}
+                className="flex-1 bg-gradient-to-r from-rose-500 to-rose-600 text-white py-2.5 rounded-xl font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {pinLoading ? t("جارٍ التحقق...", "Verifying...") : t("تأكيد", "Confirm")}
+              </button>
+              <button
+                onClick={() => {
+                  setShowPOSPinVerify(false)
+                  setPendingProtectedAction(null)
+                  setPosVerifyPinInput("")
+                }}
+                className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
+              >
+                {t("إلغاء", "Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== Sales History Modal ===== */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
@@ -1385,22 +2290,97 @@ export default function QPOSPage() {
                 {t("سجل المبيعات", "Sales History")}
               </h2>
               <button
-                onClick={() => setShowHistory(false)}
+                onClick={() => {
+                  setShowHistory(false)
+                  setHistorySessionPin("")
+                }}
                 className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {salesHistory.length === 0 ? (
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleHistoryMonthChange("current")}
+                  disabled={historyMonthLoading !== null}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    historyMonth === "current"
+                      ? "bg-rose-600 text-white shadow-sm"
+                      : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+                  } disabled:opacity-70`}
+                >
+                  {t("الشهر الحالي", "Current Month")}
+                </button>
+                <button
+                  onClick={() => handleHistoryMonthChange("previous")}
+                  disabled={historyMonthLoading !== null}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    historyMonth === "previous"
+                      ? "bg-rose-600 text-white shadow-sm"
+                      : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+                  } disabled:opacity-70`}
+                >
+                  {t("الشهر الماضي", "Previous Month")}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+                  <p className="text-2xl font-bold text-emerald-600">
+                    {(activeMonthlyHistory?.totalRevenue || 0).toFixed(2)}
+                  </p>
+                  <p className="text-gray-600 text-xs font-medium mt-1">
+                    {t("إجمالي الإيرادات", "Total Revenue")} ({currencyLabel})
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-3 shadow-sm text-center">
+                  <p className="text-2xl font-bold text-violet-600">
+                    {(activeMonthlyHistory?.netProfit || 0).toFixed(2)}
+                  </p>
+                  <p className="text-gray-600 text-xs font-medium mt-1">
+                    {t("صافي الربح", "Net Profit")} ({currencyLabel})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                {activeMonthlyHistory ? (
+                  <p className="text-xs text-gray-500 text-center">
+                    {new Date(activeMonthlyHistory.startDate).toLocaleDateString(locale)} -{" "}
+                    {new Date(activeMonthlyHistory.endDate).toLocaleDateString(locale)}
+                  </p>
+                ) : (
+                  <div />
+                )}
+                <button
+                  onClick={downloadSelectedMonthSalesHistory}
+                  disabled={!activeMonthlyHistory || sortedActiveSalesHistory.length === 0 || historyMonthLoading !== null}
+                  className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium bg-white text-rose-700 border border-rose-200 hover:bg-rose-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {t("تنزيل السجل", "Download History")}
+                </button>
+              </div>
+
+              {historyMonthLoading === historyMonth && !activeMonthlyHistory ? (
+                <div className="text-center text-gray-500 py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-rose-500 mx-auto mb-3" />
+                  <p>{t("جارٍ تحميل سجل الشهر...", "Loading monthly sales...")}</p>
+                </div>
+              ) : sortedActiveSalesHistory.length === 0 ? (
                 <div className="text-center text-gray-400 py-12">
                   <Receipt className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-gray-600 font-medium">{t("لا توجد مبيعات بعد", "No sales yet")}</p>
+                  <p className="text-gray-600 font-medium">
+                    {historyMonth === "current"
+                      ? t("لا توجد مبيعات هذا الشهر", "No sales this month")
+                      : t("لا توجد مبيعات الشهر الماضي", "No sales last month")}
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {salesHistory.map((sale) => (
+                <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
+                  {sortedActiveSalesHistory.map((sale) => (
                     <div
                       key={sale.id}
                       className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm hover:shadow-md transition"
@@ -1453,7 +2433,9 @@ export default function QPOSPage() {
                 {t("ملخص اليوم", "Today's Summary")}
               </h2>
               <button
-                onClick={() => setShowSummary(false)}
+                onClick={() => {
+                  setShowSummary(false)
+                }}
                 className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition"
               >
                 <X className="h-5 w-5" />
@@ -1470,9 +2452,11 @@ export default function QPOSPage() {
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-emerald-600">
-                    {dailySummary.totalRevenue.toFixed(0)}
+                    {dailySummary.totalRevenue.toFixed(2)}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("إجمالي الإيرادات", "Total Revenue")}</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">
+                    {t("إجمالي الإيرادات", "Total Revenue")} ({currencyLabel})
+                  </p>
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-violet-600">
@@ -1482,9 +2466,27 @@ export default function QPOSPage() {
                 </div>
                 <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                   <p className="text-3xl font-bold text-violet-600">
-                    {dailySummary.averageOrderValue.toFixed(0)}
+                    {dailySummary.averageOrderValue.toFixed(2)}
                   </p>
-                  <p className="text-gray-600 text-sm mt-1 font-medium">{t("متوسط الطلب", "Average Order")}</p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">
+                    {t("متوسط الطلب", "Average Order")} ({currencyLabel})
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-blue-600">
+                    {dailySummary.netProfit.toFixed(2)}
+                  </p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">
+                    {t("صافي الربح", "Net Profit")} ({currencyLabel})
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-amber-600">
+                    {dailySummary.cashInTotal.toFixed(2)}
+                  </p>
+                  <p className="text-gray-600 text-sm mt-1 font-medium">
+                    {t("المبلغ الداخل نقدًا", "Cash In Today")} ({currencyLabel})
+                  </p>
                 </div>
               </div>
 
@@ -1511,7 +2513,9 @@ export default function QPOSPage() {
 
             <div className="p-4 border-t border-gray-200 bg-white">
               <button
-                onClick={() => setShowSummary(false)}
+                onClick={() => {
+                  setShowSummary(false)
+                }}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-xl transition"
               >
                 {t("إغلاق", "Close")}
@@ -1579,10 +2583,171 @@ export default function QPOSPage() {
         />
       )}
 
+      {/* ===== Edit Product Modal ===== */}
+      {showEditProduct && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" dir={pageDir}>
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold">{t("تعديل المنتج", "Edit Product")}</h2>
+              <button
+                onClick={() => {
+                  setShowEditProduct(false)
+                  resetEditProductForm()
+                }}
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("اسم المنتج *", "Product Name *")}</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("سعر البيع *", "Selling Price *")}</label>
+                  <input
+                    type="number"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    min="0.01"
+                    step="0.01"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("سعر الشراء *", "Cost Price *")}</label>
+                  <input
+                    type="number"
+                    value={editCostPrice}
+                    onChange={(e) => setEditCostPrice(e.target.value)}
+                    min="0.01"
+                    step="0.01"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الفئة *", "Category *")}</label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="" disabled>
+                    {t("اختر الفئة", "Select category")}
+                  </option>
+                  {editCategory && !storeSubcategories.some((sub) => sub.name === editCategory) && (
+                    <option value={editCategory}>{editCategory}</option>
+                  )}
+                  {storeSubcategories.map((sub) => (
+                    <option key={sub.id} value={sub.name}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الباركود", "Barcode")}</label>
+                <input
+                  type="text"
+                  value={editBarcode}
+                  onChange={(e) => setEditBarcode(e.target.value)}
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={handleSaveEditedProduct}
+                disabled={editProductLoading || !editName.trim() || !editPrice || !editCostPrice || !editCategory.trim()}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-medium transition"
+              >
+                {editProductLoading ? t("جاري الحفظ...", "Saving...") : t("حفظ التعديلات", "Save Changes")}
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditProduct(false)
+                  resetEditProductForm()
+                }}
+                className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
+              >
+                {t("إلغاء", "Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Add Stock Modal ===== */}
+      {showAddStock && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-white">
+              <h2 className="text-gray-800 text-lg font-bold">{t("إضافة كمية للمخزون", "Add Stock Quantity")}</h2>
+              <button
+                onClick={() => {
+                  setShowAddStock(false)
+                  resetAddStockForm()
+                }}
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                <p className="text-gray-800 font-semibold truncate">{stockTargetProduct?.name || "-"}</p>
+                <p className="text-gray-500 text-sm">
+                  {t("المخزون الحالي", "Current Stock")}: <span className="font-bold text-gray-700">{stockTargetProduct?.stock ?? 0}</span>
+                </p>
+              </div>
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الكمية المضافة *", "Added Quantity *")}</label>
+                <input
+                  type="number"
+                  value={stockToAdd}
+                  onChange={(e) => setStockToAdd(e.target.value)}
+                  min="1"
+                  step="1"
+                  className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={handleAddStockToProduct}
+                disabled={addStockLoading || !stockToAdd}
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-medium transition"
+              >
+                {addStockLoading ? t("جاري التحديث...", "Updating...") : t("إضافة الكمية", "Add Quantity")}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddStock(false)
+                  resetAddStockForm()
+                }}
+                className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
+              >
+                {t("إلغاء", "Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== Quick Add Product Modal ===== */}
       {showQuickAdd && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" dir={pageDir}>
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" dir={pageDir}>
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
               <h2 className="text-gray-800 text-lg font-bold flex items-center gap-2">
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-1.5 rounded-lg">
@@ -1593,11 +2758,7 @@ export default function QPOSPage() {
               <button
                 onClick={() => {
                   setShowQuickAdd(false)
-                  setQuickAddBarcode("")
-                  setQuickAddName("")
-                  setQuickAddPrice("")
-                  setQuickAddStock("1")
-                  setQuickAddCategory("")
+                  resetQuickAddForm()
                 }}
                 className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
               >
@@ -1628,13 +2789,25 @@ export default function QPOSPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("السعر *", "Price *")}</label>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("سعر البيع *", "Selling Price *")}</label>
                   <input
                     type="number"
                     value={quickAddPrice}
                     onChange={(e) => setQuickAddPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0.01"
+                    step="0.01"
+                    className="w-full h-11 bg-gray-50 text-gray-800 rounded-xl px-4 text-sm border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("سعر الشراء *", "Cost Price *")}</label>
+                  <input
+                    type="number"
+                    value={quickAddCostPrice}
+                    onChange={(e) => setQuickAddCostPrice(e.target.value)}
                     placeholder="0.00"
                     min="0.01"
                     step="0.01"
@@ -1669,6 +2842,46 @@ export default function QPOSPage() {
                 </select>
               </div>
 
+              <div>
+                <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("صورة المنتج (اختياري)", "Product Image (Optional)")}</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={openQuickAddUploadDialog}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+                  >
+                    <Camera className="h-4 w-4" />
+                    {t("رفع/التقاط صورة", "Upload/Capture Image")}
+                  </button>
+                  {quickAddImagePreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickAddImageFile(null)
+                        setQuickAddImagePreview(null)
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                    >
+                      <X className="h-4 w-4" />
+                      {t("إزالة الصورة", "Remove Image")}
+                    </button>
+                  )}
+                </div>
+                {quickAddImagePreview ? (
+                  <div className="mt-3 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                    <img
+                      src={quickAddImagePreview}
+                      alt={t("معاينة صورة المنتج", "Product image preview")}
+                      className="w-full h-40 object-cover"
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-500">
+                    {t("يمكنك رفع صورة من الجهاز أو التقاط صورة بالكاميرا", "You can upload from device or capture using camera")}
+                  </p>
+                )}
+              </div>
+
               {!quickAddBarcode && (
                 <div>
                   <label className="text-gray-700 text-sm font-medium block mb-1.5">{t("الباركود (اختياري)", "Barcode (Optional)")}</label>
@@ -1686,7 +2899,7 @@ export default function QPOSPage() {
             <div className="p-4 border-t border-gray-200 flex gap-3">
               <button
                 onClick={handleQuickAddProduct}
-                disabled={quickAddLoading || !quickAddName.trim() || !quickAddPrice || !quickAddCategory.trim()}
+                disabled={quickAddLoading || !quickAddName.trim() || !quickAddPrice || !quickAddCostPrice || !quickAddCategory.trim()}
                 className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-medium transition flex items-center justify-center gap-2"
               >
                 {quickAddLoading ? (
@@ -1704,11 +2917,7 @@ export default function QPOSPage() {
               <button
                 onClick={() => {
                   setShowQuickAdd(false)
-                  setQuickAddBarcode("")
-                  setQuickAddName("")
-                  setQuickAddPrice("")
-                  setQuickAddStock("1")
-                  setQuickAddCategory("")
+                  resetQuickAddForm()
                 }}
                 className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-medium transition"
               >
@@ -1718,6 +2927,15 @@ export default function QPOSPage() {
           </div>
         </div>
       )}
+
+      <UploadDialog
+        t={t}
+        open={quickAddUploadDialogOpen}
+        onOpenChange={setQuickAddUploadDialogOpen}
+        fileInputRef={quickAddFileInputRef}
+        cameraInputRef={quickAddCameraInputRef}
+        onFileChange={handleQuickAddFileInputChange}
+      />
     </div>
   )
 }
