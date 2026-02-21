@@ -14,7 +14,6 @@ import { Label } from "../../components/ui/label"
 import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
-import { logError } from "../../lib/logger"
 import { getStoreByUserId } from "../../lib/actions/stores"
 import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreOrders } from "../../lib/actions/orders"
 import type { PickupStop } from "../../lib/actions/orders"
@@ -61,23 +60,12 @@ type RejectedOrder = {
   created_at?: string
 }
 
-type MultiStoreOrder = {
-  id: string
-  created_at: string
-  total: number
-  status: string
-  delivery_address?: string
-  timeline?: TimelineEntry[]
-  driver_name?: string
-  pickup_stops: PickupStop[]
-}
-
 export default function AccountPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const [orders, setOrders] = useState<Order[]>([])
-  const [multiOrders, setMultiOrders] = useState<MultiStoreOrder[]>([])
+  const [multiOrders, setMultiOrders] = useState<any[]>([])
   const [rejectedOrders, setRejectedOrders] = useState<RejectedOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
@@ -103,7 +91,7 @@ export default function AccountPage() {
       if (dataResult.status === "fulfilled") {
         setOrders(dataResult.value as Order[])
       } else {
-        logError("[v0] Error fetching customer orders:", dataResult.reason)
+        console.error("[v0] Error fetching customer orders:", dataResult.reason)
       }
       
       if (rejectedResult.status === "fulfilled" && rejectedResult.value.success) {
@@ -111,7 +99,7 @@ export default function AccountPage() {
       }
       
       if (multiResult.status === "fulfilled" && multiResult.value.success) {
-        setMultiOrders(multiResult.value.orders as MultiStoreOrder[])
+        setMultiOrders(multiResult.value.orders)
       }
       
       // Only show error if ALL fetches failed
@@ -119,7 +107,7 @@ export default function AccountPage() {
         setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
       }
     } catch (error) {
-      logError("[v0] Error fetching orders:", error)
+      console.error("[v0] Error fetching orders:", error)
       setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
     } finally {
       setOrdersLoading(false)
@@ -236,15 +224,15 @@ export default function AccountPage() {
           <Tabs defaultValue="orders" className="w-full">
             <TabsList className="mb-6 bg-white shadow-lg rounded-2xl p-2 border-0">
               <TabsTrigger value="orders" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
-                <Package className="ml-2 h-4 w-4" />
+                <Package className="ms-2 h-4 w-4" />
                 {t("طلباتي", "My Orders")}
               </TabsTrigger>
               <TabsTrigger value="profile" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
-                <UserIcon className="ml-2 h-4 w-4" />
+                <UserIcon className="ms-2 h-4 w-4" />
                 {t("الملف الشخصي", "Profile")}
               </TabsTrigger>
               <TabsTrigger value="address" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
-                <MapPin className="ml-2 h-4 w-4" />
+                <MapPin className="ms-2 h-4 w-4" />
                 {t("العناوين", "Addresses")}
               </TabsTrigger>
             </TabsList>
@@ -304,7 +292,7 @@ export default function AccountPage() {
                       disabled={ordersLoading}
                       className="rounded-xl"
                     >
-                      <RefreshCw className={`h-4 w-4 ml-2 ${ordersLoading ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ms-2 ${ordersLoading ? 'animate-spin' : ''}`} />
                       {t("تحديث", "Refresh")}
                     </Button>
                   </div>
@@ -389,7 +377,7 @@ export default function AccountPage() {
                                 setIsTrackingModalOpen(true)
                               }}
                             >
-                              <Eye className="h-4 w-4 ml-2" />
+                              <Eye className="h-4 w-4 ms-2" />
                               {t("تتبع الطلب", "Track Order")}
                             </Button>
                           </div>
@@ -420,11 +408,11 @@ export default function AccountPage() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-4">
-                      {multiOrders.map((order) => {
-                        const stops = order.pickup_stops || []
-                        const activeStops = stops.filter((s) => s.status !== "rejected")
-                        const confirmedCount = stops.filter((s) => s.status === "confirmed" || s.status === "picked_up").length
-                        const pickedCount = stops.filter((s) => s.status === "picked_up").length
+                      {multiOrders.map((order: any) => {
+                        const stops: PickupStop[] = order.pickup_stops || []
+                        const activeStops = stops.filter((s: PickupStop) => s.status !== "rejected")
+                        const confirmedCount = stops.filter((s: PickupStop) => s.status === "confirmed" || s.status === "picked_up").length
+                        const pickedCount = stops.filter((s: PickupStop) => s.status === "picked_up").length
                         
                         return (
                           <div key={order.id} className="bg-white border border-purple-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all">
@@ -450,7 +438,7 @@ export default function AccountPage() {
 
                             {/* Stops */}
                             <div className="p-5 space-y-3">
-                              {stops.map((stop, idx) => (
+                              {stops.map((stop: PickupStop, idx: number) => (
                                 <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${
                                   stop.status === "confirmed" ? "bg-green-50 border-green-200" :
                                   stop.status === "picked_up" ? "bg-indigo-50 border-indigo-200" :
@@ -525,18 +513,18 @@ export default function AccountPage() {
                                       status: order.status,
                                       delivery_address: order.delivery_address || "",
                                       timeline: order.timeline,
-                                      order_items: stops.flatMap((stop) => stop.items.map((item) => ({
+                                      order_items: (order.pickup_stops || []).flatMap((stop: PickupStop) => stop.items.map((item: any) => ({
                                         id: item.product_id,
                                         quantity: item.quantity,
                                         price: item.price,
                                         products: { id: item.product_id, name: item.name, image_url: item.image_url || "" },
                                       }))),
-                                      stores: { id: "multi", name: stops.map((s) => s.store_name).join(" + ") },
+                                      stores: { id: "multi", name: stops.map((s: PickupStop) => s.store_name).join(" + ") },
                                     })
                                     setIsTrackingModalOpen(true)
                                   }}
                                 >
-                                  <Eye className="h-4 w-4 ml-2" />
+                                  <Eye className="h-4 w-4 ms-2" />
                                   {t("تتبع الطلب", "Track Order")}
                                 </Button>
                                 <p className="text-xs text-gray-400">{formatDate(order.created_at)}</p>
@@ -702,10 +690,10 @@ export default function AccountPage() {
                           // refresh the page so AuthProvider reloads profile and UI reflects changes
                           router.refresh()
                         } else {
-                          logError("[v0] Failed to update profile:", res?.error)
+                          console.error("[v0] Failed to update profile:", res?.error)
                         }
                       } catch (err) {
-                        logError("[v0] Error submitting profile form:", err)
+                        console.error("[v0] Error submitting profile form:", err)
                       }
                     }}
                   >
@@ -760,10 +748,10 @@ export default function AccountPage() {
                         if (res && res.success) {
                           router.refresh()
                         } else {
-                          logError("[v0] Failed to update address:", res?.error)
+                          console.error("[v0] Failed to update address:", res?.error)
                         }
                       } catch (err) {
-                        logError("[v0] Error saving address:", err)
+                        console.error("[v0] Error saving address:", err)
                       }
                     }}
                   >

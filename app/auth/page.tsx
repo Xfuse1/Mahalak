@@ -535,16 +535,7 @@ export default function AuthPage() {
         setIsLoading(false)
         return
       }
-      if (!idCardImageFront) {
-        setError(t("يرجى رفع صورة وجه البطاقة", "Please upload the front side of the ID card"))
-        setIsLoading(false)
-        return
-      }
-      if (!idCardImageBack) {
-        setError(t("يرجى رفع صورة ظهر البطاقة", "Please upload the back side of the ID card"))
-        setIsLoading(false)
-        return
-      }
+      
 
       // Store name validation
       if (!storeName || storeName.trim().length < 3) {

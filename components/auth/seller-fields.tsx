@@ -226,14 +226,13 @@ export function SellerFields(props: SellerFieldsProps) {
       {/* Owner ID Card Number */}
       <div className="space-y-2">
         <Label htmlFor="register-ownerIdNumber" className="text-base">
-          {t("رقم بطاقة صاحب المتجر", "Store Owner ID Card Number")} <span className="text-red-500">*</span>
+          {t("رقم بطاقة صاحب المتجر", "Store Owner ID Card Number")} 
         </Label>
         <Input
           id="register-ownerIdNumber"
           name="ownerIdNumber"
           type="text"
           dir="ltr"
-          required
           value={ownerIdNumber}
           onChange={(e) => {
             const val = e.target.value.replace(/\D/g, "")
@@ -253,7 +252,7 @@ export function SellerFields(props: SellerFieldsProps) {
       {/* ID Card Images (Front & Back) */}
       <div className="space-y-3">
         <Label className="text-base">
-          {t("صورة البطاقة (وجه وظهر)", "ID Card Images (Front & Back)")} <span className="text-red-500">*</span>
+          {t("صورة البطاقة (وجه وظهر)", "ID Card Images (Front & Back)")} <span className="text-red-500">(اختياري)</span>
         </Label>
         <div className="grid grid-cols-2 gap-3">
           {/* Front */}
