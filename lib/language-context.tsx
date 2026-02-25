@@ -16,25 +16,28 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { i18n } = useTranslation()
-  const language = (i18n.language || "ar") as Language
+  const language: Language = "ar"
 
   useEffect(() => {
-    // Update DOM attributes when language changes
-    document.documentElement.lang = language
-    document.documentElement.dir = language === "ar" ? "rtl" : "ltr"
-  }, [language])
+    // Force Arabic-only UI and reset any previously saved language preference.
+    i18n.changeLanguage("ar")
+    document.documentElement.lang = "ar"
+    document.documentElement.dir = "rtl"
+    localStorage.removeItem("language")
+  }, [i18n])
 
-  const setLanguage = (lng: Language) => {
-    i18n.changeLanguage(lng)
-    localStorage.setItem("language", lng)
+  const setLanguage = (_lng: Language) => {
+    i18n.changeLanguage("ar")
+    document.documentElement.lang = "ar"
+    document.documentElement.dir = "rtl"
   }
 
   const toggleLanguage = () => {
-    setLanguage(language === "ar" ? "en" : "ar")
+    setLanguage("ar")
   }
 
-  const t = (ar: string, en: string) => {
-    return language === "ar" ? ar : en
+  const t = (ar: string, _en: string) => {
+    return ar
   }
 
   return <LanguageContext.Provider value={{ language, setLanguage, toggleLanguage, t }}>{children}</LanguageContext.Provider>

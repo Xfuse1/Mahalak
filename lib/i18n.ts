@@ -249,9 +249,10 @@ const resources = {
 
 i18n.use(initReactI18next).init({
   resources,
-  // Keep initial language stable for SSR/CSR; localStorage is applied in I18nProvider after mount.
+  // Arabic-only mode for the web app.
   lng: "ar",
   fallbackLng: "ar",
+  supportedLngs: ["ar"],
   defaultNS: "common",
   interpolation: {
     escapeValue: false,

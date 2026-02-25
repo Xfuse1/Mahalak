@@ -6,7 +6,6 @@ import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
-import { LanguageSwitcher } from "./language-switcher"
 import { useLanguage } from "../lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { useEffect, useState } from "react"
@@ -16,10 +15,10 @@ import { isSimulatorEnabled } from "@/lib/actions/delivery"
 export function Header() {
   const { user, logout } = useAuth()
   const router = useRouter()
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const { items } = useCartStore()
   const cartItemsCount = items.reduce((sum, item) => sum + item.quantity, 0)
-  const notificationLocale = language === "ar" ? "ar-EG" : "en-US"
+  const notificationLocale = "ar-EG"
 
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
@@ -141,11 +140,6 @@ export function Header() {
                 <span className="font-bold hidden md:inline ms-2">3D Market</span>
               </Button>
             )}
-
-            {/* Hide Language Switcher on very small screens to save space */}
-            <div className="hidden xs:block">
-              <LanguageSwitcher />
-            </div>
 
             {/* Cart Button */}
             <Button
