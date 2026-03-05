@@ -26,6 +26,13 @@ import {
   BookmarkCheck,
   PercentCircle,
   Stethoscope,
+  ShoppingBag,
+  MapPin,
+  Smartphone,
+  Bell,
+  Undo2,
+  TrendingUp,
+  Globe,
 } from "lucide-react"
 
 interface ToolAction {
@@ -67,6 +74,17 @@ interface POSMobileActionsSheetProps {
   onGiftCard?: () => void
   onReservation?: () => void
   onInvoiceDiscount?: () => void
+  // Online actions
+  isOnline?: boolean
+  onOnlineOrders?: () => void
+  onShippingZones?: () => void
+  onPaymentConfig?: () => void
+  onLowStock?: () => void
+  onOnlineReturns?: () => void
+  onOnlineReports?: () => void
+  onlineOrdersBadge?: number
+  lowStockBadge?: number
+  onlineReturnsBadge?: number
 }
 
 export default function POSMobileActionsSheet({
@@ -97,6 +115,16 @@ export default function POSMobileActionsSheet({
   onGiftCard,
   onReservation,
   onInvoiceDiscount,
+  isOnline,
+  onOnlineOrders,
+  onShippingZones,
+  onPaymentConfig,
+  onLowStock,
+  onOnlineReturns,
+  onOnlineReports,
+  onlineOrdersBadge,
+  lowStockBadge,
+  onlineReturnsBadge,
 }: POSMobileActionsSheetProps) {
   // Lock body scroll when open
   useEffect(() => {
@@ -240,6 +268,48 @@ export default function POSMobileActionsSheet({
     },
   ] : []
 
+  const onlineActions: ToolAction[] = isOnline ? [
+    {
+      icon: <ShoppingBag className="h-5 w-5" />,
+      label: t("الطلبات الواردة", "Incoming Orders"),
+      onClick: () => { onOnlineOrders?.(); onClose() },
+      color: "bg-blue-50 text-blue-600 border-blue-200",
+      badge: onlineOrdersBadge,
+    },
+    {
+      icon: <MapPin className="h-5 w-5" />,
+      label: t("مناطق الشحن", "Shipping Zones"),
+      onClick: () => { onShippingZones?.(); onClose() },
+      color: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    },
+    {
+      icon: <Smartphone className="h-5 w-5" />,
+      label: t("طرق الدفع", "Payment"),
+      onClick: () => { onPaymentConfig?.(); onClose() },
+      color: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    },
+    {
+      icon: <Bell className="h-5 w-5" />,
+      label: t("تنبيه المخزون", "Low Stock"),
+      onClick: () => { onLowStock?.(); onClose() },
+      color: "bg-orange-50 text-orange-600 border-orange-200",
+      badge: lowStockBadge,
+    },
+    {
+      icon: <Undo2 className="h-5 w-5" />,
+      label: t("مرتجعات أونلاين", "Online Returns"),
+      onClick: () => { onOnlineReturns?.(); onClose() },
+      color: "bg-red-50 text-red-600 border-red-200",
+      badge: onlineReturnsBadge,
+    },
+    {
+      icon: <TrendingUp className="h-5 w-5" />,
+      label: t("تقارير", "Reports"),
+      onClick: () => { onOnlineReports?.(); onClose() },
+      color: "bg-teal-50 text-teal-600 border-teal-200",
+    },
+  ] : []
+
   const renderActionGrid = (actions: ToolAction[]) => (
     <div className="grid grid-cols-3 gap-2.5">
       {actions.map((action, idx) => (
@@ -312,6 +382,17 @@ export default function POSMobileActionsSheet({
                 <span className="text-sm font-bold text-gray-700">{t("أدوات الملابس", "Clothing Tools")}</span>
               </div>
               {renderActionGrid(clothingActions)}
+            </div>
+          )}
+
+          {/* Online actions */}
+          {isOnline && onlineActions.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Globe className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-bold text-gray-700">{t("أدوات المتجر الأونلاين", "Online Store Tools")}</span>
+              </div>
+              {renderActionGrid(onlineActions)}
             </div>
           )}
         </div>

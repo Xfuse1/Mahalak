@@ -12,6 +12,7 @@ import {
   Ruler,
   BookmarkCheck,
   QrCode,
+  Tag,
 } from "lucide-react"
 
 interface ProductAction {
@@ -29,6 +30,7 @@ interface POSProductContextMenuProps {
   t: (ar: string, en: string) => string
   isPharmacy: boolean
   isClothing: boolean
+  isOnline?: boolean
   onEdit: () => void
   onAddStock: () => void
   // Pharmacy
@@ -40,6 +42,8 @@ interface POSProductContextMenuProps {
   onVariantManager?: () => void
   onReservation?: () => void
   onPriceTag?: () => void
+  // Online
+  onTierPricing?: () => void
 }
 
 export default function POSProductContextMenu({
@@ -58,6 +62,8 @@ export default function POSProductContextMenu({
   onVariantManager,
   onReservation,
   onPriceTag,
+  isOnline,
+  onTierPricing,
 }: POSProductContextMenuProps) {
   useEffect(() => {
     if (open) {
@@ -133,6 +139,13 @@ export default function POSProductContextMenu({
       onClick: () => { onPriceTag?.(); onClose() },
       color: "text-yellow-600",
       show: isClothing,
+    },
+    {
+      icon: <Tag className="h-4.5 w-4.5" />,
+      label: t("تسعير بالكمية", "Tier Pricing"),
+      onClick: () => { onTierPricing?.(); onClose() },
+      color: "text-purple-600",
+      show: !!isOnline,
     },
   ].filter(a => a.show)
 
