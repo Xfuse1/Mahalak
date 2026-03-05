@@ -66,6 +66,7 @@ export default function AuthPage() {
   
   // Store type state
   const [selectedStoreType, setSelectedStoreType] = useState("")
+  const [selectedStoreTypeId, setSelectedStoreTypeId] = useState("")
   
   // Categories from Firestore
   const [storeCategories, setStoreCategories] = useState<CategoryItem[]>([])
@@ -612,6 +613,7 @@ export default function AuthPage() {
           storeName,
           storeDescription,
           storeType,
+          storeTypeId: selectedStoreTypeId,
           storeLogoUrl,
           ownerIdNumber,
           idCardImageUrl: idCardImageFrontUrl,
@@ -652,7 +654,7 @@ export default function AuthPage() {
       // Combine address fields for the store
       const storeAddress = [street, city, country].filter(Boolean).join(", ")
       
-      sellerData = { phone, storeName, storeDescription, storeType, storeLogo, address: storeAddress, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
+      sellerData = { phone, storeName, storeDescription, storeType, storeTypeId: selectedStoreTypeId, storeLogo, address: storeAddress, latitude: storeLocation?.latitude, longitude: storeLocation?.longitude }
     }
 
     try {
@@ -880,6 +882,8 @@ export default function AuthPage() {
                         storeNameExists={storeNameExists}
                         selectedStoreType={selectedStoreType}
                         setSelectedStoreType={setSelectedStoreType}
+                        selectedStoreTypeId={selectedStoreTypeId}
+                        setSelectedStoreTypeId={setSelectedStoreTypeId}
 
                         storeLogoPreview={storeLogoPreview}
                         handleLogoChange={handleLogoChange}

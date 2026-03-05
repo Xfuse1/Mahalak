@@ -51,8 +51,8 @@ export function CategoriesSection() {
     <section className="py-16 bg-gradient-to-b from-gray-50 to-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-extrabold mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("تصفح حسب الفئة", "Browse by Category")}</h2>
-          <p className="text-gray-500 text-lg">{t("اختر الفئة التي تناسبك", "Choose the category that suits you")}</p>
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("تصفح حسب الفئة", "Browse by Category")}</h2>
+          <p className="text-gray-500 text-base md:text-lg">{t("اختر الفئة التي تناسبك", "Choose the category that suits you")}</p>
         </div>
 
         <div className="overflow-x-auto pb-4 mb-10 scrollbar-hide">
@@ -127,7 +127,7 @@ export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h2 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("متاجر مميزة", "Featured Stores")}</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("متاجر مميزة", "Featured Stores")}</h2>
             <p className="text-gray-500 mt-2">{t("اكتشف أفضل المتاجر", "Discover the best stores")}</p>
           </div>
           <Button variant="outline" asChild className="rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all">
@@ -151,7 +151,7 @@ export function FeaturedProducts({ products }: { products: ProductListItem[] }) 
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h2 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("منتجات مميزة", "Featured Products")}</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("منتجات مميزة", "Featured Products")}</h2>
             <p className="text-gray-500 mt-2">{t("أفضل المنتجات المتاحة", "Best available products")}</p>
           </div>
           <Button variant="outline" asChild className="rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all">
@@ -183,7 +183,7 @@ export function CTASection() {
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
             {t("انضم إلينا الآن", "Join us now")}
           </div>
-          <h2 className="text-4xl md:text-5xl font-extrabold mb-6 text-white">{t("هل أنت صاحب متجر؟", "Are you a store owner?")}</h2>
+          <h2 className="text-2xl md:text-4xl lg:text-5xl font-extrabold mb-6 text-white">{t("هل أنت صاحب متجر؟", "Are you a store owner?")}</h2>
           <p className="text-xl mb-10 text-white/80 max-w-2xl mx-auto leading-relaxed">
             {t(
               "انضم إلى منصتنا وابدأ في بيع منتجاتك لآلاف العملاء",

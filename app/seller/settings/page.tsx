@@ -13,7 +13,7 @@ import { Input } from "../../../components/ui/input"
 import { Label } from "../../../components/ui/label"
 import { Textarea } from "../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
-import { getStoreByUserId, updateStore, createStore, uploadStoreImage, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
+import { getStoreByUserId, updateStore, createStore, uploadStoreImage, getCategoryNameById, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
 import { logError } from "../../../lib/logger"
 import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
@@ -175,6 +175,12 @@ export default function SettingsPage() {
           whatsapp_number: storeData.phone || "",
           return_policy: storeData.return_policy || defaultReturnPolicy
         })
+        // Fetch fresh category name from Firebase by ID
+        if (storeData.category_id) {
+          getCategoryNameById(storeData.category_id as string).then(freshName => {
+            if (freshName) setFormData(prev => ({ ...prev, category: freshName }))
+          }).catch(() => {})
+        }
       }
       setIsLoadingStore(false)
     }
@@ -286,7 +292,7 @@ export default function SettingsPage() {
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <div className="mb-10">
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("الإعدادات", "Settings")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("الإعدادات", "Settings")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة معلومات المتجر والإعدادات", "Manage store information and settings")}</p>
           </div>
 

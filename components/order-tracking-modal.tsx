@@ -72,7 +72,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                     </p>
                 </DialogHeader>
 
-                <div className="p-6 space-y-8 bg-white">
+                <div className="p-4 md:p-6 space-y-6 md:space-y-8 bg-white">
                     {/* Order Info Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:border-[#1F478B]/20 transition-colors group">

@@ -13,6 +13,7 @@ const nextConfig = {
       },
     ],
     formats: ['image/webp', 'image/avif'],
+    qualities: [75, 90],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     // Add image optimization quality
@@ -30,7 +31,7 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'react-i18next'],
     serverActions: {
-      bodySizeLimit: '5mb',
+      bodySizeLimit: '10mb',
     },
   },
   // Server external packages - required for firebase-admin to work properly

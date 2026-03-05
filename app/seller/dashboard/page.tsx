@@ -146,7 +146,7 @@ export default function SellerDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
             <div>
-              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("لوحة التحكم", "Dashboard")}</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("لوحة التحكم", "Dashboard")}</h1>
               <p className="text-gray-500 mt-1">{t("مرحباً بك في لوحة التحكم", "Welcome to your dashboard")}</p>
             </div>
             <div className="flex gap-3 flex-wrap">
@@ -342,7 +342,7 @@ export default function SellerDashboard() {
               <CardContent className="space-y-4 p-6">
                 <div className="border-b border-dashed pb-4">
                   <p className="text-sm text-gray-500 mb-2">{t("عدد التقييمات", "Number of Reviews")}</p>
-                  <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{analytics.totalReviews}</p>
+                  <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{analytics.totalReviews}</p>
                   <p className="text-xs text-gray-400 mt-1">{t("تقييمات من العملاء", "Reviews from customers")}</p>
                 </div>
                 <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-yellow-50 p-4 rounded-xl">

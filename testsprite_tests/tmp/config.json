@@ -1,0 +1,28 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000/pos/qpos",
+  "loginUser": "cveeez1@OUTLOOK.COM",
+  "loginPassword": "CV20259",
+  "executionArgs": {
+    "projectName": "Mahalak",
+    "projectPath": "e:\\محلك\\Mahalak",
+    "testIds": [
+      "TC001",
+      "TC002",
+      "TC003",
+      "TC004",
+      "TC005",
+      "TC006",
+      "TC007"
+    ],
+    "additionalInstruction": "LOGIN: Go to /auth. Click the \"بائع\" (Seller) button. Enter email cveeez1@OUTLOOK.COM and password CV20259. Click \"تسجيل الدخول\". After redirect to /seller/dashboard, navigate to /pos/qpos. App is Arabic RTL.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-MczBzaGBroazrlh12MwG1b-TmtiF0wk2UyNvzjR9IzhKUbz3aBDVzoeE_PB3fjXypmrshDvQSaqJQF1AOBQZzzaLwb1XRS8rCP055Gp3EnB9LovM3zDavZgHXe5m37PEJHM"
+    }
+  },
+  "serverPort": 50285,
+  "proxy": "http://45023afe-21c3-43ab-bba4-c1e6b309f4e6:ucpR7p1djxaKUxv1b7RMz7Fh6cK4FOpo@tun.testsprite.com:8080"
+}

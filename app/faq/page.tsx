@@ -27,13 +27,13 @@ export default function FAQPage() {
         <div className="container mx-auto px-4 max-w-4xl">
           {/* Hero Section */}
           <div className="text-center mb-16">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 mb-6 shadow-lg shadow-blue-500/30">
+            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 mb-6 shadow-lg shadow-blue-500/30">
               <HelpCircle className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
               {t("faqTitle")}
             </h1>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-base md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
               {t("faqSubtitle")}
             </p>
           </div>

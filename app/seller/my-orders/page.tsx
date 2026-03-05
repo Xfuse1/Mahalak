@@ -150,7 +150,7 @@ export default function SellerMyOrdersPage() {
                 <ArrowRight className="h-4 w-4 rotate-180 rtl:rotate-0" />
                 <span className="text-gray-800">{t("طلباتي كمشتري", "My Orders")}</span>
               </div>
-              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                 {t("طلباتي كمشتري", "My Orders as Customer")}
               </h1>
               <p className="text-gray-500 mt-1">

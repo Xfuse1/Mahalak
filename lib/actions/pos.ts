@@ -57,6 +57,8 @@ export type POSSaleItem = {
   profit_per_unit?: number
   profit_total?: number
   image_url?: string
+  unit_multiplier?: number  // How many pieces this unit represents (e.g. 10 for strip, 30 for box)
+  unit_label?: string       // Display label (e.g. "شريط", "علبة")
 }
 
 type POSSaleData = {
@@ -549,13 +551,48 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         }
         const productData = productDoc.data()!
         const stock = Number(productData.stock) || 0
-        if (item.quantity > stock) {
+        const piecesNeeded = item.quantity * (item.unit_multiplier || 1)
+        if (piecesNeeded > stock) {
           throw new Error(POS_ERROR.INSUFFICIENT_STOCK)
         }
         // Use server-side price, not client-sent price
-        const serverPrice = Number(productData.price) || 0
-        const serverCostPriceValue = Number(productData.cost_price)
-        const serverCostPrice = Number.isFinite(serverCostPriceValue) ? serverCostPriceValue : serverPrice
+        // Derive piece price based on price_unit (what the stored price represents)
+        const storedPrice = Number(productData.price) || 0
+        const priceUnit = productData.price_unit || "piece" // default: price = piece price
+        const pps = Number(productData.piece_per_strip) || 1
+        const spb = Number(productData.strip_per_box) || 1
+        
+        let serverPiecePrice: number
+        if (priceUnit === "box") {
+          serverPiecePrice = storedPrice / (pps * spb)
+        } else if (priceUnit === "strip") {
+          serverPiecePrice = storedPrice / pps
+        } else {
+          serverPiecePrice = storedPrice
+        }
+        
+        const serverPrice = item.unit_multiplier && item.unit_multiplier > 1
+          ? serverPiecePrice * item.unit_multiplier
+          : serverPiecePrice
+          
+        // Same logic for cost price
+        const storedCostPrice = Number(productData.cost_price)
+        const hasCostPrice = Number.isFinite(storedCostPrice)
+        let serverPieceCost: number
+        if (hasCostPrice) {
+          if (priceUnit === "box") {
+            serverPieceCost = storedCostPrice / (pps * spb)
+          } else if (priceUnit === "strip") {
+            serverPieceCost = storedCostPrice / pps
+          } else {
+            serverPieceCost = storedCostPrice
+          }
+        } else {
+          serverPieceCost = serverPiecePrice
+        }
+        const serverCostPrice = item.unit_multiplier && item.unit_multiplier > 1
+          ? serverPieceCost * item.unit_multiplier
+          : serverPieceCost
         const profitPerUnit = calculateProfitPerUnit(serverPrice, serverCostPrice)
         const itemTotal = serverPrice * item.quantity
         const itemProfit = profitPerUnit * item.quantity
@@ -621,8 +658,9 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
       // 6. Deduct stock (atomic with the check above)
       for (const { ref, doc, item } of productDocs) {
         const currentStock = Number(doc.data()?.stock) || 0
+        const piecesToDeduct = item.quantity * (item.unit_multiplier || 1)
         transaction.update(ref, {
-          stock: Math.max(0, currentStock - item.quantity),
+          stock: Math.max(0, currentStock - piecesToDeduct),
           updated_at: now,
         })
       }

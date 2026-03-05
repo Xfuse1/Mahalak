@@ -1,0 +1,3308 @@
+[
+  {
+    "id": "TC001",
+    "title": "Add a product to cart and increment quantity updates totals",
+    "description": "Verifies adding a product from the POS grid to the cart and increasing quantity updates cart quantity and totals in real time.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product card in the product grid"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected product name is visible in the cart panel"
+      },
+      {
+        "type": "action",
+        "description": "Click the plus \"+\" button for that cart item"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Verify line total changes after incrementing quantity",
+    "description": "Verifies the cart line total/summary changes visibly after increasing an item quantity.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the plus \"+\" button for that cart item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cart subtotal/total text is visible and reflects an increased amount compared to immediately after the first add"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Add same product twice then remove it from cart",
+    "description": "Verifies clicking the same product twice increments quantity and removing the item updates totals.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the same product card in the product grid again"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the quantity for that cart item shows \"2\""
+      },
+      {
+        "type": "action",
+        "description": "Click the trash/delete icon for that cart item"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Removing an item empties cart when it is the only item",
+    "description": "Verifies deleting the only cart item results in an empty cart state and totals reset.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the trash/delete icon for that cart item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cart\" is visible and an empty-cart message or zero total is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cart total shows \"0\" or \"0.00\""
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Clear cart after adding multiple products and confirm",
+    "description": "Verifies the clear cart function removes all items after confirmation and resets totals.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a first product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click on a second, different product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Clear cart\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm\" button in the clear-cart confirmation dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty-cart message or zero total is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Cancel clear cart leaves items intact",
+    "description": "Verifies canceling the clear-cart confirmation does not remove items or change totals.",
+    "category": "Product Management & Cart",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product card in the product grid"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected product name is visible in the cart panel"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Clear cart\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancel\" button in the clear-cart confirmation dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected product name is still visible in the cart panel"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Cart totals update when adding multiple different products",
+    "description": "Verifies the cart shows multiple line items and the summary total reflects the combined items.",
+    "category": "Product Management & Cart",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a first product card in the product grid"
+      },
+      {
+        "type": "action",
+        "description": "Click on a second, different product card in the product grid"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify at least two distinct product names are visible in the cart panel"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cart subtotal/total text is visible and not \"0\""
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Expired product is blocked or warns during checkout attempt",
+    "description": "Verifies that attempting to proceed to checkout with an expired-flagged product results in a visible warning/block message and prevents completion.",
+    "category": "Product Management & Cart",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the product grid section"
+      },
+      {
+        "type": "action",
+        "description": "Click on a product that is labeled \"Expired\" or shows an expiration warning indicator"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the expired product name is visible in the cart panel"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Checkout\" or \"Pay\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"expired\" or \"cannot checkout\" or \"blocked\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Text search filters products and allows adding a matching product to cart",
+    "description": "Verifies that typing a product name filters the product grid and a visible matching product can be added to the cart.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Type \"a\" into the product search bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Clearing search restores the full product grid",
+    "description": "Verifies that removing the search query returns the product list back to the unfiltered state.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Type \"test\" into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Press \"Escape\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Category tab filters products and allows adding a product from the filtered list",
+    "description": "Verifies that selecting a category tab filters the grid and a product can be added to cart from that filtered view.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click a visible category tab (not \"All\")"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the first visible product card in the grid"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Switching between category tabs updates the visible product grid",
+    "description": "Verifies that changing category tabs updates the filtered grid accordingly without breaking the page.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click a visible category tab (not \"All\")"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"All\" category tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "No-match search shows a 'no products found' empty state",
+    "description": "Verifies that a query with no matches shows an appropriate empty state message.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Type \"zzzznonexistentproduct\" into the product search bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"no products\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Search handles Arabic input and keeps results area usable",
+    "description": "Verifies that entering an Arabic query does not break the UI and returns either results or a clear empty state.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Type \"حليب\" into the product search bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Combined filtering: apply category filter then refine using text search",
+    "description": "Verifies that category filtering and text search can be used together without errors.",
+    "category": "Search & Filter (including Voice Search)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click a visible category tab (not \"All\")"
+      },
+      {
+        "type": "action",
+        "description": "Click into the product search bar"
+      },
+      {
+        "type": "action",
+        "description": "Type \"a\" into the product search bar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the product grid is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Cash payment completes sale and offers receipt printing",
+    "description": "Verifies a cashier can complete a sale using cash, see change due, and access receipt printing.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Payment\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Cash payment shows change calculation before confirming sale",
+    "description": "Verifies that entering an amount received greater than the total shows a visible change value.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cash\" payment method option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Change\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Card payment completes sale and shows receipt options",
+    "description": "Verifies a cashier can select card payment and complete the sale with a success confirmation and receipt options.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Card\" payment method option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Card\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Split payment allows entering cash and card amounts and balances total",
+    "description": "Verifies split payments can be selected and the UI indicates totals are balanced before confirming.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Split\" / \"Split Payment\" option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Split\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Cash payment with insufficient amount shows validation error and stays in modal",
+    "description": "Verifies that paying with cash less than the total prevents confirmation and shows an insufficient amount message.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cash\" payment method option"
+      },
+      {
+        "type": "action",
+        "description": "Type \"1\" into the \"Amount received\" / \"Cash received\" field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"insufficient\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Confirm sale button becomes available only when a valid payment method is selected",
+    "description": "Verifies the UI requires selecting a payment method before allowing confirmation.",
+    "category": "Payment & Checkout",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Confirm sale\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Select payment method\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Successful sale shows a visible success confirmation with sale details",
+    "description": "Verifies that after confirming a payment, a success state appears with visible sale information.",
+    "category": "Payment & Checkout",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cash\" payment method option"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Success\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Receipt page can be opened after completing a sale",
+    "description": "Verifies that after a completed sale, the user can open the receipt view from the POS success screen.",
+    "category": "Payment & Checkout",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/phone/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a product \"Add\" / \"Add to cart\" button to add one item to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" / \"Checkout\" button to open the payment modal"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cash\" payment method option"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Print receipt\" / \"Receipt\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/receipt\""
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Hold current cart with an optional note and clear workspace",
+    "description": "Verifies that a cashier can hold the current cart with a note and the active cart workspace is cleared after confirmation.",
+    "category": "Hold Cart (تعليق الفاتورة)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the products list/grid to add it to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Hold\" / \"تعليق الفاتورة\" button in the header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Hold for customer A\" into the note field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm\" / \"Hold\" button in the hold dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating the cart was held successfully is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating the cart is empty (or no items are shown in the cart panel) is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Hold current cart without a note",
+    "description": "Verifies that holding a cart works when the note is left blank and the cart is cleared afterward.",
+    "category": "Hold Cart (تعليق الفاتورة)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the products list/grid to add it to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Hold\" / \"تعليق الفاتورة\" button in the header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm\" / \"Hold\" button in the hold dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating the cart was held successfully is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating the cart is empty (or no items are shown in the cart panel) is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Cancel hold action from the hold dialog and keep cart active",
+    "description": "Verifies that cancelling the hold dialog does not hold the cart and does not clear the current cart items.",
+    "category": "Hold Cart (تعليق الفاتورة)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the products list/grid to add it to the cart"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that at least one cart item row is visible in the right cart panel"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Hold\" / \"تعليق الفاتورة\" button in the header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancel\" / \"Close\" button in the hold dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that at least one cart item row is visible in the right cart panel"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Attempt to hold cart with empty cart and verify validation feedback",
+    "description": "Verifies the system prevents holding when there are no items in the cart and shows a visible validation message or disables confirmation.",
+    "category": "Hold Cart (تعليق الفاتورة)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating the cart is empty (or no items are shown in the cart panel) is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Hold\" / \"تعليق الفاتورة\" button in the header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text indicating you cannot hold an empty cart (or similar validation) is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Search customer by phone and link to the current sale",
+    "description": "Verifies a cashier can search customers by phone number and link an existing customer to the in-progress sale.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type a known customer phone number into the customer search field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a matching customers list is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Select a searched customer and confirm the sale shows customer is linked",
+    "description": "Verifies selecting a customer from search results links them to the current sale and displays a linked-customer indicator.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type a known customer phone number into the customer search field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first customer in the matching customers list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a customer linked indicator is visible in the current sale area"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Create a new customer with name, phone, email, and notes",
+    "description": "Verifies a cashier can add a new customer and the customer appears in the customers list after saving.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add new customer\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Test Customer\" into the customer name field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"0500000001\" into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"test.customer@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Created by automated UI test\" into the notes field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" or \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Test Customer\" is visible in the customers list"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "Attempt to create a customer without phone shows validation and does not save",
+    "description": "Verifies phone is required when creating a customer and that the customer is not saved if validation fails.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add new customer\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"No Phone Customer\" into the customer name field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" or \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"phone required\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "Customer creation form can be cancelled/closed without saving",
+    "description": "Verifies a cashier can exit the add-customer flow without creating a record and returns to the customers list.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add new customer\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancel\" or \"Close\" button on the add customer form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the customers list is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "Searching with a non-matching phone shows an empty state",
+    "description": "Verifies searching for a phone number with no matches shows a clear no-results state.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"0999999999\" into the customer search field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No customers found\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC034",
+    "title": "Complete a sale linked to a customer and verify purchase metrics update",
+    "description": "Verifies that after completing a sale for a linked customer, the customer’s total purchases and visit count are updated and visible.",
+    "category": "POS Customer Management (إدارة العملاء)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Customers\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type a known customer phone number into the customer search field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the first customer in the matching customers list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a customer linked indicator is visible in the current sale area"
+      }
+    ]
+  },
+  {
+    "id": "TC035",
+    "title": "Refund return with cash for a single item from an existing sale",
+    "description": "Verifies a cashier can locate a previous sale, select an item, refund it as cash with a reason, and see a success confirmation.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Returns\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type a valid sale ID into the sale ID search field"
+      }
+    ]
+  },
+  {
+    "id": "TC036",
+    "title": "Refund return flow completes successfully and shows confirmation",
+    "description": "Verifies completing the refund return flow after sale lookup: choose item, set quantity, pick refund + cash, add reason, and confirm.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type a valid sale ID into the sale ID search field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Search\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC037",
+    "title": "Select item, set return quantity, choose Refund + Cash, enter reason, and confirm",
+    "description": "Verifies the UI supports selecting return items, editing quantity, selecting refund type and cash method, and confirming the return with a visible success message.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the checkbox or select control for the first item in the sale items list"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"1\" into the return quantity field for the selected item"
+      }
+    ]
+  },
+  {
+    "id": "TC038",
+    "title": "Confirm refund return displays success message",
+    "description": "Verifies confirming a refund return produces a visible success result (e.g., success toast/message) and the flow completes.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Refund\" as the return type"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Cash\" as the refund method"
+      }
+    ]
+  },
+  {
+    "id": "TC039",
+    "title": "Refund return requires a reason before confirmation (validation)",
+    "description": "Verifies the return cannot be confirmed without entering a return reason and shows a visible validation message.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm Return\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"reason\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC040",
+    "title": "Invalid sale ID shows 'sale not found' error and allows aborting",
+    "description": "Verifies searching with an invalid sale ID shows a visible error and the cashier can exit/abort the returns flow.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"INVALID-SALE-ID-0000\" into the sale ID search field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Search\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC041",
+    "title": "Abort/close returns flow after 'sale not found'",
+    "description": "Verifies the cashier can abort the return process after an error and return to the POS main screen.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"sale not found\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Cancel\" or \"Close\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC042",
+    "title": "Exchange return for selected items completes successfully",
+    "description": "Verifies selecting items from a prior sale and choosing Exchange creates an exchange record and completes with a visible success confirmation.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type a valid sale ID into the sale ID search field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Search\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC043",
+    "title": "Exchange selection and confirmation shows completion message",
+    "description": "Verifies after sale lookup, the cashier can select an item, choose Exchange, confirm, and see a visible completion message/record indicator.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the checkbox or select control for the first item in the sale items list"
+      },
+      {
+        "type": "action",
+        "description": "Select \"Exchange\" as the return type"
+      }
+    ]
+  },
+  {
+    "id": "TC044",
+    "title": "Prevent confirming a return when no items are selected (validation)",
+    "description": "Verifies the system blocks return confirmation if no sale items are selected and shows a visible validation message.",
+    "category": "POS Returns & Refunds (المرتجعات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Returns\" (المرتجعات) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm Return\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Select\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC045",
+    "title": "Open a new shift with valid starting cash and see active shift summary in header",
+    "description": "Verifies a cashier can open a shift and the POS header shows active shift info including sales count/total.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"100\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a sales count value is visible in the header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a total sales amount value is visible in the header"
+      }
+    ]
+  },
+  {
+    "id": "TC046",
+    "title": "Close an active shift with matching ending cash and confirm closure success",
+    "description": "Verifies a cashier can close an active shift and sees a visible shift closed confirmation.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"50\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close shift\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"50\" into the ending cash amount field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Difference\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm close\" or \"Close shift\" confirmation button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Shift closed\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC047",
+    "title": "Close an active shift with discrepancy, add notes, and verify difference is shown",
+    "description": "Verifies discrepancy handling: difference calculation is displayed and close notes can be entered before confirming close.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"200\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close shift\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"150\" into the ending cash amount field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Difference\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a difference amount value is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Cash short due to change given\" into the close notes field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Confirm close\" or \"Close shift\" confirmation button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Shift closed\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC048",
+    "title": "Attempt to open shift with non-numeric starting cash and verify validation error",
+    "description": "Verifies starting cash input validation prevents opening a shift when value is non-numeric.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"abc\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Invalid\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC049",
+    "title": "Attempt to open shift with empty starting cash and verify required-field validation",
+    "description": "Verifies the shift cannot be opened when starting cash is left blank and a visible error/required message appears.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Press \"Enter\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Required\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC050",
+    "title": "Verify open shift action is blocked when a shift is already active",
+    "description": "Verifies the UI prevents opening a second shift while one is active (no duplicate open state).",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"75\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Open shift\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Close shift\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC051",
+    "title": "Cancel closing an active shift and verify the shift remains active",
+    "description": "Verifies that dismissing the close-shift confirmation leaves the shift in active state.",
+    "category": "POS Shift Management (الوردية)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the shift (الوردية) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Type \"120\" into the starting cash amount field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Open shift\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Close shift\" button"
+      },
+      {
+        "type": "action",
+        "description": "Press \"Escape\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active shift\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Close shift\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC052",
+    "title": "Create a new percentage coupon and verify it appears in the coupons list",
+    "description": "Verifies a cashier can create a percentage coupon with expiry and usage limit and see it listed.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Coupons\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create new coupon\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Create Coupon\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC053",
+    "title": "Complete coupon creation form (percentage) and save successfully",
+    "description": "Verifies the coupon creation form accepts valid inputs and confirms successful save.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Coupons\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create new coupon\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"AUTOTESTPERC10\" into the coupon code field"
+      }
+    ]
+  },
+  {
+    "id": "TC054",
+    "title": "Apply a valid coupon during payment and see discount reflected in totals",
+    "description": "Verifies applying a valid coupon in the payment modal updates the total with a visible discount.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the product list/grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Payment\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC055",
+    "title": "Applying an expired coupon does not change totals",
+    "description": "Verifies totals remain unchanged when an expired coupon is attempted and rejected.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the product list/grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC056",
+    "title": "Invalid/non-existent coupon code shows an error and is not applied",
+    "description": "Verifies entering an unknown coupon code produces a visible validation error and no discount is applied.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the first available product in the product list/grid"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Payment\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"NOTACOUPON123\" into the coupon code field in the payment modal"
+      }
+    ]
+  },
+  {
+    "id": "TC057",
+    "title": "Coupon creation requires a code (validation on empty code)",
+    "description": "Verifies the create coupon flow blocks saving when the coupon code is missing and shows a visible validation message.",
+    "category": "POS Coupons & Discounts (الكوبونات)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Coupons\" button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create new coupon\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC058",
+    "title": "View expiry badges on product cards in POS",
+    "description": "Verifies that expiry badges are visible on product cards and indicate days until expiry on the POS page.",
+    "category": "Pharmacy Expiry Tracking (تتبع الصلاحية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Days\" is visible on a product card expiry badge"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an expiry badge is visible on at least one product card"
+      }
+    ]
+  },
+  {
+    "id": "TC059",
+    "title": "Open expiry alerts panel and view critical vs warning items",
+    "description": "Verifies that the expiry alerts list opens from the header and shows both critical (red) and warning (orange) sections/items.",
+    "category": "Pharmacy Expiry Tracking (تتبع الصلاحية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the expiry alerts button in the POS header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Critical\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Warning\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify at least one expiry alert item is visible in the list"
+      }
+    ]
+  },
+  {
+    "id": "TC060",
+    "title": "Create a prescription for an Rx product and link it to a completed sale",
+    "description": "Verifies that adding an Rx item forces prescription capture and the saved prescription is linked to the final sale.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Add an Rx product to the cart"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"روشتة\" or \"Prescription\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC061",
+    "title": "Save prescription details from the auto-open modal",
+    "description": "Verifies that the prescription modal accepts data entry and saves successfully for an Rx cart item.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Add an Rx product to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Dr. Ahmed\" into the doctor name field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Save\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC062",
+    "title": "Complete payment after saving prescription for Rx item",
+    "description": "Verifies that after a prescription is saved, the cashier can proceed through payment and see a completion/receipt confirmation.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Add an Rx product to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Save\" button in the prescription modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Payment\" or \"Checkout\" button is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC063",
+    "title": "Open prescriptions history screen from POS",
+    "description": "Verifies the Prescriptions (روشتات) entry point is accessible from the POS page.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"روشتات\" (Prescriptions) button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"روشتات\" or \"Prescriptions\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC064",
+    "title": "Validation: prevent saving prescription when a required field is blank",
+    "description": "Verifies required field validation shows an error and blocks saving when prescription data is incomplete.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Add an Rx product to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Save\" button in the prescription modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Required\" or \"مطلوب\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC065",
+    "title": "Validation: cannot proceed to payment while prescription modal is unresolved",
+    "description": "Verifies that the cashier is blocked from proceeding to payment if the prescription requirement is not satisfied.",
+    "category": "Pharmacy Prescription Management (إدارة الروشتات)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Sign in\" / \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Add an Rx product to the cart"
+      },
+      {
+        "type": "action",
+        "description": "Click on the \"Payment\" or \"Checkout\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"روشتة\" or \"Prescription\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC066",
+    "title": "Add a new insurance company and verify it appears in the insurance list",
+    "description": "Verifies a store owner can open the insurance area, add a new insurance company with coverage %, save it, and see it listed.",
+    "category": "Pharmacy Insurance Claims (التأمين الصحي)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Insurance\" (التأمين الصحي) button in the POS header"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Insurance Companies\" (or Arabic equivalent) is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" or \"Add New Insurance Company\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC067",
+    "title": "Save new insurance company with valid name and coverage percentage",
+    "description": "Verifies the add-insurance form accepts valid inputs and shows the newly created company in the list after saving.",
+    "category": "Pharmacy Insurance Claims (التأمين الصحي)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Insurance\" (التأمين الصحي) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" or \"Add New Insurance Company\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Test Insurance Co\" into the insurance company name field"
+      }
+    ]
+  },
+  {
+    "id": "TC068",
+    "title": "Complete add-insurance flow: enter coverage percentage and confirm company appears",
+    "description": "Verifies coverage percentage entry and save action create the company and it becomes visible in the companies list.",
+    "category": "Pharmacy Insurance Claims (التأمين الصحي)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Insurance\" (التأمين الصحي) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" or \"Add New Insurance Company\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"80\" into the coverage percentage field"
+      }
+    ]
+  },
+  {
+    "id": "TC069",
+    "title": "Prevent saving insurance company with missing required fields",
+    "description": "Verifies validation prevents saving when the name or coverage percentage is missing.",
+    "category": "Pharmacy Insurance Claims (التأمين الصحي)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Insurance\" (التأمين الصحي) button in the POS header"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" or \"Add New Insurance Company\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      }
+    ]
+  },
+  {
+    "id": "TC070",
+    "title": "View alternatives list for a pharmacy product card",
+    "description": "Verifies that a seller can open the drug alternatives panel and see a populated list with expected fields.",
+    "category": "Pharmacy Drug Alternatives (البدائل الدوائية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Alternatives\" (البدائل الدوائية) button on a visible pharmacy product card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"البدائل الدوائية\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an alternatives list element is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC071",
+    "title": "Add an alternative drug to cart from alternatives list",
+    "description": "Verifies that selecting an alternative from the alternatives list adds it to the cart.",
+    "category": "Pharmacy Drug Alternatives (البدائل الدوائية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Alternatives\" (البدائل الدوائية) button on a visible pharmacy product card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an alternatives list element is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" button on the first visible alternative in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cart\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC072",
+    "title": "Verify alternative drug rows show key details (name, manufacturer, price, availability)",
+    "description": "Verifies that each alternative entry displays the expected visible information fields.",
+    "category": "Pharmacy Drug Alternatives (البدائل الدوائية)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Alternatives\" (البدائل الدوائية) button on a visible pharmacy product card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an alternatives list element is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Price\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC073",
+    "title": "Empty alternatives list shows 'no alternatives found' message",
+    "description": "Verifies that when a product has no alternatives, the UI shows a clear empty-state message.",
+    "category": "Pharmacy Drug Alternatives (البدائل الدوائية)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Alternatives\" (البدائل الدوائية) button on a pharmacy product card known to have no alternatives"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"no alternatives\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"found\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC074",
+    "title": "Alternatives add action does not navigate away from POS page",
+    "description": "Verifies that adding an alternative keeps the user on the POS interface (no unexpected route change).",
+    "category": "Pharmacy Drug Alternatives (البدائل الدوائية)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Alternatives\" (البدائل الدوائية) button on a visible pharmacy product card"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add\" button on the first visible alternative in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/pos/qpos\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Cart\" is visible"
+      }
+    ]
+  }
+]

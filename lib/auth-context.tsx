@@ -45,6 +45,7 @@ interface AuthContextType {
       storeDescription?: string
       address?: string
       storeType?: string
+      storeTypeId?: string
       storeLogo?: File | null
       storeLogoUrl?: string | null
       latitude?: number
@@ -182,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeDescription?: string
       address?: string
       storeType?: string
+      storeTypeId?: string
       storeLogo?: File | null
       storeLogoUrl?: string | null
       latitude?: number
@@ -231,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           address: sellerData.address || "",
           phone: sellerData.phone || "",
           category: sellerData.storeType || "خدمات أخرى",
+          category_id: sellerData.storeTypeId || "",
           latitude: sellerData.latitude,
           longitude: sellerData.longitude,
           whatsapp_number: sellerData.phone || "",

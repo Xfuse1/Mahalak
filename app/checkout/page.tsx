@@ -228,7 +228,7 @@ export default function CheckoutPage() {
           </div>
 
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent mb-2">{t("تأكيد البيانات", "Confirm Details")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent mb-2">{t("تأكيد البيانات", "Confirm Details")}</h1>
             <p className="text-gray-500">
               {t("يرجى مراجعة بياناتك قبل المتابعة", "Please review your information before proceeding")}
             </p>

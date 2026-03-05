@@ -132,7 +132,7 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex items-center justify-center text-white hover:bg-white/20 h-9 w-9 px-0 md:w-auto md:px-4 md:gap-2 rounded-xl transition-all duration-300 hover:scale-105"
+                className="flex items-center justify-center text-white hover:bg-white/20 h-10 w-10 px-0 md:w-auto md:px-4 md:gap-2 rounded-xl transition-all duration-300 hover:scale-105"
                 onClick={() => router.push("/supermarket")}
                 title="3D Market"
               >
@@ -145,7 +145,7 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="relative text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
+              className="relative text-white hover:bg-white/20 transition-all duration-300 h-10 w-10 rounded-xl hover:scale-105"
               onClick={() => router.push("/cart")}
             >
               <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
@@ -163,7 +163,7 @@ export function Header() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="relative text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
+                    className="relative text-white hover:bg-white/20 transition-all duration-300 h-10 w-10 rounded-xl hover:scale-105"
                     onClick={handleNotificationClick}
                   >
                     <Bell className="h-4 w-4 md:h-5 md:w-5" />
@@ -291,7 +291,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-white hover:bg-white/20 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
+                  className="text-white hover:bg-white/20 transition-all duration-300 h-10 w-10 rounded-xl hover:scale-105"
                   onClick={() => router.push(user.role === "seller" ? "/seller/dashboard" : "/account")}
                 >
                   <User className="h-4 w-4 md:h-5 md:w-5" />
@@ -299,7 +299,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-white hover:bg-rose-500/30 transition-all duration-300 h-9 w-9 md:h-10 md:w-10 rounded-xl hover:scale-105"
+                  className="text-white hover:bg-rose-500/30 transition-all duration-300 h-10 w-10 rounded-xl hover:scale-105"
                   onClick={() => {
                     logout()
                     router.push("/")

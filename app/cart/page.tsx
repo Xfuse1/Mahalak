@@ -62,7 +62,7 @@ export default function CartPage() {
             <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl text-white shadow-lg">
               <ShoppingCart className="h-6 w-6" />
             </div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("سلة التسوق", "Shopping Cart")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("سلة التسوق", "Shopping Cart")}</h1>
           </div>
 
           {items.length === 0 ? (
@@ -126,7 +126,7 @@ export default function CartPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-md transition-all"
+                            className="h-10 w-10 md:h-9 md:w-9 rounded-lg hover:bg-white hover:shadow-md transition-all"
                             onClick={() => decrementItem(item.id)}
                           >
                             <Minus className="h-4 w-4" />
@@ -135,7 +135,7 @@ export default function CartPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className={`h-9 w-9 rounded-lg transition-all ${item.quantity >= item.stock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:shadow-md'}`}
+                            className={`h-10 w-10 md:h-9 md:w-9 rounded-lg transition-all ${item.quantity >= item.stock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:shadow-md'}`}
                             onClick={() => addItem(item)}
                             disabled={item.quantity >= item.stock}
                           >
@@ -167,7 +167,7 @@ export default function CartPage() {
                 <CardContent className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm text-gray-500 mb-1">{t("الإجمالي", "Total")}</p>
-                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{total.toFixed(2)} <span className="text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
+                    <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{total.toFixed(2)} <span className="text-base md:text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
                   </div>
                   <div className="flex gap-3">
                     <Button variant="outline" onClick={handleClearCart} className="rounded-xl hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all">

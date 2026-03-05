@@ -196,7 +196,7 @@ export default function SellerProductsPage() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
             <div>
-              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة المنتجات", "Product Management")}</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة المنتجات", "Product Management")}</h1>
               <p className="text-gray-500 mt-1">{t("إدارة وتعديل منتجاتك", "Manage and edit your products")}</p>
             </div>
             {isStoreApproved ? (

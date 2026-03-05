@@ -122,4 +122,73 @@
   }
 }
 
+/* ===== POS Mobile Responsive Utilities ===== */
+
+/* Bottom sheet animation */
+@keyframes pos-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes pos-slide-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+@keyframes pos-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pos-slide-up {
+  animation: pos-slide-up 0.3s ease-out forwards;
+}
+.pos-slide-down {
+  animation: pos-slide-down 0.25s ease-in forwards;
+}
+.pos-fade-in {
+  animation: pos-fade-in 0.2s ease-out forwards;
+}
+
+/* Safe area padding for mobile notch/home bar */
+.pos-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pos-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Prevent body scroll when modal is open on mobile */
+body.pos-modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Custom scrollbar for POS */
+.pos-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.pos-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pos-scroll::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+/* Touch-optimized styles */
+@media (max-width: 768px) {
+  .pos-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* POS bottom bar spacing */
+@media (max-width: 1024px) {
+  .pos-main-with-bottombar {
+    padding-bottom: 72px;
+  }
+}
+
 

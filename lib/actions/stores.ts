@@ -15,6 +15,7 @@ export type StoreRecord = {
   address?: string
   phone?: string
   category?: string
+  category_id?: string
   latitude?: number | null
   longitude?: number | null
   whatsapp_number?: string
@@ -60,6 +61,7 @@ export type StoreCreateInput = {
   address: string
   phone: string
   category: string
+  category_id?: string
   description?: string
   latitude?: number
   longitude?: number
@@ -96,6 +98,22 @@ export type StoreUpdateInput = {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+/**
+ * Fetch the current category name from the categories collection by ID.
+ * This ensures we always use the latest name even if admin renames it.
+ */
+export async function getCategoryNameById(categoryId: string): Promise<string | null> {
+  if (!categoryId) return null
+  try {
+    const db = getAdminDb()
+    const doc = await db.collection("categories").doc(categoryId).get()
+    if (!doc.exists) return null
+    return (doc.data()?.name as string) || null
+  } catch {
+    return null
+  }
 }
 
 function normalizeStoreName(name: string) {
@@ -252,6 +270,7 @@ export async function createStore(storeData: StoreCreateInput) {
     address: storeData.address,
     phone: storeData.phone,
     category: storeData.category,
+    category_id: storeData.category_id || "",
     latitude: storeData.latitude || null,
     longitude: storeData.longitude || null,
     whatsapp_number: storeData.whatsapp_number || storeData.phone,
@@ -384,9 +403,10 @@ export async function uploadStoreImage(formData: FormData) {
 
     const { data, error } = await supabase.storage
       .from("product-images")
-      .upload(filePath, file, {
+      .upload(filePath, Buffer.from(await file.arrayBuffer()), {
         cacheControl: "3600",
         upsert: false,
+        contentType: file.type,
       })
 
     if (error) {

@@ -91,10 +91,10 @@ export default function PrivacyPage() {
         <div className="container mx-auto px-4 max-w-4xl">
           {/* Hero Section */}
           <div className="text-center mb-16">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-6 shadow-lg shadow-blue-500/30">
+            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-6 shadow-lg shadow-blue-500/30">
               <Shield className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
               {t("سياسة الخصوصية", "Privacy Policy")}
             </h1>
             <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
@@ -146,7 +146,7 @@ export default function PrivacyPage() {
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
             
             <div className="relative p-10 text-center text-white">
-              <h2 className="text-2xl md:text-3xl font-bold mb-4">{t("تواصل معنا", "Contact Us")}</h2>
+              <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-4">{t("تواصل معنا", "Contact Us")}</h2>
               <p className="text-blue-100 mb-6 max-w-md mx-auto">
                 {t(
                   "إذا كان لديك أي أسئلة حول سياسة الخصوصية، يرجى التواصل معنا",

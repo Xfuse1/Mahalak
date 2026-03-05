@@ -166,6 +166,7 @@ export default function VerifyPhonePage() {
                 storeName: pendingData.storeName,
                 storeDescription: pendingData.storeDescription,
                 storeType: pendingData.storeType,
+                storeTypeId: pendingData.storeTypeId || "",
                 storeLogo: null as File | null,
                 storeLogoUrl: pendingData.storeLogoUrl || null,
                 address: storeAddress,

@@ -273,7 +273,7 @@ export default function SellerOrdersPage() {
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="mb-10">
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة الطلبات", "Order Management")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة الطلبات", "Order Management")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</p>
           </div>
 
@@ -307,7 +307,7 @@ export default function SellerOrdersPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t("إجمالي الطلبات", "Total Orders")}</p>
-                    <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length + multiOrders.length}</p>
+                    <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length + multiOrders.length}</p>
                   </div>
                 </div>
 

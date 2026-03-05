@@ -427,7 +427,7 @@ export async function updateProduct(
   if (formData.cost_price !== undefined && (!Number.isFinite(formData.cost_price) || formData.cost_price <= 0)) {
     return { success: false, error: PRODUCT_ERROR_CODES.COST_PRICE_MUST_BE_POSITIVE }
   }
-  if (formData.stock !== undefined && (!Number.isFinite(formData.stock) || formData.stock <= 0)) {
+  if (formData.stock !== undefined && (!Number.isFinite(formData.stock) || formData.stock < 0)) {
     return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
   }
 
@@ -706,15 +706,21 @@ export async function uploadProductImage(formData: FormData) {
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `products/${storeId}/${fileName}`
 
+    // Convert File to Buffer for reliable server-side upload
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
     const { data, error } = await supabase.storage
       .from("product-images")
-      .upload(filePath, file, {
+      .upload(filePath, buffer, {
         cacheControl: "3600",
         upsert: false,
+        contentType: file.type,
       })
 
     if (error) {
-      return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_FAILED }
+      console.error("Supabase storage upload error:", error.message, error)
+      return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_FAILED, detail: error.message }
     }
 
     const {
@@ -723,6 +729,8 @@ export async function uploadProductImage(formData: FormData) {
 
     return { success: true, url: publicUrl }
   } catch (error: unknown) {
-    return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_INTERNAL_ERROR }
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error("Image upload internal error:", msg)
+    return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_INTERNAL_ERROR, detail: msg }
   }
 }

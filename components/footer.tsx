@@ -17,10 +17,10 @@ const FooterComponent = () => {
       </div>
       
       <div className="container mx-auto px-4 py-16 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 lg:gap-12">
           {/* About */}
           <div className="space-y-4">
-            <h3 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">{t("الرئيسية", "Home")}</h3>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">{t("الرئيسية", "Home")}</h3>
             <p className="text-gray-400 text-sm leading-relaxed">{t("منصة محلك - وجهتك الأولى للتسوق من المتاجر المحلية", "Mahalak - Your go-to platform for shopping from local stores")}</p>
             <div className="flex items-center gap-4 pt-4">
               <a

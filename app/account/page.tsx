@@ -196,7 +196,7 @@ export default function AccountPage() {
           </div>
 
           <div className="mb-10">
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("حسابي", "My Account")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("حسابي", "My Account")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة حسابك وطلباتك", "Manage your account and orders")}</p>
           </div>
 

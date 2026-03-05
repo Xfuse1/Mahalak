@@ -11,13 +11,33 @@ import { Input } from "../../../../../components/ui/input"
 import { Label } from "../../../../../components/ui/label"
 import { Textarea } from "../../../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select"
-import { Upload } from "lucide-react"
+import { Upload, Pill, Shirt, ShoppingBasket, Package } from "lucide-react"
 import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
+import { getCategoryNameForForm } from "../../../../../lib/actions/product-form-actions"
 import Image from "next/image"
 import { fetchStoreSubcategories, type SubcategoryItem } from "../../../../../lib/firebase/categories"
 import { useToast } from "@/components/ui/toast"
 import { useLanguage } from "../../../../../lib/language-context"
+
+type StoreType = "pharmacy" | "clothing" | "grocery" | "electronics" | "general"
+
+function detectStoreType(categoryName: string, storeName: string): StoreType {
+  const detectStr = `${categoryName} ${storeName}`.toLowerCase()
+  if (detectStr.includes("صحة") || detectStr.includes("صيدل") || detectStr.includes("صيدال") || detectStr.includes("pharmacy") || detectStr.includes("health")) return "pharmacy"
+  if (detectStr.includes("ملابس") || detectStr.includes("أزياء") || detectStr.includes("fashion") || detectStr.includes("clothing")) return "clothing"
+  if (detectStr.includes("بقالة") || detectStr.includes("سوبرماركت") || detectStr.includes("grocery") || detectStr.includes("supermarket") || detectStr.includes("ميني ماركت")) return "grocery"
+  if (detectStr.includes("إلكترون") || detectStr.includes("الكترون") || detectStr.includes("تقنية") || detectStr.includes("electronics") || detectStr.includes("mobile") || detectStr.includes("موبايل") || detectStr.includes("هواتف")) return "electronics"
+  return "general"
+}
+
+const STORE_THEME: Record<StoreType, { gradient: string; icon: React.ReactNode }> = {
+  pharmacy: { gradient: "from-emerald-600 to-teal-700", icon: <Pill className="h-5 w-5" /> },
+  clothing: { gradient: "from-purple-600 to-pink-700", icon: <Shirt className="h-5 w-5" /> },
+  grocery: { gradient: "from-orange-600 to-amber-700", icon: <ShoppingBasket className="h-5 w-5" /> },
+  electronics: { gradient: "from-blue-600 to-indigo-700", icon: <Package className="h-5 w-5" /> },
+  general: { gradient: "from-blue-600 to-blue-700", icon: <Upload className="h-5 w-5" /> },
+}
 
 type EditableProduct = {
   id: string
@@ -49,6 +69,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [customCategory, setCustomCategory] = useState<string>("")
   const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([])
   const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
+  const [storeType, setStoreType] = useState<StoreType>("general")
 
   const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
     PRODUCT_NOT_FOUND: {
@@ -143,6 +164,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       const currentStoreCategory = store?.category || ""
       if (store) {
         setStoreCategory(currentStoreCategory)
+        // Detect store type
+        try {
+          const catName = store.category_id ? (await getCategoryNameForForm(store.category_id)) || "" : currentStoreCategory
+          setStoreType(detectStoreType(catName, store.name || ""))
+        } catch {
+          setStoreType(detectStoreType(currentStoreCategory, store.name || ""))
+        }
       }
 
       // Fetch subcategories from Firestore
@@ -233,7 +261,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         const uploadResult = await uploadProductImage(uploadFormData)
 
         if (!uploadResult.success) {
-          throw new Error(getProductActionErrorMessage(uploadResult.error))
+          const detail = (uploadResult as { detail?: string }).detail
+          throw new Error(getProductActionErrorMessage(uploadResult.error) + (detail ? ` (${detail})` : ""))
         }
 
         imageUrl = uploadResult.url!
@@ -275,58 +304,73 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
 
-      // Compress image if larger than 1MB
-      if (file.size > 1 * 1024 * 1024) {
-        const img = document.createElement("img")
-        const reader = new FileReader()
-        reader.onload = (ev) => {
-          img.onload = () => {
-            const canvas = document.createElement("canvas")
-            let width = img.width
-            let height = img.height
+      const compressImage = (sourceFile: File, maxDim: number, quality: number): Promise<File> => {
+        return new Promise((resolve, reject) => {
+          const img = document.createElement("img")
+          const reader = new FileReader()
+          reader.onerror = () => reject(new Error("Failed to read file"))
+          reader.onload = (ev) => {
+            img.onerror = () => reject(new Error("Failed to load image"))
+            img.onload = () => {
+              const canvas = document.createElement("canvas")
+              let width = img.width
+              let height = img.height
 
-            const MAX_SIZE = 1200
-            if (width > MAX_SIZE || height > MAX_SIZE) {
-              if (width > height) {
-                height = Math.round((height * MAX_SIZE) / width)
-                width = MAX_SIZE
-              } else {
-                width = Math.round((width * MAX_SIZE) / height)
-                height = MAX_SIZE
-              }
-            }
-
-            canvas.width = width
-            canvas.height = height
-            const ctx = canvas.getContext("2d")!
-            ctx.drawImage(img, 0, 0, width, height)
-
-            canvas.toBlob(
-              (blob) => {
-                if (blob) {
-                  const compressedFile = new File([blob], file.name, {
-                    type: "image/jpeg",
-                    lastModified: Date.now(),
-                  })
-                  setImageFile(compressedFile)
-                  setImagePreview(canvas.toDataURL("image/jpeg", 0.8))
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width)
+                  width = maxDim
+                } else {
+                  width = Math.round((width * maxDim) / height)
+                  height = maxDim
                 }
-              },
-              "image/jpeg",
-              0.8
-            )
+              }
+
+              canvas.width = width
+              canvas.height = height
+              const ctx = canvas.getContext("2d")!
+              ctx.drawImage(img, 0, 0, width, height)
+
+              canvas.toBlob(
+                (blob) => {
+                  if (blob) {
+                    resolve(new File([blob], sourceFile.name.replace(/\.\w+$/, ".jpg"), {
+                      type: "image/jpeg",
+                      lastModified: Date.now(),
+                    }))
+                  } else {
+                    reject(new Error("Compression failed"))
+                  }
+                },
+                "image/jpeg",
+                quality
+              )
+            }
+            img.src = ev.target?.result as string
           }
-          img.src = ev.target?.result as string
-        }
-        reader.readAsDataURL(file)
-      } else {
-        setImageFile(file)
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          setImagePreview(reader.result as string)
-        }
-        reader.readAsDataURL(file)
+          reader.readAsDataURL(sourceFile)
+        })
       }
+
+      // Always compress to ensure consistent upload
+      const doCompress = async () => {
+        try {
+          let compressed = await compressImage(file, 1200, 0.8)
+          // If still > 4MB, compress more aggressively
+          if (compressed.size > 4 * 1024 * 1024) {
+            compressed = await compressImage(file, 800, 0.6)
+          }
+          setImageFile(compressed)
+          setImagePreview(URL.createObjectURL(compressed))
+        } catch {
+          // Fallback: use original file
+          setImageFile(file)
+          const r = new FileReader()
+          r.onloadend = () => setImagePreview(r.result as string)
+          r.readAsDataURL(file)
+        }
+      }
+      doCompress()
     }
   }
 
@@ -352,7 +396,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  if (error || !product) {
+  if (!product && !isLoadingProduct) {
     return (
       <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <SellerHeader />
@@ -384,9 +428,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </h1>
 
           <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+            <CardHeader className={`bg-gradient-to-r ${STORE_THEME[storeType].gradient} text-white`}>
               <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
+                {STORE_THEME[storeType].icon}
                 {t("معلومات المنتج", "Product Information")}
               </CardTitle>
             </CardHeader>
@@ -569,7 +613,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 <div className="flex gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 shadow-lg"
+                    className={`flex-1 bg-gradient-to-r ${STORE_THEME[storeType].gradient} hover:opacity-90 rounded-xl h-12 shadow-lg`}
                     disabled={isSaving}
                   >
                     {isSaving ? t("جاري الحفظ...", "Saving...") : t("حفظ التعديلات", "Save Changes")}

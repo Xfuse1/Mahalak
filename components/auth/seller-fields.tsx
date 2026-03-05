@@ -44,6 +44,8 @@ interface SellerFieldsProps {
   // Store type
   selectedStoreType: string
   setSelectedStoreType: (type: string) => void
+  selectedStoreTypeId: string
+  setSelectedStoreTypeId: (id: string) => void
   // Store logo
   storeLogoPreview: string | null
   handleLogoChange: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -75,6 +77,7 @@ export function SellerFields(props: SellerFieldsProps) {
     triggerSendOTP, setTriggerSendOTP, phoneStep, setPhoneStep,
     handleStoreNameChange, isCheckingStoreName, storeNameExists,
     selectedStoreType, setSelectedStoreType,
+    selectedStoreTypeId, setSelectedStoreTypeId,
     storeLogoPreview, handleLogoChange, removeStoreLogo,
     ownerIdNumber, setOwnerIdNumber,
     idCardImageFrontPreview, idCardImageBackPreview,
@@ -149,9 +152,11 @@ export function SellerFields(props: SellerFieldsProps) {
         <Select 
           name="storeType" 
           required
-          value={selectedStoreType}
+          value={selectedStoreTypeId}
           onValueChange={(value) => {
-            setSelectedStoreType(value)
+            const cat = categories.find(c => c.id === value)
+            setSelectedStoreType(cat?.name || value)
+            setSelectedStoreTypeId(value)
           }}
         >
           <SelectTrigger id="register-storeType" className="h-12">
@@ -162,7 +167,7 @@ export function SellerFields(props: SellerFieldsProps) {
               <SelectItem value="_loading" disabled>{t("جاري التحميل...", "Loading...")}</SelectItem>
             ) : categories.length > 0 ? (
               categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
               ))
             ) : (
               <SelectItem value="_empty" disabled>{t("لا توجد فئات", "No categories")}</SelectItem>
