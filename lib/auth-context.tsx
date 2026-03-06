@@ -9,9 +9,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile as updateFirebaseProfile,
+  type Auth,
   type User as FirebaseUser,
 } from "firebase/auth"
-import { doc, getDoc, setDoc } from "firebase/firestore"
+import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
 import { createStore, uploadStoreImage, updateStore } from "./actions/stores"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
@@ -78,11 +79,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("")
   const loadingProfile = useRef(false)
   const { t } = useTranslation()
+  const firebaseClients = useMemo(() => {
+    try {
+      return {
+        auth: getFirebaseAuth() as Auth | null,
+        db: getFirestoreClient() as Firestore | null,
+        error: null as Error | null,
+      }
+    } catch (error) {
+      return {
+        auth: null,
+        db: null,
+        error: error instanceof Error ? error : new Error("Firebase web configuration is missing"),
+      }
+    }
+  }, [])
 
-  const auth = getFirebaseAuth()
-  const db = getFirestoreClient()
+  const auth = firebaseClients.auth
+  const db = firebaseClients.db
+
+  useEffect(() => {
+    if (!firebaseClients.error) {
+      return
+    }
+
+    console.error("[auth/context] Firebase web configuration error:", firebaseClients.error.message)
+    setIsLoading(false)
+  }, [firebaseClients.error])
 
   const loadUserProfile = useCallback(async (currentUser: FirebaseUser) => {
+    if (!db) {
+      setUser(null)
+      setIsLoading(false)
+      loadingProfile.current = false
+      return
+    }
+
     // Force reload if requested or if loading is not in progress
     loadingProfile.current = true
     setIsLoading(true)
@@ -123,6 +155,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [db])
 
   useEffect(() => {
+    if (!auth || !db) {
+      setFirebaseUser(null)
+      setUser(null)
+      setIsLoading(false)
+      loadingProfile.current = false
+      return
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setFirebaseUser(currentUser)
@@ -139,6 +179,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth, loadUserProfile])
 
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
+    if (!auth || !db) {
+      const message = "Firebase auth is not configured"
+      setError(t("خدمة تسجيل الدخول غير مهيأة حالياً", "Authentication is not configured right now"))
+      throw new Error(message)
+    }
+
     try {
       const credential = await signInWithEmailAndPassword(auth, email, password)
       const profileRef = doc(db, "users", credential.user.uid)
@@ -204,6 +250,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phone?: string,
     phoneVerified?: boolean,
   ): Promise<boolean> => {
+    if (!auth || !db) {
+      const message = "Firebase auth is not configured"
+      setError(t("خدمة إنشاء الحساب غير مهيأة حالياً", "Registration is not configured right now"))
+      throw new Error(message)
+    }
+
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password)
       const normalizedProfilePhone = sellerData?.phone
@@ -301,10 +353,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
       throw error
     }
-  }, [auth, db, t])
+  }, [auth, db, t, loadUserProfile])
 
   const logout = useCallback(async () => {
-    await signOut(auth)
+    if (auth) {
+      await signOut(auth)
+    }
     setUser(null)
     setFirebaseUser(null)
   }, [auth])
