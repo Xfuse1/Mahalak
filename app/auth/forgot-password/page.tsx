@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Header } from "@/components/header"
@@ -13,17 +13,20 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { useLanguage } from "@/lib/language-context"
-import { getFirebaseAuth, initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth } from "@/lib/firebase/client"
-import { getUserByPhone, resetUserPassword, generatePasswordResetToken } from "@/lib/actions/profile"
-import { ArrowLeft, ArrowRight, CheckCircle2, Phone, Shield, Loader2, RefreshCw, Lock, Eye, EyeOff } from "lucide-react"
+import { clearPhoneAuth, getOTPStatus, sendPhoneOTP, verifyPhoneOTP } from "@/lib/firebase/client"
+import { generatePasswordResetToken, getUserByPhone, resetUserPassword } from "@/lib/actions/profile"
+import { normalizeEgyptPhone } from "@/lib/utils/phone"
+import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, Lock, Phone, RefreshCw, Shield } from "lucide-react"
 
 type Step = "phone" | "otp" | "new-password" | "success"
+
+const OTP_FLOW = "forgot-password" as const
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
   const { t, language } = useLanguage()
   const isRTL = language === "ar"
-  
+
   const [step, setStep] = useState<Step>("phone")
   const [phone, setPhone] = useState("")
   const [otpCode, setOtpCode] = useState("")
@@ -32,65 +35,96 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [countdown, setCountdown] = useState(0)
-  const [attempts, setAttempts] = useState(0)
+  const [attemptsRemaining, setAttemptsRemaining] = useState(3)
   const [userId, setUserId] = useState("")
-  const [userEmail, setUserEmail] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [resetToken, setResetToken] = useState("")
-  const maxAttempts = 3
+  const [sessionLost, setSessionLost] = useState(false)
 
-  // Countdown timer
+  const syncOtpState = () => {
+    const status = getOTPStatus(OTP_FLOW)
+    setCountdown(status.cooldownRemaining)
+    setAttemptsRemaining(status.attemptsRemaining)
+    setSessionLost(status.sessionLost)
+    return status
+  }
+
   useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
-      return () => clearTimeout(timer)
+    const status = syncOtpState()
+    if (!status.hasRequestedCode || !status.phone) {
+      return
     }
-  }, [countdown])
 
-  // Cleanup on unmount
-  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      const result = await getUserByPhone(status.phone!)
+      if (cancelled || !result.success || !result.data?.id) {
+        return
+      }
+
+      setPhone(status.phone!)
+      setUserId(result.data.id)
+      setStep("otp")
+    })()
+
     return () => {
-      clearPhoneAuth()
+      cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (step !== "otp") {
+      return
+    }
+
+    syncOtpState()
+    const timer = window.setInterval(() => {
+      syncOtpState()
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [step])
 
   const handleCheckPhone = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
 
-    if (!phone || phone.length < 10) {
-      setError(t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number"))
-      setIsLoading(false)
-      return
-    }
-
     try {
-      // Check if phone exists in database
-      const result = await getUserByPhone(phone)
-      
-      if (!result.success || result.error === "phone_not_found") {
-        setError(t("رقم الهاتف غير مسجل في النظام", "Phone number is not registered"))
-        setIsLoading(false)
+      const normalizedPhone = normalizeEgyptPhone(phone)
+      if (!normalizedPhone) {
+        setError(t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number"))
         return
       }
 
-      // Store user data for later
-      setUserId(result.data!.id)
-      setUserEmail(result.data!.email)
-
-      // Initialize reCAPTCHA and send OTP
-      initRecaptchaVerifier("recaptcha-container")
-      const otpResult = await sendPhoneOTP(phone)
-
-      if (otpResult.success) {
-        setStep("otp")
-        setCountdown(60)
-        setAttempts(0)
-      } else {
-        setError(otpResult.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
+      const result = await getUserByPhone(normalizedPhone)
+      if (!result.success || !result.data?.id) {
+        setError(t("رقم الهاتف غير مسجل في النظام", "Phone number is not registered"))
+        return
       }
-    } catch (err: any) {
+
+      const otpResult = await sendPhoneOTP(normalizedPhone, {
+        flow: OTP_FLOW,
+        containerId: "recaptcha-container",
+      })
+
+      if (!otpResult.success) {
+        setError(otpResult.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
+        syncOtpState()
+        return
+      }
+
+      setPhone(otpResult.phone || normalizedPhone)
+      setUserId(result.data.id)
+      setOtpCode("")
+      setSessionLost(false)
+      setStep("otp")
+      syncOtpState()
+    } catch (lookupError) {
+      console.error("[auth/forgot-password] Phone lookup error:", lookupError)
       setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
     } finally {
       setIsLoading(false)
@@ -103,34 +137,47 @@ export default function ForgotPasswordPage() {
       return
     }
 
-    if (attempts >= maxAttempts) {
-      setError(t("تم تجاوز عدد المحاولات المسموحة", "Maximum attempts exceeded"))
+    if (sessionLost) {
+      setError(t("انتهت جلسة التحقق. أعد إرسال الكود للمتابعة", "Verification session was lost. Resend the code to continue"))
       return
     }
 
     setIsLoading(true)
     setError("")
-    setAttempts((prev) => prev + 1)
 
     try {
-      const result = await verifyPhoneOTP(otpCode)
+      let resolvedUserId = userId
+      if (!resolvedUserId) {
+        const userResult = await getUserByPhone(phone)
+        if (!userResult.success || !userResult.data?.id) {
+          setError(t("تعذر العثور على الحساب المرتبط بهذا الرقم", "Could not find the account for this phone number"))
+          setStep("phone")
+          return
+        }
 
-      if (result.success) {
-        // Generate a server-side reset token to secure the password reset
-        const tokenResult = await generatePasswordResetToken(userId)
-        if (tokenResult.success && tokenResult.token) {
-          setResetToken(tokenResult.token)
-          setStep("new-password")
-        } else {
-          setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
-        }
-      } else {
-        setError(result.error || t("كود التحقق غير صحيح", "Invalid verification code"))
-        if (attempts + 1 >= maxAttempts) {
-          setError(t("تم تجاوز عدد المحاولات. يرجى طلب كود جديد", "Maximum attempts exceeded. Please request a new code"))
-        }
+        resolvedUserId = userResult.data.id
+        setUserId(resolvedUserId)
       }
-    } catch (err: any) {
+
+      const result = await verifyPhoneOTP(otpCode, { flow: OTP_FLOW })
+      syncOtpState()
+
+      if (!result.success) {
+        setSessionLost(Boolean(result.sessionLost))
+        setError(result.error || t("كود التحقق غير صحيح", "Invalid verification code"))
+        return
+      }
+
+      const tokenResult = await generatePasswordResetToken(resolvedUserId)
+      if (!tokenResult.success || !tokenResult.token) {
+        setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+        return
+      }
+
+      setResetToken(tokenResult.token)
+      setStep("new-password")
+    } catch (verifyError) {
+      console.error("[auth/forgot-password] OTP verification error:", verifyError)
       setError(t("حدث خطأ أثناء التحقق", "An error occurred during verification"))
     } finally {
       setIsLoading(false)
@@ -138,27 +185,47 @@ export default function ForgotPasswordPage() {
   }
 
   const handleResendOTP = async () => {
-    if (countdown > 0) return
+    if (countdown > 0) {
+      return
+    }
 
-    setOtpCode("")
-    setError("")
-    setAttempts(0)
     setIsLoading(true)
+    setError("")
 
     try {
-      initRecaptchaVerifier("recaptcha-container")
-      const result = await sendPhoneOTP(phone)
+      const otpResult = await sendPhoneOTP(phone, {
+        flow: OTP_FLOW,
+        containerId: "recaptcha-container",
+      })
 
-      if (result.success) {
-        setCountdown(60)
-      } else {
-        setError(result.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
+      if (!otpResult.success) {
+        setError(otpResult.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
+        syncOtpState()
+        return
       }
-    } catch (err: any) {
+
+      setOtpCode("")
+      setSessionLost(false)
+      syncOtpState()
+    } catch (resendError) {
+      console.error("[auth/forgot-password] OTP resend error:", resendError)
       setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleChangeNumber = () => {
+    clearPhoneAuth(OTP_FLOW)
+    setStep("phone")
+    setPhone("")
+    setOtpCode("")
+    setError("")
+    setCountdown(0)
+    setAttemptsRemaining(3)
+    setUserId("")
+    setResetToken("")
+    setSessionLost(false)
   }
 
   const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -166,35 +233,33 @@ export default function ForgotPasswordPage() {
     setIsLoading(true)
     setError("")
 
-    if (newPassword.length < 6) {
-      setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
-      setIsLoading(false)
-      return
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
-      setIsLoading(false)
-      return
-    }
-
     try {
-      if (!userId) {
-        setError(t("يرجى إعادة التحقق من رقم الهاتف", "Please re-verify your phone number"))
+      if (!resetToken || !userId) {
+        setError(t("يرجى إعادة التحقق من رقم الهاتف", "Please verify your phone number again"))
         setStep("phone")
         return
       }
 
-      // Use server action with verified reset token to update the password
-      const result = await resetUserPassword(userId, newPassword, resetToken)
-      
-      if (result.success) {
-        setStep("success")
-      } else {
-        setError(result.error || t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
+      if (newPassword.length < 6) {
+        setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+        return
       }
-    } catch (err: any) {
-      console.error("[v0] Password reset error:", err)
+
+      if (newPassword !== confirmPassword) {
+        setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
+        return
+      }
+
+      const result = await resetUserPassword(userId, newPassword, resetToken)
+      if (!result.success) {
+        setError(result.error || t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
+        return
+      }
+
+      clearPhoneAuth(OTP_FLOW)
+      setStep("success")
+    } catch (resetError) {
+      console.error("[auth/forgot-password] Password reset error:", resetError)
       setError(t("فشل تغيير كلمة المرور. يرجى المحاولة مرة أخرى", "Failed to change password. Please try again"))
     } finally {
       setIsLoading(false)
@@ -203,9 +268,7 @@ export default function ForgotPasswordPage() {
 
   const renderPhoneStep = () => (
     <form onSubmit={handleCheckPhone} className="space-y-6">
-      {error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">{error}</div>}
 
       <div className="space-y-2">
         <Label htmlFor="phone" className="text-base">
@@ -219,7 +282,7 @@ export default function ForgotPasswordPage() {
             type="tel"
             required
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(event) => setPhone(event.target.value)}
             placeholder="01012345678"
             className="h-12 pr-10"
             dir="ltr"
@@ -243,16 +306,12 @@ export default function ForgotPasswordPage() {
       </Button>
 
       <div className="text-center">
-        <Link
-          href="/auth"
-          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
-        >
+        <Link href="/auth" className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
           {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
           {t("العودة إلى تسجيل الدخول", "Back to Login")}
         </Link>
       </div>
 
-      {/* Hidden reCAPTCHA container */}
       <div id="recaptcha-container" />
     </form>
   )
@@ -263,25 +322,20 @@ export default function ForgotPasswordPage() {
         <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
           <Shield className="h-8 w-8 text-blue-600" />
         </div>
-        <h3 className="text-lg font-bold text-gray-800">
-          {t("أدخل كود التحقق", "Enter Verification Code")}
-        </h3>
-        <p className="text-sm text-gray-500 mt-1">
-          {t(`تم إرسال كود التحقق إلى ${phone}`, `Verification code sent to ${phone}`)}
-        </p>
+        <h3 className="text-lg font-bold text-gray-800">{t("أدخل كود التحقق", "Enter Verification Code")}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t(`تم إرسال كود التحقق إلى ${phone}`, `Verification code sent to ${phone}`)}</p>
       </div>
 
-      {error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm text-center">{error}</div>
+      {sessionLost && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm text-center">
+          {t("انتهت جلسة التحقق بعد تحديث الصفحة أو التنقل. أعد إرسال الكود للمتابعة.", "The verification session was lost after refresh/navigation. Resend the code to continue.")}
+        </div>
       )}
 
+      {error && <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm text-center">{error}</div>}
+
       <div className="flex justify-center" dir="ltr">
-        <InputOTP
-          maxLength={6}
-          value={otpCode}
-          onChange={setOtpCode}
-          disabled={isLoading}
-        >
+        <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} disabled={isLoading || sessionLost || attemptsRemaining <= 0}>
           <InputOTPGroup>
             <InputOTPSlot index={0} />
             <InputOTPSlot index={1} />
@@ -294,13 +348,13 @@ export default function ForgotPasswordPage() {
       </div>
 
       <p className="text-sm text-gray-500 text-center">
-        {t(`المحاولات المتبقية: ${maxAttempts - attempts}`, `Remaining attempts: ${maxAttempts - attempts}`)}
+        {t(`المحاولات المتبقية: ${attemptsRemaining}`, `Remaining attempts: ${attemptsRemaining}`)}
       </p>
 
       <Button
         type="button"
         onClick={handleVerifyOTP}
-        disabled={isLoading || otpCode.length !== 6}
+        disabled={isLoading || otpCode.length !== 6 || sessionLost || attemptsRemaining <= 0}
         className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl"
       >
         {isLoading ? (
@@ -314,18 +368,7 @@ export default function ForgotPasswordPage() {
       </Button>
 
       <div className="flex items-center justify-between">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            clearPhoneAuth()
-            setStep("phone")
-            setOtpCode("")
-            setError("")
-          }}
-          disabled={isLoading}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={handleChangeNumber} disabled={isLoading}>
           {t("تغيير الرقم", "Change Number")}
         </Button>
 
@@ -344,7 +387,6 @@ export default function ForgotPasswordPage() {
         </Button>
       </div>
 
-      {/* Hidden reCAPTCHA container */}
       <div id="recaptcha-container" />
     </div>
   )
@@ -355,17 +397,11 @@ export default function ForgotPasswordPage() {
         <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-4">
           <Lock className="h-8 w-8 text-green-600" />
         </div>
-        <h3 className="text-lg font-bold text-gray-800">
-          {t("إنشاء كلمة مرور جديدة", "Create New Password")}
-        </h3>
-        <p className="text-sm text-gray-500 mt-1">
-          {t("أدخل كلمة المرور الجديدة", "Enter your new password")}
-        </p>
+        <h3 className="text-lg font-bold text-gray-800">{t("إنشاء كلمة مرور جديدة", "Create New Password")}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t("أدخل كلمة المرور الجديدة", "Enter your new password")}</p>
       </div>
 
-      {error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">{error}</div>}
 
       <div className="space-y-2">
         <Label htmlFor="new-password" className="text-base">
@@ -377,8 +413,8 @@ export default function ForgotPasswordPage() {
             type={showPassword ? "text" : "password"}
             required
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="••••••••"
+            onChange={(event) => setNewPassword(event.target.value)}
+            placeholder="********"
             className="h-12 pr-10"
           />
           <button
@@ -401,8 +437,8 @@ export default function ForgotPasswordPage() {
             type={showPassword ? "text" : "password"}
             required
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="********"
             className="h-12 pr-10"
           />
           <button
@@ -436,18 +472,13 @@ export default function ForgotPasswordPage() {
     <div className="space-y-6">
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
         <CheckCircle2 className="w-16 h-16 text-green-500" />
-        <p className="text-center text-lg font-medium">
-          {t("تم تغيير كلمة المرور بنجاح!", "Password Changed Successfully!")}
-        </p>
+        <p className="text-center text-lg font-medium">{t("تم تغيير كلمة المرور بنجاح!", "Password Changed Successfully!")}</p>
         <p className="text-center text-sm text-muted-foreground">
-          {t(
-            "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة",
-            "You can now login with your new password",
-          )}
+          {t("يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة", "You can now login with your new password")}
         </p>
       </div>
-      <Button 
-        onClick={() => router.push("/auth")} 
+      <Button
+        onClick={() => router.push("/auth")}
         className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl"
       >
         {t("تسجيل الدخول", "Login")}
@@ -463,22 +494,15 @@ export default function ForgotPasswordPage() {
         <div className="container mx-auto px-4 max-w-md">
           <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
             <CardHeader className="space-y-2 bg-gradient-to-r from-gray-50 to-white border-b">
-              <CardTitle className="text-2xl text-center">
-                {t("نسيت كلمة المرور؟", "Forgot Password?")}
-              </CardTitle>
+              <CardTitle className="text-2xl text-center">{t("نسيت كلمة المرور؟", "Forgot Password?")}</CardTitle>
               <CardDescription className="text-center">
-                {step === "phone" && t(
-                  "أدخل رقم هاتفك المسجل وسنرسل لك كود التحقق",
-                  "Enter your registered phone number and we'll send you a verification code",
-                )}
-                {step === "otp" && t(
-                  "أدخل كود التحقق المرسل إلى هاتفك",
-                  "Enter the verification code sent to your phone",
-                )}
-                {step === "new-password" && t(
-                  "أنشئ كلمة مرور جديدة لحسابك",
-                  "Create a new password for your account",
-                )}
+                {step === "phone" &&
+                  t(
+                    "أدخل رقم هاتفك المسجل وسنرسل لك كود التحقق",
+                    "Enter your registered phone number and we'll send you a verification code",
+                  )}
+                {step === "otp" && t("أدخل كود التحقق المرسل إلى هاتفك", "Enter the verification code sent to your phone")}
+                {step === "new-password" && t("أنشئ كلمة مرور جديدة لحسابك", "Create a new password for your account")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">

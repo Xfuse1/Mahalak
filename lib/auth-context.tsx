@@ -15,6 +15,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
 import { createStore, uploadStoreImage, updateStore } from "./actions/stores"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
+import { normalizeEgyptPhone } from "./utils/phone"
 
 interface User {
   id: string
@@ -52,8 +53,10 @@ interface AuthContextType {
       longitude?: number
       ownerIdNumber?: string
       idCardImageUrl?: string | null
+      idCardImageBackUrl?: string | null
       commercialRegisterImageUrl?: string | null
       taxCardImageUrl?: string | null
+      taxCardImageBackUrl?: string | null
     },
     street?: string,
     city?: string,
@@ -190,8 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       longitude?: number
       ownerIdNumber?: string
       idCardImageUrl?: string | null
+      idCardImageBackUrl?: string | null
       commercialRegisterImageUrl?: string | null
       taxCardImageUrl?: string | null
+      taxCardImageBackUrl?: string | null
     },
     street?: string,
     city?: string,
@@ -201,6 +206,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<boolean> => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password)
+      const normalizedProfilePhone = sellerData?.phone
+        ? normalizeEgyptPhone(sellerData.phone)
+        : phone
+          ? normalizeEgyptPhone(phone)
+          : null
 
       try {
         await updateFirebaseProfile(credential.user, { displayName: name })
@@ -213,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         full_name: name,
         role,
-        phone: sellerData?.phone ?? phone ?? null,
+        phone: normalizedProfilePhone,
         phone_verified: phoneVerified ?? false,
         phone_verified_at: phoneVerified ? now : null,
         street: street ?? null,
@@ -226,22 +236,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await setDoc(doc(db, "users", credential.user.uid), profileData)
 
       if (role === "seller" && credential.user && sellerData?.storeName) {
+        const normalizedSellerPhone = sellerData.phone ? normalizeEgyptPhone(sellerData.phone) : null
         const result = await createStore({
           seller_id: credential.user.uid,
           name: sellerData.storeName,
           description: sellerData.storeDescription || "",
           address: sellerData.address || "",
-          phone: sellerData.phone || "",
+          phone: normalizedSellerPhone || "",
           category: sellerData.storeType || "خدمات أخرى",
           category_id: sellerData.storeTypeId || "",
           latitude: sellerData.latitude,
           longitude: sellerData.longitude,
-          whatsapp_number: sellerData.phone || "",
+          whatsapp_number: normalizedSellerPhone || "",
           support_email: email,
           owner_id_number: sellerData.ownerIdNumber || "",
           id_card_image_url: sellerData.idCardImageUrl || undefined,
+          id_card_image_back_url: sellerData.idCardImageBackUrl || undefined,
           commercial_register_image_url: sellerData.commercialRegisterImageUrl || undefined,
           tax_card_image_url: sellerData.taxCardImageUrl || undefined,
+          tax_card_image_back_url: sellerData.taxCardImageBackUrl || undefined,
         })
 
         if (!result.success) {

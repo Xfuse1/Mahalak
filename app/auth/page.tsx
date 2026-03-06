@@ -21,6 +21,7 @@ import { getUserByPhone, storePendingRegistration } from "../../lib/actions/prof
 import { LoginForm } from "../../components/auth/login-form"
 import { SellerFields } from "../../components/auth/seller-fields"
 import { UploadDialog } from "../../components/auth/upload-dialog"
+import { normalizeEgyptPhone } from "../../lib/utils/phone"
 
 // Lazy load phone verification (heavy: Firebase reCAPTCHA)
 const PhoneVerification = dynamic(
@@ -54,15 +55,13 @@ export default function AuthPage() {
   
   // Customer phone state
   const [customerPhone, setCustomerPhone] = useState("")
-  const [isCustomerPhoneVerified, setIsCustomerPhoneVerified] = useState(false)
-  const [triggerCustomerSendOTP, setTriggerCustomerSendOTP] = useState(false)
-  const [customerPhoneStep, setCustomerPhoneStep] = useState<"phone" | "otp" | "verified">("phone")
+  const [isCustomerPhoneVerified] = useState(false)
+  const [customerPhoneStep] = useState<"phone" | "otp">("phone")
   
   // Phone verification state for sellers
   const [sellerPhone, setSellerPhone] = useState("")
   const [isPhoneVerified, setIsPhoneVerified] = useState(false)
-  const [triggerSendOTP, setTriggerSendOTP] = useState(false)
-  const [phoneStep, setPhoneStep] = useState<"phone" | "otp" | "verified">("phone")
+  const [phoneStep] = useState<"phone" | "otp">("phone")
   
   // Store type state
   const [selectedStoreType, setSelectedStoreType] = useState("")
@@ -94,7 +93,7 @@ export default function AuthPage() {
   // Store name uniqueness check
   const [isCheckingStoreName, setIsCheckingStoreName] = useState(false)
   const [storeNameExists, setStoreNameExists] = useState(false)
-  const storeNameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const storeNameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // Map picker state
   const [showMapPicker, setShowMapPicker] = useState(false)
@@ -341,15 +340,15 @@ export default function AuthPage() {
     const emailOrPhone = (formData.get("emailOrPhone") as string).trim()
     const password = formData.get("password") as string
 
-    // Detect if input is a phone number (Egyptian: starts with 01, 11 digits)
-    const isPhone = /^(01[0125])\d{8}$/.test(emailOrPhone)
+    const normalizedLoginPhone = emailOrPhone.includes("@") ? null : normalizeEgyptPhone(emailOrPhone)
+    const isPhone = Boolean(normalizedLoginPhone)
 
     let email = emailOrPhone
 
     try {
       if (isPhone) {
         // Look up the email associated with this phone number
-        const result = await getUserByPhone(emailOrPhone)
+        const result = await getUserByPhone(normalizedLoginPhone || emailOrPhone)
         if (!result.success || !result.data?.email) {
           setIsLoading(false)
           setError(t("لا يوجد حساب مرتبط برقم الهاتف هذا", "No account found with this phone number"))
@@ -365,7 +364,7 @@ export default function AuthPage() {
         router.push(role === "seller" ? "/seller/dashboard" : "/")
       }
     } catch (error: any) {
-      if (error.message === "Email not confirmed") {
+      if (error.message === "__email_verification_disabled__") {
         setError(
           t(
             "يرجى تأكيد بريدك الإلكتروني أولاً. تحقق من صندوق الوارد الخاص بك.",
@@ -387,7 +386,7 @@ export default function AuthPage() {
     setIsLoggingIn(false)
   }
 
-  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+  const _legacyHandleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
     setIsLoading(true)
@@ -676,6 +675,217 @@ export default function AuthPage() {
     setIsLoggingIn(false)
   }
 
+  const handleRegistrationSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError("")
+    setIsLoading(true)
+
+    const formData = new FormData(e.currentTarget)
+    const name = (formData.get("name") as string).trim()
+    const email = (formData.get("email") as string).trim()
+    const password = formData.get("password") as string
+    const confirmPassword = formData.get("confirmPassword") as string
+    const street = (formData.get("street") as string).trim()
+    const city = selectedCity.trim()
+    const country = selectedCountry.trim()
+
+    try {
+      if (!name || name.length < 3) {
+        setError(t("الاسم يجب أن يكون 3 أحرف على الأقل", "Name must be at least 3 characters"))
+        return
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!email || !emailRegex.test(email)) {
+        setError(t("يرجى إدخال بريد إلكتروني صحيح", "Please enter a valid email address"))
+        return
+      }
+
+      if (!street || street.length < 2) {
+        setError(t("يرجى إدخال عنوان الشارع", "Please enter the street address"))
+        return
+      }
+
+      if (!city || city.length < 2) {
+        setError(t("يرجى إدخال اسم المدينة", "Please enter the city name"))
+        return
+      }
+
+      if (!country || country.length < 2) {
+        setError(t("يرجى إدخال اسم الدولة", "Please enter the country name"))
+        return
+      }
+
+      if (!password || password.length < 6) {
+        setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+        return
+      }
+
+      if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+        setError(t("كلمة المرور يجب أن تحتوي على حرف ورقم على الأقل", "Password must contain at least one letter and one number"))
+        return
+      }
+
+      if (password !== confirmPassword) {
+        setError(t("كلمات المرور غير متطابقة", "Passwords do not match"))
+        return
+      }
+
+      if (role === "customer") {
+        const normalizedCustomerPhone = normalizeEgyptPhone(customerPhone)
+        if (!normalizedCustomerPhone) {
+          setError(t("يرجى إدخال رقم هاتف مصري صحيح", "Please enter a valid Egyptian phone number"))
+          return
+        }
+
+        const phoneCheck = await getUserByPhone(normalizedCustomerPhone)
+        if (phoneCheck.success) {
+          setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+          return
+        }
+
+        const storeResult = await storePendingRegistration({
+          email,
+          password,
+          name,
+          phone: normalizedCustomerPhone,
+          street,
+          city,
+          country,
+          role: "customer",
+        })
+
+        if (!storeResult.success || !storeResult.token) {
+          setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+          return
+        }
+
+        sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
+        router.push(`/auth/verify-phone?phone=${encodeURIComponent(normalizedCustomerPhone)}&role=customer&returnUrl=/`)
+        return
+      }
+
+      const normalizedSellerPhone = normalizeEgyptPhone(sellerPhone)
+      const storeName = (formData.get("storeName") as string).trim()
+      const storeDescription = (formData.get("storeDescription") as string).trim()
+      const storeType = selectedStoreType
+
+      if (!normalizedSellerPhone) {
+        setError(t("يرجى إدخال رقم هاتف مصري صحيح", "Please enter a valid Egyptian phone number"))
+        return
+      }
+
+      const sellerPhoneCheck = await getUserByPhone(normalizedSellerPhone)
+      if (sellerPhoneCheck.success) {
+        setError(t("رقم الهاتف مسجل بالفعل في حساب آخر", "This phone number is already registered to another account"))
+        return
+      }
+
+      if (!ownerIdNumber || ownerIdNumber.length !== 14) {
+        setError(t("رقم البطاقة يجب أن يكون 14 رقم بالضبط", "ID card number must be exactly 14 digits"))
+        return
+      }
+
+      if (!storeName || storeName.length < 3) {
+        setError(t("اسم المتجر يجب أن يكون 3 أحرف على الأقل", "Store name must be at least 3 characters"))
+        return
+      }
+
+      if (storeNameExists) {
+        setError(t("اسم المتجر مسجل بالفعل. يرجى اختيار اسم آخر", "Store name is already taken. Please choose a different name"))
+        return
+      }
+
+      if (!storeDescription || storeDescription.length < 10) {
+        setError(t("وصف المتجر يجب أن يكون 10 أحرف على الأقل", "Store description must be at least 10 characters"))
+        return
+      }
+
+      if (!storeType) {
+        setError(t("يرجى اختيار نوع المتجر", "Please select a store type"))
+        return
+      }
+
+      if (!storeLogo) {
+        setError(t("يرجى رفع لوجو المتجر", "Please upload a store logo"))
+        return
+      }
+
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
+      const uploadFile = async (file: File | null, prefix: string): Promise<string | null> => {
+        if (!file) {
+          return null
+        }
+
+        try {
+          const uploadData = new FormData()
+          uploadData.append("file", file)
+          uploadData.append("storeId", `${tempId}/${prefix}`)
+          const result = await uploadStoreImage(uploadData)
+          return result.success && result.url ? result.url : null
+        } catch (uploadError) {
+          console.error(`[auth/register] Failed to pre-upload ${prefix}:`, uploadError)
+          return null
+        }
+      }
+
+      const [
+        storeLogoUrl,
+        idCardImageFrontUrl,
+        idCardImageBackUrl,
+        commercialRegisterImageUrl,
+        taxCardImageFrontUrl,
+        taxCardImageBackUrl,
+      ] = await Promise.all([
+        uploadFile(storeLogo, "logo"),
+        uploadFile(idCardImageFront, "id-card-front"),
+        uploadFile(idCardImageBack, "id-card-back"),
+        uploadFile(commercialRegisterImage, "commercial-register"),
+        uploadFile(taxCardImageFront, "tax-card-front"),
+        uploadFile(taxCardImageBack, "tax-card-back"),
+      ])
+
+      const storeResult = await storePendingRegistration({
+        email,
+        password,
+        name,
+        role: "seller",
+        phone: normalizedSellerPhone,
+        storeName,
+        storeDescription,
+        storeType,
+        storeLogoUrl,
+        ownerIdNumber,
+        idCardImageUrl: idCardImageFrontUrl,
+        idCardImageBackUrl,
+        commercialRegisterImageUrl,
+        taxCardImageUrl: taxCardImageFrontUrl,
+        taxCardImageBackUrl,
+        street,
+        city,
+        country,
+        latitude: storeLocation?.latitude,
+        longitude: storeLocation?.longitude,
+      })
+
+      if (!storeResult.success || !storeResult.token) {
+        setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
+        return
+      }
+
+      sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
+      router.push(`/auth/verify-phone?phone=${encodeURIComponent(normalizedSellerPhone)}&role=seller&returnUrl=/seller/dashboard`)
+    } catch (registrationError: any) {
+      if (registrationError?.message?.includes("already registered")) {
+        setError(t("البريد الإلكتروني مسجل بالفعل", "Email already registered"))
+      } else {
+        setError(t("فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.", "Account creation failed. Please try again."))
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div suppressHydrationWarning className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-blue-50">
       <Header />
@@ -756,7 +966,7 @@ export default function AuthPage() {
                 </TabsContent>
 
                 <TabsContent value="register">
-                  <form onSubmit={handleRegister} className="space-y-5">
+                  <form onSubmit={handleRegistrationSubmit} className="space-y-5">
                     <div className="space-y-2">
                       <Label htmlFor="register-name" className="text-base">
                         {t("الاسم الكامل", "Full Name")} <span className="text-red-500">*</span>
@@ -788,18 +998,11 @@ export default function AuthPage() {
                       <PhoneVerification
                         phoneNumber={customerPhone}
                         onPhoneChange={setCustomerPhone}
-                        onVerified={setIsCustomerPhoneVerified}
-                        isVerified={isCustomerPhoneVerified}
+                        onVerified={() => undefined}
+                        isVerified={false}
                         language={language}
                         recaptchaId="recaptcha-container-customer"
-                        triggerSendOTP={triggerCustomerSendOTP}
-                        onOTPSent={(success, error) => {
-                          setTriggerCustomerSendOTP(false)
-                          if (!success && error) {
-                            setError(error)
-                          }
-                        }}
-                        onStepChange={setCustomerPhoneStep}
+                        mode="input"
                       />
                     )}
 
@@ -866,17 +1069,10 @@ export default function AuthPage() {
                         t={t}
                         isRTL={isRTL}
                         language={language}
-                        setError={setError}
                         categories={storeCategories}
                         isCategoriesLoading={isCategoriesLoading}
                         sellerPhone={sellerPhone}
                         setSellerPhone={setSellerPhone}
-                        isPhoneVerified={isPhoneVerified}
-                        setIsPhoneVerified={setIsPhoneVerified}
-                        triggerSendOTP={triggerSendOTP}
-                        setTriggerSendOTP={setTriggerSendOTP}
-                        phoneStep={phoneStep}
-                        setPhoneStep={setPhoneStep}
                         handleStoreNameChange={handleStoreNameChange}
                         isCheckingStoreName={isCheckingStoreName}
                         storeNameExists={storeNameExists}

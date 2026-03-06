@@ -19,6 +19,7 @@ import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
+import { normalizeEgyptPhone } from "@/lib/utils/phone"
 
 function PhoneVerificationLoading() {
   const { t } = useLanguage()
@@ -408,11 +409,13 @@ export default function SettingsPage() {
                       <PhoneVerification
                         phoneNumber={newPhone}
                         onPhoneChange={setNewPhone}
+                        flow="other"
                         onVerified={(verified) => {
                           setIsPhoneVerified(verified)
                           if (verified) {
+                            const normalizedPhone = normalizeEgyptPhone(newPhone) || newPhone
                             // Update form data with new verified phone + whatsapp
-                            setFormData(prev => ({ ...prev, phone: newPhone, whatsapp_number: newPhone }))
+                            setFormData(prev => ({ ...prev, phone: normalizedPhone, whatsapp_number: normalizedPhone }))
                           }
                         }}
                         isVerified={isPhoneVerified}

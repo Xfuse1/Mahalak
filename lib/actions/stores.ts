@@ -22,8 +22,10 @@ export type StoreRecord = {
   support_email?: string
   owner_id_number?: string
   id_card_image_url?: string | null
+  id_card_image_back_url?: string | null
   commercial_register_image_url?: string | null
   tax_card_image_url?: string | null
+  tax_card_image_back_url?: string | null
   image_url?: string
   open_time?: string
   close_time?: string
@@ -69,8 +71,10 @@ export type StoreCreateInput = {
   support_email?: string
   owner_id_number?: string
   id_card_image_url?: string
+  id_card_image_back_url?: string
   commercial_register_image_url?: string
   tax_card_image_url?: string
+  tax_card_image_back_url?: string
   image_url?: string
   open_time?: string
   close_time?: string
@@ -277,8 +281,10 @@ export async function createStore(storeData: StoreCreateInput) {
     support_email: storeData.support_email || "",
     owner_id_number: storeData.owner_id_number || "",
     id_card_image_url: storeData.id_card_image_url || null,
+    id_card_image_back_url: storeData.id_card_image_back_url || null,
     commercial_register_image_url: storeData.commercial_register_image_url || null,
     tax_card_image_url: storeData.tax_card_image_url || null,
+    tax_card_image_back_url: storeData.tax_card_image_back_url || null,
     is_approved: false,
     rating: 0,
     created_at: now,
@@ -350,8 +356,8 @@ export async function updateStore(
 
   revalidatePath("/seller/settings", "page")
   revalidatePath(`/store/${id}`, "page")
-  revalidateTag("stores")
-  revalidateTag(`store-${id}`)
+  revalidateTag("stores", "max")
+  revalidateTag(`store-${id}`, "max")
   return { success: true, data: store }
 }
 

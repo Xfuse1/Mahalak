@@ -24,19 +24,12 @@ interface SellerFieldsProps {
   t: (ar: string, en: string) => string
   isRTL: boolean
   language: "ar" | "en"
-  setError: (error: string) => void
   // Categories from Firestore
   categories: CategoryItem[]
   isCategoriesLoading: boolean
   // Phone verification
   sellerPhone: string
   setSellerPhone: (phone: string) => void
-  isPhoneVerified: boolean
-  setIsPhoneVerified: (verified: boolean) => void
-  triggerSendOTP: boolean
-  setTriggerSendOTP: (trigger: boolean) => void
-  phoneStep: "phone" | "otp" | "verified"
-  setPhoneStep: (step: "phone" | "otp" | "verified") => void
   // Store name
   handleStoreNameChange: (value: string) => void
   isCheckingStoreName: boolean
@@ -71,10 +64,9 @@ interface SellerFieldsProps {
 
 export function SellerFields(props: SellerFieldsProps) {
   const {
-    t, isRTL, language, setError,
+    t, isRTL, language,
     categories, isCategoriesLoading,
-    sellerPhone, setSellerPhone, isPhoneVerified, setIsPhoneVerified,
-    triggerSendOTP, setTriggerSendOTP, phoneStep, setPhoneStep,
+    sellerPhone, setSellerPhone,
     handleStoreNameChange, isCheckingStoreName, storeNameExists,
     selectedStoreType, setSelectedStoreType,
     selectedStoreTypeId, setSelectedStoreTypeId,
@@ -92,18 +84,10 @@ export function SellerFields(props: SellerFieldsProps) {
       <PhoneVerification
         phoneNumber={sellerPhone}
         onPhoneChange={setSellerPhone}
-        onVerified={setIsPhoneVerified}
-        isVerified={isPhoneVerified}
+        onVerified={() => undefined}
+        isVerified={false}
         language={language}
-        recaptchaId="recaptcha-container-seller"
-        triggerSendOTP={triggerSendOTP}
-        onOTPSent={(success, error) => {
-          setTriggerSendOTP(false)
-          if (!success && error) {
-            setError(error)
-          }
-        }}
-        onStepChange={setPhoneStep}
+        mode="input"
       />
       <div className="space-y-2">
         <Label htmlFor="register-storeName" className="text-base">

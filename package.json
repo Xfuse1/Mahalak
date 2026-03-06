@@ -5,8 +5,10 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "check:auth-types": "tsc -p tsconfig.auth.json --noEmit",
     "dev": "next dev --turbopack",
     "lint": "next lint",
+    "normalize:phones": "ts-node --project tsconfig.node.json scripts/normalize-egypt-phones.ts",
     "start": "next start",
     "preview": "next start -p 3000",
     "setup:env": "node scripts/setup-env.js",
@@ -53,6 +55,7 @@
     "dotenv": "^17.2.3",
     "eslint": "8.57.0",
     "eslint-config-next": "^16.1.3",
+    "pg": "^8.18.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "ts-node": "^10.9.2",

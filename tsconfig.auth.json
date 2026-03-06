@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "app/auth/**/*.tsx",
+    "components/auth/**/*.tsx",
+    "components/footer.tsx",
+    "components/header.tsx",
+    "components/map-picker.tsx",
+    "components/phone-verification.tsx",
+    "components/ui/**/*.tsx",
+    "lib/actions/profile.ts",
+    "lib/actions/stores.ts",
+    "lib/auth-context.tsx",
+    "lib/firebase/admin.ts",
+    "lib/firebase/client.ts",
+    "lib/firebase/firestore-helpers.ts",
+    "lib/language-context.tsx",
+    "lib/logger.ts",
+    "lib/utils/phone.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

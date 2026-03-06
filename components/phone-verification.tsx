@@ -6,7 +6,13 @@ import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp"
 import { Phone, Shield, CheckCircle2, Loader2, RefreshCw, AlertTriangle } from "lucide-react"
-import { initRecaptchaVerifier, sendPhoneOTP, verifyPhoneOTP, clearPhoneAuth, getOTPCooldownRemaining, getOTPAttemptsRemaining } from "@/lib/firebase/client"
+import {
+  clearPhoneAuth,
+  getOTPStatus,
+  sendPhoneOTP,
+  type OTPFlow,
+  verifyPhoneOTP,
+} from "@/lib/firebase/client"
 
 interface PhoneVerificationProps {
   phoneNumber: string
@@ -15,11 +21,9 @@ interface PhoneVerificationProps {
   isVerified: boolean
   disabled?: boolean
   language?: "ar" | "en"
-  recaptchaId?: string // Unique ID for reCAPTCHA container to avoid duplicate IDs
-  // New props for external control
-  triggerSendOTP?: boolean // When true, triggers sending OTP
-  onOTPSent?: (success: boolean, error?: string) => void // Callback when OTP is sent
-  onStepChange?: (step: "phone" | "otp" | "verified") => void // Notify parent of step changes
+  recaptchaId?: string
+  flow?: OTPFlow
+  mode?: "input" | "inline"
 }
 
 export function PhoneVerification({
@@ -29,103 +33,108 @@ export function PhoneVerification({
   isVerified,
   disabled = false,
   language = "ar",
-  triggerSendOTP = false,
-  onOTPSent,
-  onStepChange,
   recaptchaId = "recaptcha-container",
+  flow = "other",
+  mode = "inline",
 }: PhoneVerificationProps) {
   const [step, setStep] = useState<"phone" | "otp" | "verified">(isVerified ? "verified" : "phone")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [successMsg, setSuccessMsg] = useState("")
   const [otpCode, setOtpCode] = useState("")
-  const [countdown, setCountdown] = useState(() => getOTPCooldownRemaining())
-  const [attempts, setAttempts] = useState(() => 3 - getOTPAttemptsRemaining())
-  const [sendCount, setSendCount] = useState(0)
-  const maxAttempts = 3
+  const [countdown, setCountdown] = useState(0)
+  const [attemptsRemaining, setAttemptsRemaining] = useState(3)
+  const [sessionLost, setSessionLost] = useState(false)
 
   const t = useCallback(
     (ar: string, en: string) => (language === "ar" ? ar : en),
-    [language]
+    [language],
   )
 
-  // Countdown timer for resend
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
-      return () => clearTimeout(timer)
+  const syncStatus = useCallback(() => {
+    const status = getOTPStatus(flow)
+    setCountdown(status.cooldownRemaining)
+    setAttemptsRemaining(status.attemptsRemaining)
+    setSessionLost(status.sessionLost)
+
+    if (mode === "inline" && status.hasRequestedCode && !isVerified) {
+      setStep("otp")
     }
-  }, [countdown])
+  }, [flow, isVerified, mode])
 
-  // Reset when phone number changes
   useEffect(() => {
-    if (!isVerified) {
-      setStep("phone")
-      setOtpCode("")
-      setError("")
-      setAttempts(0)
-    }
-  }, [phoneNumber, isVerified])
+    syncStatus()
+  }, [syncStatus])
 
-  // Notify parent of step changes
   useEffect(() => {
-    onStepChange?.(step)
-  }, [step, onStepChange])
-
-  // Trigger OTP send from parent (when "Create Account" is clicked)
-  useEffect(() => {
-    if (triggerSendOTP && step === "phone" && !isLoading) {
-      handleSendOTP(true)
-    }
-  }, [triggerSendOTP])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      clearPhoneAuth()
-    }
-  }, [])
-
-  // Unified send OTP function (used by both internal button and external trigger)
-  const handleSendOTP = async (isExternal = false) => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      const errorMsg = t("يرجى إدخال رقم هاتف صحيح", "Please enter a valid phone number")
-      setError(errorMsg)
-      if (isExternal) onOTPSent?.(false, errorMsg)
+    if (countdown <= 0) {
       return
     }
 
+    const timer = setTimeout(() => {
+      syncStatus()
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [countdown, syncStatus])
+
+  useEffect(() => {
+    if (isVerified) {
+      setStep("verified")
+      return
+    }
+
+    if (mode === "input") {
+      setStep("phone")
+      setOtpCode("")
+      setError("")
+      setSuccessMsg("")
+      setSessionLost(false)
+      setAttemptsRemaining(3)
+      setCountdown(0)
+      return
+    }
+
+    clearPhoneAuth(flow)
+    setStep("phone")
+    setOtpCode("")
+    setError("")
+    setSuccessMsg("")
+    setSessionLost(false)
+    setAttemptsRemaining(3)
+    setCountdown(0)
+  }, [phoneNumber, isVerified, mode, flow])
+
+  useEffect(() => {
+    return () => {
+      clearPhoneAuth(flow)
+    }
+  }, [flow])
+
+  const handleSendOTP = async () => {
     setIsLoading(true)
     setError("")
     setSuccessMsg("")
+    setSessionLost(false)
 
     try {
-      // Initialize reCAPTCHA
-      initRecaptchaVerifier(recaptchaId)
-
-      // Send OTP (rate limiting is handled inside sendPhoneOTP)
-      const result = await sendPhoneOTP(phoneNumber)
+      const result = await sendPhoneOTP(phoneNumber, { containerId: recaptchaId, flow })
 
       if (result.success) {
+        const status = getOTPStatus(flow)
         setStep("otp")
-        // Progressive cooldown from rate limit data
-        const cooldown = getOTPCooldownRemaining()
-        setCountdown(cooldown > 0 ? cooldown : 60)
-        setAttempts(0)
-        setSendCount(prev => prev + 1)
+        setCountdown(result.cooldown ?? status.cooldownRemaining)
+        setAttemptsRemaining(result.attemptsRemaining ?? status.attemptsRemaining)
         setSuccessMsg(t("تم إرسال كود التحقق بنجاح", "Verification code sent successfully"))
         setTimeout(() => setSuccessMsg(""), 4000)
-        if (isExternal) onOTPSent?.(true)
       } else {
-        const errorMsg = result.error || t("فشل إرسال كود التحقق", "Failed to send verification code")
-        if (result.cooldown) setCountdown(result.cooldown)
-        setError(errorMsg)
-        if (isExternal) onOTPSent?.(false, errorMsg)
+        setCountdown(result.cooldown ?? 0)
+        setAttemptsRemaining(result.attemptsRemaining ?? 3)
+        setSessionLost(Boolean(result.sessionLost))
+        setError(result.error || t("فشل إرسال كود التحقق", "Failed to send verification code"))
       }
-    } catch (err: any) {
-      const errorMsg = t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again")
-      setError(errorMsg)
-      if (isExternal) onOTPSent?.(false, errorMsg)
+    } catch {
+      setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
     } finally {
       setIsLoading(false)
     }
@@ -137,55 +146,57 @@ export function PhoneVerification({
       return
     }
 
-    if (attempts >= maxAttempts) {
-      setError(t("تم تجاوز عدد المحاولات المسموحة", "Maximum attempts exceeded"))
+    if (attemptsRemaining <= 0) {
+      setError(t("تم تجاوز عدد المحاولات. يرجى طلب كود جديد", "Maximum attempts exceeded. Please request a new code"))
       return
     }
 
     setIsLoading(true)
     setError("")
     setSuccessMsg("")
-    setAttempts((prev) => prev + 1)
 
     try {
-      const result = await verifyPhoneOTP(otpCode)
+      const result = await verifyPhoneOTP(otpCode, { flow })
 
       if (result.success) {
         setStep("verified")
+        setSessionLost(false)
+        setAttemptsRemaining(3)
         onVerified(true)
       } else {
+        setAttemptsRemaining(result.attemptsRemaining ?? attemptsRemaining)
+        setSessionLost(Boolean(result.sessionLost))
         setError(result.error || t("كود التحقق غير صحيح", "Invalid verification code"))
-        // Sync attempts from rate limiter
-        if (typeof result.attemptsRemaining === 'number') {
-          setAttempts(maxAttempts - result.attemptsRemaining)
-        }
       }
-    } catch (err: any) {
+    } catch {
       setError(t("حدث خطأ أثناء التحقق", "An error occurred during verification"))
     } finally {
+      syncStatus()
       setIsLoading(false)
     }
   }
 
   const handleResendOTP = async () => {
-    if (countdown > 0) return
+    if (countdown > 0) {
+      return
+    }
 
     setOtpCode("")
-    setError("")
-    setAttempts(0)
     await handleSendOTP()
   }
 
   const handleChangePhone = () => {
-    clearPhoneAuth()
+    clearPhoneAuth(flow)
     setStep("phone")
     setOtpCode("")
     setError("")
-    setAttempts(0)
+    setSuccessMsg("")
+    setSessionLost(false)
+    setAttemptsRemaining(3)
+    setCountdown(0)
     onVerified(false)
   }
 
-  // Render verified state
   if (step === "verified" || isVerified) {
     return (
       <div className="space-y-2">
@@ -194,22 +205,11 @@ export function PhoneVerification({
         </Label>
         <div className="flex items-center gap-3">
           <div className="flex-1 relative">
-            <Input
-              type="tel"
-              value={phoneNumber}
-              disabled
-              className="h-12 bg-green-50 border-green-200 pr-10"
-            />
+            <Input type="tel" value={phoneNumber} disabled className="h-12 bg-green-50 border-green-200 pr-10" />
             <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
           </div>
           {!disabled && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleChangePhone}
-              className="h-12 px-4"
-            >
+            <Button type="button" variant="outline" size="sm" onClick={handleChangePhone} className="h-12 px-4">
               {t("تغيير", "Change")}
             </Button>
           )}
@@ -222,7 +222,33 @@ export function PhoneVerification({
     )
   }
 
-  // Render OTP input step
+  if (mode === "input") {
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="phone-input" className="text-base font-medium text-gray-700">
+          {t("رقم الهاتف", "Phone Number")}
+        </Label>
+        <div className="relative">
+          <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Input
+            id="phone-input"
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => onPhoneChange(e.target.value)}
+            placeholder="01012345678"
+            disabled={disabled || isLoading}
+            className="h-12 pr-10"
+            dir="ltr"
+          />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <p className="text-xs text-gray-500">
+          {t("سيتم إرسال كود التحقق في الخطوة التالية", "The verification code will be sent in the next step")}
+        </p>
+      </div>
+    )
+  }
+
   if (step === "otp") {
     return (
       <div className="space-y-4">
@@ -230,23 +256,14 @@ export function PhoneVerification({
           <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
             <Shield className="h-8 w-8 text-blue-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-800">
-            {t("أدخل كود التحقق", "Enter Verification Code")}
-          </h3>
+          <h3 className="text-lg font-bold text-gray-800">{t("أدخل كود التحقق", "Enter Verification Code")}</h3>
           <p className="text-sm text-gray-500 mt-1">
             {t(`تم إرسال كود التحقق إلى ${phoneNumber}`, `Verification code sent to ${phoneNumber}`)}
           </p>
         </div>
 
         <div className="flex justify-center" dir="ltr">
-          <InputOTP
-            maxLength={6}
-            value={otpCode}
-            onChange={setOtpCode}
-            disabled={isLoading}
-            autoComplete="one-time-code"
-            textAlign="center"
-          >
+          <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} disabled={isLoading || sessionLost} autoComplete="one-time-code">
             <InputOTPGroup>
               <InputOTPSlot index={0} />
               <InputOTPSlot index={1} />
@@ -267,11 +284,18 @@ export function PhoneVerification({
           </div>
         )}
 
-        {error && (
-          <p className="text-sm text-red-600 text-center">{error}</p>
+        {sessionLost && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center">
+            <p className="text-sm text-amber-700 flex items-center justify-center gap-1">
+              <AlertTriangle className="h-4 w-4" />
+              {t("انتهت جلسة التحقق محلياً. يرجى إعادة إرسال الكود", "Verification session was lost locally. Please resend the code")}
+            </p>
+          </div>
         )}
 
-        {attempts >= maxAttempts && (
+        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+        {attemptsRemaining <= 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center">
             <p className="text-sm text-amber-700 flex items-center justify-center gap-1">
               <AlertTriangle className="h-4 w-4" />
@@ -281,13 +305,13 @@ export function PhoneVerification({
         )}
 
         <p className="text-sm text-gray-500 text-center">
-          {t(`المحاولات المتبقية: ${maxAttempts - attempts}`, `Remaining attempts: ${maxAttempts - attempts}`)}
+          {t(`المحاولات المتبقية: ${attemptsRemaining}`, `Remaining attempts: ${attemptsRemaining}`)}
         </p>
 
         <Button
           type="button"
           onClick={handleVerifyOTP}
-          disabled={isLoading || otpCode.length !== 6 || attempts >= maxAttempts}
+          disabled={isLoading || otpCode.length !== 6 || attemptsRemaining <= 0 || sessionLost}
           className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
         >
           {isLoading ? (
@@ -301,13 +325,7 @@ export function PhoneVerification({
         </Button>
 
         <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleChangePhone}
-            disabled={isLoading}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={handleChangePhone} disabled={isLoading}>
             {t("تغيير الرقم", "Change Number")}
           </Button>
 
@@ -326,15 +344,13 @@ export function PhoneVerification({
           </Button>
         </div>
 
-        {/* Hidden reCAPTCHA container */}
         <div id={recaptchaId} />
       </div>
     )
   }
 
-  // Render phone input step
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <Label htmlFor="phone-input" className="text-base font-medium text-gray-700">
         {t("رقم الهاتف", "Phone Number")}
       </Label>
@@ -352,15 +368,23 @@ export function PhoneVerification({
         />
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Button type="button" onClick={handleSendOTP} disabled={disabled || isLoading} className="w-full h-12">
+        {isLoading ? (
+          <>
+            <Loader2 className="me-2 h-4 w-4 animate-spin" />
+            {t("جاري الإرسال...", "Sending...")}
+          </>
+        ) : (
+          t("إرسال كود التحقق", "Send Verification Code")
+        )}
+      </Button>
 
       <p className="text-xs text-gray-500">
         {t("سيتم إرسال رسالة نصية تحتوي على كود التحقق", "A text message with verification code will be sent")}
       </p>
 
-      {/* Hidden reCAPTCHA container */}
       <div id={recaptchaId} />
     </div>
   )

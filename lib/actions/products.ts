@@ -386,7 +386,7 @@ export async function createProduct(formData: {
     await docRef.set(payload)
 
     revalidatePath("/seller/products", "page")
-    revalidateTag("products")
+    revalidateTag("products", "max")
     return { success: true, data: { id: docRef.id, ...payload } }
   } catch (error: unknown) {
     return { success: false, error: PRODUCT_ERROR_CODES.CREATE_PRODUCT_UNEXPECTED_ERROR }
@@ -467,8 +467,8 @@ export async function updateProduct(
 
   revalidatePath("/seller/products", "page")
   revalidatePath(`/product/${id}`, "page")
-  revalidateTag("products")
-  revalidateTag(`product-${id}`)
+  revalidateTag("products", "max")
+  revalidateTag(`product-${id}`, "max")
   return { success: true, data: mapProduct(updatedSnap) }
 }
 
@@ -494,7 +494,7 @@ export async function deleteProduct(id: string, callerUserId?: string) {
   }
 
   revalidatePath("/seller/products", "page")
-  revalidateTag("products")
+  revalidateTag("products", "max")
   return { success: true }
 }
 
