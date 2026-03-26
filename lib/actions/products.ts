@@ -28,6 +28,7 @@ type ProductRecord = {
   updated_at?: string
   discount_percentage?: number
   offer_title?: string | null
+  reservation_enabled?: boolean
   stores?:
   | {
     id?: string
@@ -325,6 +326,7 @@ export async function createProduct(formData: {
   store_id: string
   barcode?: string
   simulator_section?: string | null
+  reservation_enabled?: boolean
 }, callerUserId?: string) {
   try {
     const db = getAdminDb()
@@ -347,7 +349,11 @@ export async function createProduct(formData: {
     if (formData.price < formData.cost_price) {
       return { success: false, error: PRODUCT_ERROR_CODES.SELLING_PRICE_BELOW_COST }
     }
-    if (!Number.isFinite(formData.stock) || formData.stock <= 0) {
+    // السماح بـ stock = 0 عند تفعيل الحجز المسبق
+    if (!Number.isFinite(formData.stock) || formData.stock < 0) {
+      return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
+    }
+    if (formData.stock === 0 && !formData.reservation_enabled) {
       return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
     }
 
@@ -377,6 +383,7 @@ export async function createProduct(formData: {
       store_id: formData.store_id,
       barcode: formData.barcode || "",
       simulator_section: formData.simulator_section || null,
+      reservation_enabled: formData.reservation_enabled || false,
       rating: 0,
       rating_count: 0,
       created_at: now,
@@ -406,6 +413,7 @@ export async function updateProduct(
     rating: number
     simulator_section?: string | null
     barcode?: string
+    reservation_enabled?: boolean
   }>,
   callerUserId?: string,
 ) {
@@ -428,6 +436,10 @@ export async function updateProduct(
     return { success: false, error: PRODUCT_ERROR_CODES.COST_PRICE_MUST_BE_POSITIVE }
   }
   if (formData.stock !== undefined && (!Number.isFinite(formData.stock) || formData.stock < 0)) {
+    return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
+  }
+  // السماح بـ stock = 0 عند تفعيل الحجز المسبق
+  if (formData.stock === 0 && !formData.reservation_enabled && !existingProduct?.reservation_enabled) {
     return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
   }
 

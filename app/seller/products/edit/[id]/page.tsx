@@ -50,6 +50,7 @@ type EditableProduct = {
   category?: string
   image_url?: string
   barcode?: string
+  reservation_enabled?: boolean
 }
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,6 +71,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([])
   const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
   const [storeType, setStoreType] = useState<StoreType>("general")
+  const [isReservationEnabled, setIsReservationEnabled] = useState(false)
 
   const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
     PRODUCT_NOT_FOUND: {
@@ -159,6 +161,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
       setProduct(productData)
       setImagePreview(productData.image_url ?? null)
+      setIsReservationEnabled(productData.reservation_enabled ?? false)
       
       // Set store category from the store object we already fetched
       const currentStoreCategory = store?.category || ""
@@ -241,8 +244,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       if (price < costPrice) {
         throw new Error(t("سعر البيع لا يمكن أن يكون أقل من سعر الشراء", "Selling price cannot be lower than cost price"))
       }
-      if (!stock || stock <= 0) {
-        throw new Error(t("الكمية يجب أن تكون أكبر من صفر", "Quantity must be greater than zero"))
+      if (!stock || stock < 0) {
+        throw new Error(t("الكمية لا يمكن أن تكون سالبة", "Quantity cannot be negative"))
+      }
+      // السماح بـ stock = 0 عند تفعيل الحجز المسبق
+      if (stock === 0 && !isReservationEnabled) {
+        throw new Error(t("الكمية يجب أن تكون أكبر من صفر أو فعّل الحجز المسبق", "Quantity must be greater than zero or enable pre-reservation"))
       }
 
       // Upload new image if selected
@@ -284,6 +291,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         category: finalCategory,
         barcode: (formData.get("barcode") as string)?.trim() || "",
         image_url: imageUrl,
+        reservation_enabled: isReservationEnabled,
       }, user?.id)
 
       if (!result.success) {
@@ -492,11 +500,42 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       id="stock"
                       name="stock"
                       type="number"
-                      min="1"
+                      min="0"
                       defaultValue={product.stock}
                       required
                       className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     />
+                    {isReservationEnabled && (
+                      <p className="text-xs text-green-600 mt-1">
+                        {t("✓ الحجز المسبق مفعّل - يمكنك إضافة الكمية 0", "✓ Pre-reservation enabled - you can set quantity to 0")}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Pre-Reservation Toggle */}
+                  <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-blue-200 bg-blue-50/50">
+                    <div className="flex-1">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isReservationEnabled}
+                          onChange={(e) => setIsReservationEnabled(e.target.checked)}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer"
+                        />
+                        <span className="font-medium text-gray-700">
+                          {t("متاح للحجز المسبق", "Available for Pre-Reservation")}
+                        </span>
+                      </label>
+                      <p className="text-xs text-gray-600 mt-1 ms-8">
+                        {t(
+                          "فعّل هذا الخيار للسماح بالحجز حتى لو لم يكن لديك مخزون حالياً",
+                          "Enable this option to allow reservations even if you don't have stock currently"
+                        )}
+                      </p>
+                    </div>
+                    {isReservationEnabled && (
+                      <div className="text-blue-600 text-2xl">✓</div>
+                    )}
                   </div>
                 </div>
 
