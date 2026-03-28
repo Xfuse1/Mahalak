@@ -1,0 +1,48 @@
+
+> my-v0-project@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.1.3 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.61:3000
+- Environments: .env.local
+- Experiments (use with caution):
+  · optimizePackageImports
+  · serverActions
+
+✓ Starting...
+✓ Ready in 5.7s
+○ Compiling / ...
+ GET / 200 in 5.9s (compile: 1288ms, render: 4.6s)
+ POST / 200 in 1357ms (compile: 18ms, render: 1339ms)
+ POST / 200 in 888ms (compile: 10ms, render: 878ms)
+○ Compiling /auth ...
+ GET /auth 200 in 4.7s (compile: 4.5s, render: 203ms)
+ POST /auth 200 in 1511ms (compile: 15ms, render: 1496ms)
+ POST /auth 200 in 1081ms (compile: 10ms, render: 1070ms)
+ GET / 200 in 493ms (compile: 53ms, render: 440ms)
+ GET / 200 in 729ms (compile: 12ms, render: 717ms)
+ POST /auth 200 in 1734ms (compile: 13ms, render: 1721ms)
+ POST / 200 in 3.0s (compile: 9ms, render: 3.0s)
+ POST /auth 200 in 1978ms (compile: 17ms, render: 1962ms)
+ POST / 200 in 2.3s (compile: 49ms, render: 2.2s)
+ POST / 200 in 2.3s (compile: 46ms, render: 2.2s)
+○ Compiling /account ...
+ GET /account 200 in 7.9s (compile: 7.5s, render: 364ms)
+ GET /auth 200 in 4.5s (compile: 4.2s, render: 378ms)
+ GET / 200 in 6.0s (compile: 5.3s, render: 723ms)
+ POST /auth 200 in 1564ms (compile: 8ms, render: 1556ms)
+ POST /auth 200 in 1007ms (compile: 10ms, render: 997ms)
+○ Compiling /auth/seller ...
+ GET /auth/seller 200 in 3.5s (compile: 3.4s, render: 117ms)
+ POST /auth/seller 200 in 1221ms (compile: 11ms, render: 1210ms)
+ POST /auth/seller 200 in 1048ms (compile: 9ms, render: 1039ms)
+ POST /auth/seller 200 in 1342ms (compile: 10ms, render: 1332ms)
+ POST /auth/seller 200 in 1331ms (compile: 12ms, render: 1319ms)
+ POST /auth/seller 200 in 1335ms (compile: 12ms, render: 1323ms)
+○ Compiling /auth/seller/register ...
+ GET /auth/seller/register 200 in 4.0s (compile: 3.8s, render: 153ms)
+ POST /auth/seller/register 200 in 1291ms (compile: 11ms, render: 1280ms)
+ POST /auth/seller/register 200 in 1062ms (compile: 14ms, render: 1048ms)
+ GET /auth/seller/register 200 in 2.5s (compile: 24ms, render: 2.5s)
+ POST /auth/seller/register 200 in 2.1s (compile: 9ms, render: 2.1s)

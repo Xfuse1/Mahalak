@@ -25,6 +25,7 @@ export default function VerifyPhonePage() {
   const phoneParam = searchParams.get("phone") || ""
   const role = (searchParams.get("role") || "customer") as "customer" | "seller"
   const returnUrl = searchParams.get("returnUrl") || (role === "seller" ? "/seller/dashboard" : "/")
+  const roleEntryPath = role === "seller" ? "/auth/seller/register" : "/auth/register"
   const normalizedPhone = useMemo(() => normalizeEgyptPhone(phoneParam), [phoneParam])
 
   const [otpCode, setOtpCode] = useState("")
@@ -130,9 +131,9 @@ export default function VerifyPhonePage() {
 
   useEffect(() => {
     if (!phoneParam) {
-      router.push("/auth")
+      router.push(roleEntryPath)
     }
-  }, [phoneParam, router])
+  }, [phoneParam, roleEntryPath, router])
 
   const completeRegistration = async () => {
     const token = sessionStorage.getItem("pendingRegistrationToken")
@@ -252,7 +253,7 @@ export default function VerifyPhonePage() {
   const handleChangeNumber = () => {
     clearPhoneAuth(OTP_FLOW)
     sessionStorage.removeItem("pendingRegistrationToken")
-    router.push(`/auth?role=${role}`)
+    router.push(roleEntryPath)
   }
 
   return (
@@ -372,7 +373,7 @@ export default function VerifyPhonePage() {
           </div>
 
           <div className="mt-8 pt-6 border-t text-center">
-            <Link href="/auth" className="text-gray-500 hover:text-blue-600 text-sm transition-colors">
+            <Link href={roleEntryPath} className="text-gray-500 hover:text-blue-600 text-sm transition-colors">
               {t("العودة لصفحة التسجيل", "Back to Sign Up")}
             </Link>
           </div>

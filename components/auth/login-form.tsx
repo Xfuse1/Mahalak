@@ -1,25 +1,38 @@
 "use client"
 
 import type React from "react"
+import Link from "next/link"
+import { Chrome } from "lucide-react"
 import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { Button } from "../ui/button"
 import { EyeOpenIcon, EyeOffIcon } from "../ui/icons"
-import Link from "next/link"
 
 interface LoginFormProps {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  onGoogleSignIn: () => void
   isLoading: boolean
+  isGoogleLoading?: boolean
   showPassword: boolean
   setShowPassword: (show: boolean) => void
   t: (ar: string, en: string) => string
+  registerHref?: string
 }
 
-export function LoginForm({ onSubmit, isLoading, showPassword, setShowPassword, t }: LoginFormProps) {
+export function LoginForm({
+  onSubmit,
+  onGoogleSignIn,
+  isLoading,
+  isGoogleLoading = false,
+  showPassword,
+  setShowPassword,
+  t,
+  registerHref = "/auth/register",
+}: LoginFormProps) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="login-emailOrPhone" className="text-base font-medium text-gray-700">
+        <Label htmlFor="login-emailOrPhone" className="text-sm font-medium text-slate-700 sm:text-base">
           {t("البريد الإلكتروني أو رقم الهاتف", "Email or Phone Number")}
         </Label>
         <Input
@@ -28,43 +41,73 @@ export function LoginForm({ onSubmit, isLoading, showPassword, setShowPassword, 
           type="text"
           required
           placeholder={t("example@email.com أو 01012345678", "example@email.com or 01012345678")}
-          className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all"
+          className="h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-blue-100 sm:h-14 sm:text-base"
         />
       </div>
+
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="login-password" className="text-base font-medium text-gray-700">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 sm:text-base">
             {t("كلمة المرور", "Password")}
           </Label>
-          <Link href="/auth/forgot-password" className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline transition-colors">
+          <Link href="/auth/forgot-password" className="text-xs font-medium text-blue-600 hover:text-blue-800 sm:text-sm">
             {t("هل نسيت كلمة السر؟", "Forgot Password?")}
           </Link>
         </div>
-        <div className="relative group">
+
+        <div className="relative">
           <Input
             id="login-password"
             name="password"
             type={showPassword ? "text" : "password"}
             required
             placeholder="••••••••"
-            className="h-14 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all pe-12"
+            className="h-12 rounded-2xl border-slate-200 bg-white px-4 pe-12 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-blue-100 sm:h-14 sm:text-base"
           />
           <button
             type="button"
-            className="absolute inset-y-0 end-0 flex items-center px-4 text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute inset-y-0 end-0 flex items-center px-4 text-slate-400 transition hover:text-slate-600"
             onClick={() => setShowPassword(!showPassword)}
           >
             {showPassword ? <EyeOffIcon /> : <EyeOpenIcon />}
           </button>
         </div>
       </div>
+
       <Button
         type="submit"
-        className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
-        disabled={isLoading}
+        className="h-12 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold shadow-lg transition hover:from-blue-700 hover:to-blue-800 sm:h-14 sm:text-base"
+        disabled={isLoading || isGoogleLoading}
       >
         {isLoading ? t("جاري تسجيل الدخول...", "Logging in...") : t("تسجيل الدخول", "Login")}
       </Button>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200" />
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="bg-white px-3 text-slate-400">{t("أو", "Or")}</span>
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onGoogleSignIn}
+        disabled={isLoading || isGoogleLoading}
+        className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
+      >
+        <Chrome className="h-5 w-5" />
+        {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
+      </Button>
+
+      <p className="text-center text-sm text-slate-500">
+        {t("لا تمتلك حسابًا؟", "Don't have an account?")}{" "}
+        <Link href={registerHref} className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+          {t("أنشئ حساب الآن", "Create one now")}
+        </Link>
+      </p>
     </form>
   )
 }

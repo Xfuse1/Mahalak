@@ -6,7 +6,13 @@ import { StoreListClient } from "../../components/store/store-list-client"
 import { StorePageHeader } from "../../components/store/store-page-header"
 
 export default async function StoresPage() {
-  const allStores = await getStores()
+  let allStores: Awaited<ReturnType<typeof getStores>> = []
+
+  try {
+    allStores = await getStores()
+  } catch {
+    // Allow the page to render even when store data is unavailable during build/runtime.
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">

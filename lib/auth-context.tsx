@@ -5,7 +5,9 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react"
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithEmailAndPassword,
   signOut,
   updateProfile as updateFirebaseProfile,
@@ -36,6 +38,7 @@ interface AuthContextType {
   user: User | null
   firebaseUser: FirebaseUser | null
   login: (email: string, password: string, role: "customer" | "seller") => Promise<boolean>
+  signInWithGoogle: () => Promise<"customer" | "seller">
   register: (
     email: string,
     password: string,
@@ -221,6 +224,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [auth, db, loadUserProfile])
 
+  const signInWithGoogle = useCallback(async (): Promise<"customer" | "seller"> => {
+    if (!auth || !db) {
+      const message = "Firebase auth is not configured"
+      setError(t("خدمة تسجيل الدخول غير مهيأة حالياً", "Authentication is not configured right now"))
+      throw new Error(message)
+    }
+
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: "select_account" })
+
+    try {
+      const credential = await signInWithPopup(auth, provider)
+      const profileRef = doc(db, "users", credential.user.uid)
+      const profileSnap = await getDoc(profileRef)
+      const now = new Date().toISOString()
+
+      if (!profileSnap.exists()) {
+        await setDoc(profileRef, {
+          email: credential.user.email || "",
+          full_name: credential.user.displayName || credential.user.email?.split("@")[0] || "",
+          role: "customer",
+          created_at: now,
+          updated_at: now,
+        })
+      }
+
+      await loadUserProfile(credential.user)
+
+      const profileData = profileSnap.exists() ? profileSnap.data() : null
+      return ((profileData?.role as "customer" | "seller" | undefined) || "customer")
+    } catch (error: any) {
+      const code = error?.code as string | undefined
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        throw new Error("Google sign-in cancelled")
+      }
+      throw error
+    }
+  }, [auth, db, loadUserProfile, t])
+
   const register = useCallback(async (
     email: string,
     password: string,
@@ -364,8 +406,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth])
 
   const contextValue = useMemo(
-    () => ({ user, firebaseUser, login, register, logout, isLoading, error }),
-    [user, firebaseUser, login, register, logout, isLoading, error],
+    () => ({ user, firebaseUser, login, signInWithGoogle, register, logout, isLoading, error }),
+    [user, firebaseUser, login, signInWithGoogle, register, logout, isLoading, error],
   )
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>

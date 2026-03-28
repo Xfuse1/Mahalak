@@ -1,0 +1,248 @@
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error counting notifications: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at getUnreadNotificationsCount (lib\actions\notifications.ts:99:8)
+   97 |       .where("user_id", "==", userId)
+   98 |       .where("is_read", "==", false)
+>  99 |       .get()
+      |        ^
+  100 |
+  101 |     return snapshot.size
+  102 |   } catch (error) { {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+[v0] Error fetching simulator settings: Error: 16 UNAUTHENTICATED: Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at isSimulatorEnabled (lib\actions\delivery.ts:133:66)
+  131 |   try {
+  132 |     const db = getAdminDb()
+> 133 |     const doc = await db.collection("settings").doc("simulator").get()
+      |                                                                  ^
+  134 |     
+  135 |     if (!doc.exists) {
+  136 |       return false {
+  code: 16,
+  details: 'Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.',
+  metadata: [Metadata]
+}
+^C^C

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "check:auth-types": "tsc -p tsconfig.auth.json --noEmit",
-    "dev": "next dev --turbopack",
+    "dev": "next dev --webpack",
     "lint": "next lint",
     "normalize:phones": "ts-node --project tsconfig.node.json scripts/normalize-egypt-phones.ts",
     "start": "next start",
