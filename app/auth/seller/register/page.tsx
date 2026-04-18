@@ -423,6 +423,7 @@ export default function SellerRegisterPage() {
         storeName,
         storeDescription: storeDescription || undefined,
         storeType,
+        storeTypeId: selectedStoreTypeId,
         storeLogoUrl: storeLogoUrl || undefined,
         ownerIdNumber: undefined,
         idCardImageUrl: undefined,

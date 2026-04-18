@@ -275,6 +275,11 @@ export function getOTPAttemptsRemaining(flow?: OTPFlow): number {
   }
 
   const data = getOTPRateLimitData()
+  const meta = flow ? getOTPSessionMeta(flow) : null
+  if (meta?.phone && data.phone && data.phone !== meta.phone) {
+    return 3
+  }
+
   return Math.max(0, 3 - data.verifyAttempts)
 }
 

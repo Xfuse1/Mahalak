@@ -106,10 +106,11 @@ export function PhoneVerification({
   }, [phoneNumber, isVerified, mode, flow])
 
   useEffect(() => {
+    if (mode === "input") return
     return () => {
       clearPhoneAuth(flow)
     }
-  }, [flow])
+  }, [flow, mode])
 
   const handleSendOTP = async () => {
     setIsLoading(true)
