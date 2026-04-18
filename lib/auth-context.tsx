@@ -299,6 +299,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      if (auth.currentUser) {
+        try { await signOut(auth) } catch {}
+      }
       const credential = await createUserWithEmailAndPassword(auth, email, password)
       const normalizedProfilePhone = sellerData?.phone
         ? normalizeEgyptPhone(sellerData.phone)

@@ -233,9 +233,17 @@ export default function VerifyPhonePage() {
       sessionStorage.removeItem("pendingRegistrationToken")
       clearPhoneAuth(OTP_FLOW)
       router.push(returnUrl)
-    } catch (verifyError) {
+    } catch (verifyError: any) {
       console.error("[auth/verify-phone] Verification error:", verifyError)
-      setError(t("حدث خطأ. حاول مرة أخرى", "An error occurred. Please try again"))
+      const msg = verifyError?.message || ""
+      if (msg.includes("already registered") || msg.includes("email-already-in-use")) {
+        setError(t("البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول", "Email already registered. Please log in instead"))
+      } else if (msg.includes("Failed to create store")) {
+        setError(t("فشل إنشاء المتجر. يرجى المحاولة مرة أخرى", "Failed to create store. Please try again"))
+      } else {
+        setError(t("حدث خطأ. حاول مرة أخرى", "An error occurred. Please try again"))
+      }
+
     } finally {
       setLoading(false)
       setRegistering(false)
