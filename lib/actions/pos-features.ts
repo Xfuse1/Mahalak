@@ -839,7 +839,7 @@ export async function validatePOSCoupon(storeId: string, code: string, orderTota
   }
 }
 
-export async function usePOSCoupon(storeId: string, couponId: string) {
+export async function redeemPOSCoupon(storeId: string, couponId: string) {
   try {
     const db = getAdminDb()
     const docRef = db.collection("pos_coupons").doc(couponId)
@@ -851,7 +851,7 @@ export async function usePOSCoupon(storeId: string, couponId: string) {
       used_count: (Number(doc.data()?.used_count) || 0) + 1,
     })
   } catch (error) {
-    logError("[usePOSCoupon] Error:", error)
+    logError("[redeemPOSCoupon] Error:", error)
   }
 }
 

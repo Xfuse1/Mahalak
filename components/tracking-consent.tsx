@@ -14,6 +14,9 @@ export function TrackingConsent() {
   const { t } = useLanguage()
 
   useEffect(() => {
+    // قراءة الموافقة المحفوظة بعد التركيب: نمط مقصود وآمن للـ hydration
+    // (لا يمكن نقله لمُهيّئ useState لأن وسم البكسل غير محمي بـ ready)
+    /* eslint-disable react-hooks/set-state-in-effect */
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved === "true") {
@@ -27,6 +30,7 @@ export function TrackingConsent() {
       // ignore storage errors
     }
     setReady(true)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [])
 
   // If no pixel id provided, don't render or load anything

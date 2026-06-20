@@ -22,6 +22,7 @@ type SimProduct = {
     image_url?: string | null;
     store_id?: string;
     store_name?: string;
+    stock: number;
     color: number;
     label: string;
     pattern?: string;
@@ -37,6 +38,7 @@ type StoreProductRecord = {
     store_id?: string;
     stores?: { name?: string } | null;
     simulator_section?: string;
+    stock?: number;
 };
 
 type RuntimeShelf = {
@@ -242,6 +244,7 @@ export default function SupermarketSimulator() {
                         image_url: product?.image_url || null,
                         store_id: product?.store_id,
                         store_name: product?.stores?.name || '',
+                        stock: Number(product?.stock ?? 0),
                         color,
                         label: name.slice(0, 16),
                         pattern: pickPattern(id)
@@ -1395,7 +1398,7 @@ export default function SupermarketSimulator() {
 
             // Apply Transform
             group.position.set(x, 0, z); // Force Y=0 for floor placement
-            group.rotation.y = rotY;
+            group.rotation.y = rotY ?? 0;
 
             // Add to scene & collisions
             addObstacleFromObject(group);
@@ -2189,7 +2192,8 @@ export default function SupermarketSimulator() {
                     image_url: p.image_url || null,
                     store_id: p.store_id,
                     store_name: p.store_name,
-                    description: p.description
+                    description: p.description,
+                    stock: Number(p.stock ?? 0)
                 });
                 setMessage(`+ ${p.name}`);
                 setTimeout(() => setMessage(''), 1000);
@@ -2621,7 +2625,8 @@ export default function SupermarketSimulator() {
                                             image_url: hoveredProduct.image_url || null,
                                             store_id: hoveredProduct.store_id,
                                             store_name: hoveredProduct.store_name,
-                                            description: hoveredProduct.description
+                                            description: hoveredProduct.description,
+                                            stock: Number(hoveredProduct.stock ?? 0)
                                         });
                                         setMessage(`+ ${hoveredProduct.name}`);
                                         setTimeout(() => setMessage(''), 1000);

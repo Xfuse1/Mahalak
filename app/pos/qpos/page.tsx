@@ -30,7 +30,7 @@ import {
   closeShift,
   getCurrentShift,
   validatePOSCoupon,
-  usePOSCoupon,
+  redeemPOSCoupon,
   type HeldCart,
   type HeldCartItem,
   type POSCustomer,
@@ -137,7 +137,7 @@ import {
   createGiftCard,
   getGiftCards,
   validateGiftCard,
-  useGiftCard,
+  redeemGiftCard,
   createReservation,
   getReservations,
   updateReservationStatus,
@@ -2275,7 +2275,7 @@ export default function QPOSPage() {
 
         // Mark coupon as used
         if (appliedCoupon) {
-          usePOSCoupon(store.id, appliedCoupon.coupon_id).catch(() => {})
+          redeemPOSCoupon(store.id, appliedCoupon.coupon_id).catch(() => {})
         }
 
         // Update customer purchase stats
@@ -2325,7 +2325,7 @@ export default function QPOSPage() {
           }
           // Deduct gift card
           if (appliedGiftCard) {
-          useGiftCard(store.id, appliedGiftCard.card_id, appliedGiftCard.useAmount, result?.data?.id || "").catch(() => {})
+          redeemGiftCard(store.id, appliedGiftCard.card_id, appliedGiftCard.useAmount, result?.data?.id || "").catch(() => {})
           }
           // Update variant stock for ALL variant items in cart
           for (const item of cart) {

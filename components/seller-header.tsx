@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu } from "lucide-react"
@@ -28,24 +28,30 @@ export function SellerHeader() {
   const { t } = useLanguage()
   const [pendingCount, setPendingCount] = useState(0)
 
-  const fetchPendingCount = useCallback(async () => {
-    if (!user?.id) return
-    try {
-      const store = await getStoreByUserId(user.id)
-      if (store) {
-        const count = await getPendingOrdersCount(store.id)
-        setPendingCount(count)
-      }
-    } catch (e) {
-      logError("Error fetching pending count:", e)
-    }
-  }, [user?.id])
-
   useEffect(() => {
+    const userId = user?.id
+    if (!userId) return
+    let active = true
+
+    const fetchPendingCount = async () => {
+      try {
+        const store = await getStoreByUserId(userId)
+        if (store && active) {
+          const count = await getPendingOrdersCount(store.id)
+          if (active) setPendingCount(count)
+        }
+      } catch (e) {
+        logError("Error fetching pending count:", e)
+      }
+    }
+
     fetchPendingCount()
     const interval = setInterval(fetchPendingCount, 30000) // refresh every 30s
-    return () => clearInterval(interval)
-  }, [fetchPendingCount])
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [user?.id])
 
   const navItems = [
     { href: "/seller/dashboard", label: t("لوحة التحكم", "Dashboard"), icon: LayoutDashboard },
@@ -60,7 +66,7 @@ export function SellerHeader() {
     router.push("/")
   }
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <div className="flex flex-col h-full bg-white">
       <div className="p-8 border-b border-gray-50 flex items-center justify-center">
         <Link href="/" className="block hover:opacity-80 transition-all hover:scale-105 active:scale-95">
@@ -129,7 +135,7 @@ export function SellerHeader() {
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-72 border-l border-gray-100 min-h-screen flex-col shadow-[rgba(0,0,0,0.02)_1px_0_10px] z-50 sticky top-0 h-screen">
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* Mobile Header */}
@@ -145,7 +151,7 @@ export function SellerHeader() {
               <SheetHeader className="sr-only">
                 <SheetTitle>{t("القائمة", "Menu")}</SheetTitle>
               </SheetHeader>
-              <SidebarContent />
+              {sidebarContent}
             </SheetContent>
           </Sheet>
         </div>

@@ -28,3 +28,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code / temp working dirs & junk
+tmpclaude-*
+tmp/
+tmp
+nul
+env.download
+inspection/

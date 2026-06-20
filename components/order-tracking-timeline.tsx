@@ -169,7 +169,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                         )}
                                         {entry?.note && (
                                             <p className="mt-2 text-sm text-gray-600 italic bg-white/50 p-2 rounded border border-gray-100">
-                                                "{entry.note}"
+                                                &quot;{entry.note}&quot;
                                             </p>
                                         )}
                                     </div>
@@ -217,7 +217,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                                 </div>
                                                 {entry.note && (
                                                     <p className="mt-2 text-sm text-gray-600 italic bg-white/50 p-2 rounded border border-gray-100">
-                                                        "{entry.note}"
+                                                        &quot;{entry.note}&quot;
                                                     </p>
                                                 )}
                                             </div>

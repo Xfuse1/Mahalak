@@ -722,7 +722,7 @@ export async function validateGiftCard(
   }
 }
 
-export async function useGiftCard(
+export async function redeemGiftCard(
   storeId: string,
   cardId: string,
   amount: number,
