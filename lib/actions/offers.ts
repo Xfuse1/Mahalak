@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { cleanUndefined } from "../firebase/firestore-helpers"
 
 type OfferRecord = {
@@ -59,8 +60,9 @@ export async function createOffer(formData: {
   quantity?: number
   duration_hours?: number
 }, callerId?: string) {
-  // التحقق من أن المتصل هو صاحب المتجر
-  if (callerId && callerId !== formData.store_id) {
+  // التحقق من الملكية سيرفر-سايد (إجباري)
+  const uid = await getCurrentUid()
+  if (!uid || uid !== formData.store_id) {
     return { success: false, error: "ليس لديك صلاحية لإنشاء عرض لهذا المتجر" }
   }
 
@@ -118,15 +120,14 @@ export async function updateOffer(
     return { success: false, error: "نسبة الخصم يجب أن تكون بين 1 و 100" }
   }
 
-  // التحقق من الملكية
-  if (callerId) {
-    const offerDoc = await docRef.get()
-    if (!offerDoc.exists) {
-      return { success: false, error: "العرض غير موجود" }
-    }
-    if (offerDoc.data()?.store_id !== callerId) {
-      return { success: false, error: "ليس لديك صلاحية لتعديل هذا العرض" }
-    }
+  // التحقق من الملكية سيرفر-سايد (إجباري)
+  const uid = await getCurrentUid()
+  const offerDoc = await docRef.get()
+  if (!offerDoc.exists) {
+    return { success: false, error: "العرض غير موجود" }
+  }
+  if (!uid || offerDoc.data()?.store_id !== uid) {
+    return { success: false, error: "ليس لديك صلاحية لتعديل هذا العرض" }
   }
 
   try {
@@ -151,14 +152,13 @@ export async function deleteOffer(id: string, callerId?: string) {
   const db = getAdminDb()
 
   try {
-    if (callerId) {
-      const offerDoc = await db.collection("offers").doc(id).get()
-      if (!offerDoc.exists) {
-        return { success: false, error: "العرض غير موجود" }
-      }
-      if (offerDoc.data()?.store_id !== callerId) {
-        return { success: false, error: "ليس لديك صلاحية لحذف هذا العرض" }
-      }
+    const uid = await getCurrentUid()
+    const offerDoc = await db.collection("offers").doc(id).get()
+    if (!offerDoc.exists) {
+      return { success: false, error: "العرض غير موجود" }
+    }
+    if (!uid || offerDoc.data()?.store_id !== uid) {
+      return { success: false, error: "ليس لديك صلاحية لحذف هذا العرض" }
     }
     await db.collection("offers").doc(id).delete()
   } catch (error: unknown) {

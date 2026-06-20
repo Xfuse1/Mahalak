@@ -2,6 +2,7 @@
 
 import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { chunkArray } from "../firebase/firestore-helpers"
 
 type FirestoreRecord = Record<string, unknown>
@@ -78,7 +79,8 @@ async function fetchByIn<T extends FirestoreRecord>(db: Firestore, collection: s
 
 export async function getDashboardAnalytics(storeId: string, callerId?: string): Promise<DashboardAnalytics> {
   // Ownership check
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return {
       totalRevenue: 0, totalOrders: 0, totalProducts: 0,
       topProduct: "", topProductSales: 0,
@@ -168,7 +170,8 @@ export async function getDashboardAnalytics(storeId: string, callerId?: string):
 
 export async function getRecentOrders(storeId: string, limit = 3, callerId?: string): Promise<RecentDashboardOrder[]> {
   // Ownership check
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
   if (limit <= 0) {

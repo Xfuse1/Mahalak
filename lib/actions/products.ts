@@ -4,6 +4,7 @@ import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestor
 import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
@@ -331,8 +332,9 @@ export async function createProduct(formData: {
   try {
     const db = getAdminDb()
 
-    // Ownership check: caller must match target store id
-    if (callerUserId && callerUserId !== formData.store_id) {
+    // التحقق من الهوية سيرفر-سايد: المستدعي يجب أن يملك المتجر المستهدف (لا نثق بالعميل)
+    const uid = await getCurrentUid()
+    if (!uid || uid !== formData.store_id) {
       return {
         success: false,
         error: PRODUCT_ERROR_CODES.UNAUTHORIZED_STORE_PRODUCT_CREATE,
@@ -425,7 +427,9 @@ export async function updateProduct(
 
   const existingProduct = productSnap.data() as ProductRecord | undefined
 
-  if (callerUserId && existingProduct?.store_id !== callerUserId) {
+  // التحقق من الملكية سيرفر-سايد (إجباري)
+  const uid = await getCurrentUid()
+  if (!uid || existingProduct?.store_id !== uid) {
     return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
   }
 
@@ -487,16 +491,17 @@ export async function updateProduct(
 export async function deleteProduct(id: string, callerUserId?: string) {
   const db = getAdminDb()
 
-  // التحقق من ملكية المنتج
-  if (callerUserId) {
-    const productSnap = await db.collection("products").doc(id).get()
-    if (!productSnap.exists) {
-      return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
-    }
-    const productData = productSnap.data()
-    if (productData?.store_id !== callerUserId) {
-      return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
-    }
+  // التحقق من ملكية المنتج سيرفر-سايد (إجباري)
+  const uid = await getCurrentUid()
+  if (!uid) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
+  }
+  const productSnap = await db.collection("products").doc(id).get()
+  if (!productSnap.exists) {
+    return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
+  }
+  if (productSnap.data()?.store_id !== uid) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
   }
 
   try {

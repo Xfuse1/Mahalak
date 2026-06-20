@@ -17,6 +17,7 @@ import {
 import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
 import { createStore, uploadStoreImage, updateStore } from "./actions/stores"
+import { createSession, destroySession } from "./actions/auth-session"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 import { normalizeEgyptPhone } from "./utils/phone"
 
@@ -169,6 +170,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setFirebaseUser(currentUser)
+        // إنشاء/تحديث كوكي الجلسة الموثّق ليتمكّن السيرفر من التحقق من الهوية
+        try {
+          await createSession(await currentUser.getIdToken())
+        } catch {
+          // فشل إنشاء الجلسة لا يمنع تحميل الملف الشخصي
+        }
         await loadUserProfile(currentUser)
       } else {
         setFirebaseUser(null)
@@ -303,6 +310,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try { await signOut(auth) } catch {}
       }
       const credential = await createUserWithEmailAndPassword(auth, email, password)
+      // إنشاء جلسة موثّقة فورًا حتى تنجح أكشنز إنشاء/تحديث المتجر التالية
+      try {
+        await createSession(await credential.user.getIdToken())
+      } catch {}
       const normalizedProfilePhone = sellerData?.phone
         ? normalizeEgyptPhone(sellerData.phone)
         : phone
@@ -403,6 +414,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     if (auth) {
       await signOut(auth)
+    }
+    try {
+      await destroySession()
+    } catch {
+      // تجاهل فشل حذف الجلسة
     }
     setUser(null)
     setFirebaseUser(null)
