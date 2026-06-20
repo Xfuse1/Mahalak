@@ -10,6 +10,8 @@ import {
   FeaturedProducts,
   CTASection,
 } from "../components/home/home-client-sections"
+import type { ProductListItem } from "../lib/types/product"
+import type { StoreListItem } from "../lib/types/store"
 
 export default async function Home() {
   // Fetch data on the server — no loading spinner needed
@@ -34,8 +36,8 @@ export default async function Home() {
         <HeroBanner />
         <SearchSection />
         <CategoriesSection />
-        <FeaturedStores stores={featuredStores} />
-        <FeaturedProducts products={featuredProducts} />
+        <FeaturedStores stores={featuredStores as StoreListItem[]} />
+        <FeaturedProducts products={featuredProducts as ProductListItem[]} />
         <CTASection />
       </main>
 

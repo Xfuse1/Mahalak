@@ -240,7 +240,7 @@ export default function SellerProductsPage() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       {/* Discount Badge */}
-                      {product.discount_percentage > 0 && (
+                      {(product.discount_percentage ?? 0) > 0 && (
                         <div className="absolute top-3 left-3 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-full px-2.5 py-1 flex items-center gap-1 shadow-lg z-10">
                           <Tag className="h-3 w-3" />
                           <span className="text-xs font-bold">-{product.discount_percentage}%</span>
@@ -253,13 +253,13 @@ export default function SellerProductsPage() {
                         <p className="text-xs text-gray-400 mb-2">{product.category}</p>
                       )}
                       <div className="flex items-center justify-between mb-4">
-                        {product.discount_percentage > 0 ? (
+                        {(product.discount_percentage ?? 0) > 0 ? (
                           <div className="flex flex-col">
                             <p className="text-sm text-gray-400 line-through">
                               {product.price} <span className="text-xs">{t("جنيه", "EGP")}</span>
                             </p>
                             <p className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
-                              {(product.price - (product.price * product.discount_percentage / 100)).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
+                              {(product.price - (product.price * (product.discount_percentage ?? 0) / 100)).toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
                             </p>
                             <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-2 py-0.5 w-fit mt-0.5 font-medium">
                               {t("بعد الخصم", "After discount")}

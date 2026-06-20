@@ -100,7 +100,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
         const fetchedOrder = await getOrderById(resolvedParams.orderId, user.id)
         if (fetchedOrder) {
           // التحقق من أن الطلب يخص المستخدم الحالي (enforced server-side too)
-          if (fetchedOrder.customer_id !== user.id) {
+          if ((fetchedOrder as { customer_id?: string }).customer_id !== user.id) {
             setOrder(null)
             setLoading(false)
             return

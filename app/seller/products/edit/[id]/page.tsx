@@ -404,7 +404,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  if (!product && !isLoadingProduct) {
+  // بعد حارس isLoadingProduct أعلاه يصبح هذا مكافئًا لـ !product ويتيح لـ TS تضييق النوع
+  if (!product) {
     return (
       <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <SellerHeader />

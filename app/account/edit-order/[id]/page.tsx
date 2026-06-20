@@ -93,7 +93,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
     if (!searchQuery.trim()) return
     setSearching(true)
     try {
-      const results = await searchProducts(searchQuery) as Product[]
+      const results = await searchProducts(searchQuery) as unknown as Product[]
       // Filter out products from rejected stores that were already in the order
       // and products already added to newItems
       const rejectedStoreIds = (order?.pickup_stops || [])

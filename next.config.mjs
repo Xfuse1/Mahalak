@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // أخطاء الأنواع توقف البناء (تم إصلاح كل الأخطاء الموجودة)
+    ignoreBuildErrors: false,
   },
   images: {
     // Enable image optimization for better performance

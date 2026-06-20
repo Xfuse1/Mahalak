@@ -107,7 +107,7 @@ export default function SellerOrdersPage() {
       if (store) {
         setStoreId(store.id)
         const [data, multiData] = await Promise.all([
-          getStoreOrders(store.id, user.id) as Promise<Order[]>,
+          getStoreOrders(store.id, user.id) as unknown as Promise<Order[]>,
           getMultiStoreOrdersForStore(store.id),
         ])
         const nextMultiOrders = multiData.success ? (multiData.orders as MultiStoreOrder[]) : []

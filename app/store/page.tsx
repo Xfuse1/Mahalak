@@ -24,7 +24,8 @@ export default async function StoresPage() {
 
           <StorePageHeader />
 
-          <StoreListClient initialStores={allStores} />
+          {/* بيانات المتاجر من السيرفر تتطابق بنيويًا مع نوع StoreListClient المحلي */}
+          <StoreListClient initialStores={allStores as any} />
         </div>
       </main>
 

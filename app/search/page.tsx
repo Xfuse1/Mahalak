@@ -35,7 +35,7 @@ function SearchResults() {
     const fetchData = async () => {
       setLoading(true)
       try {
-        let productsData, storesData
+        let productsData: any[] = [], storesData: any[] = []
 
         if (!query) {
           // No query - fetch all products only
@@ -85,7 +85,7 @@ function SearchResults() {
         const cutoff = new Date()
         cutoff.setDate(cutoff.getDate() - filters.daysAgo)
         filtered = filtered.filter((p) => {
-          const date = new Date(p.updatedAt || p.createdAt)
+          const date = new Date(p.updatedAt || p.createdAt || 0)
           return date >= cutoff
         })
       }
@@ -102,7 +102,7 @@ function SearchResults() {
           filtered.sort((a, b) => b.rating - a.rating)
           break
         case "newest":
-          filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+          filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
           break
         case "name-asc":
           filtered.sort((a, b) => a.name.localeCompare(b.name, isRTL ? "ar" : "en"))

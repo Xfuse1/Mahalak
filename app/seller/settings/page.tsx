@@ -275,10 +275,10 @@ export default function SettingsPage() {
     setIsSaving(false)
 
     if (result.success) {
-      setStore(result.data)
+      setStore(result.data as Store)
       setImageFile(null)
-      if (result.data?.image_url) {
-        setImagePreview(result.data.image_url)
+      if ((result.data as Store).image_url) {
+        setImagePreview((result.data as Store).image_url!)
       }
       toast.success(t("تم حفظ الإعدادات بنجاح", "Settings saved successfully"))
     } else {
