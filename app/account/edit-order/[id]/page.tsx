@@ -43,11 +43,9 @@ type NewItem = {
   stock: number
 }
 
-export default function EditOrderPage({ params }: { params: { id: string } }) {
-  const unwrappedParams = typeof params === "object" && "then" in params
-    ? React.use(params as unknown as Promise<{ id: string }>)
-    : (params as { id: string })
-  const { id: orderId } = unwrappedParams
+export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
+  // Next.js 15+: params is a Promise, unwrap with React.use()
+  const { id: orderId } = React.use(params)
 
   const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()

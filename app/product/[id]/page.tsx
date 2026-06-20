@@ -38,12 +38,9 @@ type Product = {
   }
 }
 
-export default function ProductPage({ params }: { params: { id: string } }) {
-  // Next.js 14+: params may be a Promise, unwrap with React.use()
-  const unwrappedParams = typeof params === "object" && "then" in params
-    ? React.use(params as unknown as Promise<{ id: string }>)
-    : (params as { id: string });
-  const { id } = unwrappedParams;
+export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+  // Next.js 15+: params is a Promise, unwrap with React.use()
+  const { id } = React.use(params);
   const { user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
