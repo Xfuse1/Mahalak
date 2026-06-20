@@ -4,6 +4,7 @@ import type { DocumentSnapshot, Query } from "firebase-admin/firestore"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { createAdminClient } from "../supabase/server"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
@@ -262,6 +263,11 @@ export async function getStoreByUserId(userId: string) {
 }
 
 export async function createStore(storeData: StoreCreateInput) {
+  // التحقق سيرفر-سايد: المستخدم ينشئ متجره فقط (معرّف المتجر = معرّفه)
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeData.seller_id) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const now = new Date().toISOString()
 
@@ -314,8 +320,9 @@ export async function updateStore(
   formData: Partial<StoreUpdateInput>,
   callerId?: string,
 ) {
-  // Ownership check: if callerId provided, must match store id
-  if (callerId && callerId !== id) {
+  // التحقق من الملكية سيرفر-سايد (إجباري — معرّف المتجر = معرّف المستخدم)
+  const uid = await getCurrentUid()
+  if (!uid || uid !== id) {
     return { success: false, error: "ليس لديك صلاحية لتعديل هذا المتجر" }
   }
 
@@ -379,14 +386,14 @@ export async function searchStores(query: string) {
 export async function uploadStoreImage(formData: FormData) {
   const file = formData.get("file") as File
   const storeId = formData.get("storeId") as string
-  const callerId = formData.get("callerId") as string
 
   if (!file || !storeId) {
     return { success: false, error: "Missing file or store ID" }
   }
 
-  // Ownership check
-  if (callerId && callerId !== storeId) {
+  // التحقق من الملكية سيرفر-سايد (إجباري)
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: "ليس لديك صلاحية" }
   }
 

@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 
@@ -149,7 +150,8 @@ export async function holdCart(data: {
   discount_type?: "percentage" | "fixed"
   label?: string
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -199,7 +201,8 @@ export async function holdCart(data: {
 function t_ar(text: string) { return text }
 
 export async function getHeldCarts(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
 
@@ -220,7 +223,8 @@ export async function getHeldCarts(storeId: string, callerId?: string) {
 }
 
 export async function deleteHeldCart(cartId: string, storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -255,7 +259,8 @@ export async function createOrUpdatePOSCustomer(data: {
   notes?: string
   tags?: string[]
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -328,7 +333,8 @@ export async function createOrUpdatePOSCustomer(data: {
 }
 
 export async function getPOSCustomers(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
 
@@ -349,7 +355,8 @@ export async function getPOSCustomers(storeId: string, callerId?: string) {
 }
 
 export async function searchPOSCustomers(storeId: string, query: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
 
@@ -416,7 +423,8 @@ export async function updateCustomerAfterSale(
 // ==================== Returns & Exchanges ====================
 
 export async function getSaleForReturn(saleId: string, storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -469,7 +477,8 @@ export async function createPOSReturn(data: {
   customer_phone?: string
   notes?: string
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -535,7 +544,8 @@ export async function openShift(data: {
   cashier_name?: string
   opening_cash: number
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -585,7 +595,8 @@ export async function closeShift(data: {
   closing_cash: number
   notes?: string
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -693,7 +704,8 @@ export async function closeShift(data: {
 }
 
 export async function getCurrentShift(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return null
   }
 
@@ -728,7 +740,8 @@ export async function createPOSCoupon(data: {
   valid_from: string
   valid_until: string
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -776,7 +789,8 @@ export async function createPOSCoupon(data: {
 }
 
 export async function validatePOSCoupon(storeId: string, code: string, orderTotal: number, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 
@@ -856,7 +870,8 @@ export async function redeemPOSCoupon(storeId: string, couponId: string) {
 }
 
 export async function getPOSCoupons(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
 
@@ -877,7 +892,8 @@ export async function getPOSCoupons(storeId: string, callerId?: string) {
 }
 
 export async function toggleCouponStatus(couponId: string, storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_FEATURE_ERROR.UNAUTHORIZED }
   }
 

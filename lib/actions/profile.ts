@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { getAdminDb, getAdminAuth } from "@/lib/firebase/admin"
+import { getCurrentUid } from "@/lib/auth/session"
 import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
 import { logError } from "@/lib/logger"
 import { getEgyptPhoneLookupCandidates, normalizeEgyptPhone } from "@/lib/utils/phone"
@@ -173,7 +174,8 @@ export async function getUserByPhone(phone: string) {
 }
 
 export async function updateProfile(userId: string, data: MutableProfileData, callerUserId?: string) {
-  if (callerUserId && callerUserId !== userId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== userId) {
     return { success: false, error: "Unauthorized: cannot modify another user's profile" }
   }
 

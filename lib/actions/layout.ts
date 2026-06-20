@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { revalidatePath } from "next/cache"
 import { logError } from "../logger"
 import type { Placement, Shelf } from "../types/product-management"
@@ -11,8 +12,9 @@ export async function saveSupermarketLayout(
     placements: Placement[],
     callerId?: string,
 ) {
-    // Ownership check
-    if (callerId && callerId !== storeId) {
+    // التحقق من الملكية سيرفر-سايد (إجباري)
+    const uid = await getCurrentUid()
+    if (!uid || uid !== storeId) {
         return { success: false, error: "ليس لديك صلاحية لتعديل هذا التخطيط" }
     }
 
@@ -36,8 +38,9 @@ export async function saveSupermarketLayout(
 }
 
 export async function getSupermarketLayout(storeId: string, callerId?: string) {
-    // Ownership check
-    if (!callerId || callerId !== storeId) {
+    // التحقق من الملكية سيرفر-سايد
+    const uid = await getCurrentUid()
+    if (!uid || uid !== storeId) {
         return { success: false, error: "UNAUTHORIZED_LAYOUT_ACCESS", data: null };
     }
 

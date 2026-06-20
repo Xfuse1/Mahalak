@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
 import { revalidatePath } from "next/cache"
 import { logError } from "../logger"
@@ -10,7 +11,8 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
 // ==================== POS Products ====================
 
 export async function getPOSProducts(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
   const db = getAdminDb()
@@ -434,7 +436,8 @@ const aggregateSalesDocs = async (
 }
 
 export async function getPOSPinStatus(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED, hasPin: false }
   }
 
@@ -449,7 +452,8 @@ export async function getPOSPinStatus(storeId: string, callerId?: string) {
 }
 
 export async function setPOSAccessPin(storeId: string, pin: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED }
   }
 
@@ -489,7 +493,8 @@ export async function setPOSAccessPin(storeId: string, pin: string, callerId?: s
 }
 
 export async function verifyPOSAccessPin(storeId: string, pin: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED }
   }
 
@@ -520,7 +525,8 @@ export async function verifyPOSAccessPin(storeId: string, pin: string, callerId?
 }
 
 export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
-  if (callerId && callerId !== saleData.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== saleData.store_id) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED }
   }
 
@@ -764,7 +770,8 @@ export async function createPOSQuickProduct(data: {
   image_url?: string
   store_id: string
 }, callerId?: string) {
-  if (callerId && callerId !== data.store_id) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== data.store_id) {
     return { success: false, error: POS_ERROR.UNAUTHORIZED }
   }
 
@@ -853,7 +860,8 @@ export async function createPOSQuickProduct(data: {
 // ==================== POS Sales History ====================
 
 export async function getPOSSales(storeId: string, limit: number = 50, callerId?: string, posPin?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return []
   }
 
@@ -923,7 +931,8 @@ export async function getPOSMonthlySalesHistory(
     sales: [],
   }
 
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return emptyResult
   }
 
@@ -991,7 +1000,8 @@ export async function getPOSMonthlySalesHistory(
 // ==================== POS Daily Summary ====================
 
 export async function getPOSDailySummary(storeId: string, date?: string, callerId?: string, posPin?: string) {
-  if (callerId && callerId !== storeId) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) {
     return {
       date: date || new Date().toISOString().split("T")[0],
       totalSales: 0,

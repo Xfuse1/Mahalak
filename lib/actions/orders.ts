@@ -4,6 +4,7 @@ import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { getCurrentUid, getCurrentUser, requireOwner } from "../auth/session"
 import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "./notifications"
@@ -195,14 +196,13 @@ export async function getOrderById(orderId: string, callerUserId?: string) {
     const orderData = orderDoc.data()
     if (!orderData) return null
 
-    // Ownership check: if callerUserId is provided, verify access
-    if (callerUserId) {
-      const isCustomer = orderData.customer_id === callerUserId
-      const isSeller = orderData.store_id === callerUserId
-      const isDriver = orderData.driver_id === callerUserId
-      if (!isCustomer && !isSeller && !isDriver) {
-        return null
-      }
+    // التحقق من الهوية سيرفر-سايد (إجباري): المستدعي إمّا العميل أو التاجر أو السائق
+    const uid = await getCurrentUid()
+    const isCustomer = orderData.customer_id === uid
+    const isSeller = orderData.store_id === uid
+    const isDriver = orderData.driver_id === uid
+    if (!uid || (!isCustomer && !isSeller && !isDriver)) {
+      return null
     }
 
     // Get order items
@@ -244,6 +244,8 @@ export async function getOrderById(orderId: string, callerUserId?: string) {
 }
 
 export async function getCustomerOrders(customerId: string) {
+  // التحقق سيرفر-سايد: العميل يقرأ طلباته فقط
+  if (!(await requireOwner(customerId))) return []
   const db = getAdminDb()
   const snapshot = await db.collection("orders").where("customer_id", "==", customerId).get()
   // Filter out multi-store and inquiry records from regular customer orders
@@ -306,6 +308,8 @@ export async function getCustomerOrders(customerId: string) {
 }
 
 export async function getPendingOrdersCount(storeId: string): Promise<number> {
+  // التحقق سيرفر-سايد: التاجر يقرأ عدّاد متجره فقط
+  if (!(await requireOwner(storeId))) return 0
   const db = getAdminDb()
   try {
     // Count single-store pending orders
@@ -335,8 +339,9 @@ export async function getPendingOrdersCount(storeId: string): Promise<number> {
 }
 
 export async function getStoreOrders(storeId: string, callerId: string) {
-  if (callerId !== storeId) {
-    logError("[getStoreOrders] Unauthorized access attempt", { storeId, callerId })
+  // التحقق من الهوية سيرفر-سايد (لا نثق بـ callerId من العميل)
+  if (!(await requireOwner(storeId))) {
+    logError("[getStoreOrders] Unauthorized access attempt", { storeId })
     return []
   }
 
@@ -434,12 +439,18 @@ export async function updateOrderStatus(
       return { success: false, error: "Order not found" }
     }
 
-    // Authorization check
-    if (callerRole === "seller" && currentData.store_id !== callerId) {
-      return { success: false, error: "Unauthorized: not your store order" }
-    }
-    if (callerRole === "driver" && currentData.driver_id !== callerId) {
-      return { success: false, error: "Unauthorized: not your delivery" }
+    // التحقق من الصلاحية: مستخدمو Firebase (تاجر/أدمن) عبر الجلسة، والسائقون عبر نظام PIN المنفصل
+    const caller = await getCurrentUser()
+    if (caller) {
+      const isStoreOwner = currentData.store_id === caller.uid
+      if (caller.role !== "admin" && !isStoreOwner) {
+        return { success: false, error: "Unauthorized: not your store order" }
+      }
+    } else {
+      // لا توجد جلسة Firebase → يُسمح فقط بمسار السائق المُعيّن (مصادقة PIN منفصلة — تحتاج تحصينًا لاحقًا)
+      if (callerRole !== "driver" || currentData.driver_id !== callerId) {
+        return { success: false, error: "Unauthorized" }
+      }
     }
 
     // Build update payload
@@ -541,6 +552,10 @@ export async function createOrder(orderData: {
   driver_name?: string
   items: { product_id: string; quantity: number; price: number }[]
 }) {
+  // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
+  if (!(await requireOwner(orderData.customer_id))) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const now = new Date().toISOString()
 
@@ -716,6 +731,10 @@ export async function changeOrderDriver(
   newDriverName: string,
   newDeliveryPrice: number
 ) {
+  // التحقق سيرفر-سايد: العميل يعدّل طلبه فقط
+  if (!(await requireOwner(customerId))) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
@@ -783,6 +802,7 @@ export async function changeOrderDriver(
 
 // Get orders with driver_rejected status for a customer
 export async function getRejectedOrdersForCustomer(customerId: string) {
+  if (!(await requireOwner(customerId))) return { success: true, orders: [] }
   const db = getAdminDb()
 
   try {
@@ -825,6 +845,10 @@ export async function createMultiStoreOrder(orderData: {
   driver_commission: number
   pickup_stops: PickupStop[]
 }) {
+  // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
+  if (!(await requireOwner(orderData.customer_id))) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const now = new Date().toISOString()
   const orderRef = db.collection("orders").doc()
@@ -984,6 +1008,7 @@ export async function createMultiStoreOrder(orderData: {
 
 // Store confirms its part of a multi-store order
 export async function confirmStorePickup(orderId: string, storeId: string) {
+  if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
@@ -1106,6 +1131,7 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
 
 // Store rejects its part of a multi-store order
 export async function rejectStorePickup(orderId: string, storeId: string, reason?: string) {
+  if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
@@ -1235,6 +1261,8 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
 
 // Driver marks pickup from a specific store
 export async function markStorePickedUp(orderId: string, driverId: string, storeId: string) {
+  // ملاحظة أمنية: السائقون يُصادَقون عبر نظام PIN منفصل (مجموعة drivers) وليس جلسة Firebase.
+  // هذه الدالة تحتاج تحصينًا ضمن مسار مصادقة السائق (متابعة لاحقة).
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
@@ -1332,6 +1360,7 @@ export async function markStorePickedUp(orderId: string, driverId: string, store
 
 // Get multi-store orders for a specific store (seller view)
 export async function getMultiStoreOrdersForStore(storeId: string) {
+  if (!(await requireOwner(storeId))) return { success: true, orders: [] }
   const db = getAdminDb()
 
   try {
@@ -1364,6 +1393,7 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
 
 // Get multi-store orders for a driver
 export async function getMultiStoreOrdersForDriver(driverId: string) {
+  // ملاحظة أمنية: مسار السائق يعتمد على مصادقة PIN المنفصلة (يحتاج تحصينًا لاحقًا)
   const db = getAdminDb()
 
   try {
@@ -1388,6 +1418,7 @@ export async function getMultiStoreOrdersForDriver(driverId: string) {
 
 // Get multi-store orders for a customer
 export async function getCustomerMultiStoreOrders(customerId: string) {
+  if (!(await requireOwner(customerId))) return { success: true, orders: [] }
   const db = getAdminDb()
 
   try {
@@ -1412,6 +1443,7 @@ export async function getCustomerMultiStoreOrders(customerId: string) {
 
 // Get a multi-store order by ID for editing
 export async function getMultiStoreOrderForEdit(orderId: string, customerId: string) {
+  if (!(await requireOwner(customerId))) return { success: false, error: "Unauthorized" }
   const db = getAdminDb()
   
   try {
@@ -1465,9 +1497,13 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
   }[]
   subtotal: number
 }[]) {
+  // التحقق سيرفر-سايد: العميل يعدّل طلبه فقط
+  if (!(await requireOwner(customerId))) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const now = new Date().toISOString()
-  
+
   try {
     const orderDoc = await db.collection("orders").doc(orderId).get()
     if (!orderDoc.exists) {
