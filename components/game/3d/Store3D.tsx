@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import * as THREE from 'three';
 import Link from 'next/link';
 import { useProductStore } from '../../../lib/stores/product-store';
@@ -271,6 +272,8 @@ export default function SupermarketSimulator() {
 
     useEffect(() => {
         if (!mountRef.current || !catalogLoaded) return;
+        // نلتقط عقدة التركيب محليًا لاستخدامها في التنظيف (قد تتغيّر mountRef.current قبل تشغيل cleanup)
+        const mount = mountRef.current;
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -365,7 +368,7 @@ export default function SupermarketSimulator() {
         rendererRef.current = renderer;
         renderer.domElement.tabIndex = 0; // Make focusable
         renderer.domElement.style.outline = 'none';
-        mountRef.current.appendChild(renderer.domElement);
+        mount.appendChild(renderer.domElement);
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xfff5e6, isMobileDevice ? 1.8 : 1.2);
@@ -2348,14 +2351,16 @@ export default function SupermarketSimulator() {
             scene.clear();
             camera.clear();
 
-            if (mountRef.current?.contains(renderer.domElement)) {
-                mountRef.current.removeChild(renderer.domElement);
+            if (mount.contains(renderer.domElement)) {
+                mount.removeChild(renderer.domElement);
             }
             renderer.renderLists.dispose();
             (renderer as THREE.WebGLRenderer & { forceContextLoss?: () => void }).forceContextLoss?.();
             renderer.dispose();
             rendererRef.current = null;
         }
+        // يُعاد بناء المشهد عند تغيّر هذه القيم فقط؛ addItem (ثابت من zustand) وcatalog مقصود استثناؤهما
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [catalogLoaded, dragToAddMessage, isArabic]);
 
     const handleCheckout = () => {
@@ -2586,9 +2591,12 @@ export default function SupermarketSimulator() {
                             flexShrink: 0,
                             border: '1px solid rgba(255,255,255,0.08)'
                         }}>
-                            <img
+                            <Image
                                 src={hoveredProduct.image_url || '/placeholder.svg'}
                                 alt={hoveredProduct.name}
+                                width={64}
+                                height={64}
+                                unoptimized
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                         </div>

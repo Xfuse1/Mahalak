@@ -112,6 +112,7 @@ export default function VerifyPhonePage() {
     }
 
     void sendVerificationCode(normalizedPhone)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedPhone, t])
 
   useEffect(() => {

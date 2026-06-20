@@ -138,6 +138,7 @@ export default function AccountPage() {
       }
     }
     checkStore()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, t])
 
   if (isLoading || !user) {

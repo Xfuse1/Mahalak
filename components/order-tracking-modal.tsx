@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { MapPin, Phone, Store, Calendar, Hash, Loader2, Truck } from "lucide-react"
 import {
     Dialog,
@@ -150,9 +151,12 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                         {/* Product Image Placeholder or actual image if implemented */}
                                         <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden relative border border-gray-200">
                                             {item.products?.image_url ? (
-                                                <img
+                                                <Image
                                                     src={item.products.image_url}
                                                     alt={item.products.name}
+                                                    width={48}
+                                                    height={48}
+                                                    unoptimized
                                                     className="w-full h-full object-cover"
                                                 />
                                             ) : (

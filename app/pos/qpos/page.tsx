@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
+import Image from "next/image"
 import type { ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
@@ -741,7 +742,7 @@ export default function QPOSPage() {
   const getErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error && error.message ? translatePosError(error.message, fallback) : fallback
   const activeMonthlyHistory = monthlyHistory[historyMonth]
-  const activeSalesHistory = activeMonthlyHistory?.sales ?? []
+  const activeSalesHistory = useMemo(() => activeMonthlyHistory?.sales ?? [], [activeMonthlyHistory])
   const getSaleTimestamp = useCallback((createdAt?: string) => {
     const parsed = createdAt ? Date.parse(createdAt) : NaN
     return Number.isFinite(parsed) ? parsed : 0
@@ -1165,6 +1166,7 @@ export default function QPOSPage() {
         )
       )
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [products, t]
   )
 
@@ -3085,6 +3087,7 @@ export default function QPOSPage() {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, showPayment, clearCart, resetQuickAddForm, resetEditProductForm, resetAddStockForm])
 
   // ===================== Loading / Auth States =====================
@@ -3146,9 +3149,12 @@ export default function QPOSPage() {
           </button>
           <div className="flex items-center gap-2 sm:gap-3">
             {store.logo_url ? (
-              <img
+              <Image
                 src={store.logo_url}
                 alt={store.name}
+                width={40}
+                height={40}
+                unoptimized
                 className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-cover shadow-sm border border-gray-200"
               />
             ) : (
@@ -3561,9 +3567,12 @@ export default function QPOSPage() {
                 >
                   {/* Product image */}
                   {item.image_url ? (
-                    <img
+                    <Image
                       src={item.image_url}
                       alt={item.name}
+                      width={40}
+                      height={40}
+                      unoptimized
                       className="w-10 h-10 rounded-md object-cover flex-shrink-0"
                     />
                   ) : (
@@ -3859,9 +3868,12 @@ export default function QPOSPage() {
                       {/* Image */}
                       <div className="aspect-square rounded-lg overflow-hidden bg-gray-700 mb-2">
                         {product.image_url ? (
-                          <img
+                          <Image
                             src={product.image_url}
                             alt={product.name}
+                            width={200}
+                            height={200}
+                            unoptimized
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
                         ) : (
@@ -5514,9 +5526,12 @@ export default function QPOSPage() {
                 </div>
                 {quickAddImagePreview ? (
                   <div className="mt-3 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
-                    <img
+                    <Image
                       src={quickAddImagePreview}
                       alt={t("معاينة صورة المنتج", "Product image preview")}
+                      width={400}
+                      height={160}
+                      unoptimized
                       className="w-full h-40 object-cover"
                     />
                   </div>

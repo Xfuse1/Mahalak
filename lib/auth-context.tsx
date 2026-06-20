@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => unsubscribe()
-  }, [auth, loadUserProfile])
+  }, [auth, db, loadUserProfile])
 
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     if (!auth || !db) {
@@ -222,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw error
     }
-  }, [auth, db, loadUserProfile])
+  }, [auth, db, loadUserProfile, t])
 
   const signInWithGoogle = useCallback(async (): Promise<"customer" | "seller"> => {
     if (!auth || !db) {

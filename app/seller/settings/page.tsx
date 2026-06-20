@@ -189,6 +189,7 @@ export default function SettingsPage() {
     if (user?.id && user?.role === "seller") {
       fetchStore()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {

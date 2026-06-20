@@ -206,6 +206,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     }
 
     fetchProduct()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user?.id])
 
   useEffect(() => {

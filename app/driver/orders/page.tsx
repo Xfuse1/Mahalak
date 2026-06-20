@@ -88,6 +88,7 @@ export default function DriverOrdersPage() {
     if (driverIdParam && driverPin) {
       handleLogin()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driverIdParam])
 
   const handleLogin = async () => {

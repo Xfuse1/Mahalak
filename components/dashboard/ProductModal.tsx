@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import { useProductStore } from '../../lib/stores/product-store';
 import {
     Dialog,
@@ -67,7 +68,7 @@ export default function ProductModal() {
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
                                                         {product?.textureURL ? (
-                                                            <img src={product.textureURL} alt="" className="w-full h-full object-cover" />
+                                                            <Image src={product.textureURL} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
                                                         ) : (
                                                             <Package className="w-5 h-5 text-gray-400" />
                                                         )}
@@ -115,7 +116,7 @@ export default function ProductModal() {
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden group-hover:bg-blue-50 transition-colors">
                                                     {product.textureURL ? (
-                                                        <img src={product.textureURL} alt="" className="w-full h-full object-cover" />
+                                                        <Image src={product.textureURL} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
                                                     ) : (
                                                         <Package className="w-5 h-5 text-gray-400 group-hover:text-[#1F478B]" />
                                                     )}
