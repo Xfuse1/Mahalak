@@ -280,12 +280,12 @@ export default function DeliveryPage() {
 
   if (authLoading || !checkoutData || (isBuyNowMode && !buyNowItem)) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary flex items-center justify-center mb-4 animate-pulse">
                 <Truck className="w-8 h-8 text-white" />
               </div>
               <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
@@ -298,7 +298,7 @@ export default function DeliveryPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-10">
@@ -309,10 +309,10 @@ export default function DeliveryPage() {
 
           {/* Header Section */}
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 mb-4 shadow-lg shadow-blue-500/30">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary mb-4 shadow-lg shadow-primary/30">
               <Truck className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-foreground">
               {t("اختر سائق التوصيل", "Select Delivery Driver")}
             </h1>
             <p className="text-gray-600 mt-2">
@@ -324,7 +324,7 @@ export default function DeliveryPage() {
           <div className="space-y-4 mb-8">
             {loadingDrivers ? (
               <div className="text-center py-12 bg-white rounded-2xl shadow-md">
-                <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-600" />
+                <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary" />
                 <p className="text-gray-600 mt-3">{t("جاري تحميل السائقين...", "Loading drivers...")}</p>
               </div>
             ) : sortedDrivers.length === 0 ? (
@@ -341,7 +341,7 @@ export default function DeliveryPage() {
                   className={`transition-all duration-300 border-0 rounded-2xl overflow-hidden ${!driver.is_available
                     ? "opacity-60 bg-gray-50 ring-2 ring-red-200 cursor-not-allowed"
                     : selectedDriver === driver.id
-                      ? "ring-2 ring-blue-500 shadow-lg shadow-blue-500/20 bg-blue-50 cursor-pointer"
+                      ? "ring-2 ring-primary shadow-lg shadow-primary/20 bg-primary/5 cursor-pointer"
                       : "hover:shadow-lg hover:-translate-y-1 bg-white shadow-md cursor-pointer"
                     }`}
                   onClick={() => driver.is_available && setSelectedDriver(driver.id)}
@@ -372,7 +372,7 @@ export default function DeliveryPage() {
                             }}
                           />
                         ) : (
-                          <div className={`h-full w-full flex items-center justify-center ${!driver.is_available ? "bg-gray-400" : "bg-gradient-to-br from-blue-500 to-blue-600"} text-white text-xl font-bold`}>
+                          <div className={`h-full w-full flex items-center justify-center ${!driver.is_available ? "bg-gray-400" : "bg-primary"} text-white text-xl font-bold`}>
                             {driver.name.charAt(0)}
                           </div>
                         )}
@@ -394,8 +394,8 @@ export default function DeliveryPage() {
                             </span>
                           )}
                           {driver.is_online ? (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full flex items-center gap-1 font-medium">
-                              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full flex items-center gap-1 font-medium">
+                              <span className="w-2 h-2 bg-primary rounded-full"></span>
                               {t("متصل", "Online")}
                             </span>
                           ) : (
@@ -433,7 +433,7 @@ export default function DeliveryPage() {
 
                       {/* Price */}
                       <div className="text-center">
-                        <p className={`text-xl font-bold ${!driver.is_available ? "text-gray-400" : "bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent"}`}>
+                        <p className={`text-xl font-bold ${!driver.is_available ? "text-gray-400" : "text-primary"}`}>
                           {driver.price}
                         </p>
                         <p className="text-xs text-gray-500">{t("جنيه", "EGP")}</p>
@@ -466,7 +466,7 @@ export default function DeliveryPage() {
               </div>
               <div className="border-t pt-4 flex justify-between items-center">
                 <span className="font-semibold text-lg">{t("الإجمالي", "Total")}</span>
-                <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                <span className="text-2xl font-bold text-primary">
                   {grandTotal.toFixed(2)} {t("جنيه", "EGP")}
                 </span>
               </div>
@@ -477,7 +477,7 @@ export default function DeliveryPage() {
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardContent className="p-5">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-lg">
                   <MapPin className="h-6 w-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -505,7 +505,7 @@ export default function DeliveryPage() {
                         href={`https://www.google.com/maps?q=${checkoutData.latitude},${checkoutData.longitude}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium"
                       >
                         <MapPin className="h-4 w-4" />
                         {t("عرض الموقع على الخريطة", "View location on map")}
@@ -520,7 +520,7 @@ export default function DeliveryPage() {
           {/* Confirm Button */}
           <Button
             onClick={handleConfirmOrder}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
+            className="w-full bg-primary hover:bg-primary/90 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
             size="lg"
             disabled={!selectedDriver || isSubmitting}
           >

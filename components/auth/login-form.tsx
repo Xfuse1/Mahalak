@@ -2,7 +2,7 @@
 
 import type React from "react"
 import Link from "next/link"
-import { Chrome } from "lucide-react"
+import { Chrome, Loader2 } from "lucide-react"
 import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { Button } from "../ui/button"
@@ -79,7 +79,14 @@ export function LoginForm({
         className="h-12 w-full rounded-2xl bg-primary text-primary-foreground text-sm font-bold shadow-lg transition hover:bg-primary/90 sm:h-14 sm:text-base"
         disabled={isLoading || isGoogleLoading}
       >
-        {isLoading ? t("جاري تسجيل الدخول...", "Logging in...") : t("تسجيل الدخول", "Login")}
+        {isLoading ? (
+          <>
+            <Loader2 className="me-2 size-4 animate-spin" />
+            {t("جاري تسجيل الدخول...", "Logging in...")}
+          </>
+        ) : (
+          t("تسجيل الدخول", "Login")
+        )}
       </Button>
 
       <div className="relative">
@@ -98,7 +105,7 @@ export function LoginForm({
         disabled={isLoading || isGoogleLoading}
         className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
       >
-        <Chrome className="h-5 w-5" />
+        {isGoogleLoading ? <Loader2 className="size-5 animate-spin" /> : <Chrome className="h-5 w-5" />}
         {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
       </Button>
 

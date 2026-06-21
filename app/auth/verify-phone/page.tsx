@@ -268,11 +268,11 @@ export default function VerifyPhonePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white p-4" dir={isRTL ? "rtl" : "ltr"}>
+    <div className="min-h-screen flex items-center justify-center bg-background p-4" dir={isRTL ? "rtl" : "ltr"}>
       <Card className="w-full max-w-md border-0 shadow-2xl rounded-3xl overflow-hidden">
         <CardContent className="p-8">
           <div className="text-center mb-8">
-            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+            <div className="w-20 h-20 mx-auto mb-6 bg-primary rounded-full flex items-center justify-center shadow-lg">
               <Shield className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-800 mb-2">{t("أدخل كود التحقق", "Enter Verification Code")}</h1>
@@ -280,13 +280,13 @@ export default function VerifyPhonePage() {
               <Phone className="h-4 w-4" />
               {t("تم إرسال كود التحقق إلى", "Verification code sent to")}
             </p>
-            <p className="text-blue-600 font-bold text-lg mt-1" dir="ltr">
+            <p className="text-primary font-bold text-lg mt-1" dir="ltr">
               {normalizedPhone || phoneParam}
             </p>
           </div>
 
           {sendingOtp && (
-            <div className="flex items-center justify-center gap-2 mb-6 text-blue-600">
+            <div className="flex items-center justify-center gap-2 mb-6 text-primary">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span className="text-sm">{t("جاري إرسال كود التحقق...", "Sending verification code...")}</span>
             </div>
@@ -314,9 +314,9 @@ export default function VerifyPhonePage() {
           )}
 
           {registering && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-center flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-              <p className="text-blue-600 text-sm">{t("جاري إنشاء الحساب...", "Creating account...")}</p>
+            <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-xl text-center flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <p className="text-primary text-sm">{t("جاري إنشاء الحساب...", "Creating account...")}</p>
             </div>
           )}
 
@@ -350,7 +350,7 @@ export default function VerifyPhonePage() {
             type="button"
             onClick={handleVerify}
             disabled={loading || otpCode.length !== 6 || attemptsRemaining <= 0 || sessionLost}
-            className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl text-lg font-bold shadow-lg hover:shadow-xl transition-all"
+            className="w-full h-14 bg-primary hover:bg-primary/90 rounded-xl text-lg font-bold shadow-lg hover:shadow-xl transition-all"
           >
             {loading ? (
               <div className="flex items-center gap-2">
@@ -366,7 +366,7 @@ export default function VerifyPhonePage() {
           </Button>
 
           <div className="flex items-center justify-between mt-6 text-sm">
-            <button type="button" onClick={handleChangeNumber} className="text-gray-500 hover:text-blue-600 transition-colors">
+            <button type="button" onClick={handleChangeNumber} className="text-gray-500 hover:text-primary transition-colors">
               {t("تغيير الرقم", "Change Number")}
             </button>
 
@@ -374,7 +374,7 @@ export default function VerifyPhonePage() {
               type="button"
               onClick={handleResend}
               disabled={countdown > 0 || loading || sendingOtp}
-              className={`flex items-center gap-1 ${countdown <= 0 ? "text-blue-600 hover:text-blue-700" : "text-gray-400"} transition-colors`}
+              className={`flex items-center gap-1 ${countdown <= 0 ? "text-primary hover:text-primary/80" : "text-gray-400"} transition-colors`}
             >
               <RefreshCw className={`h-4 w-4 ${loading || sendingOtp ? "animate-spin" : ""}`} />
               {countdown <= 0
@@ -384,7 +384,7 @@ export default function VerifyPhonePage() {
           </div>
 
           <div className="mt-8 pt-6 border-t text-center">
-            <Link href={roleEntryPath} className="text-gray-500 hover:text-blue-600 text-sm transition-colors">
+            <Link href={roleEntryPath} className="text-gray-500 hover:text-primary text-sm transition-colors">
               {t("العودة لصفحة التسجيل", "Back to Sign Up")}
             </Link>
           </div>

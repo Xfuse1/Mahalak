@@ -11,7 +11,7 @@ export default function TermsPage() {
   const sections = [
     {
       icon: FileText,
-      color: "from-blue-500 to-blue-600",
+      color: "from-primary to-primary",
       title: t("مقدمة", "Introduction"),
       content: t(
         "مرحباً بك في محلك. باستخدامك لهذه المنصة، فإنك توافق على الالتزام بشروط الاستخدام التالية. يرجى قراءة هذه الشروط بعناية قبل استخدام خدماتنا.",
@@ -33,7 +33,7 @@ export default function TermsPage() {
     },
     {
       icon: User,
-      color: "from-violet-500 to-violet-600",
+      color: "from-primary to-primary",
       title: t("حسابات المستخدمين", "User Accounts"),
       content: t(
         "أنت مسؤول عن جميع الأنشطة التي تتم من خلال حسابك. يجب عليك إخطارنا فوراً بأي استخدام غير مصرح به لحسابك. نحتفظ بالحق في تعليق أو إنهاء حسابك إذا انتهكت هذه الشروط.",
@@ -79,7 +79,7 @@ export default function TermsPage() {
     },
     {
       icon: Copyright,
-      color: "from-indigo-500 to-indigo-600",
+      color: "from-primary to-primary",
       title: t("الملكية الفكرية", "Intellectual Property"),
       content: t(
         "جميع المحتويات على منصة محلك، بما في ذلك النصوص والصور والشعارات والتصميمات، محمية بحقوق الملكية الفكرية. لا يجوز استخدام أي محتوى دون إذن كتابي مسبق منا.",
@@ -116,7 +116,7 @@ export default function TermsPage() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-16">

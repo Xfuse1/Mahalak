@@ -161,13 +161,13 @@ export default function POSMobileActionsSheet({
       icon: <BarChart3 className="h-5 w-5" />,
       label: t("ملخص اليوم", "Summary"),
       onClick: () => { onSummary(); onClose() },
-      color: "bg-violet-50 text-violet-600 border-violet-200",
+      color: "bg-primary/10 text-primary border-primary/20",
     },
     {
       icon: <Bookmark className="h-5 w-5" />,
       label: t("سلات معلقة", "Held Carts"),
       onClick: () => { onHeldCarts(); onClose() },
-      color: "bg-blue-50 text-blue-600 border-blue-200",
+      color: "bg-primary/10 text-primary border-primary/20",
       badge: heldCartsCount > 0 ? heldCartsCount : undefined,
     },
     {
@@ -201,7 +201,7 @@ export default function POSMobileActionsSheet({
       icon: <Shield className="h-5 w-5" />,
       label: t("التأمين", "Insurance"),
       onClick: () => { onInsurance?.(); onClose() },
-      color: "bg-blue-50 text-blue-600 border-blue-200",
+      color: "bg-primary/10 text-primary border-primary/20",
     },
     {
       icon: <User className="h-5 w-5" />,
@@ -273,7 +273,7 @@ export default function POSMobileActionsSheet({
       icon: <ShoppingBag className="h-5 w-5" />,
       label: t("الطلبات الواردة", "Incoming Orders"),
       onClick: () => { onOnlineOrders?.(); onClose() },
-      color: "bg-blue-50 text-blue-600 border-blue-200",
+      color: "bg-primary/10 text-primary border-primary/20",
       badge: onlineOrdersBadge,
     },
     {
@@ -286,7 +286,7 @@ export default function POSMobileActionsSheet({
       icon: <Smartphone className="h-5 w-5" />,
       label: t("طرق الدفع", "Payment"),
       onClick: () => { onPaymentConfig?.(); onClose() },
-      color: "bg-indigo-50 text-indigo-600 border-indigo-200",
+      color: "bg-primary/10 text-primary border-primary/20",
     },
     {
       icon: <Bell className="h-5 w-5" />,
@@ -378,7 +378,7 @@ export default function POSMobileActionsSheet({
           {isClothing && clothingActions.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <Ruler className="h-4 w-4 text-indigo-600" />
+                <Ruler className="h-4 w-4 text-primary" />
                 <span className="text-sm font-bold text-gray-700">{t("أدوات الملابس", "Clothing Tools")}</span>
               </div>
               {renderActionGrid(clothingActions)}
@@ -389,7 +389,7 @@ export default function POSMobileActionsSheet({
           {isOnline && onlineActions.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <Globe className="h-4 w-4 text-blue-600" />
+                <Globe className="h-4 w-4 text-primary" />
                 <span className="text-sm font-bold text-gray-700">{t("أدوات المتجر الأونلاين", "Online Store Tools")}</span>
               </div>
               {renderActionGrid(onlineActions)}

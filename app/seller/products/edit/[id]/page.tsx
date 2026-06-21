@@ -35,8 +35,8 @@ const STORE_THEME: Record<StoreType, { gradient: string; icon: React.ReactNode }
   pharmacy: { gradient: "from-emerald-600 to-teal-700", icon: <Pill className="h-5 w-5" /> },
   clothing: { gradient: "from-purple-600 to-pink-700", icon: <Shirt className="h-5 w-5" /> },
   grocery: { gradient: "from-orange-600 to-amber-700", icon: <ShoppingBasket className="h-5 w-5" /> },
-  electronics: { gradient: "from-blue-600 to-indigo-700", icon: <Package className="h-5 w-5" /> },
-  general: { gradient: "from-blue-600 to-blue-700", icon: <Upload className="h-5 w-5" /> },
+  electronics: { gradient: "from-primary to-primary/90", icon: <Package className="h-5 w-5" /> },
+  general: { gradient: "from-primary to-primary", icon: <Upload className="h-5 w-5" /> },
 }
 
 type EditableProduct = {
@@ -389,12 +389,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
   if (isLoadingProduct) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex min-h-screen bg-background">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4 max-w-3xl">
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary flex items-center justify-center mb-4 animate-pulse">
                 <Upload className="w-8 h-8 text-white" />
               </div>
               <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
@@ -408,7 +408,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   // بعد حارس isLoadingProduct أعلاه يصبح هذا مكافئًا لـ !product ويتيح لـ TS تضييق النوع
   if (!product) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex min-h-screen bg-background">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4 max-w-3xl">
@@ -416,7 +416,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               <p className="text-red-500 text-lg mb-4">{error || t("المنتج غير موجود", "Product not found")}</p>
               <Button
                 onClick={() => router.push("/seller/products")}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
+                className="bg-primary rounded-xl"
               >
                 {t("العودة للمنتجات", "Back to products")}
               </Button>
@@ -428,12 +428,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
-          <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold mb-8 text-foreground">
             {t("تعديل المنتج", "Edit Product")}
           </h1>
 
@@ -453,7 +453,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     name="name"
                     defaultValue={product.name}
                     required
-                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
 
@@ -465,7 +465,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     defaultValue={product.description}
                     rows={4}
                     required
-                    className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1.5 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
 
@@ -480,7 +480,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       min="0.01"
                       defaultValue={product.price}
                       required
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div>
@@ -493,7 +493,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       min="0.01"
                       defaultValue={product.cost_price ?? product.price}
                       required
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div>
@@ -505,7 +505,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       min="0"
                       defaultValue={product.stock}
                       required
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                     {isReservationEnabled && (
                       <p className="text-xs text-green-600 mt-1">
@@ -515,14 +515,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   </div>
 
                   {/* Pre-Reservation Toggle */}
-                  <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-blue-200 bg-blue-50/50">
+                  <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-primary/20 bg-primary/5">
                     <div className="flex-1">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={isReservationEnabled}
                           onChange={(e) => setIsReservationEnabled(e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="w-5 h-5 rounded border-gray-300 text-primary cursor-pointer"
                         />
                         <span className="font-medium text-gray-700">
                           {t("متاح للحجز المسبق", "Available for Pre-Reservation")}
@@ -536,7 +536,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       </p>
                     </div>
                     {isReservationEnabled && (
-                      <div className="text-blue-600 text-2xl">✓</div>
+                      <div className="text-primary text-2xl">✓</div>
                     )}
                   </div>
                 </div>
@@ -548,7 +548,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     name="barcode"
                     defaultValue={product.barcode || ""}
                     placeholder={t("مثال: 6221507001016", "Example: 6221507001016")}
-                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 font-mono"
                   />
                   <p className="text-xs text-gray-500 mt-1">{t("رقم الباركود المطبوع على المنتج (إن وجد)", "Barcode printed on the product (if available)")}</p>
                 </div>
@@ -565,7 +565,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       }
                     }}
                   >
-                    <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                    <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20">
                       <SelectValue placeholder={t("اختر القسم", "Select category")} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -599,7 +599,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       value={customCategory}
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder={t("أدخل اسم القسم", "Enter category name")}
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                 )}
@@ -622,10 +622,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   <div className="mt-2">
                     <label
                       htmlFor="image"
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-all bg-gray-50 group"
+                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all bg-gray-50 group"
                     >
                       <div className="flex flex-col items-center justify-center py-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-2 shadow-lg group-hover:scale-110 transition-transform">
+                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center mb-2 shadow-lg group-hover:scale-110 transition-transform">
                           <Upload className="h-5 w-5 text-white" />
                         </div>
                         <p className="text-sm text-gray-600 font-medium">

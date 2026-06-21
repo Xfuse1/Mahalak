@@ -192,7 +192,7 @@ export default function Supermarket3DPage() {
     if (isLoading || isCheckingStore) {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-50">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F478B]"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
         )
     }
@@ -218,7 +218,7 @@ export default function Supermarket3DPage() {
                                     "Sorry, the 3D simulator is currently designed specifically for Supermarkets and Grocery stores."
                                 )}
                             </p>
-                            <Button asChild className="w-full bg-[#1F478B] hover:bg-[#1a3a70]">
+                            <Button asChild className="w-full bg-primary hover:bg-primary/90">
                                 <Link href="/seller/dashboard">
                                     <ArrowRight className="ms-2 h-5 w-5" />
                                     {t("العودة للوحة التحكم", "Back to Dashboard")}
@@ -239,8 +239,8 @@ export default function Supermarket3DPage() {
                 {/* Header */}
                 <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-8 shrink-0">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <LayoutGrid className="w-5 h-5 text-[#1F478B]" />
+                        <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                            <LayoutGrid className="w-5 h-5 text-primary" />
                         </div>
                         <h1 className="text-lg font-bold text-gray-900">
                             {t("تخطيط السوبر ماركت", "Supermarket Layout")}
@@ -265,8 +265,8 @@ export default function Supermarket3DPage() {
                             <ShelfManager />
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
-                                <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center">
-                                    <LayoutGrid className="w-10 h-10 text-blue-200" />
+                                <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <LayoutGrid className="w-10 h-10 text-primary/40" />
                                 </div>
                                 <div className="max-w-xs">
                                     <h2 className="text-xl font-bold text-gray-900 mb-2">

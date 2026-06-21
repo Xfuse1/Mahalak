@@ -7,6 +7,7 @@ import { StoreCard } from "../store-card"
 import { useLanguage } from "../../lib/language-context"
 import Link from "next/link"
 import { Button } from "../ui/button"
+import { Skeleton } from "../ui/skeleton"
 import { Package, Store, ShoppingBasket, HeartPulse, Shirt, Smartphone, UtensilsCrossed, Sofa, Wrench } from "lucide-react"
 import { memo } from "react"
 import type { ProductListItem } from "@/lib/types/product"
@@ -15,7 +16,7 @@ import type { StoreListItem } from "@/lib/types/store"
 // Lazy load below-the-fold components
 const BannerCarousel = dynamic(
   () => import("../banner-carousel").then(m => ({ default: m.BannerCarousel })),
-  { ssr: false, loading: () => <div className="w-full h-48 bg-gray-100 animate-pulse rounded-2xl" /> }
+  { ssr: false, loading: () => <Skeleton className="w-full h-48 rounded-2xl" /> }
 )
 
 const MemoizedProductCard = memo(ProductCard)

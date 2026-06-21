@@ -8,8 +8,13 @@ import { ProductCard } from "../../components/product-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
-import { Star } from "lucide-react"
+import { Star, Package, Store as StoreIcon } from "lucide-react"
 import { SearchBar } from "../../components/search-bar"
+import { SkeletonGrid } from "../../components/ui/skeleton-grid"
+import { EmptyState } from "../../components/ui/empty-state"
+import { ErrorState } from "../../components/ui/error-state"
+import { Spinner } from "../../components/ui/spinner"
+import { logError } from "../../lib/logger"
 import { FilterSort, type FilterState } from "../../components/filter-sort"
 import { BackButton } from "../../components/back-button"
 import { useLanguage } from "../../lib/language-context"
@@ -74,45 +79,48 @@ function SearchResults() {
   const [sortedProducts, setSortedProducts] = useState<ProductListItem[]>([])
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const { language, t } = useLanguage()
 
   const isRTL = language === "ar"
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        let productsData: any[] = [], storesData: any[] = []
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      let productsData: any[] = [], storesData: any[] = []
 
-        if (!query) {
-          // No query - fetch all products only
-          productsData = await getProducts()
-          storesData = []
-        } else {
-          // Query exists - search for matching products and stores
-          ;[productsData, storesData] = await Promise.all([searchProducts(query), searchStores(query)])
-        }
-
-        // Transform products to match the expected format
-        const transformedProducts = productsData.map((product: any) => ({
-          ...product,
-          image: product.image_url, // Map image_url to image for ProductCard component
-          storeName: product.stores?.name || "",
-          createdAt: product.created_at,
-          updatedAt: product.updated_at || product.created_at,
-        }))
-
-        setProducts(transformedProducts)
-        setStores(storesData)
-      } catch (error) {
-        // Error handled silently - page shows empty results
-      } finally {
-        setLoading(false)
+      if (!query) {
+        // No query - fetch all products only
+        productsData = await getProducts()
+        storesData = []
+      } else {
+        // Query exists - search for matching products and stores
+        ;[productsData, storesData] = await Promise.all([searchProducts(query), searchStores(query)])
       }
-    }
 
-    fetchData()
+      // Transform products to match the expected format
+      const transformedProducts = productsData.map((product: any) => ({
+        ...product,
+        image: product.image_url, // Map image_url to image for ProductCard component
+        storeName: product.stores?.name || "",
+        createdAt: product.created_at,
+        updatedAt: product.updated_at || product.created_at,
+      }))
+
+      setProducts(transformedProducts)
+      setStores(storesData)
+    } catch (err) {
+      logError("[search] fetchData", err)
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [query])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // اشتقاق النتائج المعروضة من المنتجات + الفلاتر الحالية — يُعيد تطبيق الفلاتر تلقائيًا
   // عند تغيّر الاستعلام (كانت الفلاتر تُفقد سابقًا عند كل بحث جديد).
@@ -135,28 +143,26 @@ function SearchResults() {
         ))}
       </div>
     ) : (
-      <div className={`text-center py-12 ${isRTL ? "text-right" : "text-left"}`}>
-        <p className="text-gray-500 text-lg">{t("لم يتم العثور على منتجات", "No products found")}</p>
-      </div>
+      <EmptyState icon={Package} title={t("لم يتم العثور على منتجات", "No products found")} />
     )
 
   return (
     <div className="min-h-screen flex flex-col" dir={isRTL ? "rtl" : "ltr"}>
       <Header />
 
-      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-8 bg-secondary/20">
         <div className="container mx-auto px-4">
           <BackButton />
 
           <div className={`mb-8 ${isRTL ? "text-right" : "text-left"}`}>
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">
               {query
                 ? `${t("نتائج البحث عن:", "Search results for:")} `
                 : t("جميع المنتجات", "All Products")}
-              {query && <span className="text-blue-600">{query}</span>}
+              {query && <span className="text-primary">{query}</span>}
             </h1>
             {query && (
-              <p className="text-gray-500 mt-2">
+              <p className="text-muted-foreground mt-2">
                 {t(`تم العثور على ${sortedProducts.length} منتج و ${stores.length} متجر`, `Found ${sortedProducts.length} products and ${stores.length} stores`)}
               </p>
             )}
@@ -175,22 +181,24 @@ function SearchResults() {
           </div>
 
           {loading ? (
-            <div className="text-center py-20">
-              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="mt-4 text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
-            </div>
+            <SkeletonGrid variant="product" />
+          ) : error ? (
+            <ErrorState
+              description={t("تعذّر تحميل النتائج. حاول مرة أخرى.", "Failed to load results. Please try again.")}
+              onRetry={fetchData}
+            />
           ) : query ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className={`mb-8 w-auto ${isRTL ? "ml-auto" : "mr-auto"} flex gap-2 bg-white shadow-lg rounded-2xl p-2 border-0`}>
                 <TabsTrigger
                   value="products"
-                  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all"
+                  className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg px-6 py-3 transition-all"
                 >
                   {t("المنتجات", "Products")} ({sortedProducts.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="stores"
-                  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all"
+                  className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg px-6 py-3 transition-all"
                 >
                   {t("المتاجر", "Stores")} ({stores.length})
                 </TabsTrigger>
@@ -206,8 +214,8 @@ function SearchResults() {
                   >
                     {stores.map((store) => (
                       <Link key={store.id} href={`/store/${store.id}`}>
-                        <Card className="hover:shadow-2xl transition-all duration-300 h-full overflow-hidden border-0 shadow-lg rounded-2xl hover:-translate-y-2 group">
-                          <div className="relative h-48 bg-gray-100 overflow-hidden">
+                        <Card className="hover:shadow-lg transition-all duration-300 h-full overflow-hidden border border-border bg-card shadow-sm rounded-2xl hover:-translate-y-1 group">
+                          <div className="relative h-48 bg-muted overflow-hidden">
                             <Image
                               src={store.image_url || "/placeholder.svg"}
                               alt={store.name}
@@ -219,8 +227,8 @@ function SearchResults() {
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                           <CardContent className="p-6">
-                            <h3 className="text-xl font-bold mb-2 text-gray-800">{store.name}</h3>
-                            <p className="text-gray-500 mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
+                            <h3 className="text-xl font-bold mb-2 text-foreground">{store.name}</h3>
+                            <p className="text-muted-foreground mb-4 line-clamp-2 leading-relaxed">{store.description}</p>
                             <div
                               className={`flex items-center gap-2 mb-4 ${isRTL ? "flex-row-reverse justify-end" : "justify-start"}`}
                             >
@@ -230,7 +238,7 @@ function SearchResults() {
                               </div>
                             </div>
                             <div className={isRTL ? "text-right" : "text-left"}>
-                              <span className="inline-block bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-1.5 rounded-xl text-sm font-medium text-blue-700 border border-blue-100">
+                              <span className="inline-block bg-primary/10 px-4 py-1.5 rounded-xl text-sm font-medium text-primary border border-primary/20">
                                 {store.category}
                               </span>
                             </div>
@@ -240,12 +248,7 @@ function SearchResults() {
                     ))}
                   </div>
                 ) : (
-                  <div className={`text-center py-16 ${isRTL ? "text-right" : "text-left"}`}>
-                    <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                      <Star className="h-10 w-10 text-gray-400" />
-                    </div>
-                    <p className="text-gray-500 text-lg">{t("لم يتم العثور على متاجر", "No stores found")}</p>
-                  </div>
+                  <EmptyState icon={StoreIcon} title={t("لم يتم العثور على متاجر", "No stores found")} />
                 )}
               </TabsContent>
             </Tabs>
@@ -264,11 +267,8 @@ export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading...</p>
-          </div>
+        <div className="min-h-screen flex items-center justify-center">
+          <Spinner size="lg" label="جاري التحميل…" className="flex-col" />
         </div>
       }
     >

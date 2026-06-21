@@ -201,12 +201,12 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary flex items-center justify-center mb-4 animate-pulse">
                 <Star className="w-8 h-8 text-white" />
               </div>
               <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
@@ -220,7 +220,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (!order) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4 text-center py-12">
@@ -229,8 +229,8 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
             </div>
             <h2 className="text-2xl font-semibold mb-2">{t("الطلب غير موجود", "Order not found")}</h2>
             <Button 
-              onClick={() => router.push("/account")} 
-              className="mt-4 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl"
+              onClick={() => router.push("/account")}
+              className="mt-4 bg-primary rounded-xl"
             >
               {t("العودة للحساب", "Back to Account")}
             </Button>
@@ -243,14 +243,14 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
 
   if (alreadyReviewed || submitted) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4 max-w-xl text-center py-12">
             <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mb-6 shadow-lg shadow-green-500/30">
               <CheckCircle className="h-12 w-12 text-white" />
             </div>
-            <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            <h2 className="text-2xl font-bold mb-2 text-foreground">
               {submitted
                 ? t("شكراً لتقييمك! 🎉", "Thank you for your review! 🎉")
                 : t("تم تقييم هذا الطلب مسبقاً", "This order has already been reviewed")}
@@ -259,8 +259,8 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
               {t("تقييمك يساعدنا في تحسين خدماتنا", "Your feedback helps us improve our services")}
             </p>
             <Button 
-              onClick={() => router.push("/account")} 
-              className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl px-8 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+              onClick={() => router.push("/account")}
+              className="bg-primary rounded-xl px-8 shadow-lg hover:shadow-xl transition-all hover:scale-105"
             >
               {t("العودة للحساب", "Back to Account")}
             </Button>
@@ -272,7 +272,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-10">
@@ -282,7 +282,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 mb-4 shadow-lg shadow-yellow-500/30">
               <Star className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-foreground">
               {t("قيّم تجربتك", "Rate Your Experience")}
             </h1>
             <p className="text-gray-600 mt-2">
@@ -295,7 +295,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
             <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardContent className="p-6">
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-lg">
+                  <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg">
                     <Truck className="h-8 w-8" />
                   </div>
                   <div>
@@ -313,7 +313,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                   placeholder={t("أضف تعليقاً (اختياري)...", "Add a comment (optional)...")}
                   value={driverComment}
                   onChange={(e) => setDriverComment(e.target.value)}
-                  className="resize-none rounded-xl border-gray-200 focus:border-blue-500"
+                  className="resize-none rounded-xl border-gray-200 focus:border-primary"
                   rows={3}
                 />
               </CardContent>
@@ -324,7 +324,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardContent className="p-6">
               <h3 className="font-semibold text-lg mb-6 flex items-center gap-3 text-gray-800">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-lg">
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg">
                   <Package className="h-5 w-5 text-white" />
                 </div>
                 {t("تقييم المنتجات", "Rate the Products")}
@@ -363,7 +363,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                       placeholder={t("تعليق على المنتج (اختياري)...", "Comment on product (optional)...")}
                       value={productRatings[productId]?.comment || ""}
                       onChange={(e) => handleProductComment(productId, e.target.value)}
-                      className="resize-none text-sm rounded-xl border-gray-200 focus:border-blue-500 bg-white"
+                      className="resize-none text-sm rounded-xl border-gray-200 focus:border-primary bg-white"
                       rows={2}
                     />
                   </div>
@@ -376,7 +376,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
           {/* Submit Button */}
           <Button
             onClick={handleSubmit}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
+            className="w-full bg-primary hover:bg-primary/90 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
             size="lg"
             disabled={submitting}
           >

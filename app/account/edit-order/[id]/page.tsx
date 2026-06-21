@@ -231,10 +231,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4 max-w-4xl">
             <div className="flex flex-col items-center justify-center py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
+              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
               <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
@@ -248,7 +248,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4 max-w-4xl">
             <BackButton />
             <div className="text-center py-16">
@@ -269,7 +269,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4 max-w-4xl">
             <div className="text-center py-20">
               <div className="w-20 h-20 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
@@ -289,18 +289,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-8 bg-background">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="mb-6">
             <BackButton />
           </div>
 
           <div className="flex items-center gap-3 mb-8">
-            <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl text-white shadow-lg">
+            <div className="p-3 bg-primary rounded-2xl text-white shadow-lg">
               <Package className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-extrabold text-foreground">
                 {t("تعديل الطلب", "Edit Order")}
               </h1>
               <p className="text-sm text-gray-500">#{orderId.slice(0, 8)}</p>
@@ -418,10 +418,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
           {/* Search for Replacement Products */}
           <Card className="mb-6 border-0 shadow-lg rounded-2xl">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b">
+            <CardHeader className="bg-primary/5 border-b">
               <CardTitle className="flex items-center gap-3 text-lg">
-                <div className="p-2 bg-blue-100 rounded-xl">
-                  <Search className="h-5 w-5 text-blue-600" />
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <Search className="h-5 w-5 text-primary" />
                 </div>
                 {t("ابحث عن منتجات بديلة", "Search for Replacement Products")}
               </CardTitle>
@@ -433,12 +433,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="h-12 rounded-xl border-gray-200 focus:border-blue-500"
+                  className="h-12 rounded-xl border-gray-200 focus:border-primary"
                 />
                 <Button
                   onClick={handleSearch}
                   disabled={searching || !searchQuery.trim()}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-6 h-12"
+                  className="bg-primary hover:bg-primary/90 rounded-xl px-6 h-12"
                 >
                   {searching ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
                 </Button>
@@ -450,7 +450,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   {searchResults.map((product) => {
                     const alreadyAdded = newItems.find(i => i.product_id === product.id)
                     return (
-                      <div key={product.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 hover:border-blue-300 hover:shadow-md transition-all">
+                      <div key={product.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 hover:border-primary/50 hover:shadow-md transition-all">
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
                           <Image src={product.image_url || "/placeholder.svg"} alt={product.name} width={64} height={64} className="object-cover w-full h-full" />
                         </div>
@@ -460,7 +460,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                             <Store className="h-3 w-3" />
                             {product.stores?.name || "متجر"}
                           </p>
-                          <p className="text-sm font-bold text-blue-600">
+                          <p className="text-sm font-bold text-primary">
                             {product.discount_percentage && product.discount_percentage > 0
                               ? (product.price - (product.price * product.discount_percentage / 100)).toLocaleString()
                               : product.price.toLocaleString()
@@ -472,7 +472,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                           size="sm"
                           onClick={() => addProduct(product)}
                           disabled={!!alreadyAdded && alreadyAdded.quantity >= product.stock}
-                          className={`rounded-lg flex-shrink-0 ${alreadyAdded ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          className={`rounded-lg flex-shrink-0 ${alreadyAdded ? 'bg-green-600 hover:bg-green-700' : 'bg-primary hover:bg-primary/90'}`}
                         >
                           {alreadyAdded ? <CheckCircle className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                         </Button>
@@ -493,8 +493,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
           {/* New Items Cart */}
           {newItems.length > 0 && (
-            <Card className="mb-6 border-0 shadow-xl rounded-2xl border-2 border-blue-200">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
+            <Card className="mb-6 border-0 shadow-xl rounded-2xl border-2 border-primary/20">
+              <CardHeader className="bg-primary text-white rounded-t-2xl">
                 <CardTitle className="flex items-center gap-3 text-lg">
                   <ShoppingCart className="h-5 w-5" />
                   {t("المنتجات البديلة المضافة", "Replacement Products Added")}
@@ -506,7 +506,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 {newStopsGrouped.map((stop) => (
                   <div key={stop.store_id} className="mb-4 last:mb-0">
                     <div className="flex items-center gap-2 mb-3 bg-gray-50 p-2 rounded-lg">
-                      <Store className="h-4 w-4 text-blue-600" />
+                      <Store className="h-4 w-4 text-primary" />
                       <span className="font-medium text-sm text-gray-700">{stop.store_name}</span>
                       <span className="text-xs text-gray-400 mr-auto">
                         {stop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
@@ -520,7 +520,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm text-gray-800 truncate">{item.name}</p>
-                            <p className="text-sm font-bold text-blue-600">{(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}</p>
+                            <p className="text-sm font-bold text-primary">{(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}</p>
                           </div>
                           <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
                             <Button
@@ -561,11 +561,11 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 <div className="mt-4 pt-4 border-t border-dashed">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-600">{t("المنتجات البديلة", "Replacement items")}</span>
-                    <span className="font-bold text-blue-600">{newItemsSubtotal.toLocaleString()} {t("جنيه", "EGP")}</span>
+                    <span className="font-bold text-primary">{newItemsSubtotal.toLocaleString()} {t("جنيه", "EGP")}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">{t("إجمالي الطلب الجديد", "New Order Total")}</span>
-                    <span className="font-extrabold text-xl bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                    <span className="font-extrabold text-xl text-primary">
                       {((order?.total || 0) + newItemsSubtotal).toLocaleString()} {t("جنيه", "EGP")}
                     </span>
                   </div>
@@ -595,13 +595,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
           {/* No items added yet hint */}
           {newItems.length === 0 && rejectedStops.length > 0 && (
-            <Card className="border-0 shadow-lg rounded-2xl bg-blue-50">
+            <Card className="border-0 shadow-lg rounded-2xl bg-primary/10">
               <CardContent className="p-6 text-center">
-                <ShoppingCart className="h-12 w-12 text-blue-400 mx-auto mb-3" />
-                <p className="text-blue-700 font-medium mb-1">
+                <ShoppingCart className="h-12 w-12 text-primary mx-auto mb-3" />
+                <p className="text-primary font-medium mb-1">
                   {t("لم تضف منتجات بديلة بعد", "No replacement products added yet")}
                 </p>
-                <p className="text-blue-500 text-sm">
+                <p className="text-primary text-sm">
                   {t("استخدم البحث أعلاه لإيجاد منتجات بديلة وأضفها للطلب", "Use the search above to find and add replacement products")}
                 </p>
               </CardContent>

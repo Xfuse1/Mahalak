@@ -138,7 +138,7 @@ export default function ResetPasswordPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-[#1F478B] hover:bg-[#1a3a70] text-base font-semibold"
+                    className="w-full h-12 bg-primary hover:bg-primary/90 text-base font-semibold"
                     disabled={isLoading}
                   >
                     {isLoading ? t("جاري التحديث...", "Updating...") : t("تحديث كلمة المرور", "Update Password")}

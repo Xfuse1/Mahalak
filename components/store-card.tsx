@@ -32,7 +32,7 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
           <div className="aspect-video relative bg-muted overflow-hidden">
             {store.activeOffer && (
               <div className="absolute top-3 left-3 z-10">
-                <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground border-none px-3 py-1.5 flex items-center gap-1.5 shadow-lg animate-pulse">
+                <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground border-none px-3 py-1.5 flex items-center gap-1.5 shadow-lg">
                   <Tag className="h-3.5 w-3.5" />
                   {t("عرض خاص", "Special Offer")} {store.activeOffer.discount_percentage}%
                 </Badge>

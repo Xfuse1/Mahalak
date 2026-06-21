@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { cn } from "../../../lib/utils"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { EmptyState } from "../../../components/ui/empty-state"
 import { logError } from "../../../lib/logger"
 import { useLanguage } from "../../../lib/language-context"
 
@@ -285,7 +286,7 @@ export default function OffersPage() {
       const todayDate = new Date()
       todayDate.setHours(0, 0, 0, 0)
       if (todayDate.getTime() < start.getTime()) {
-        return { label: t("قادم", "Upcoming"), className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+        return { label: t("قادم", "Upcoming"), className: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10" }
       }
       if (now > offerEnd) {
         return { label: t("منتهي", "Ended"), className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
@@ -299,7 +300,7 @@ export default function OffersPage() {
     end.setHours(23, 59, 59, 999)
 
     if (nowDate < start) {
-      return { label: t("قادم", "Upcoming"), className: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100" }
+      return { label: t("قادم", "Upcoming"), className: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10" }
     }
     if (now > end) {
       return { label: t("منتهي", "Ended"), className: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100" }
@@ -314,12 +315,12 @@ export default function OffersPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex min-h-screen bg-background">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-4 animate-pulse">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary flex items-center justify-center mb-4 animate-pulse">
                 <Tag className="w-8 h-8 text-white" />
               </div>
               <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
@@ -331,7 +332,7 @@ export default function OffersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
@@ -339,7 +340,7 @@ export default function OffersPage() {
           {/* Header */}
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-bold text-foreground">
                 {t("العروض الترويجية", "Promotional Offers")}
               </h1>
               <p className="text-gray-600 mt-1">{t("إدارة العروض والخصومات", "Manage offers and discounts")}</p>
@@ -356,7 +357,7 @@ export default function OffersPage() {
                 setDurationHours(1)
                 setIsAdding(!isAdding)
               }}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+              className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
             >
               <Plus className="me-2 h-4 w-4" />
               {t("إضافة عرض جديد", "Add New Offer")}
@@ -366,7 +367,7 @@ export default function OffersPage() {
           {/* Add/Edit Form */}
           {isAdding && (
             <Card className="mb-8 border-0 shadow-xl rounded-2xl overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+              <CardHeader className="bg-primary text-white">
                 <CardTitle className="flex items-center gap-2">
                   <Tag className="h-5 w-5" />
                   {editingOffer ? t("تعديل العرض", "Edit Offer") : t("إضافة عرض جديد", "Add New Offer")}
@@ -382,7 +383,7 @@ export default function OffersPage() {
                       required
                       placeholder={t("خصم 20% على جميع المنتجات", "20% off all products")}
                       defaultValue={editingOffer?.title}
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div>
@@ -393,7 +394,7 @@ export default function OffersPage() {
                       required
                       placeholder={t("عرض خاص لفترة محدودة", "Limited-time special offer")}
                       defaultValue={editingOffer?.description}
-                      className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
+                      className="mt-1.5 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 min-h-[100px]"
                     />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -404,7 +405,7 @@ export default function OffersPage() {
                           type="button"
                           variant={offerTarget === "all" ? "default" : "outline"}
                           size="sm"
-                          className={cn("flex-1 rounded-xl h-12", offerTarget === "all" && "bg-blue-600 hover:bg-blue-700")}
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "all" && "bg-primary hover:bg-primary/90")}
                           onClick={() => { setOfferTarget("all"); setSelectedProduct(""); setSelectedCategory("") }}
                         >
                           {t("جميع المنتجات", "All Products")}
@@ -413,7 +414,7 @@ export default function OffersPage() {
                           type="button"
                           variant={offerTarget === "product" ? "default" : "outline"}
                           size="sm"
-                          className={cn("flex-1 rounded-xl h-12", offerTarget === "product" && "bg-blue-600 hover:bg-blue-700")}
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "product" && "bg-primary hover:bg-primary/90")}
                           onClick={() => { setOfferTarget("product"); setSelectedCategory("") }}
                         >
                           <Package className="h-4 w-4 me-1" />
@@ -423,7 +424,7 @@ export default function OffersPage() {
                           type="button"
                           variant={offerTarget === "category" ? "default" : "outline"}
                           size="sm"
-                          className={cn("flex-1 rounded-xl h-12", offerTarget === "category" && "bg-blue-600 hover:bg-blue-700")}
+                          className={cn("flex-1 rounded-xl h-12", offerTarget === "category" && "bg-primary hover:bg-primary/90")}
                           onClick={() => { setOfferTarget("category"); setSelectedProduct("") }}
                         >
                           <Layers className="h-4 w-4 me-1" />
@@ -440,7 +441,7 @@ export default function OffersPage() {
                             defaultValue={editingOffer?.product_id || ""}
                             onValueChange={setSelectedProduct}
                           >
-                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20">
                               <SelectValue placeholder={t("اختر منتج", "Select Product")} />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
@@ -463,7 +464,7 @@ export default function OffersPage() {
                             value={selectedCategory}
                             onValueChange={setSelectedCategory}
                           >
-                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                            <SelectTrigger className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20">
                               <SelectValue placeholder={t("اختر قسم", "Select Category")} />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
@@ -488,7 +489,7 @@ export default function OffersPage() {
                             </SelectContent>
                           </Select>
                           {selectedCategory && (
-                            <p className="text-xs text-blue-600 mt-1">
+                            <p className="text-xs text-primary mt-1">
                               {t("سيتم تطبيق الخصم على", "Discount will be applied to")}{" "}
                               {products.filter((p) => p.category === selectedCategory).length} {t("منتج", "products")}{" "}
                               {t("في هذا القسم", "in this category")}
@@ -516,7 +517,7 @@ export default function OffersPage() {
                       min="1"
                       placeholder={t("مثال: 100", "Example: 100")}
                       defaultValue={editingOffer?.quantity || ""}
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div>
@@ -530,7 +531,7 @@ export default function OffersPage() {
                       required
                       placeholder="20"
                       defaultValue={editingOffer?.discount_percentage}
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       {t("يجب أن تكون نسبة الخصم بين 1% و 100%", "Discount percentage must be between 1% and 100%")}
@@ -545,7 +546,7 @@ export default function OffersPage() {
                         type="date"
                         required
                         value={startDateValue}
-                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                         onChange={(e) => setStartDateValue(e.target.value)}
                       />
                     </div>
@@ -557,7 +558,7 @@ export default function OffersPage() {
                         type="date"
                         required
                         value={endDateValue}
-                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                         onChange={(e) => setEndDateValue(e.target.value)}
                       />
                     </div>
@@ -596,7 +597,7 @@ export default function OffersPage() {
                   <div className="flex gap-3 pt-2">
                     <Button 
                       type="submit" 
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl h-12 px-8 shadow-lg" 
+                      className="bg-primary hover:bg-primary/90 rounded-xl h-12 px-8 shadow-lg"
                       disabled={submitting}
                     >
                       {submitting
@@ -632,10 +633,10 @@ export default function OffersPage() {
               const status = getOfferStatus(offer.start_date, offer.end_date, offer.duration_hours)
               return (
                 <Card key={offer.id} className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                  <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                  <CardHeader className="bg-secondary/20 border-b">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                           <Tag className="h-5 w-5 text-white" />
                         </div>
                         <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -650,9 +651,9 @@ export default function OffersPage() {
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleEdit(offer)}
-                          className="hover:bg-blue-50 rounded-xl"
+                          className="hover:bg-primary/10 rounded-xl"
                         >
-                          <Edit className="h-4 w-4 text-blue-600" />
+                          <Edit className="h-4 w-4 text-primary" />
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -668,9 +669,9 @@ export default function OffersPage() {
                   </CardHeader>
                   <CardContent className="p-5">
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4">
+                      <div className="flex items-center justify-between bg-primary/10 rounded-xl p-4">
                         <span className="text-sm text-gray-600">{t("الخصم:", "Discount:")}</span>
-                        <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                        <span className="text-3xl font-bold text-primary">
                           {offer.discount_percentage}%
                         </span>
                       </div>
@@ -683,18 +684,18 @@ export default function OffersPage() {
                         </div>
                       )}
                       {offer.category && !offer.product_id && (
-                        <div className="flex items-center gap-2 text-sm bg-purple-50 rounded-xl p-3">
-                          <Layers className="h-4 w-4 text-purple-600" />
-                          <span className="font-medium text-purple-700">{t("القسم:", "Category:")} {offer.category}</span>
-                          <span className="text-purple-500 text-xs">
+                        <div className="flex items-center gap-2 text-sm bg-primary/10 rounded-xl p-3">
+                          <Layers className="h-4 w-4 text-primary" />
+                          <span className="font-medium text-primary">{t("القسم:", "Category:")} {offer.category}</span>
+                          <span className="text-primary/70 text-xs">
                             ({products.filter((p) => p.category === offer.category).length} {t("منتج", "products")})
                           </span>
                         </div>
                       )}
                       {!offer.product_id && !offer.category && (
-                        <div className="flex items-center gap-2 text-sm text-gray-500 bg-blue-50 rounded-xl p-3">
-                          <Package className="h-4 w-4 text-blue-500" />
-                          <span className="text-blue-600 font-medium">{t("جميع المنتجات", "All Products")}</span>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 bg-primary/10 rounded-xl p-3">
+                          <Package className="h-4 w-4 text-primary" />
+                          <span className="text-primary font-medium">{t("جميع المنتجات", "All Products")}</span>
                         </div>
                       )}
                       {offer.quantity && (
@@ -730,21 +731,11 @@ export default function OffersPage() {
 
           {/* Empty State */}
           {offers.length === 0 && !isAdding && (
-            <Card className="border-0 shadow-lg rounded-2xl">
-              <CardContent className="py-16 text-center">
-                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mb-6">
-                  <Tag className="h-10 w-10 text-gray-400" />
-                </div>
-                <p className="text-gray-500 text-lg mb-6">{t("لا توجد عروض حالياً", "No offers available right now")}</p>
-                <Button 
-                  onClick={() => setIsAdding(true)} 
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
-                >
-                  <Plus className="me-2 h-4 w-4" />
-                  {t("إضافة عرض جديد", "Add New Offer")}
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={Tag}
+              title={t("لا توجد عروض حالياً", "No offers available right now")}
+              action={{ label: t("إضافة عرض جديد", "Add New Offer"), onClick: () => setIsAdding(true) }}
+            />
           )}
         </div>
       </main>

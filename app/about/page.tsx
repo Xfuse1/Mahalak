@@ -13,10 +13,10 @@ export default function AboutPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-12 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-12 bg-background">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="text-center mb-12">
-            <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent mb-4">{t("aboutMahalak")}</h1>
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground mb-4">{t("aboutMahalak")}</h1>
             <p className="text-base md:text-lg lg:text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed">{t("aboutDescription")}</p>
           </div>
 
@@ -24,7 +24,7 @@ export default function AboutPage() {
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-2 group">
               <CardContent className="pt-8 pb-8">
                 <div className="flex flex-col items-center text-center">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-5 rounded-2xl mb-5 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="bg-primary p-5 rounded-2xl mb-5 shadow-lg group-hover:scale-110 transition-transform">
                     <ShoppingBag className="h-8 w-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-gray-800">{t("diverseProducts")}</h3>
@@ -70,7 +70,7 @@ export default function AboutPage() {
             </Card>
           </div>
 
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-6 md:p-8 lg:p-10 text-white shadow-xl relative overflow-hidden">
+          <div className="bg-primary rounded-3xl p-6 md:p-8 lg:p-10 text-white shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-3xl"></div>
             <div className="relative z-10">

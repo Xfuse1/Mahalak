@@ -35,8 +35,8 @@ const STORE_TYPE_THEME: Record<StoreType, { gradient: string; icon: React.ReactN
   pharmacy: { gradient: "from-emerald-600 to-teal-700", icon: <Pill className="h-5 w-5" />, label: { ar: "منتج صيدلية", en: "Pharmacy Product" }, color: "emerald" },
   clothing: { gradient: "from-purple-600 to-pink-700", icon: <Shirt className="h-5 w-5" />, label: { ar: "منتج ملابس", en: "Clothing Product" }, color: "purple" },
   grocery: { gradient: "from-orange-600 to-amber-700", icon: <ShoppingBasket className="h-5 w-5" />, label: { ar: "منتج بقالة", en: "Grocery Product" }, color: "orange" },
-  electronics: { gradient: "from-blue-600 to-indigo-700", icon: <Package className="h-5 w-5" />, label: { ar: "منتج إلكتروني", en: "Electronics Product" }, color: "blue" },
-  general: { gradient: "from-blue-600 to-blue-700", icon: <Upload className="h-5 w-5" />, label: { ar: "معلومات المنتج", en: "Product Information" }, color: "blue" },
+  electronics: { gradient: "from-primary to-primary/80", icon: <Package className="h-5 w-5" />, label: { ar: "منتج إلكتروني", en: "Electronics Product" }, color: "blue" },
+  general: { gradient: "from-primary to-primary/80", icon: <Upload className="h-5 w-5" />, label: { ar: "معلومات المنتج", en: "Product Information" }, color: "blue" },
 }
 
 const DOSAGE_FORMS = [
@@ -555,12 +555,12 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
-          <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold mb-8 text-foreground">
             {t("إضافة منتج جديد", "Add New Product")}
           </h1>
 
@@ -633,7 +633,7 @@ export default function NewProductPage() {
                       storeType === "electronics" ? t("مثال: سماعة بلوتوث JBL", "Example: JBL Bluetooth Speaker") :
                       t("مثال: هاتف ذكي سامسونج", "Example: Samsung Smartphone")
                     }
-                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
 
@@ -649,7 +649,7 @@ export default function NewProductPage() {
                       t("وصف تفصيلي للمنتج...", "Detailed product description...")
                     }
                     rows={3}
-                    className="mt-1.5 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1.5 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
 
@@ -668,7 +668,7 @@ export default function NewProductPage() {
                       placeholder="0.00"
                       min="0.01"
                       step="0.01"
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
 
@@ -686,7 +686,7 @@ export default function NewProductPage() {
                       placeholder="0.00"
                       min="0.01"
                       step="0.01"
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
 
@@ -701,7 +701,7 @@ export default function NewProductPage() {
                       required
                       placeholder="1"
                       min="0"
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                     {isReservationEnabled && (
                       <p className="text-xs text-green-600 mt-1">
@@ -711,7 +711,7 @@ export default function NewProductPage() {
                   </div>
 
                   {/* Pre-Reservation Toggle */}
-                  <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-blue-200 bg-blue-50/50">
+                  <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-primary/20 bg-primary/5">
                     <div className="flex-1">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input
@@ -719,7 +719,7 @@ export default function NewProductPage() {
                           name="reservationEnabled"
                           checked={isReservationEnabled}
                           onChange={(e) => setIsReservationEnabled(e.target.checked)}
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer"
+                          className="w-5 h-5 rounded border-gray-300 text-primary cursor-pointer"
                         />
                         <span className="font-medium text-gray-700">
                           {t("متاح للحجز المسبق", "Available for Pre-Reservation")}
@@ -733,7 +733,7 @@ export default function NewProductPage() {
                       </p>
                     </div>
                     {isReservationEnabled && (
-                      <div className="text-blue-600 text-2xl">✓</div>
+                      <div className="text-primary text-2xl">✓</div>
                     )}
                   </div>
                 </div>
@@ -744,7 +744,7 @@ export default function NewProductPage() {
                     id="barcode"
                     name="barcode"
                     placeholder={t("مثال: 6221507001016 - الرقم المطبوع على العلبة", "Example: 6221507001016 - printed code on the package")}
-                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
+                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 font-mono"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {t(
@@ -1214,8 +1214,8 @@ export default function NewProductPage() {
 
                 {/* ===== ELECTRONICS-SPECIFIC FIELDS ===== */}
                 {storeType === "electronics" && (
-                  <div className="space-y-4 border-2 border-blue-200 rounded-2xl p-5 bg-blue-50/50">
-                    <h3 className="text-sm font-bold text-blue-800 flex items-center gap-2">
+                  <div className="space-y-4 border-2 border-primary/20 rounded-2xl p-5 bg-primary/5">
+                    <h3 className="text-sm font-bold text-primary flex items-center gap-2">
                       <Box className="h-4 w-4" />
                       {t("بيانات المنتج الإلكتروني", "Electronics Product Details")}
                     </h3>
@@ -1225,19 +1225,19 @@ export default function NewProductPage() {
                         <Label className="text-gray-700 text-sm">{t("الماركة / البراند", "Brand")}</Label>
                         <Input value={electronicsBrand} onChange={(e) => setElectronicsBrand(e.target.value)}
                           placeholder={t("مثال: سامسونج", "Example: Samsung")}
-                          className="mt-1 h-10 rounded-xl border-blue-200 focus:ring-blue-500" />
+                          className="mt-1 h-10 rounded-xl border-primary/20 focus:ring-primary/20" />
                       </div>
                       <div>
                         <Label className="text-gray-700 text-sm">{t("الموديل", "Model")}</Label>
                         <Input value={electronicsModel} onChange={(e) => setElectronicsModel(e.target.value)}
                           placeholder={t("مثال: Galaxy A54", "Example: Galaxy A54")}
-                          className="mt-1 h-10 rounded-xl border-blue-200 focus:ring-blue-500" />
+                          className="mt-1 h-10 rounded-xl border-primary/20 focus:ring-primary/20" />
                       </div>
                       <div>
                         <Label className="text-gray-700 text-sm">{t("مدة الضمان (بالشهور)", "Warranty (months)")}</Label>
                         <Input type="number" value={electronicsWarranty} onChange={(e) => setElectronicsWarranty(e.target.value)}
                           placeholder="12" min="0"
-                          className="mt-1 h-10 rounded-xl border-blue-200 focus:ring-blue-500" />
+                          className="mt-1 h-10 rounded-xl border-primary/20 focus:ring-primary/20" />
                       </div>
                     </div>
                   </div>
@@ -1257,7 +1257,7 @@ export default function NewProductPage() {
                       }
                     }}
                   >
-                    <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                    <SelectTrigger id="category" className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20">
                       <SelectValue placeholder={t("اختر القسم", "Select category")} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -1292,7 +1292,7 @@ export default function NewProductPage() {
                       value={customCategory}
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder={t("أدخل اسم القسم", "Enter category name")}
-                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                 )}
@@ -1324,7 +1324,7 @@ export default function NewProductPage() {
                     ) : (
                       <label
                         htmlFor="image"
-                        className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-all bg-gray-50 group"
+                        className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all bg-gray-50 group"
                       >
                         <div className="flex flex-col items-center justify-center py-6">
                           <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${STORE_TYPE_THEME[storeType].gradient} flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform`}>

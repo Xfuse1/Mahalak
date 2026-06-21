@@ -11,7 +11,7 @@ export default function PrivacyPage() {
   const sections = [
     {
       icon: FileText,
-      color: "from-blue-500 to-blue-600",
+      color: "from-primary to-primary",
       title: t("مقدمة", "Introduction"),
       content: t(
         "نحن في محلك نلتزم بحماية خصوصيتك وأمان معلوماتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية البيانات التي تقدمها لنا عند استخدام منصتنا.",
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
     },
     {
       icon: Eye,
-      color: "from-violet-500 to-violet-600",
+      color: "from-primary to-primary",
       title: t("كيفية استخدام المعلومات", "How We Use Information"),
       content: t("نستخدم المعلومات التي نجمعها للأغراض التالية:", "We use the information we collect for the following purposes:"),
       list: [
@@ -74,7 +74,7 @@ export default function PrivacyPage() {
     },
     {
       icon: RefreshCw,
-      color: "from-indigo-500 to-indigo-600",
+      color: "from-primary to-primary",
       title: t("التغييرات على السياسة", "Policy Changes"),
       content: t(
         "قد نقوم بتحديث سياسة الخصوصية من وقت لآخر. سنقوم بإخطارك بأي تغييرات جوهرية عبر البريد الإلكتروني أو من خلال إشعار على المنصة.",
@@ -84,17 +84,17 @@ export default function PrivacyPage() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-16">
         <div className="container mx-auto px-4 max-w-4xl">
           {/* Hero Section */}
           <div className="text-center mb-16">
-            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-6 shadow-lg shadow-blue-500/30">
+            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary mb-6 shadow-lg shadow-primary/30">
               <Shield className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 via-blue-700 to-blue-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-4 text-foreground">
               {t("سياسة الخصوصية", "Privacy Policy")}
             </h1>
             <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
@@ -141,13 +141,13 @@ export default function PrivacyPage() {
 
           {/* Contact Section */}
           <div className="mt-12 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-3xl" />
+            <div className="absolute inset-0 bg-primary rounded-3xl" />
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
             
             <div className="relative p-10 text-center text-white">
               <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-4">{t("تواصل معنا", "Contact Us")}</h2>
-              <p className="text-blue-100 mb-6 max-w-md mx-auto">
+              <p className="text-white/90 mb-6 max-w-md mx-auto">
                 {t(
                   "إذا كان لديك أي أسئلة حول سياسة الخصوصية، يرجى التواصل معنا",
                   "If you have any questions about the privacy policy, please contact us",

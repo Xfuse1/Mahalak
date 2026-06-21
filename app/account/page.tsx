@@ -20,6 +20,11 @@ import type { PickupStop } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
 import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
+import { Spinner } from "../../components/ui/spinner"
+import { EmptyState } from "../../components/ui/empty-state"
+import { ErrorState } from "../../components/ui/error-state"
+import { useToast } from "../../components/ui/toast"
+import { logError } from "../../lib/logger"
 
 // Lazy load tracking modal (only opens on user action)
 const OrderTrackingModal = dynamic(
@@ -64,6 +69,7 @@ export default function AccountPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+  const toast = useToast()
   const [orders, setOrders] = useState<Order[]>([])
   const [multiOrders, setMultiOrders] = useState<any[]>([])
   const [rejectedOrders, setRejectedOrders] = useState<RejectedOrder[]>([])
@@ -91,23 +97,27 @@ export default function AccountPage() {
       if (dataResult.status === "fulfilled") {
         setOrders(dataResult.value as Order[])
       } else {
-        console.error("[v0] Error fetching customer orders:", dataResult.reason)
+        logError("[account] customer orders", dataResult.reason)
       }
-      
+
       if (rejectedResult.status === "fulfilled" && rejectedResult.value.success) {
         setRejectedOrders(rejectedResult.value.orders as RejectedOrder[])
       }
-      
+
       if (multiResult.status === "fulfilled" && multiResult.value.success) {
         setMultiOrders(multiResult.value.orders)
       }
-      
-      // Only show error if ALL fetches failed
-      if (dataResult.status === "rejected" && rejectedResult.status === "rejected" && multiResult.status === "rejected") {
+
+      const allRejected = dataResult.status === "rejected" && rejectedResult.status === "rejected" && multiResult.status === "rejected"
+      const anyRejected = dataResult.status === "rejected" || rejectedResult.status === "rejected" || multiResult.status === "rejected"
+      // Only block with a full error if ALL failed; otherwise warn about the partial failure
+      if (allRejected) {
         setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
+      } else if (anyRejected) {
+        toast.warning("تعذّر تحميل جزء من البيانات")
       }
     } catch (error) {
-      console.error("[v0] Error fetching orders:", error)
+      logError("[account] fetchOrders", error)
       setOrdersError(t("حدث خطأ في تحميل الطلبات", "Error loading orders"))
     } finally {
       setOrdersLoading(false)
@@ -133,7 +143,7 @@ export default function AccountPage() {
         try {
           const store = await getStoreByUserId(user.id)
           if (store) setHasStore(true)
-        } catch (e) { }
+        } catch (e) { logError("[account] checkStore", e) }
         finally { setCheckingStore(false) }
       }
     }
@@ -190,14 +200,14 @@ export default function AccountPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-8 bg-background">
         <div className="container mx-auto px-4 max-w-5xl">
           <div className="mb-6">
             <BackButton />
           </div>
 
           <div className="mb-10">
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("حسابي", "My Account")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("حسابي", "My Account")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة حسابك وطلباتك", "Manage your account and orders")}</p>
           </div>
 
@@ -224,15 +234,15 @@ export default function AccountPage() {
 
           <Tabs defaultValue="orders" className="w-full">
             <TabsList className="mb-6 bg-white shadow-lg rounded-2xl p-2 border-0">
-              <TabsTrigger value="orders" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
+              <TabsTrigger value="orders" className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <Package className="ms-2 h-4 w-4" />
                 {t("طلباتي", "My Orders")}
               </TabsTrigger>
-              <TabsTrigger value="profile" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
+              <TabsTrigger value="profile" className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <UserIcon className="ms-2 h-4 w-4" />
                 {t("الملف الشخصي", "Profile")}
               </TabsTrigger>
-              <TabsTrigger value="address" className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
+              <TabsTrigger value="address" className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-lg px-6 py-3 transition-all">
                 <MapPin className="ms-2 h-4 w-4" />
                 {t("العناوين", "Addresses")}
               </TabsTrigger>
@@ -281,8 +291,8 @@ export default function AccountPage() {
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-xl">
-                        <Package className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-primary/10 rounded-xl">
+                        <Package className="h-5 w-5 text-primary" />
                       </div>
                       {t("طلباتي", "My Orders")}
                     </CardTitle>
@@ -303,26 +313,20 @@ export default function AccountPage() {
                 </CardHeader>
                 <CardContent className="p-6">
                   {ordersLoading ? (
-                    <div className="flex flex-col items-center justify-center py-12">
-                      <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                      <span className="text-gray-500">{t("جاري التحميل...", "Loading...")}</span>
+                    <div className="flex items-center justify-center py-12">
+                      <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
                     </div>
                   ) : ordersError ? (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                        <Package className="h-8 w-8 text-red-500" />
-                      </div>
-                      <p className="text-red-600">{ordersError}</p>
-                    </div>
+                    <ErrorState description={ordersError} onRetry={fetchOrders} />
                   ) : orders.length > 0 ? (
                     <div className="space-y-4">
                       {orders.map((order) => (
-                        <div key={order.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden hover:border-blue-200 hover:shadow-lg transition-all duration-300 group">
+                        <div key={order.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden hover:border-primary/20 hover:shadow-lg transition-all duration-300 group">
                           {/* Card Header */}
                           <div className="bg-gradient-to-r from-gray-50 to-white border-b p-5 flex items-start justify-between gap-3">
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 border shadow-sm flex items-center justify-center flex-shrink-0">
-                                <Store className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
+                              <div className="w-12 h-12 rounded-xl bg-primary/10 border shadow-sm flex items-center justify-center flex-shrink-0">
+                                <Store className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
                               </div>
                               <div>
                                 <h3 className="font-bold text-gray-900 leading-tight mb-1">
@@ -364,7 +368,7 @@ export default function AccountPage() {
                           <div className="px-5 pb-5 pt-0 flex flex-row items-center justify-between gap-4 border-t border-dashed pt-4">
                             <div>
                               <p className="text-xs text-gray-500 mb-1">{t("الإجمالي", "Total Value")}</p>
-                              <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                              <p className="text-xl font-extrabold text-primary">
                                 {Number(order.total).toFixed(2)} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
                               </p>
                             </div>
@@ -372,7 +376,7 @@ export default function AccountPage() {
                             <Button
                               variant="default"
                               size="sm"
-                              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
+                              className="bg-primary hover:bg-primary/90 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
                               onClick={() => {
                                 setSelectedOrder(order)
                                 setIsTrackingModalOpen(true)
@@ -386,12 +390,12 @@ export default function AccountPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                        <Package className="h-10 w-10 text-gray-400" />
-                      </div>
-                      <p className="text-gray-500 text-lg">{t("لا توجد طلبات بعد", "No orders yet")}</p>
-                    </div>
+                    <EmptyState
+                      icon={ShoppingBag}
+                      title={t("لا توجد طلبات بعد", "No orders yet")}
+                      description={t("ابدأ التسوّق واطلب من متاجر حيّك المفضّلة", "Start shopping and order from your favorite local stores")}
+                      action={{ label: t("تصفح المنتجات", "Browse Products"), href: "/search" }}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -399,10 +403,10 @@ export default function AccountPage() {
               {/* Multi-Store Orders */}
               {multiOrders.length > 0 && (
                 <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-6">
-                  <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b">
+                  <CardHeader className="bg-accent/10 border-b">
                     <CardTitle className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-xl">
-                        <Store className="h-5 w-5 text-purple-600" />
+                      <div className="p-2 bg-accent/15 rounded-xl">
+                        <Store className="h-5 w-5 text-accent-foreground" />
                       </div>
                       {t("طلبات متعددة المتاجر", "Multi-Store Orders")}
                     </CardTitle>
@@ -416,12 +420,12 @@ export default function AccountPage() {
                         const pickedCount = stops.filter((s: PickupStop) => s.status === "picked_up").length
                         
                         return (
-                          <div key={order.id} className="bg-white border border-purple-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all">
+                          <div key={order.id} className="bg-white border border-accent/30 rounded-2xl overflow-hidden hover:shadow-lg transition-all">
                             {/* Header */}
-                            <div className="bg-gradient-to-r from-purple-50 to-white border-b p-5 flex items-start justify-between">
+                            <div className="bg-accent/10 border-b p-5 flex items-start justify-between">
                               <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
-                                  <Store className="h-6 w-6 text-purple-600" />
+                                <div className="w-12 h-12 rounded-xl bg-accent/15 flex items-center justify-center">
+                                  <Store className="h-6 w-6 text-accent-foreground" />
                                 </div>
                                 <div>
                                   <p className="font-bold text-gray-800">
@@ -485,7 +489,7 @@ export default function AccountPage() {
                                   </div>
                                   <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                                     <div 
-                                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
+                                      className="h-full bg-primary rounded-full transition-all duration-500"
                                       style={{ width: `${activeStops.length > 0 ? (pickedCount / activeStops.length) * 100 : 0}%` }}
                                     />
                                   </div>
@@ -497,7 +501,7 @@ export default function AccountPage() {
                             <div className="px-5 pb-5 flex items-center justify-between border-t border-dashed pt-4">
                               <div>
                                 <p className="text-xs text-gray-500">{t("الإجمالي", "Total")}</p>
-                                <p className="text-xl font-extrabold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                                <p className="text-xl font-extrabold text-accent-foreground">
                                   {Number(order.total).toLocaleString()} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
                                 </p>
                               </div>
@@ -505,7 +509,7 @@ export default function AccountPage() {
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
+                                  className="bg-accent text-accent-foreground hover:bg-accent/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-5"
                                   onClick={() => {
                                     setSelectedOrder({
                                       id: order.id,
@@ -543,7 +547,7 @@ export default function AccountPage() {
             <TabsContent value="profile">
               {/* User Stats Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                <Card className="border-0 shadow-lg rounded-2xl bg-primary text-white">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white/20 rounded-xl">
@@ -551,7 +555,7 @@ export default function AccountPage() {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{orders.length}</p>
-                        <p className="text-xs text-blue-100">{t("إجمالي الطلبات", "Total Orders")}</p>
+                        <p className="text-xs text-white/80">{t("إجمالي الطلبات", "Total Orders")}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -569,7 +573,7 @@ export default function AccountPage() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                <Card className="border-0 shadow-lg rounded-2xl bg-accent text-accent-foreground">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white/20 rounded-xl">
@@ -577,7 +581,7 @@ export default function AccountPage() {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{orders.reduce((sum, o) => sum + Number(o.total || 0), 0).toFixed(0)}</p>
-                        <p className="text-xs text-purple-100">{t("إجمالي الإنفاق", "Total Spent")}</p>
+                        <p className="text-xs text-accent-foreground/80">{t("إجمالي الإنفاق", "Total Spent")}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -599,14 +603,14 @@ export default function AccountPage() {
 
               {/* Profile Info Card */}
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mb-6">
-                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                <CardHeader className="bg-primary text-white">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold">
                       {user.name?.charAt(0)?.toUpperCase() || "U"}
                     </div>
                     <div>
                       <CardTitle className="text-xl text-white">{user.name || t("مستخدم", "User")}</CardTitle>
-                      <CardDescription className="text-blue-100">{t("عميل", "Customer")}</CardDescription>
+                      <CardDescription className="text-white/80">{t("عميل", "Customer")}</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -614,8 +618,8 @@ export default function AccountPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Email */}
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                      <div className="p-3 bg-blue-100 rounded-xl">
-                        <Mail className="h-5 w-5 text-blue-600" />
+                      <div className="p-3 bg-primary/10 rounded-xl">
+                        <Mail className="h-5 w-5 text-primary" />
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 mb-1">{t("البريد الإلكتروني", "Email")}</p>
@@ -636,8 +640,8 @@ export default function AccountPage() {
 
                     {/* Address */}
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                      <div className="p-3 bg-purple-100 rounded-xl">
-                        <MapPin className="h-5 w-5 text-purple-600" />
+                      <div className="p-3 bg-accent/15 rounded-xl">
+                        <MapPin className="h-5 w-5 text-accent-foreground" />
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 mb-1">{t("العنوان", "Address")}</p>
@@ -667,8 +671,8 @@ export default function AccountPage() {
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                   <CardTitle className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-xl">
-                      <UserIcon className="h-5 w-5 text-blue-600" />
+                    <div className="p-2 bg-primary/10 rounded-xl">
+                      <UserIcon className="h-5 w-5 text-primary" />
                     </div>
                     {t("تعديل الملف الشخصي", "Edit Profile")}
                   </CardTitle>
@@ -700,7 +704,7 @@ export default function AccountPage() {
                   >
                     <div>
                       <Label htmlFor="name" className="text-gray-700 font-medium">{t("الاسم الكامل", "Full Name")}</Label>
-                      <Input id="name" name="name" defaultValue={user.name} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                      <Input id="name" name="name" defaultValue={user.name} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                     </div>
                     <div>
                       <Label htmlFor="email" className="text-gray-700 font-medium">{t("البريد الإلكتروني", "Email")}</Label>
@@ -708,9 +712,9 @@ export default function AccountPage() {
                     </div>
                     <div>
                       <Label htmlFor="phone" className="text-gray-700 font-medium">{t("رقم الهاتف", "Phone Number")}</Label>
-                      <Input id="phone" name="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                      <Input id="phone" name="phone" type="tel" placeholder="01xxxxxxxxx" defaultValue={user.phone || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                     </div>
-                    <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
                       {t("حفظ التغييرات", "Save Changes")}
                     </Button>
                   </form>
@@ -722,8 +726,8 @@ export default function AccountPage() {
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                   <CardTitle className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-xl">
-                      <MapPin className="h-5 w-5 text-blue-600" />
+                    <div className="p-2 bg-primary/10 rounded-xl">
+                      <MapPin className="h-5 w-5 text-primary" />
                     </div>
                     {t("عناوين التوصيل", "Delivery Addresses")}
                   </CardTitle>
@@ -758,17 +762,17 @@ export default function AccountPage() {
                   >
                     <div>
                       <Label htmlFor="country" className="text-gray-700 font-medium">{t("الدولة", "Country")}</Label>
-                      <Input id="country" name="country" placeholder={t("مصر", "Egypt")} defaultValue={user.country || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                      <Input id="country" name="country" placeholder={t("مصر", "Egypt")} defaultValue={user.country || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                     </div>
                     <div>
                       <Label htmlFor="city" className="text-gray-700 font-medium">{t("المدينة", "City")}</Label>
-                      <Input id="city" name="city" placeholder={t("القاهرة", "Cairo")} defaultValue={user.city || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                      <Input id="city" name="city" placeholder={t("القاهرة", "Cairo")} defaultValue={user.city || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                     </div>
                     <div>
                       <Label htmlFor="street" className="text-gray-700 font-medium">{t("الشارع", "Street")}</Label>
-                      <Input id="street" name="street" placeholder={t("الشارع، المنطقة", "Street, Area")} defaultValue={user.street || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                      <Input id="street" name="street" placeholder={t("الشارع، المنطقة", "Street, Area")} defaultValue={user.street || ""} className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                     </div>
-                    <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
                       {t("حفظ العنوان", "Save Address")}
                     </Button>
                   </form>

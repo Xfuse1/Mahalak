@@ -81,7 +81,7 @@ export default function POSProductContextMenu({
       icon: <Edit className="h-4.5 w-4.5" />,
       label: t("تعديل المنتج", "Edit Product"),
       onClick: () => { onEdit(); onClose() },
-      color: "text-blue-600",
+      color: "text-primary",
       show: true,
     },
     {
@@ -123,7 +123,7 @@ export default function POSProductContextMenu({
       icon: <Ruler className="h-4.5 w-4.5" />,
       label: t("مقاسات وألوان", "Sizes & Colors"),
       onClick: () => { onVariantManager?.(); onClose() },
-      color: "text-indigo-600",
+      color: "text-primary",
       show: isClothing,
     },
     {

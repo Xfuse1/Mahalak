@@ -135,7 +135,7 @@ export default function SellerMyOrdersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
@@ -144,13 +144,13 @@ export default function SellerMyOrdersPage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <Link href="/seller/dashboard" className="hover:text-blue-600 transition-colors">
+                <Link href="/seller/dashboard" className="hover:text-primary transition-colors">
                   {t("لوحة التحكم", "Dashboard")}
                 </Link>
                 <ArrowRight className="h-4 w-4 rotate-180 rtl:rotate-0" />
                 <span className="text-gray-800">{t("طلباتي كمشتري", "My Orders")}</span>
               </div>
-              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">
                 {t("طلباتي كمشتري", "My Orders as Customer")}
               </h1>
               <p className="text-gray-500 mt-1">

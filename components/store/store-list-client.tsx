@@ -8,6 +8,9 @@ import { SearchBar } from "../search-bar"
 import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
 import { searchStores } from "../../lib/actions/stores"
+import { SkeletonGrid } from "../ui/skeleton-grid"
+import { EmptyState } from "../ui/empty-state"
+import { useToast } from "../ui/toast"
 
 type Store = {
   id: string
@@ -68,13 +71,19 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
   const [stores, setStores] = useState<Store[]>(initialStores)
   const [loading, setLoading] = useState(false)
   const { t } = useLanguage()
+  const toast = useToast()
 
   const handleSearch = async (query: string) => {
     if (query.trim()) {
       setLoading(true)
-      const data = await searchStores(query)
-      setStores(data as Store[])
-      setLoading(false)
+      try {
+        const data = await searchStores(query)
+        setStores(data as Store[])
+      } catch {
+        toast.error(t("تعذّر إجراء البحث. حاول مجددًا", "Search failed. Please try again"))
+      } finally {
+        setLoading(false)
+      }
     } else {
       setStores(initialStores)
     }
@@ -90,16 +99,7 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="animate-pulse">
-              <div className="bg-muted h-48 rounded-2xl mb-4"></div>
-              <div className="bg-muted h-5 rounded-xl w-3/4 mb-3"></div>
-              <div className="bg-muted h-4 rounded-xl w-full mb-2"></div>
-              <div className="bg-muted h-4 rounded-xl w-1/2"></div>
-            </div>
-          ))}
-        </div>
+        <SkeletonGrid variant="store" count={6} />
       ) : stores.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {stores.map((store, index) => (
@@ -107,17 +107,11 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
           ))}
         </div>
       ) : (
-        <div className="text-center py-20">
-          <div className="w-24 h-24 mx-auto mb-6 bg-muted rounded-full flex items-center justify-center">
-            <StoreIcon className="h-12 w-12 text-muted-foreground" />
-          </div>
-          <p className="text-muted-foreground text-xl font-medium">
-            {t("لم يتم العثور على متاجر", "No stores found")}
-          </p>
-          <p className="text-muted-foreground mt-2">
-            {t("جرب البحث بكلمات مختلفة", "Try searching with different keywords")}
-          </p>
-        </div>
+        <EmptyState
+          icon={StoreIcon}
+          title={t("لم يتم العثور على متاجر", "No stores found")}
+          description={t("جرب البحث بكلمات مختلفة", "Try searching with different keywords")}
+        />
       )}
     </>
   )

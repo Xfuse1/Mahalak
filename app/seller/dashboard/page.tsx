@@ -139,14 +139,14 @@ export default function SellerDashboard() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
             <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("لوحة التحكم", "Dashboard")}</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("لوحة التحكم", "Dashboard")}</h1>
               <p className="text-gray-500 mt-1">{t("مرحباً بك في لوحة التحكم", "Welcome to your dashboard")}</p>
             </div>
             <div className="flex gap-3 flex-wrap">
@@ -162,7 +162,7 @@ export default function SellerDashboard() {
                   {t("نظام QPOS", "QPOS System")}
                 </Link>
               </Button>
-              <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
+              <Button asChild className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/seller/products/new">
                   <Plus className="ms-2 h-4 w-4" />
                   {t("إضافة منتج", "Add Product")}
@@ -199,15 +199,15 @@ export default function SellerDashboard() {
 
           {/* Store Approval Status Banner */}
           {store && storeApproved === false && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-4 shadow-md">
-              <div className="bg-blue-100 p-3 rounded-xl">
-                <Clock className="h-6 w-6 text-blue-600" />
+            <div className="mb-6 bg-info/10 border border-info/20 rounded-2xl p-4 flex items-start gap-4 shadow-md">
+              <div className="bg-info/10 p-3 rounded-xl">
+                <Clock className="h-6 w-6 text-info" />
               </div>
               <div className="flex-1">
-                <h3 className="font-bold text-blue-800 text-lg">
+                <h3 className="font-bold text-info text-lg">
                   {t("متجرك قيد المراجعة", "Your store is under review")}
                 </h3>
-                <p className="text-blue-700 text-sm mt-1">
+                <p className="text-info text-sm mt-1">
                   {t(
                     "متجرك في انتظار موافقة المسؤول. يمكنك إضافة المنتجات والإعدادات، لكن متجرك لن يظهر للعملاء حتى تتم الموافقة عليه.",
                     "Your store is pending admin approval. You can add products and settings, but your store won't be visible to customers until approved."
@@ -241,16 +241,16 @@ export default function SellerDashboard() {
           <div className="mb-10">
             <h2 className="text-xl font-bold mb-5 text-gray-800">{t("الأداء المالي", "Financial Performance")}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-gradient-to-br from-white to-blue-50">
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-primary/5">
                 <CardContent className="pt-6 pb-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-500 mb-2">{t("إجمالي الإيرادات", "Total Revenue")}</p>
-                      <p className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                      <p className="text-2xl font-extrabold text-primary">
                         {analytics.totalRevenue.toLocaleString()} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
                       </p>
                     </div>
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-2xl shadow-lg">
+                    <div className="bg-primary p-4 rounded-2xl shadow-lg">
                       <DollarSign className="h-6 w-6 text-white" />
                     </div>
                   </div>
@@ -271,14 +271,14 @@ export default function SellerDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-gradient-to-br from-white to-violet-50">
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-primary/5">
                 <CardContent className="pt-6 pb-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-500 mb-2">{t("عدد المنتجات", "Total Products")}</p>
-                      <p className="text-2xl font-extrabold text-violet-600">{analytics.totalProducts}</p>
+                      <p className="text-2xl font-extrabold text-primary">{analytics.totalProducts}</p>
                     </div>
-                    <div className="bg-gradient-to-br from-violet-500 to-violet-600 p-4 rounded-2xl shadow-lg">
+                    <div className="bg-primary p-4 rounded-2xl shadow-lg">
                       <Package className="h-6 w-6 text-white" />
                     </div>
                   </div>
@@ -306,8 +306,8 @@ export default function SellerDashboard() {
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <CardTitle className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-xl">
-                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                  <div className="p-2 bg-primary/10 rounded-xl">
+                    <BarChart3 className="h-5 w-5 text-primary" />
                   </div>
                   {t("أداء المنتجات", "Product Performance")}
                 </CardTitle>
@@ -342,7 +342,7 @@ export default function SellerDashboard() {
               <CardContent className="space-y-4 p-6">
                 <div className="border-b border-dashed pb-4">
                   <p className="text-sm text-gray-500 mb-2">{t("عدد التقييمات", "Number of Reviews")}</p>
-                  <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{analytics.totalReviews}</p>
+                  <p className="text-2xl md:text-3xl font-extrabold text-primary">{analytics.totalReviews}</p>
                   <p className="text-xs text-gray-400 mt-1">{t("تقييمات من العملاء", "Reviews from customers")}</p>
                 </div>
                 <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-yellow-50 p-4 rounded-xl">
@@ -366,7 +366,7 @@ export default function SellerDashboard() {
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t("الطلبات الأخيرة", "Recent Orders")}</CardTitle>
-                <Button variant="outline" size="sm" asChild className="rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300">
+                <Button variant="outline" size="sm" asChild className="rounded-xl hover:bg-primary/10 hover:text-primary hover:border-primary/50">
                   <Link href="/seller/orders">{t("عرض الكل", "View All")}</Link>
                 </Button>
               </div>
@@ -383,7 +383,7 @@ export default function SellerDashboard() {
               ) : (
                 <div className="space-y-3">
                   {recentOrders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between border border-gray-100 rounded-xl p-5 hover:shadow-md hover:border-blue-200 transition-all bg-white">
+                    <div key={order.id} className="flex items-center justify-between border border-gray-100 rounded-xl p-5 hover:shadow-md hover:border-primary/20 transition-all bg-white">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <p className="font-bold text-gray-800">{order.id}</p>
@@ -397,7 +397,7 @@ export default function SellerDashboard() {
                           {order.customer || t("عميل", "Customer")} • {order.date}
                         </p>
                       </div>
-                      <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                      <p className="text-xl font-extrabold text-primary">
                         {order.total.toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
                       </p>
                     </div>

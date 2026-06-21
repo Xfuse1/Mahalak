@@ -132,7 +132,7 @@ export default function AuthPage() {
 
                 <div className="mt-5 rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">
                   {t("هل تريد الدخول كبائع؟", "Want to sign in as a seller?")}{" "}
-                  <Link href="/auth/seller" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  <Link href="/auth/seller" className="font-semibold text-primary hover:text-primary/80 hover:underline">
                     {t("افتح بوابة التاجر", "Open seller gateway")}
                   </Link>
                 </div>

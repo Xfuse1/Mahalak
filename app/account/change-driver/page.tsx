@@ -115,12 +115,12 @@ export default function ChangeDriverPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+      <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
             <div className="text-center py-12">
-              <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-600" />
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
               <p className="text-gray-600 mt-4">{t("جاري التحميل...", "Loading...")}</p>
             </div>
           </div>
@@ -131,7 +131,7 @@ export default function ChangeDriverPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-8">
@@ -158,14 +158,14 @@ export default function ChangeDriverPage() {
             </CardContent>
           </Card>
 
-          <h1 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold mb-6 text-primary">
             {t("اختر سائق جديد", "Select New Driver")}
           </h1>
 
           {/* Drivers List */}
           {loadingDrivers ? (
             <div className="text-center py-12">
-              <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-600" />
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
               <p className="text-gray-600 mt-4">{t("جاري تحميل السائقين...", "Loading drivers...")}</p>
             </div>
           ) : sortedDrivers.length === 0 ? (
@@ -182,7 +182,7 @@ export default function ChangeDriverPage() {
                   key={driver.id}
                   className={`cursor-pointer transition-all duration-300 border-2 rounded-2xl overflow-hidden ${
                     selectedDriver === driver.id
-                      ? "border-blue-500 shadow-xl bg-blue-50/50"
+                      ? "border-primary shadow-xl bg-primary/5"
                       : "border-transparent shadow-lg hover:shadow-xl hover:border-gray-200"
                   } ${!driver.is_available ? "opacity-60" : ""}`}
                   onClick={() => driver.is_available && setSelectedDriver(driver.id)}
@@ -200,7 +200,7 @@ export default function ChangeDriverPage() {
                             className="rounded-xl object-cover shadow-md"
                           />
                         ) : (
-                          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
+                          <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-md">
                             <User className="w-8 h-8 text-white" />
                           </div>
                         )}
@@ -249,7 +249,7 @@ export default function ChangeDriverPage() {
                         {/* Price */}
                         <div className="flex items-center justify-between">
                           <span className="text-gray-500 text-sm">{t("سعر التوصيل", "Delivery Price")}</span>
-                          <span className="font-bold text-blue-600 text-lg">
+                          <span className="font-bold text-primary text-lg">
                             {driver.price} {t("جنيه", "EGP")}
                           </span>
                         </div>
@@ -272,7 +272,7 @@ export default function ChangeDriverPage() {
           <Button
             onClick={handleConfirm}
             disabled={!selectedDriver || isSubmitting}
-            className="w-full h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl text-lg font-bold shadow-lg hover:shadow-xl transition-all"
+            className="w-full h-14 bg-primary hover:bg-primary/90 rounded-xl text-lg font-bold shadow-lg hover:shadow-xl transition-all"
           >
             {isSubmitting ? (
               <Loader2 className="h-5 w-5 animate-spin" />

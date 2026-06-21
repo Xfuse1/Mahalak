@@ -129,11 +129,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                         ${isCurrent ? "ring-4 ring-primary/20 scale-110" : ""}
                                     `}
                                 >
-                                    {isCurrent && !isCancelled ? (
-                                        <div className="animate-pulse">{step.icon}</div>
-                                    ) : (
-                                        step.icon
-                                    )}
+                                    {step.icon}
                                 </div>
                                 {/* Line */}
                                 {!isLast && (

@@ -125,7 +125,7 @@ export default function SellerLoginPage() {
           <section>
             <Card className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white/95 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur">
               <CardHeader className="space-y-3 border-b border-slate-100 bg-white px-5 py-6 sm:px-8">
-                <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <LayoutDashboard className="h-7 w-7" />
                 </div>
                 <CardTitle className="text-2xl font-black text-slate-900 sm:text-3xl">
@@ -156,7 +156,7 @@ export default function SellerLoginPage() {
 
                 <div className="mt-5 text-center text-sm text-slate-500">
                   {t("هل تريد الدخول كعميل؟", "Want to sign in as a customer?")}{" "}
-                  <Link href="/auth" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  <Link href="/auth" className="font-semibold text-primary hover:text-primary/80 hover:underline">
                     {t("العودة لحساب العميل", "Back to customer login")}
                   </Link>
                 </div>

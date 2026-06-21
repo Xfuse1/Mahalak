@@ -288,7 +288,7 @@ export default function ForgotPasswordPage() {
 
       <Button
         type="submit"
-        className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-base font-semibold rounded-xl"
+        className="w-full h-12 bg-primary hover:bg-primary/90 text-base font-semibold rounded-xl"
         disabled={isLoading}
       >
         {isLoading ? (
@@ -302,7 +302,7 @@ export default function ForgotPasswordPage() {
       </Button>
 
       <div className="text-center">
-        <Link href="/auth" className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+        <Link href="/auth" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
           {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
           {t("العودة إلى تسجيل الدخول", "Back to Login")}
         </Link>
@@ -315,8 +315,8 @@ export default function ForgotPasswordPage() {
   const renderOTPStep = () => (
     <div className="space-y-6">
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
-          <Shield className="h-8 w-8 text-blue-600" />
+        <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
+          <Shield className="h-8 w-8 text-primary" />
         </div>
         <h3 className="text-lg font-bold text-gray-800">{t("أدخل كود التحقق", "Enter Verification Code")}</h3>
         <p className="text-sm text-gray-500 mt-1">{t(`تم إرسال كود التحقق إلى ${phone}`, `Verification code sent to ${phone}`)}</p>
@@ -351,7 +351,7 @@ export default function ForgotPasswordPage() {
         type="button"
         onClick={handleVerifyOTP}
         disabled={isLoading || otpCode.length !== 6 || sessionLost || attemptsRemaining <= 0}
-        className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl"
+        className="w-full h-12 bg-primary hover:bg-primary/90 rounded-xl"
       >
         {isLoading ? (
           <>
@@ -475,7 +475,7 @@ export default function ForgotPasswordPage() {
       </div>
       <Button
         onClick={() => router.push("/auth")}
-        className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl"
+        className="w-full h-12 bg-primary hover:bg-primary/90 rounded-xl"
       >
         {t("تسجيل الدخول", "Login")}
       </Button>
@@ -486,10 +486,10 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-12 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-12 bg-background">
         <div className="container mx-auto px-4 max-w-md">
           <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
-            <CardHeader className="space-y-2 bg-gradient-to-r from-gray-50 to-white border-b">
+            <CardHeader className="space-y-2 bg-secondary/20 border-b">
               <CardTitle className="text-2xl text-center">{t("نسيت كلمة المرور؟", "Forgot Password?")}</CardTitle>
               <CardDescription className="text-center">
                 {step === "phone" &&

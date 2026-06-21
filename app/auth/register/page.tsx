@@ -179,7 +179,7 @@ export default function CustomerRegisterPage() {
   }
 
   const fieldClassName =
-    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition focus-visible:border-blue-300 focus-visible:ring-blue-100 sm:h-14"
+    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition focus-visible:border-primary focus-visible:ring-primary/20 sm:h-14"
 
   return (
     <div suppressHydrationWarning className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_35%),linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f8fafc_100%)]">
@@ -192,7 +192,7 @@ export default function CustomerRegisterPage() {
               <CardHeader className="space-y-5 px-4 py-5 md:px-6 md:py-7 lg:px-8 lg:py-8">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-3">
-                    <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 shadow-[0_12px_30px_rgba(59,130,246,0.18)]">
+                    <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_12px_30px_rgba(59,130,246,0.18)]">
                       <UserPlus className="h-7 w-7" />
                     </div>
                     <div className="space-y-2">
@@ -208,8 +208,8 @@ export default function CustomerRegisterPage() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-5 md:gap-3">
-                  <div className="rounded-2xl bg-blue-50/70 px-2 py-3 text-center md:px-4 md:text-start">
-                    <div className="mx-auto mb-0 inline-flex rounded-xl bg-white p-2 text-blue-600 shadow-sm md:mx-0 md:mb-2">
+                  <div className="rounded-2xl bg-primary/5 px-2 py-3 text-center md:px-4 md:text-start">
+                    <div className="mx-auto mb-0 inline-flex rounded-xl bg-white p-2 text-primary shadow-sm md:mx-0 md:mb-2">
                       <UserPlus className="h-4 w-4" />
                     </div>
                     <p className="hidden text-sm font-bold text-slate-900 md:block">{t("البيانات الأساسية", "Basic Details")}</p>
@@ -373,7 +373,7 @@ export default function CustomerRegisterPage() {
 
                   <Button
                     type="submit"
-                    className="h-12 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold shadow-lg transition hover:from-blue-700 hover:to-blue-800 sm:h-14 sm:text-base"
+                    className="h-12 w-full rounded-2xl bg-primary text-sm font-bold shadow-lg transition hover:bg-primary/90 sm:h-14 sm:text-base"
                     disabled={isLoading || isGoogleLoading}
                   >
                     {isLoading ? t("جاري إنشاء الحساب...", "Creating account...") : t("إنشاء حساب", "Create Account")}
@@ -402,14 +402,14 @@ export default function CustomerRegisterPage() {
 
                 <p className="mt-6 text-center text-sm text-slate-500">
                   {t("لديك حساب بالفعل؟", "Already have an account?")}{" "}
-                  <Link href="/auth" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  <Link href="/auth" className="font-semibold text-primary hover:text-primary/80 hover:underline">
                     {t("سجل دخولك الآن", "Sign in now")}
                   </Link>
                 </p>
 
                 <p className="mt-3 text-center text-sm text-slate-500">
                   {t("هل أنت تاجر؟", "Are you a seller?")}{" "}
-                  <Link href="/auth/seller" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  <Link href="/auth/seller" className="font-semibold text-primary hover:text-primary/80 hover:underline">
                     {t("انتقل لصفحة التاجر", "Go to seller page")}
                   </Link>
                 </p>

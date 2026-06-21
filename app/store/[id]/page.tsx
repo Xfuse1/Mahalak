@@ -4,7 +4,7 @@ import { Header } from "../../../components/header"
 import { Footer } from "../../../components/footer"
 import { ProductCard } from "../../../components/product-card"
 import { BackButton } from "../../../components/back-button"
-import { Star, MapPin, Phone, MessageCircle, FileText, Tag } from "lucide-react"
+import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
 import { Button } from "../../../components/ui/button"
 import {
@@ -24,6 +24,8 @@ import { getProductsByStoreId } from "../../../lib/actions/products"
 import { trackMetaEvent } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
+import { EmptyState } from "../../../components/ui/empty-state"
+import { Spinner } from "../../../components/ui/spinner"
 import { useToast } from "@/components/ui/toast"
 
 type Store = {
@@ -175,8 +177,8 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
         <Header />
         <main className="flex-1 py-8">
           <div className="container mx-auto px-4">
-            <div className="text-center py-12">
-              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
             </div>
           </div>
         </main>
@@ -343,7 +345,7 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
                 </div>
 
                 <div className="flex items-start gap-3 p-3 md:p-4 bg-secondary rounded-lg">
-                  <MapPin className="h-5 w-5 text-[#1F478B] mt-1 flex-shrink-0" />
+                  <MapPin className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
                   <div>
                     <p className="font-semibold mb-1">{t("العنوان", "Address")}</p>
                     <p className="text-gray-600">{store.address}</p>
@@ -394,11 +396,10 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 bg-secondary rounded-lg">
-                <p className="text-gray-500 text-lg">
-                  {t("لا توجد منتجات في هذا المتجر حالياً", "No products available in this store currently")}
-                </p>
-              </div>
+              <EmptyState
+                icon={Package}
+                title={t("لا توجد منتجات في هذا المتجر حالياً", "No products available in this store currently")}
+              />
             )}
           </div>
         </div>

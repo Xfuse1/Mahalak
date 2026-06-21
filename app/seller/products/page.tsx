@@ -15,6 +15,8 @@ import { useLanguage } from "../../../lib/language-context"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { logError } from "../../../lib/logger"
+import { EmptyState } from "../../../components/ui/empty-state"
+import { Spinner } from "../../../components/ui/spinner"
 
 type SellerProduct = {
   id: string
@@ -174,13 +176,12 @@ export default function SellerProductsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex min-h-screen bg-background">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
-            <div className="text-center py-16">
-              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="flex items-center justify-center py-16">
+              <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
             </div>
           </div>
         </main>
@@ -189,18 +190,18 @@ export default function SellerProductsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
             <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة المنتجات", "Product Management")}</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("إدارة المنتجات", "Product Management")}</h1>
               <p className="text-gray-500 mt-1">{t("إدارة وتعديل منتجاتك", "Manage and edit your products")}</p>
             </div>
             {isStoreApproved ? (
-              <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
+              <Button asChild className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-6">
                 <Link href="/seller/products/new">
                   <Plus className="ms-2 h-4 w-4" />
                   {t("إضافة منتج جديد", "Add New Product")}
@@ -268,7 +269,7 @@ export default function SellerProductsPage() {
                           </div>
                         ) : (
                           <div className="flex flex-col">
-                            <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                            <p className="text-xl font-extrabold text-primary">
                               {product.price} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
                             </p>
                             <span className="text-[10px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-0.5 w-fit mt-0.5 font-medium">
@@ -284,7 +285,7 @@ export default function SellerProductsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="flex-1 rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all"
+                          className="flex-1 rounded-xl hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all"
                           onClick={() => router.push(`/seller/products/edit/${product.id}`)}
                         >
                           <Edit className="ms-2 h-4 w-4" />
@@ -314,23 +315,12 @@ export default function SellerProductsPage() {
               ))}
             </div>
           ) : (
-            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
-              <CardContent className="py-20 text-center">
-                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
-                  <Package className="h-10 w-10 text-blue-600" />
-                </div>
-                <h2 className="text-2xl font-bold mb-3 text-gray-800">{t("لا توجد منتجات", "No Products")}</h2>
-                <p className="text-gray-500 mb-8 max-w-md mx-auto">
-                  {t("ابدأ بإضافة منتجات إلى متجرك", "Start adding products to your store")}
-                </p>
-                <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3">
-                  <Link href="/seller/products/new">
-                    <Plus className="ms-2 h-5 w-5" />
-                    {t("إضافة منتج جديد", "Add New Product")}
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={Package}
+              title={t("لا توجد منتجات", "No Products")}
+              description={t("ابدأ بإضافة منتجات إلى متجرك", "Start adding products to your store")}
+              action={{ label: t("إضافة منتج جديد", "Add New Product"), href: "/seller/products/new" }}
+            />
           )}
         </div>
 

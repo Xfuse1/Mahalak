@@ -35,15 +35,15 @@ export function useToast() {
 
 // ─── Individual Toast ─────────────────────────────────────────────
 const iconMap: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />,
-  error: <XCircle className="w-5 h-5 text-red-500 shrink-0" />,
+  success: <CheckCircle className="w-5 h-5 text-primary shrink-0" />,
+  error: <XCircle className="w-5 h-5 text-destructive shrink-0" />,
   warning: <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />,
   info: <Info className="w-5 h-5 text-blue-500 shrink-0" />,
 }
 
 const bgMap: Record<ToastType, string> = {
-  success: "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/60",
-  error: "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/60",
+  success: "border-primary/20 bg-primary/10",
+  error: "border-destructive/20 bg-destructive/10",
   warning: "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/60",
   info: "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60",
 }
@@ -69,7 +69,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
         "pointer-events-auto flex items-start gap-3 w-full max-w-sm rounded-xl border px-4 py-3 shadow-lg backdrop-blur-sm transition-all duration-300",
         bgMap[toast.type],
         isExiting
-          ? "animate-out fade-out-0 slide-out-to-right-full"
+          ? "animate-out fade-out-0 slide-out-to-top-2"
           : "animate-in fade-in-0 slide-in-from-top-5"
       )}
       role="alert"
@@ -96,7 +96,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const addToast = useCallback((type: ToastType, message: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    setToasts((prev) => [...prev, { id, message, type }])
+    // حدّ أقصى 3 toasts معروضة لتفادي الفيضان (مثل البحث الحيّ المتكرر)
+    setToasts((prev) => [...prev, { id, message, type }].slice(-3))
   }, [])
 
   const toast = React.useMemo(

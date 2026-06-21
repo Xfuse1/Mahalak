@@ -6,7 +6,7 @@ import { SellerHeader } from "../../../components/seller-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { Button } from "../../../components/ui/button"
-import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
+import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, ShoppingBag, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup } from "../../../lib/actions/orders"
@@ -26,6 +26,8 @@ import { Textarea } from "../../../components/ui/textarea"
 import { Label } from "../../../components/ui/label"
 import { AlertTriangle, Clock, Truck } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
+import { Spinner } from "@/components/ui/spinner"
+import { EmptyState } from "@/components/ui/empty-state"
 
 type OrderItem = {
   id: string
@@ -109,10 +111,16 @@ export default function SellerOrdersPage() {
       const store = await getStoreByUserId(user.id)
       if (store) {
         setStoreId(store.id)
-        const [data, multiData] = await Promise.all([
+        const [dataRes, multiRes] = await Promise.allSettled([
           getStoreOrders(store.id, user.id) as unknown as Promise<Order[]>,
           getMultiStoreOrdersForStore(store.id),
         ])
+        if (dataRes.status === "rejected" || multiRes.status === "rejected") {
+          logError("Error fetching some orders:", dataRes.status === "rejected" ? dataRes.reason : (multiRes.status === "rejected" ? multiRes.reason : null))
+          toast.warning("تعذّر تحميل جزء من الطلبات")
+        }
+        const data = dataRes.status === "fulfilled" ? dataRes.value : []
+        const multiData = multiRes.status === "fulfilled" ? multiRes.value : { success: false as const, orders: [] as MultiStoreOrder[] }
         const nextMultiOrders = multiData.success ? (multiData.orders as MultiStoreOrder[]) : []
         setOrders(data)
         setMultiOrders(nextMultiOrders)
@@ -136,7 +144,7 @@ export default function SellerOrdersPage() {
     } finally {
       setLoadingOrders(false)
     }
-  }, [user?.id])
+  }, [user?.id, toast])
 
   useEffect(() => {
     if (user?.id && user?.role === "seller") {
@@ -255,13 +263,12 @@ export default function SellerOrdersPage() {
 
   if (loadingOrders) {
     return (
-      <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex min-h-screen bg-background">
         <SellerHeader />
         <main className="flex-1 pt-16 lg:pt-8 pb-8">
           <div className="container mx-auto px-4">
-            <div className="text-center py-16">
-              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="flex items-center justify-center py-16">
+              <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
             </div>
           </div>
         </main>
@@ -270,13 +277,13 @@ export default function SellerOrdersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4">
           <div className="mb-10">
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("إدارة الطلبات", "Order Management")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("إدارة الطلبات", "Order Management")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</p>
           </div>
 
@@ -284,8 +291,8 @@ export default function SellerOrdersPage() {
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-xl">
-                    <Filter className="h-5 w-5 text-blue-600" />
+                  <div className="p-2 bg-primary/10 rounded-xl">
+                    <Filter className="h-5 w-5 text-primary" />
                   </div>
                   {t("جميع الطلبات", "All Orders")}
                 </CardTitle>
@@ -303,20 +310,20 @@ export default function SellerOrdersPage() {
               <CardDescription>{t("إدارة ومتابعة طلبات العملاء", "Manage and track customer orders")}</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4 mb-8 justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
+              <div className="flex flex-col md:flex-row gap-4 mb-8 justify-between items-center bg-primary/10 p-5 rounded-2xl border border-primary/20">
                 <div className="flex items-center gap-4">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-2xl shadow-lg">
+                  <div className="bg-primary p-4 rounded-2xl shadow-lg">
                     <Filter className="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t("إجمالي الطلبات", "Total Orders")}</p>
-                    <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{orders.length + multiOrders.length}</p>
+                    <p className="text-2xl md:text-3xl font-extrabold text-primary">{orders.length + multiOrders.length}</p>
                   </div>
                 </div>
 
                 <div className="w-full md:w-64">
                   <Select value={filter} onValueChange={setFilter}>
-                    <SelectTrigger className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                    <SelectTrigger className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20">
                       <SelectValue placeholder={t("تصفية حسب الحالة", "Filter by status")} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -333,22 +340,17 @@ export default function SellerOrdersPage() {
               </div>
 
               {orders.length === 0 && multiOrders.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                    <Filter className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <p className="text-gray-500 text-lg">{t("لا توجد طلبات حتى الآن", "No orders yet")}</p>
-                </div>
+                <EmptyState icon={ShoppingBag} title={t("لا توجد طلبات حتى الآن", "No orders yet")} />
               ) : orders.length === 0 ? null : (
                 <div className="space-y-4">
                   {orders
                     .filter(order => filter === "all" || order.status === filter)
                     .map((order) => (
-                      <div key={order.id} className="border border-gray-100 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-300 bg-white">
+                      <div key={order.id} className="border border-gray-100 rounded-2xl p-5 hover:shadow-lg hover:border-primary/50 transition-all duration-300 bg-white">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center">
-                              <span className="text-blue-600 font-bold">#{order.id.slice(0, 2)}</span>
+                            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                              <span className="text-primary font-bold">#{order.id.slice(0, 2)}</span>
                             </div>
                             <div>
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
@@ -367,7 +369,7 @@ export default function SellerOrdersPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-[#1F478B] border-[#1F478B] hover:bg-[#1F478B] hover:text-white"
+                              className="text-primary border-primary hover:bg-primary hover:text-white"
                               onClick={() => {
                                 setSelectedOrder(order)
                                 setIsDetailsOpen(true)
@@ -381,7 +383,7 @@ export default function SellerOrdersPage() {
                         <div className="flex items-center justify-between pt-4 border-t border-dashed mt-4">
                           <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
                           <div className="flex items-center gap-4">
-                            <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{Number(order.total).toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span></p>
+                            <p className="text-xl font-extrabold text-primary">{Number(order.total).toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span></p>
                             <OrderStatusSelector orderId={order.id} currentStatus={order.status} callerId={storeId || ""} callerRole="seller" onUpdated={loadOrders} />
                           </div>
                         </div>
@@ -395,10 +397,10 @@ export default function SellerOrdersPage() {
           {/* Multi-Store Orders Section */}
           {multiOrders.length > 0 && (
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-8">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b">
+              <CardHeader className="bg-accent/10 border-b">
                 <CardTitle className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-xl">
-                    <Store className="h-5 w-5 text-purple-600" />
+                  <div className="p-2 bg-accent/15 rounded-xl">
+                    <Store className="h-5 w-5 text-accent-foreground" />
                   </div>
                   {t("طلبات متعددة المتاجر", "Multi-Store Orders")}
                 </CardTitle>
@@ -409,11 +411,11 @@ export default function SellerOrdersPage() {
                   {multiOrders.map((order) => {
                     const myStop = order.my_stop
                     return (
-                      <div key={order.id} className="border border-purple-100 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 bg-white">
+                      <div key={order.id} className="border border-accent/30 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 bg-white">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center">
-                              <Store className="w-5 h-5 text-purple-600" />
+                            <div className="w-12 h-12 bg-accent/15 rounded-xl flex items-center justify-center">
+                              <Store className="w-5 h-5 text-accent-foreground" />
                             </div>
                             <div>
                               <p className="font-bold text-lg text-gray-800">#{order.id.slice(0, 8)}</p>
@@ -455,7 +457,7 @@ export default function SellerOrdersPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-purple-600 border-purple-200 hover:bg-purple-50 rounded-xl"
+                            className="text-accent-foreground border-accent/30 hover:bg-accent/10 rounded-xl"
                             onClick={() => {
                               setSelectedMultiOrder(order)
                               setIsMultiDetailsOpen(true)
@@ -527,7 +529,7 @@ export default function SellerOrdersPage() {
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={t("rtl", "ltr")}>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                  <Package className="w-6 h-6 text-[#1F478B]" />
+                  <Package className="w-6 h-6 text-primary" />
                   {t("تفاصيل الطلب", "Order Details")} #{selectedOrder?.id.slice(0, 8)}
                 </DialogTitle>
                 <DialogDescription>
@@ -541,7 +543,7 @@ export default function SellerOrdersPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-lg space-y-3">
                       <h3 className="font-bold border-b pb-2 flex items-center gap-2">
-                        <User className="w-4 h-4 text-[#1F478B]" />
+                        <User className="w-4 h-4 text-primary" />
                         {t("بيانات العميل", "Customer Info")}
                       </h3>
                       <div className="space-y-1 text-sm">
@@ -559,7 +561,7 @@ export default function SellerOrdersPage() {
 
                     <div className="bg-gray-50 p-4 rounded-lg space-y-3">
                       <h3 className="font-bold border-b pb-2 flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-[#1F478B]" />
+                        <MapPin className="w-4 h-4 text-primary" />
                         {t("عنوان التوصيل", "Delivery Address")}
                       </h3>
                       <p className="text-sm text-gray-700 leading-relaxed">
@@ -571,7 +573,7 @@ export default function SellerOrdersPage() {
                   {/* Products List */}
                   <div className="space-y-3">
                     <h3 className="font-bold flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-[#1F478B]" />
+                      <ShoppingCart className="w-4 h-4 text-primary" />
                       {t("المنتجات", "Products")} ({selectedOrder.order_items.length})
                     </h3>
                     <div className="border rounded-lg overflow-hidden">
@@ -595,7 +597,7 @@ export default function SellerOrdersPage() {
                               <p className="font-medium line-clamp-1">{item.products.name}</p>
                             </div>
                             <div className="text-center">x{item.quantity}</div>
-                            <div className="text-end font-bold text-[#1F478B]">
+                            <div className="text-end font-bold text-primary">
                               {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
                             </div>
                           </div>
@@ -605,7 +607,7 @@ export default function SellerOrdersPage() {
                   </div>
 
                   {/* Order Summary */}
-                  <div className="bg-[#1F478B]/5 p-4 rounded-lg flex justify-between items-center">
+                  <div className="bg-primary/5 p-4 rounded-lg flex justify-between items-center">
                     <div>
                       <p className="text-sm text-gray-600">{t("حالة الطلب الحالية:", "Current Status:")}</p>
                       <span className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedOrder.status)}`}>
@@ -614,7 +616,7 @@ export default function SellerOrdersPage() {
                     </div>
                     <div className="text-end">
                       <p className="text-sm text-gray-600">{t("الإجمالي الكلي", "Grand Total")}</p>
-                      <p className="text-2xl font-black text-[#1F478B]">
+                      <p className="text-2xl font-black text-primary">
                         {Number(selectedOrder.total).toLocaleString()} {t("جنيه", "EGP")}
                       </p>
                     </div>
@@ -638,7 +640,7 @@ export default function SellerOrdersPage() {
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={t("rtl", "ltr")}>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                  <Store className="w-6 h-6 text-purple-600" />
+                  <Store className="w-6 h-6 text-accent-foreground" />
                   {t("تفاصيل طلب متعدد المتاجر", "Multi-Store Order Details")} #{selectedMultiOrder?.id.slice(0, 8)}
                 </DialogTitle>
                 <DialogDescription>
@@ -654,7 +656,7 @@ export default function SellerOrdersPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-gray-50 p-4 rounded-xl space-y-3">
                         <h3 className="font-bold border-b pb-2 flex items-center gap-2">
-                          <User className="w-4 h-4 text-purple-600" />
+                          <User className="w-4 h-4 text-accent-foreground" />
                           {t("بيانات العميل", "Customer Info")}
                         </h3>
                         <div className="space-y-1 text-sm">
@@ -668,7 +670,7 @@ export default function SellerOrdersPage() {
 
                       <div className="bg-gray-50 p-4 rounded-xl space-y-3">
                         <h3 className="font-bold border-b pb-2 flex items-center gap-2">
-                          <Truck className="w-4 h-4 text-purple-600" />
+                          <Truck className="w-4 h-4 text-accent-foreground" />
                           {t("بيانات السائق والتوصيل", "Driver & Delivery Info")}
                         </h3>
                         <div className="space-y-1 text-sm">
@@ -682,9 +684,9 @@ export default function SellerOrdersPage() {
                     </div>
 
                     {/* Order Status */}
-                    <div className="flex items-center gap-4 bg-purple-50 p-4 rounded-xl">
+                    <div className="flex items-center gap-4 bg-accent/10 p-4 rounded-xl">
                       <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-purple-600" />
+                        <Clock className="w-4 h-4 text-accent-foreground" />
                         <span className="text-sm font-medium text-gray-600">{t("حالة الطلب:", "Order Status:")}</span>
                         <span className={`px-3 py-1 rounded-lg text-xs font-bold ${getStatusColor(selectedMultiOrder.status)}`}>
                           {getStatusText(selectedMultiOrder.status)}
@@ -701,7 +703,7 @@ export default function SellerOrdersPage() {
                     {/* My Stop Items */}
                     <div className="space-y-3">
                       <h3 className="font-bold flex items-center gap-2">
-                        <ShoppingCart className="w-4 h-4 text-purple-600" />
+                        <ShoppingCart className="w-4 h-4 text-accent-foreground" />
                         {t("منتجات متجرك", "Your Store Products")} ({myStop.items.length})
                       </h3>
                       <div className="border rounded-xl overflow-hidden">
@@ -722,7 +724,7 @@ export default function SellerOrdersPage() {
                                 <p className="font-medium line-clamp-1">{item.name}</p>
                               </div>
                               <div className="text-center">x{item.quantity}</div>
-                              <div className="text-end font-bold text-purple-600">
+                              <div className="text-end font-bold text-accent-foreground">
                                 {(item.price * item.quantity).toLocaleString()} {t("جنيه", "EGP")}
                               </div>
                             </div>
@@ -754,11 +756,11 @@ export default function SellerOrdersPage() {
                     )}
 
                     {/* Summary */}
-                    <div className="bg-purple-50 p-4 rounded-xl">
+                    <div className="bg-accent/10 p-4 rounded-xl">
                       <div className="flex justify-between items-center">
                         <div>
                           <p className="text-sm text-gray-600">{t("إجمالي متجرك", "Your Store Subtotal")}</p>
-                          <p className="text-xl font-black text-purple-700">
+                          <p className="text-xl font-black text-accent-foreground">
                             {myStop.subtotal.toLocaleString()} {t("جنيه", "EGP")}
                           </p>
                         </div>

@@ -131,7 +131,7 @@ export default function DriverOrdersPage() {
       case "confirmed":
         return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
       case "picked_up":
-        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+        return "bg-primary/10 text-primary"
       case "rejected":
         return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
       case "pending":
@@ -180,7 +180,7 @@ export default function DriverOrdersPage() {
       case "pending":
         return "text-yellow-600"
       case "confirmed":
-        return "text-blue-600"
+        return "text-primary"
       case "picking_up":
         return "text-orange-600"
       case "on_the_way":
@@ -203,8 +203,8 @@ export default function DriverOrdersPage() {
           <BackButton />
           <Card className="mt-4">
             <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-4">
-                <Truck className="w-8 h-8 text-indigo-600" />
+              <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <Truck className="w-8 h-8 text-primary" />
               </div>
               <CardTitle>{t("Ù„ÙˆØ­Ø© ØªØ­ÙƒÙ… Ø§Ù„Ø³Ø§Ø¦Ù‚", "Driver Dashboard")}</CardTitle>
               <p className="text-sm text-gray-500 mt-2">
@@ -270,11 +270,11 @@ export default function DriverOrdersPage() {
         <BackButton />
 
         {/* Driver Info Header */}
-        <Card className="mt-4 mb-6 border-indigo-200 dark:border-indigo-800">
+        <Card className="mt-4 mb-6 border-primary/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                <Truck className="w-6 h-6 text-indigo-600" />
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                <Truck className="w-6 h-6 text-primary" />
               </div>
               <div className="flex-1">
                 <h2 className="font-bold text-lg">{driver.name}</h2>
@@ -317,7 +317,7 @@ export default function DriverOrdersPage() {
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-indigo-600">{orders.length}</p>
+              <p className="text-2xl font-bold text-primary">{orders.length}</p>
               <p className="text-xs text-gray-500">{t("Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ", "Total")}</p>
             </CardContent>
           </Card>
@@ -325,7 +325,7 @@ export default function DriverOrdersPage() {
 
         {loading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : orders.length === 0 ? (
           <Card>
@@ -354,7 +354,7 @@ export default function DriverOrdersPage() {
                   return (
                     <Card
                       key={order.id}
-                      className="border-indigo-200 dark:border-indigo-800 overflow-hidden"
+                      className="border-primary/20 overflow-hidden"
                     >
                       {/* Order Header */}
                       <div
@@ -363,7 +363,7 @@ export default function DriverOrdersPage() {
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <Package className="w-4 h-4 text-indigo-600" />
+                            <Package className="w-4 h-4 text-primary" />
                             <span className="font-bold text-sm">#{order.id.slice(-6)}</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -393,7 +393,7 @@ export default function DriverOrdersPage() {
                           </div>
                           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                             <div
-                              className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                              className="bg-primary h-2 rounded-full transition-all duration-500"
                               style={{
                                 width: activeStops.length > 0
                                   ? `${(pickedStops.length / activeStops.length) * 100}%`
@@ -408,11 +408,11 @@ export default function DriverOrdersPage() {
                       {isExpanded && (
                         <div className="border-t dark:border-gray-700">
                           {/* Delivery Address */}
-                          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
+                          <div className="p-3 bg-info/10 border-b dark:border-gray-700">
                             <div className="flex items-start gap-2">
-                              <MapPin className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                              <MapPin className="w-4 h-4 text-info mt-0.5 shrink-0" />
                               <div>
-                                <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                                <p className="text-xs font-medium text-info">
                                   {t("Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªÙˆØµÙŠÙ„", "Delivery Address")}
                                 </p>
                                 <p className="text-sm">{order.delivery_address || t("ØºÙŠØ± Ù…Ø­Ø¯Ø¯", "Not specified")}</p>
@@ -423,7 +423,7 @@ export default function DriverOrdersPage() {
                           {/* Pickup Stops List */}
                           <div className="p-4 space-y-3">
                             <h4 className="font-medium text-sm flex items-center gap-2 mb-3">
-                              <Store className="w-4 h-4 text-indigo-600" />
+                              <Store className="w-4 h-4 text-primary" />
                               {t("Ù…Ø­Ø·Ø§Øª Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…", "Pickup Stops")} ({stops.length})
                             </h4>
 
@@ -434,7 +434,7 @@ export default function DriverOrdersPage() {
                                   stop.status === "confirmed"
                                     ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10"
                                     : stop.status === "picked_up"
-                                    ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10"
+                                    ? "border-primary/20 bg-primary/5"
                                     : stop.status === "rejected"
                                     ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 opacity-60"
                                     : "border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/10"
@@ -442,7 +442,7 @@ export default function DriverOrdersPage() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">
+                                    <span className="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center font-bold">
                                       {idx + 1}
                                     </span>
                                     <span className="font-medium text-sm">{stop.store_name}</span>
@@ -476,7 +476,7 @@ export default function DriverOrdersPage() {
                                 {stop.status === "confirmed" && (
                                   <Button
                                     size="sm"
-                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                                    className="w-full bg-primary hover:bg-primary/90 text-white"
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       handlePickup(order.id, stop.store_id)
@@ -493,7 +493,7 @@ export default function DriverOrdersPage() {
                                 )}
 
                                 {stop.status === "picked_up" && (
-                                  <div className="flex items-center gap-1 text-blue-600 text-xs">
+                                  <div className="flex items-center gap-1 text-primary text-xs">
                                     <CheckCircle className="w-3 h-3" />
                                     {t("ØªÙ… Ø§Ù„Ø§Ø³ØªÙ„Ø§Ù…", "Picked up")}
                                     {stop.picked_up_at && (

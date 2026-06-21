@@ -85,7 +85,7 @@ export default function SellerRegisterPage() {
 
   const errorRef = useRef<HTMLDivElement>(null)
   const fieldClassName =
-    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition placeholder:text-slate-400 focus-visible:border-blue-400 focus-visible:ring-blue-100 sm:h-14"
+    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/20 sm:h-14"
 
   const countriesAndCities: Record<string, string[]> = {
     "مصر": ["القاهرة", "الجيزة", "الإسكندرية", "الشرقية", "الدقهلية", "البحيرة", "المنيا", "المنوفية", "الغربية", "القليوبية", "كفر الشيخ", "سوهاج", "أسيوط", "قنا", "الأقصر", "أسوان", "الفيوم", "بني سويف", "بورسعيد", "الإسماعيلية", "السويس", "دمياط", "شمال سيناء", "جنوب سيناء", "البحر الأحمر", "الوادي الجديد", "مطروح"],
@@ -465,7 +465,7 @@ export default function SellerRegisterPage() {
             <CardHeader className="space-y-5 px-4 py-5 md:px-6 md:py-7 lg:px-8 lg:py-8">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-3">
-                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 shadow-[0_12px_30px_rgba(59,130,246,0.18)]">
+                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-[0_12px_30px_rgba(59,130,246,0.18)]">
                     <Store className="h-7 w-7" />
                   </div>
                   <div className="space-y-2">
@@ -481,8 +481,8 @@ export default function SellerRegisterPage() {
               </div>
 
               <div className="grid grid-cols-3 gap-2 border-t border-slate-200 pt-5 md:gap-3">
-                <div className="rounded-2xl border border-blue-300 bg-gradient-to-br from-blue-100 via-blue-50 to-white px-2 py-3 text-center shadow-[0_12px_30px_rgba(37,99,235,0.12)] ring-1 ring-blue-100 md:px-4 md:text-start">
-                  <div className="mx-auto mb-0 inline-flex rounded-xl border border-blue-200 bg-white p-2 text-blue-700 shadow-[0_6px_16px_rgba(37,99,235,0.14)] md:mx-0 md:mb-2">
+                <div className="rounded-2xl border border-primary/20 bg-primary/10 px-2 py-3 text-center shadow-[0_12px_30px_rgba(37,99,235,0.12)] ring-1 ring-primary/20 md:px-4 md:text-start">
+                  <div className="mx-auto mb-0 inline-flex rounded-xl border border-primary/20 bg-white p-2 text-primary shadow-[0_6px_16px_rgba(37,99,235,0.14)] md:mx-0 md:mb-2">
                     <Building2 className="h-4 w-4" />
                   </div>
                   <p className="hidden text-sm font-bold text-slate-900 md:block">{t("الحساب والعنوان", "Account & Address")}</p>
@@ -685,7 +685,7 @@ export default function SellerRegisterPage() {
 
                 <Button
                   type="submit"
-                  className="h-12 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold shadow-lg transition-all hover:scale-[1.01] hover:from-blue-700 hover:to-blue-800 hover:shadow-xl active:scale-[0.99] md:h-14 md:text-base"
+                  className="h-12 w-full rounded-2xl bg-primary text-sm font-bold shadow-lg transition-all hover:scale-[1.01] hover:bg-primary/90 hover:shadow-xl active:scale-[0.99] md:h-14 md:text-base"
                   disabled={isLoading}
                 >
                   {isLoading ? t("جاري إنشاء الحساب...", "Creating account...") : t("إنشاء حساب", "Create Account")}
@@ -694,13 +694,13 @@ export default function SellerRegisterPage() {
                 <div className="pt-4 text-center text-sm text-slate-500">
                   <p>
                     {t("هل لديك حساب بالفعل؟", "Already have an account?")} {" "}
-                    <Link href="/auth/seller/login" className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
+                    <Link href="/auth/seller/login" className="text-primary hover:text-primary/80 font-medium hover:underline">
                       {t("سجل الدخول هنا", "Login here")}
                     </Link>
                   </p>
                   <p className="mt-3">
                     {t("تريد التسجيل كعميل؟", "Want to register as a customer?")}{" "}
-                    <Link href="/auth/register" className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
+                    <Link href="/auth/register" className="text-primary hover:text-primary/80 font-medium hover:underline">
                       {t("اذهب لفورم العميل", "Go to customer form")}
                     </Link>
                   </p>

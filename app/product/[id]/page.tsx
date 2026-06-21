@@ -18,6 +18,7 @@ import { createContactInquiry } from "@/lib/actions/orders"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { Tag } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
+import { Spinner } from "@/components/ui/spinner"
 
 type Product = {
   id: string
@@ -119,11 +120,10 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4">
-            <div className="text-center py-20">
-              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
             </div>
           </div>
         </main>
@@ -136,7 +136,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4">
             <div className="mb-6">
               <BackButton />
@@ -149,7 +149,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
               <p className="text-gray-500 mb-6">
                 {t("عذراً، لم نتمكن من العثور على هذا المنتج", "Sorry, we couldn't find this product")}
               </p>
-              <Button onClick={() => router.push("/")} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg px-6">{t("العودة للرئيسية", "Back to Home")}</Button>
+              <Button onClick={() => router.push("/")} className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg px-6">{t("العودة للرئيسية", "Back to Home")}</Button>
             </div>
           </div>
         </main>
@@ -280,8 +280,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             <div className="space-y-5">
               <h1 className="text-4xl font-extrabold text-gray-800 text-balance">{product.name}</h1>
 
-              <Link href={`/store/${product.store_id}`} className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors">
-                <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+              <Link href={`/store/${product.store_id}`} className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-medium transition-colors">
+                <span className="w-2 h-2 bg-primary rounded-full"></span>
                 {product.stores?.name || t("المتجر", "Store")}
               </Link>
 
@@ -343,7 +343,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                   </p>
                 </div>
               ) : (
-                <p className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                <p className="text-5xl font-extrabold text-primary">
                   {product.price} <span className="text-2xl text-gray-500">{t("جنيه", "EGP")}</span>
                 </p>
               )}
@@ -415,7 +415,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
                     router.push("/checkout?mode=buynow")
                   }}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
+                  className="flex-1 bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"
                   disabled={product.stock === 0}
                 >
                   <Zap className="ms-2 h-6 w-6" />
@@ -437,7 +437,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     })
                   }}
                   variant="outline"
-                  className="flex-1 border-2 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-xl h-14 text-lg transition-all hover:scale-[1.02]"
+                  className="flex-1 border-2 border-primary text-primary hover:bg-primary/10 rounded-xl h-14 text-lg transition-all hover:scale-[1.02]"
                   disabled={product.stock === 0}
                 >
                   <ShoppingCart className="ms-2 h-6 w-6" />
@@ -445,9 +445,9 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 </Button>
               </div>
 
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100">
+              <div className="bg-primary/10 p-5 rounded-2xl border border-primary/20">
                 <p className="text-sm text-gray-700">
-                  <span className="font-bold text-blue-700">{t("الفئة:", "Category:")}</span> {product.category}
+                  <span className="font-bold text-primary">{t("الفئة:", "Category:")}</span> {product.category}
                 </p>
               </div>
             </div>
@@ -460,7 +460,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 <h2 className="text-2xl font-bold text-gray-800">{t("منتجات أخرى من نفس المتجر", "More from this Store")}</h2>
                 <Link 
                   href={`/store/${product.store_id}`}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
+                  className="text-primary hover:text-primary/80 text-sm font-medium transition-colors"
                 >
                   {t("عرض الكل", "View All")} →
                 </Link>
@@ -494,7 +494,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                             </p>
                           </div>
                         ) : (
-                          <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                          <p className="font-extrabold text-primary">
                             {storeProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
                           </p>
                         )}
@@ -528,7 +528,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                       <div className="p-4">
                         <h3 className="font-bold text-sm mb-1 line-clamp-2 text-gray-800">{otherProduct.name}</h3>
                         <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                          <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
                           {otherProduct.stores?.name || t("المتجر", "Store")}
                         </p>
                         <div className="flex items-center gap-1 mb-2">
@@ -543,7 +543,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                             </p>
                           </div>
                         ) : (
-                          <p className="font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                          <p className="font-extrabold text-primary">
                             {otherProduct.price} <span className="text-xs text-gray-500">{t("جنيه", "EGP")}</span>
                           </p>
                         )}

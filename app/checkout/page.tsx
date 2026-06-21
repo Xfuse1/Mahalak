@@ -16,6 +16,7 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react"
 import type { CheckoutItem } from "@/lib/types/checkout"
+import { Spinner } from "@/components/ui/spinner"
 
 export default function CheckoutPage() {
   const { t, language } = useLanguage()
@@ -200,11 +201,10 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+        <main className="flex-1 py-8 bg-background">
           <div className="container mx-auto px-4">
-            <div className="text-center py-20">
-              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-500">{t("جاري التحميل...", "Loading...")}</p>
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="lg" label={t("جاري التحميل...", "Loading...")} className="flex-col" />
             </div>
           </div>
         </main>
@@ -221,14 +221,14 @@ export default function CheckoutPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="flex-1 py-8 bg-gradient-to-b from-gray-50 to-white">
+      <main className="flex-1 py-8 bg-background">
         <div className="container mx-auto px-4 max-w-2xl">
           <div className="mb-6">
             <BackButton />
           </div>
 
           <div className="text-center mb-10">
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent mb-2">{t("تأكيد البيانات", "Confirm Details")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground mb-2">{t("تأكيد البيانات", "Confirm Details")}</h1>
             <p className="text-gray-500">
               {t("يرجى مراجعة بياناتك قبل المتابعة", "Please review your information before proceeding")}
             </p>
@@ -238,8 +238,8 @@ export default function CheckoutPage() {
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <CardTitle className="text-lg flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-xl">
-                  <FileText className="h-5 w-5 text-blue-600" />
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <FileText className="h-5 w-5 text-primary" />
                 </div>
                 {t("ملخص الطلب", "Order Summary")}
               </CardTitle>
@@ -270,7 +270,7 @@ export default function CheckoutPage() {
                       {hasDiscount && (
                         <p className="text-xs text-gray-400 line-through">{(item.price * item.quantity).toFixed(2)}</p>
                       )}
-                      <p className={`font-extrabold bg-gradient-to-r ${hasDiscount ? 'from-emerald-600 to-green-600' : 'from-blue-600 to-blue-800'} bg-clip-text text-transparent`}>
+                      <p className={`font-extrabold ${hasDiscount ? 'bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent' : 'text-primary'}`}>
                         {itemTotal.toFixed(2)} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span>
                       </p>
                     </div>
@@ -279,7 +279,7 @@ export default function CheckoutPage() {
               })}
               <div className="border-t border-dashed pt-4 flex justify-between items-center">
                 <span className="font-bold text-gray-700">{t("الإجمالي", "Total")}</span>
-                <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                <span className="text-2xl font-extrabold text-primary">
                   {total.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
                 </span>
               </div>
@@ -290,8 +290,8 @@ export default function CheckoutPage() {
           <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <CardTitle className="text-lg flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-xl">
-                  <User className="h-5 w-5 text-blue-600" />
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <User className="h-5 w-5 text-primary" />
                 </div>
                 {t("بيانات العميل", "Customer Information")}
               </CardTitle>
@@ -309,7 +309,7 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أدخل اسمك الكامل", "Enter your full name")}
                   required
-                  className={`h-12 rounded-xl ${attempted && !formData.fullName ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
+                  className={`h-12 rounded-xl ${attempted && !formData.fullName ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-primary focus:ring-primary/20"}`}
                 />
                 {attempted && !formData.fullName && (
                   <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
@@ -329,7 +329,7 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أدخل رقم هاتفك", "Enter your phone number")}
                   required
-                  className={`h-12 rounded-xl ${attempted && (!formData.phone || !isValidEgyptianPhone(formData.phone)) ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
+                  className={`h-12 rounded-xl ${attempted && (!formData.phone || !isValidEgyptianPhone(formData.phone)) ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-primary focus:ring-primary/20"}`}
                 />
                 {attempted && !formData.phone && (
                   <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
@@ -355,7 +355,7 @@ export default function CheckoutPage() {
                       ? "border-emerald-500 text-emerald-600 bg-emerald-50"
                       : attempted && (!formData.latitude || !formData.longitude)
                       ? "border-red-500 text-red-500 hover:bg-red-50"
-                      : "border-blue-500 text-blue-600 hover:bg-blue-50"
+                      : "border-primary text-primary hover:bg-primary/5"
                   }`}
                 >
                   {isGettingLocation ? (
@@ -395,7 +395,7 @@ export default function CheckoutPage() {
                   value={formData.street}
                   onChange={handleInputChange}
                   placeholder={t("أدخل عنوانك التفصيلي", "Enter your detailed address")}
-                  className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                  className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                 />
               </div>
 
@@ -408,7 +408,7 @@ export default function CheckoutPage() {
                     value={formData.city}
                     onChange={handleInputChange}
                     placeholder={t("المدينة", "City")}
-                    className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
                 <div className="space-y-2">
@@ -419,7 +419,7 @@ export default function CheckoutPage() {
                     value={formData.state}
                     onChange={handleInputChange}
                     placeholder={t("المحافظة", "State")}
-                    className="h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
               </div>
@@ -436,13 +436,13 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   placeholder={t("أي ملاحظات خاصة بالتوصيل...", "Any special delivery notes...")}
                   rows={3}
-                  className="rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                  className="rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                 />
               </div>
 
               <Button
                 onClick={handleContinue}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg mt-4"
+                className="w-full bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg mt-4"
                 size="lg"
               >
                 {t("متابعة لاختيار الدليفري", "Continue to Select Delivery")}

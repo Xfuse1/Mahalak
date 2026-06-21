@@ -291,13 +291,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="flex min-h-screen bg-background">
       <SellerHeader />
 
       <main className="flex-1 pt-16 lg:pt-8 pb-8">
         <div className="container mx-auto px-4 max-w-3xl">
           <div className="mb-10">
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("الإعدادات", "Settings")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("الإعدادات", "Settings")}</h1>
             <p className="text-gray-500 mt-1">{t("إدارة معلومات المتجر والإعدادات", "Manage store information and settings")}</p>
           </div>
 
@@ -306,8 +306,8 @@ export default function SettingsPage() {
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <CardTitle className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-xl">
-                    <Upload className="h-5 w-5 text-blue-600" />
+                  <div className="p-2 bg-primary/10 rounded-xl">
+                    <Upload className="h-5 w-5 text-primary" />
                   </div>
                   {t("معلومات المتجر", "Store Information")}
                 </CardTitle>
@@ -318,7 +318,7 @@ export default function SettingsPage() {
                   <Label htmlFor="storeLogo" className="text-gray-700 font-medium">{t("شعار المتجر", "Store Logo")}</Label>
                   <div className="mt-3 flex items-center gap-4">
                     {imagePreview && (
-                      <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-blue-200 shadow-md">
+                      <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-primary/20 shadow-md">
                         <Image
                           src={imagePreview || "/placeholder.svg"}
                           alt={t("معاينة شعار المتجر", "Store logo preview")}
@@ -330,9 +330,9 @@ export default function SettingsPage() {
                     <div className="flex-1">
                       <Label
                         htmlFor="storeLogo"
-                        className="flex items-center justify-center gap-3 px-5 py-4 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all"
+                        className="flex items-center justify-center gap-3 px-5 py-4 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/10 transition-all"
                       >
-                        <Upload className="h-6 w-6 text-blue-600" />
+                        <Upload className="h-6 w-6 text-primary" />
                         <span className="font-medium text-gray-700">
                           {imagePreview ? t("تغيير الشعار", "Change Logo") : t("رفع شعار المتجر", "Upload Store Logo")}
                         </span>
@@ -351,7 +351,7 @@ export default function SettingsPage() {
 
                 <div>
                   <Label htmlFor="storeName" className="text-gray-700 font-medium">{t("اسم المتجر", "Store Name")}</Label>
-                  <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                  <Input id="storeName" name="name" value={formData.name} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                 </div>
                 <div>
                   <Label htmlFor="storeDescription" className="text-gray-700 font-medium">{t("وصف المتجر", "Store Description")}</Label>
@@ -361,7 +361,7 @@ export default function SettingsPage() {
                     value={formData.description}
                     onChange={handleInputChange}
                     rows={4}
-                    className="mt-2 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-2 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -378,7 +378,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <Label htmlFor="storeAddress" className="text-gray-700 font-medium">{t("العنوان", "Address")}</Label>
-                  <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500" />
+                  <Input id="storeAddress" name="address" value={formData.address} onChange={handleInputChange} required className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20" />
                 </div>
                 
                 {/* Phone with verification */}
@@ -409,7 +409,7 @@ export default function SettingsPage() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
                       <PhoneVerification
                         phoneNumber={newPhone}
                         onPhoneChange={setNewPhone}
@@ -558,7 +558,7 @@ export default function SettingsPage() {
                       value={formData.open_time}
                       onChange={handleInputChange}
                       required
-                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                   <div>
@@ -570,7 +570,7 @@ export default function SettingsPage() {
                       value={formData.close_time}
                       onChange={handleInputChange}
                       required
-                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                     />
                   </div>
                 </div>
@@ -582,7 +582,7 @@ export default function SettingsPage() {
                     value={formData.working_days}
                     onChange={handleInputChange}
                     required
-                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
               </CardContent>
@@ -604,7 +604,7 @@ export default function SettingsPage() {
                     value={formData.support_email}
                     onChange={handleInputChange}
                     required
-                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
                 <div>
@@ -627,14 +627,14 @@ export default function SettingsPage() {
                     value={formData.return_policy}
                     onChange={handleInputChange}
                     rows={3}
-                    className="mt-2 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-2 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex justify-end pb-8">
-              <Button type="submit" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3 text-lg" disabled={isSaving || isUploadingImage}>
+              <Button type="submit" className="bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 px-8 py-3 text-lg" disabled={isSaving || isUploadingImage}>
                 {isUploadingImage ? t("جاري رفع الصورة...", "Uploading image...") : isSaving ? t("جاري الحفظ...", "Saving...") : t("حفظ التغييرات", "Save Changes")}
               </Button>
             </div>

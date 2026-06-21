@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useLanguage } from "@/lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -49,7 +50,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
       <main className="flex-1 py-8">
@@ -59,30 +60,19 @@ export default function CartPage() {
           </div>
 
           <div className="flex items-center gap-3 mb-8">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl text-white shadow-lg">
+            <div className="p-3 bg-primary rounded-2xl text-primary-foreground shadow-lg">
               <ShoppingCart className="h-6 w-6" />
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("سلة التسوق", "Shopping Cart")}</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">{t("سلة التسوق", "Shopping Cart")}</h1>
           </div>
 
           {items.length === 0 ? (
-            <Card className="border-0 shadow-xl bg-white rounded-2xl overflow-hidden">
-              <CardContent className="py-20 text-center">
-                <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                  <ShoppingBag className="h-12 w-12 text-gray-400" />
-                </div>
-                <h2 className="text-2xl font-bold mb-3 text-gray-800">{t("السلة فارغة", "Cart is Empty")}</h2>
-                <p className="text-gray-500 mb-8 max-w-sm mx-auto">
-                  {t("لم تقم بإضافة أي منتجات إلى السلة بعد", "You haven't added any products to your cart yet")}
-                </p>
-                <Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
-                  <Link href="/search" className="flex items-center gap-2">
-                    {t("تصفح المنتجات", "Browse Products")}
-                    <ArrowLeft className="h-5 w-5 rtl:rotate-180" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <EmptyState
+              icon={ShoppingBag}
+              title={t("السلة فارغة", "Cart is Empty")}
+              description={t("لم تقم بإضافة أي منتجات إلى السلة بعد", "You haven't added any products to your cart yet")}
+              action={{ label: t("تصفح المنتجات", "Browse Products"), href: "/search" }}
+            />
           ) : (
             <div className="space-y-6">
               <div className="space-y-4">
@@ -93,7 +83,7 @@ export default function CartPage() {
                         <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill loading="lazy" sizes="112px" className="object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition-colors">{item.name}</h3>
+                        <h3 className="font-bold text-lg text-gray-800 group-hover:text-primary transition-colors">{item.name}</h3>
                         <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
                           {item.store_name || t("المتجر", "Store")}
@@ -113,7 +103,7 @@ export default function CartPage() {
                             </p>
                           </div>
                         ) : (
-                          <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{item.price} {t("جنيه", "EGP")}</p>
+                          <p className="text-xl font-extrabold text-primary">{item.price} {t("جنيه", "EGP")}</p>
                         )}
 
                         {/* Stock info */}
@@ -167,13 +157,13 @@ export default function CartPage() {
                 <CardContent className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm text-gray-500 mb-1">{t("الإجمالي", "Total")}</p>
-                    <p className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">{total.toFixed(2)} <span className="text-base md:text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
+                    <p className="text-2xl md:text-3xl font-extrabold text-primary">{total.toFixed(2)} <span className="text-base md:text-lg text-gray-500">{t("جنيه", "EGP")}</span></p>
                   </div>
                   <div className="flex gap-3">
                     <Button variant="outline" onClick={handleClearCart} className="rounded-xl hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-all">
                       {t("إفراغ السلة", "Clear Cart")}
                     </Button>
-                    <Button onClick={handleCheckout} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl px-8 font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
+                    <Button onClick={handleCheckout} className="bg-primary hover:bg-primary/90 rounded-xl px-8 font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105">
                       {t("إكمال الطلب", "Checkout")}
                     </Button>
                   </div>
