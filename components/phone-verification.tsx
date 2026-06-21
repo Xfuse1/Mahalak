@@ -254,8 +254,8 @@ export function PhoneVerification({
     return (
       <div className="space-y-4">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
-            <Shield className="h-8 w-8 text-blue-600" />
+          <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
+            <Shield className="h-8 w-8 text-primary" />
           </div>
           <h3 className="text-lg font-bold text-gray-800">{t("أدخل كود التحقق", "Enter Verification Code")}</h3>
           <p className="text-sm text-gray-500 mt-1">
@@ -313,7 +313,7 @@ export function PhoneVerification({
           type="button"
           onClick={handleVerifyOTP}
           disabled={isLoading || otpCode.length !== 6 || attemptsRemaining <= 0 || sessionLost}
-          className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+          className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90"
         >
           {isLoading ? (
             <>

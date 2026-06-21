@@ -144,10 +144,13 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    // انتظر انتهاء تحميل المصادقة قبل أي تحويل — وإلا يُطرد البائع لحظة التحميل (user=null)
+    if (isLoading) return
+    if (!user) {
       router.push("/auth?role=seller")
+      return
     }
-    if (user?.role !== "seller") {
+    if (user.role !== "seller") {
       router.push("/")
     }
   }, [user, isLoading, router])

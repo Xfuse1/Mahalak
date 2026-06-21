@@ -1099,7 +1099,6 @@ export default function QPOSPage() {
       const effectiveMultiplier = unitInfo?.unit_multiplier ?? 1
       setCart((prev) => {
         // When adding with unit, check by product id + unit_multiplier to allow same product in different units
-        const cartKey = `${product.id}_${effectiveMultiplier}`
         const existing = prev.find((item) => item.id === product.id && (item.unit_multiplier || 1) === effectiveMultiplier)
         if (existing) {
           const piecesInCart = prev
@@ -1172,6 +1171,13 @@ export default function QPOSPage() {
 
   const removeFromCart = useCallback((productId: string) => {
     setCart((prev) => prev.filter((item) => item.id !== productId))
+    // تنظيف خريطة المتغيّرات حتى لا تتراكم إدخالات قديمة طوال الجلسة
+    setCartVariantMap((prev) => {
+      if (!(productId in prev)) return prev
+      const next = { ...prev }
+      delete next[productId]
+      return next
+    })
   }, [])
 
   const clearCart = useCallback(() => {
@@ -1251,19 +1257,29 @@ export default function QPOSPage() {
 
   const handleRetrieveHeldCart = useCallback(async (heldCart: HeldCart) => {
     if (!store || !user) return
-    // Restore cart items
+    // Restore cart items — نعتمد السعر/الإجمالي المحفوظ (يحافظ على الأسعار المخصّصة)
     const newCartItems: CartItem[] = []
+    const droppedNames: string[] = []
     for (const item of heldCart.items) {
       const product = products.find((p) => p.id === item.product_id)
       if (product) {
+        // استخدم السعر/الإجمالي المحفوظ إن وُجد، وإلا اشتقّه من سعر المنتج الحالي
+        const restoredPrice = typeof item.price === "number"
+          ? item.price
+          : item.unit_multiplier ? product.price * item.unit_multiplier : product.price
+        const restoredTotal = typeof item.total === "number" ? item.total : item.quantity * restoredPrice
         newCartItems.push({
           ...product,
+          name: item.name || product.name,
           quantity: item.quantity,
-          total: item.quantity * (item.unit_multiplier ? product.price * item.unit_multiplier : product.price),
-          price: item.unit_multiplier ? product.price * item.unit_multiplier : product.price,
+          total: restoredTotal,
+          price: restoredPrice,
           unit_multiplier: item.unit_multiplier,
           unit_label: item.unit_label,
         })
+      } else {
+        // صنف لم يعد له منتج مطابق (غالبًا صنف متغيّر بمعرّف مركّب) — لا نُسقطه بصمت
+        droppedNames.push(item.name || item.product_id)
       }
     }
     setCart(newCartItems)
@@ -1279,8 +1295,17 @@ export default function QPOSPage() {
     await deleteHeldCart(heldCart.id, store.id, user.id)
     await loadHeldCarts()
     setShowHeldCarts(false)
-    setSuccess(t("تم استرجاع السلة", "Cart retrieved"))
-    setTimeout(() => setSuccess(""), 2500)
+    if (droppedNames.length > 0) {
+      setError(
+        t(
+          `تعذّر استرجاع بعض الأصناف (${droppedNames.join("، ")}). أعد إضافتها يدويًا.`,
+          `Some items could not be restored (${droppedNames.join(", ")}). Please re-add them manually.`,
+        ),
+      )
+    } else {
+      setSuccess(t("تم استرجاع السلة", "Cart retrieved"))
+      setTimeout(() => setSuccess(""), 2500)
+    }
   }, [store, user, products, loadHeldCarts, t])
 
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
@@ -7182,8 +7207,8 @@ export default function QPOSPage() {
                       <p className="text-xs text-gray-500">{t("الرصيد:", "Balance:")} {card.current_balance.toFixed(2)} / {card.initial_balance.toFixed(2)} {currencyLabel}</p>
                       {card.recipient_name && <p className="text-[10px] text-gray-400">{card.recipient_name}</p>}
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${card.current_balance > 0 && card.current_balance > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                      {card.current_balance > 0 && card.current_balance > 0 ? t("نشط", "Active") : t("مستنفد", "Used")}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${card.current_balance > 0 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                      {card.current_balance > 0 ? t("نشط", "Active") : t("مستنفد", "Used")}
                     </span>
                   </div>
                 ))
@@ -8658,19 +8683,11 @@ export default function QPOSPage() {
                       key={opt.multiplier}
                       disabled={opt.maxQty <= 0}
                       onClick={() => {
-                        if (opt.multiplier === 1) {
-                          addToCart(unitPickerProduct, {
-                            unit_multiplier: 1,
-                            unit_label: opt.label,
-                            unit_price: opt.price,
-                          })
-                        } else {
-                          addToCart(unitPickerProduct, {
-                            unit_multiplier: opt.multiplier,
-                            unit_label: opt.label,
-                            unit_price: opt.price,
-                          })
-                        }
+                        addToCart(unitPickerProduct, {
+                          unit_multiplier: opt.multiplier,
+                          unit_label: opt.label,
+                          unit_price: opt.price,
+                        })
                         setShowUnitPicker(false)
                         setUnitPickerProduct(null)
                       }}

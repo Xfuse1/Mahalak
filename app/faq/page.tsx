@@ -4,18 +4,23 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useTranslation } from "react-i18next"
+import { useLanguage } from "@/lib/language-context"
 import { HelpCircle, MessageCircle, Phone, Mail, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function FAQPage() {
   const { t } = useTranslation()
+  // مساعد ثنائي اللغة t(ar, en) للنصوص غير الموجودة في مفاتيح i18n
+  const { t: tt } = useLanguage()
 
   const faqs = [
-    { question: t("faq1Q"), answer: t("faq1A"), icon: "🛒" },
-    { question: t("faq2Q"), answer: t("faq2A"), icon: "📦" },
-    { question: t("faq5Q"), answer: t("faq5A"), icon: "💳" },
-    { question: t("faq6Q"), answer: t("faq6A"), icon: "🚚" },
-    { question: t("faq7Q"), answer: t("faq7A"), icon: "🔄" },
+    { question: t("faq1Q"), answer: t("faq1A"), icon: "👤" },
+    { question: t("faq2Q"), answer: t("faq2A"), icon: "🔍" },
+    { question: t("faq3Q"), answer: t("faq3A"), icon: "💳" },
+    { question: t("faq4Q"), answer: t("faq4A"), icon: "🚚" },
+    { question: t("faq5Q"), answer: t("faq5A"), icon: "🔄" },
+    { question: t("faq6Q"), answer: t("faq6A"), icon: "🏪" },
+    { question: t("faq7Q"), answer: t("faq7A"), icon: "📦" },
     { question: t("faq8Q"), answer: t("faq8A"), icon: "🔒" },
   ]
 
@@ -92,7 +97,7 @@ export default function FAQPage() {
                   className="border-2 border-white/30 bg-white/10 text-white hover:bg-white/20 rounded-xl px-8 backdrop-blur-sm"
                 >
                   <Mail className="w-5 h-5 me-2" />
-                  {t("email") || "راسلنا"}
+                  {tt("راسلنا", "Email")}
                 </Button>
               </div>
             </div>
@@ -101,10 +106,10 @@ export default function FAQPage() {
           {/* Quick Categories */}
           <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: "🛍️", label: t("orders") || "الطلبات", color: "from-blue-500 to-blue-600" },
-              { icon: "💰", label: t("payments") || "المدفوعات", color: "from-emerald-500 to-emerald-600" },
-              { icon: "🚚", label: t("delivery") || "التوصيل", color: "from-amber-500 to-amber-600" },
-              { icon: "🔐", label: t("account") || "الحساب", color: "from-violet-500 to-violet-600" },
+              { icon: "🛍️", label: tt("الطلبات", "Orders"), color: "from-blue-500 to-blue-600" },
+              { icon: "💰", label: tt("المدفوعات", "Payments"), color: "from-emerald-500 to-emerald-600" },
+              { icon: "🚚", label: tt("التوصيل", "Delivery"), color: "from-amber-500 to-amber-600" },
+              { icon: "🔐", label: tt("الحساب", "Account"), color: "from-violet-500 to-violet-600" },
             ].map((item, index) => (
               <div 
                 key={index}

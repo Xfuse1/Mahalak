@@ -3,6 +3,13 @@
 import { getAdminDb } from "@/lib/firebase/admin"
 import { FieldValue } from "firebase-admin/firestore"
 import { serializeData } from "@/lib/firebase/firestore-helpers"
+import { getCurrentUid } from "@/lib/auth/session"
+
+// التحقق من ملكية المتجر: الهوية من كوكي الجلسة فقط، ومعرّف المتجر يساوي معرّف المالك
+async function isStoreOwner(storeId: string): Promise<boolean> {
+  const uid = await getCurrentUid()
+  return uid != null && uid === storeId
+}
 
 // ==================== TYPES ====================
 
@@ -156,6 +163,7 @@ export async function saveProductVariants(
   stockMatrix: Record<string, number> // key: "size_color" → stock
 ): Promise<{ success: boolean; count: number }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, count: 0 }
     const db = getAdminDb()
     const batch = db.batch()
     const variantsRef = db.collection(`stores/${storeId}/product_variants`)
@@ -198,6 +206,7 @@ export async function getProductVariants(
   productId: string
 ): Promise<ProductVariant[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/product_variants`)
       .where("product_id", "==", productId)
@@ -216,6 +225,7 @@ export async function updateVariantStock(
   quantityChange: number
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/product_variants/${variantId}`).update({
       stock: FieldValue.increment(quantityChange)
@@ -232,6 +242,7 @@ export async function findVariantByBarcode(
   barcode: string
 ): Promise<ProductVariant | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/product_variants`)
       .where("barcode", "==", barcode)
@@ -248,6 +259,13 @@ export async function findVariantByBarcode(
 
 export async function getLoyaltyConfig(storeId: string): Promise<LoyaltyConfig> {
   try {
+    if (!(await isStoreOwner(storeId))) {
+      return {
+        points_per_unit: 10, currency_per_point: 10,
+        silver_threshold: 500, gold_threshold: 2000, platinum_threshold: 5000,
+        point_value: 0.5, enabled: false,
+      }
+    }
     const db = getAdminDb()
     const doc = await db.doc(`stores/${storeId}/settings/loyalty`).get()
     if (!doc.exists) {
@@ -273,6 +291,7 @@ export async function getLoyaltyConfig(storeId: string): Promise<LoyaltyConfig> 
 
 export async function saveLoyaltyConfig(storeId: string, config: LoyaltyConfig): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/settings/loyalty`).set(config, { merge: true })
     return true
@@ -293,6 +312,7 @@ export async function getLoyaltyCustomer(
   phone: string
 ): Promise<LoyaltyCustomer | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/loyalty_customers`)
       .where("phone", "==", phone)
@@ -310,6 +330,7 @@ export async function createLoyaltyCustomer(
   data: { name: string; phone: string; email?: string; notes?: string; preferences?: string }
 ): Promise<LoyaltyCustomer | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const now = new Date().toISOString()
     const customer: Omit<LoyaltyCustomer, "id"> = {
@@ -340,6 +361,7 @@ export async function updateLoyaltyAfterSale(
   pointsRedeemed: number = 0
 ): Promise<{ newPoints: number; newTier: LoyaltyTier } | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const config = await getLoyaltyConfig(storeId)
     const earnedPoints = Math.floor(saleAmount / config.currency_per_point)
@@ -349,7 +371,9 @@ export async function updateLoyaltyAfterSale(
     if (!doc.exists) return null
 
     const current = doc.data() as LoyaltyCustomer
-    const newPoints = current.points + earnedPoints - pointsRedeemed
+    // لا يمكن استبدال أكثر من الرصيد المتاح، ولا يجوز أن يصبح الرصيد سالبًا
+    const redeemed = Math.max(0, Math.min(pointsRedeemed, current.points))
+    const newPoints = Math.max(0, current.points + earnedPoints - redeemed)
     const newTotalSpent = current.total_spent + saleAmount
     const newTier = calculateTier(newPoints, config)
 
@@ -374,6 +398,7 @@ export async function updateCustomerNotes(
   preferences: string
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/loyalty_customers/${customerId}`).update({
       notes: notes || null,
@@ -399,9 +424,17 @@ export async function createInstallment(
   }
 ): Promise<Installment | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
+    // تحقق من المدخلات المالية: عدد أقساط صحيح موجب، ومبالغ منتهية غير سالبة، ودفعة مقدّمة لا تتجاوز الإجمالي
+    const numInstallments = Number(data.num_installments)
+    const totalAmount = Number(data.total_amount)
+    const downPayment = Number(data.down_payment)
+    if (!Number.isInteger(numInstallments) || numInstallments <= 0) return null
+    if (!Number.isFinite(totalAmount) || totalAmount < 0) return null
+    if (!Number.isFinite(downPayment) || downPayment < 0 || downPayment > totalAmount) return null
     const db = getAdminDb()
-    const remaining = data.total_amount - data.down_payment
-    const installmentAmount = Math.ceil(remaining / data.num_installments)
+    const remaining = totalAmount - downPayment
+    const installmentAmount = Math.ceil(remaining / numInstallments)
 
     // Next due date is 30 days from now
     const nextDue = new Date()
@@ -412,17 +445,17 @@ export async function createInstallment(
       customer_id: "",
       customer_name: data.customer_name,
       customer_phone: data.customer_phone,
-      total_amount: data.total_amount,
-      down_payment: data.down_payment,
+      total_amount: totalAmount,
+      down_payment: downPayment,
       remaining,
-      num_installments: data.num_installments,
+      num_installments: numInstallments,
       installment_amount: installmentAmount,
       paid_installments: 0,
       next_due_date: nextDue.toISOString(),
       status: "active",
       created_at: new Date().toISOString(),
-      payments: data.down_payment > 0 ? [{
-        amount: data.down_payment,
+      payments: downPayment > 0 ? [{
+        amount: downPayment,
         paid_at: new Date().toISOString(),
         method: "cash",
         note: "دفعة مقدمة",
@@ -441,6 +474,7 @@ export async function getInstallments(
   status?: "active" | "completed" | "overdue"
 ): Promise<Installment[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     let query = db.collection(`stores/${storeId}/installments`).orderBy("created_at", "desc")
     if (status) {
@@ -460,31 +494,39 @@ export async function payInstallment(
   method: "cash" | "card"
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     const ref = db.doc(`stores/${storeId}/installments/${installmentId}`)
     const doc = await ref.get()
     if (!doc.exists) return false
 
     const data = doc.data() as Installment
-    const newRemaining = data.remaining - amount
-    const newPaidCount = data.paid_installments + 1
+    // منع الدفع السالب أو تجاوز المتبقّي
+    const pay = Math.max(0, Math.min(Number(amount) || 0, data.remaining))
+    if (pay <= 0) return false
+    const newRemaining = Math.max(0, data.remaining - pay)
+    const completed = newRemaining <= 0
+    // عدد الأقساط المدفوعة لا يتجاوز إجمالي عدد الأقساط
+    const newPaidCount = Math.min(data.paid_installments + 1, data.num_installments)
 
     const nextDue = new Date()
     nextDue.setDate(nextDue.getDate() + 30)
 
     const payment: InstallmentPayment = {
-      amount,
+      amount: pay,
       paid_at: new Date().toISOString(),
       method,
     }
 
-    await ref.update({
+    const update: Record<string, unknown> = {
       remaining: newRemaining,
       paid_installments: newPaidCount,
-      next_due_date: nextDue.toISOString(),
-      status: newRemaining <= 0 ? "completed" : "active",
+      status: completed ? "completed" : "active",
       payments: FieldValue.arrayUnion(payment),
-    })
+    }
+    // لا نُقدّم موعد الاستحقاق التالي بعد اكتمال السداد
+    if (!completed) update.next_due_date = nextDue.toISOString()
+    await ref.update(update)
 
     return true
   } catch {
@@ -496,6 +538,7 @@ export async function payInstallment(
 
 export async function getSeasons(storeId: string): Promise<Season[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/seasons`)
       .orderBy("start_date", "desc")
@@ -512,6 +555,7 @@ export async function createSeason(
   data: { name: string; name_ar: string; start_date: string; end_date: string; discount_percentage?: number; is_clearance: boolean }
 ): Promise<Season | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const season = {
       ...data,
@@ -527,6 +571,7 @@ export async function createSeason(
 
 export async function toggleSeason(storeId: string, seasonId: string): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     const ref = db.doc(`stores/${storeId}/seasons/${seasonId}`)
     const doc = await ref.get()
@@ -540,19 +585,25 @@ export async function toggleSeason(storeId: string, seasonId: string): Promise<b
 
 export async function getActiveSeasonDiscount(storeId: string): Promise<{ discount: number; season_name: string } | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
-    const now = new Date().toISOString()
+    // مقارنة بالتاريخ فقط (YYYY-MM-DD) كي لا يُعتبر الموسم منتهيًا في يومه الأخير
+    const today = new Date().toISOString().split("T")[0]
     const snap = await db.collection(`stores/${storeId}/seasons`)
       .where("is_active", "==", true)
       .get()
 
+    // نختار أفضل موسم نشط (أعلى نسبة خصم) وليس أول موسم مطابق
+    let best: { discount: number; season_name: string } | null = null
     for (const doc of snap.docs) {
       const s = doc.data() as Season
-      if (s.start_date <= now && s.end_date >= now && s.discount_percentage && s.discount_percentage > 0) {
-        return { discount: s.discount_percentage, season_name: s.name_ar || s.name }
+      if (s.start_date <= today && s.end_date >= today && s.discount_percentage && s.discount_percentage > 0) {
+        if (!best || s.discount_percentage > best.discount) {
+          best = { discount: s.discount_percentage, season_name: s.name_ar || s.name }
+        }
       }
     }
-    return null
+    return best
   } catch {
     return null
   }
@@ -562,6 +613,7 @@ export async function getActiveSeasonDiscount(storeId: string): Promise<{ discou
 
 export async function getSuppliers(storeId: string): Promise<Supplier[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/suppliers`).orderBy("name").get()
     return snap.docs.map((doc: any) => serializeData({ id: doc.id, ...doc.data() }) as Supplier)
@@ -575,6 +627,7 @@ export async function addSupplier(
   data: { name: string; phone?: string; email?: string; address?: string; notes?: string }
 ): Promise<Supplier | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const supplier = { ...data, created_at: new Date().toISOString() }
     const ref = await db.collection(`stores/${storeId}/suppliers`).add(supplier)
@@ -586,6 +639,7 @@ export async function addSupplier(
 
 export async function getSupplierProductCounts(storeId: string): Promise<Record<string, number>> {
   try {
+    if (!(await isStoreOwner(storeId))) return {}
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/supplier_products`).get()
     const counts: Record<string, number> = {}
@@ -607,6 +661,7 @@ export async function linkSupplierToProduct(
   quantity: number
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     await db.collection(`stores/${storeId}/supplier_products`).add({
       product_id: productId,
@@ -626,6 +681,7 @@ export async function getProductSuppliers(
   productId: string
 ): Promise<(SupplierProduct & { supplier_name: string })[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/supplier_products`)
       .where("product_id", "==", productId)
@@ -653,6 +709,7 @@ export async function createGiftCard(
   data: { balance: number; purchaser_name?: string; purchaser_phone?: string; recipient_name?: string; expires_days?: number }
 ): Promise<GiftCard | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const code = `GC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
 
@@ -685,6 +742,7 @@ export async function createGiftCard(
 
 export async function getGiftCards(storeId: string): Promise<GiftCard[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/gift_cards`)
       .orderBy("created_at", "desc")
@@ -701,6 +759,7 @@ export async function validateGiftCard(
   code: string
 ): Promise<{ valid: boolean; balance?: number; card_id?: string; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { valid: false }
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/gift_cards`)
       .where("code", "==", code)
@@ -729,13 +788,15 @@ export async function redeemGiftCard(
   saleId: string
 ): Promise<{ success: boolean; remaining: number }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, remaining: 0 }
     const db = getAdminDb()
     const ref = db.doc(`stores/${storeId}/gift_cards/${cardId}`)
     const doc = await ref.get()
     if (!doc.exists) return { success: false, remaining: 0 }
 
     const card = doc.data() as GiftCard
-    const deducted = Math.min(amount, card.current_balance)
+    // منع المبالغ السالبة (التي قد تزيد الرصيد) وتجاوز الرصيد المتاح
+    const deducted = Math.max(0, Math.min(Number(amount) || 0, card.current_balance))
     const remaining = card.current_balance - deducted
 
     await ref.update({
@@ -772,6 +833,7 @@ export async function createReservation(
   }
 ): Promise<ProductReservation | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const reservedUntil = new Date()
     reservedUntil.setHours(reservedUntil.getHours() + data.hours)
@@ -804,6 +866,7 @@ export async function getReservations(
   status?: "active" | "fulfilled" | "expired"
 ): Promise<ProductReservation[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     let query = db.collection(`stores/${storeId}/reservations`).orderBy("created_at", "desc")
     if (status) {
@@ -822,6 +885,7 @@ export async function updateReservationStatus(
   status: "fulfilled" | "cancelled"
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/reservations/${reservationId}`).update({ status })
     return true
@@ -834,6 +898,7 @@ export async function updateReservationStatus(
 
 export async function getInvoiceDiscountRules(storeId: string): Promise<InvoiceDiscount[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const doc = await db.doc(`stores/${storeId}/settings/invoice_discounts`).get()
     if (!doc.exists) return []
@@ -848,6 +913,7 @@ export async function saveInvoiceDiscountRules(
   rules: InvoiceDiscount[]
 ): Promise<boolean> {
   try {
+    if (!(await isStoreOwner(storeId))) return false
     const db = getAdminDb()
     // Sort by min_amount descending for proper matching
     rules.sort((a, b) => b.min_amount - a.min_amount)

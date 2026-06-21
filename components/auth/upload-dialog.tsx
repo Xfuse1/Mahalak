@@ -62,8 +62,8 @@ export function UploadDialog({ t, open, onOpenChange, fileInputRef, cameraInputR
           </div>
 
           <div className="grid grid-cols-2 gap-3 p-4 pb-6">
-            <label className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer active:scale-95">
-              <Upload className="h-9 w-9 text-blue-500" />
+            <label className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-gray-200 hover:border-primary hover:bg-primary/10 transition-all cursor-pointer active:scale-95">
+              <Upload className="h-9 w-9 text-primary" />
               <span className="text-sm font-medium text-gray-700 text-center">{t("رفع صورة", "Upload Image")}</span>
               <input
                 ref={fileInputRef}
@@ -76,8 +76,8 @@ export function UploadDialog({ t, open, onOpenChange, fileInputRef, cameraInputR
                 className="hidden"
               />
             </label>
-            <label className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer active:scale-95">
-              <Camera className="h-9 w-9 text-blue-500" />
+            <label className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-gray-200 hover:border-primary hover:bg-primary/10 transition-all cursor-pointer active:scale-95">
+              <Camera className="h-9 w-9 text-primary" />
               <span className="text-sm font-medium text-gray-700 text-center">{t("فتح الكاميرا", "Open Camera")}</span>
               <input
                 ref={cameraInputRef}

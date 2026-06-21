@@ -179,12 +179,36 @@ export async function getRecentOrders(storeId: string, limit = 3, callerId?: str
   }
 
   const db = getAdminDb()
-  const snapshot = await db
-    .collection("orders")
-    .where("store_id", "==", storeId)
-    .limit(limit)
-    .get()
+  // ترتيب تنازلي بتاريخ الإنشاء حتى تظهر "أحدث" الطلبات فعلاً، مع fallback
+  // إلى الترتيب في الذاكرة لو لم يكن فهرس Firestore المركّب متاحًا.
+  let snapshot: FirebaseFirestore.QuerySnapshot
+  try {
+    snapshot = await db
+      .collection("orders")
+      .where("store_id", "==", storeId)
+      .orderBy("created_at", "desc")
+      .limit(limit)
+      .get()
+  } catch {
+    const fallback = await db
+      .collection("orders")
+      .where("store_id", "==", storeId)
+      .limit(Math.max(limit * 10, 50))
+      .get()
+    const sorted = fallback.docs.sort((a, b) =>
+      String(b.data().created_at || "").localeCompare(String(a.data().created_at || "")),
+    )
+    const orders: DashboardOrder[] = sorted.slice(0, limit).map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
+    return mapRecentOrders(orders, db)
+  }
   const orders: DashboardOrder[] = snapshot.docs.map((doc) => ({ ...(doc.data() as FirestoreRecord), id: doc.id }))
+  return mapRecentOrders(orders, db)
+}
+
+async function mapRecentOrders(
+  orders: DashboardOrder[],
+  db: FirebaseFirestore.Firestore,
+): Promise<RecentDashboardOrder[]> {
   const customerMap = await fetchDocsMap<{ full_name?: string }>(
     db,
     "users",

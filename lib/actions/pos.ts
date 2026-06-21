@@ -80,7 +80,7 @@ type POSSaleData = {
   notes?: string
 }
 
-type POSPaymentMethod = "cash" | "card" | "wallet"
+type POSPaymentMethod = "cash" | "card" | "wallet" | "split"
 
 const POS_ERROR = {
   UNAUTHORIZED: "POS_UNAUTHORIZED",
@@ -139,7 +139,7 @@ export type POSReceiptData = {
 }
 
 function normalizePaymentMethod(value: unknown): POSPaymentMethod {
-  if (value === "cash" || value === "card" || value === "wallet") {
+  if (value === "cash" || value === "card" || value === "wallet" || value === "split") {
     return value
   }
   return "cash"
@@ -620,8 +620,9 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         ? (calculatedSubtotal * (saleData.discount || 0)) / 100
         : Math.min(saleData.discount || 0, calculatedSubtotal)
 
-      // 3. Calculate total on server
-      const calculatedTotal = Math.max(0, calculatedSubtotal - discountAmount)
+      // 3. Calculate total on server (الضريبة كمبلغ مطلق تُضاف للمجموع — كانت تُخزَّن وتُهمَل سابقًا)
+      const taxAmount = Math.max(0, Number(saleData.tax) || 0)
+      const calculatedTotal = Math.max(0, calculatedSubtotal - discountAmount) + taxAmount
 
       // 4. Validate payment
       if (saleData.payment_method === "cash") {
@@ -646,7 +647,7 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         subtotal: roundMoney(calculatedSubtotal),
         discount: roundMoney(discountAmount),
         discount_type: saleData.discount_type,
-        tax: saleData.tax,
+        tax: roundMoney(taxAmount),
         total: roundMoney(calculatedTotal),
         total_profit: calculatedTotalProfit,
         cash_collected: cashCollected,

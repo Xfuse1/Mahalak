@@ -57,7 +57,7 @@ export default function ShelfManager() {
                 </div>
                 <Button
                     onClick={() => toggleAddShelfModal(true)}
-                    className="bg-[#1F478B] hover:bg-[#1a3a70] text-white gap-2"
+                    className="bg-primary hover:bg-primary/90 text-white gap-2"
                 >
                     <Plus className="w-4 h-4" />
                     {t("إضافة رف جديد", "Add New Shelf")}
@@ -69,8 +69,8 @@ export default function ShelfManager() {
                     <Card key={shelf.shelfId} className="border-gray-100 hover:shadow-lg transition-shadow">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <div className="p-3 bg-blue-50 rounded-xl">
-                                    <Layers className="w-5 h-5 text-[#1F478B]" />
+                                <div className="p-3 bg-primary/10 rounded-xl">
+                                    <Layers className="w-5 h-5 text-primary" />
                                 </div>
                                 <span className="text-xs font-mono text-gray-400">{shelf.shelfId}</span>
                             </div>
@@ -85,16 +85,16 @@ export default function ShelfManager() {
                                     <p className="text-[10px] text-gray-400 mb-1">{t("السعة", "Capacity")}</p>
                                     <p className="font-bold text-gray-900">{shelf.capacity}</p>
                                 </div>
-                                <div className="text-center p-3 bg-blue-50/50 rounded-lg">
-                                    <p className="text-[10px] text-[#1F478B] mb-1">{t("المخزون", "In Stock")}</p>
-                                    <p className="font-bold text-[#1F478B]">{getProductCount(shelf.shelfId)}</p>
+                                <div className="text-center p-3 bg-primary/5 rounded-lg">
+                                    <p className="text-[10px] text-primary mb-1">{t("المخزون", "In Stock")}</p>
+                                    <p className="font-bold text-primary">{getProductCount(shelf.shelfId)}</p>
                                 </div>
                             </div>
 
                             <div className="flex gap-2">
                                 <Button
                                     variant="outline"
-                                    className="flex-1 gap-2 border-gray-200 text-gray-600 hover:text-[#1F478B] hover:bg-blue-50"
+                                    className="flex-1 gap-2 border-gray-200 text-gray-600 hover:text-primary hover:bg-primary/10"
                                     onClick={() => {
                                         setSelectedShelf(shelf.shelfId);
                                         toggleModal(true);

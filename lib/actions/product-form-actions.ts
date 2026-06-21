@@ -1,7 +1,23 @@
 "use server"
 
 import { getAdminDb } from "@/lib/firebase/admin"
+import { getCurrentUid } from "@/lib/auth/session"
 import { FieldValue } from "firebase-admin/firestore"
+
+/**
+ * يتحقق سيرفر-سايد أن المستخدم الموثّق (من الجلسة) هو مالك المنتج.
+ * لا نثق بأي storeId قادم من العميل — نشتق الملكية من مستند المنتج نفسه.
+ */
+async function assertProductOwnership(
+  productId: string,
+): Promise<{ ok: true; uid: string } | { ok: false; error: string }> {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false, error: "Unauthorized" }
+  const snap = await getAdminDb().collection("products").doc(productId).get()
+  if (!snap.exists) return { ok: false, error: "Product not found" }
+  if (snap.data()?.store_id !== uid) return { ok: false, error: "Unauthorized" }
+  return { ok: true, uid }
+}
 
 /**
  * Save pharmacy-specific fields for a product.
@@ -28,6 +44,9 @@ export async function savePharmacyProductFields(
     default_selling_unit?: string
   }
 ) {
+  const ownership = await assertProductOwnership(productId)
+  if (!ownership.ok) return { success: false, error: ownership.error }
+
   const db = getAdminDb()
 
   // Save pharmacy fields
@@ -88,6 +107,11 @@ export async function saveClothingProductVariants(
     totalStock: number
   }
 ) {
+  const ownership = await assertProductOwnership(productId)
+  if (!ownership.ok) return { success: false, error: ownership.error }
+  // اشتقاق المالك من الجلسة — لا نثق بـ storeId القادم من العميل
+  storeId = ownership.uid
+
   const db = getAdminDb()
 
   // Save all clothing product-level attributes
@@ -147,12 +171,20 @@ export async function saveExtraProductFields(
   productId: string,
   fields: Record<string, any>
 ) {
+  const ownership = await assertProductOwnership(productId)
+  if (!ownership.ok) return { success: false, error: ownership.error }
+
   const db = getAdminDb()
-  const updateFields: Record<string, any> = {
-    ...fields,
-    updated_at: FieldValue.serverTimestamp(),
+  // منع العميل من إعادة كتابة حقول الملكية/الهوية عبر هذا المسار العام
+  const PROTECTED_KEYS = new Set(["store_id", "id", "seller_id", "owner", "owner_id", "role"])
+  const safeFields: Record<string, any> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (!PROTECTED_KEYS.has(key)) safeFields[key] = value
   }
-  await db.collection("products").doc(productId).update(updateFields)
+  await db.collection("products").doc(productId).update({
+    ...safeFields,
+    updated_at: FieldValue.serverTimestamp(),
+  })
   return { success: true }
 }
 

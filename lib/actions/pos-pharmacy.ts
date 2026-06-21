@@ -3,6 +3,13 @@
 import { getAdminDb } from "../firebase/admin"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
+import { getCurrentUid } from "@/lib/auth/session"
+
+// التحقق من ملكية المتجر: الهوية من كوكي الجلسة فقط، ومعرّف المتجر يساوي معرّف المالك
+async function isStoreOwner(storeId: string): Promise<boolean> {
+  const uid = await getCurrentUid()
+  return uid != null && uid === storeId
+}
 
 // ==================== Types ====================
 
@@ -215,6 +222,7 @@ export async function updateProductPharmacyFields(
   }
 ) {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const productRef = db.collection("products").doc(productId)
     const productDoc = await productRef.get()
@@ -245,6 +253,7 @@ export async function updateProductPharmacyFields(
  */
 export async function getExpiryAlerts(storeId: string): Promise<ExpiryAlert[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("products")
@@ -301,6 +310,7 @@ export async function checkProductExpiry(storeId: string, productId: string): Pr
   expiry_date: string | null
 }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { expired: false, days_remaining: null, expiry_date: null }
     const db = getAdminDb()
     const doc = await db.collection("products").doc(productId).get()
     if (!doc.exists || doc.data()?.store_id !== storeId) {
@@ -345,6 +355,7 @@ export async function savePrescriptionRecord(data: {
   image_url?: string
 }): Promise<{ success: boolean; prescription_id?: string; error?: string }> {
   try {
+    if (!(await isStoreOwner(data.store_id))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const now = new Date().toISOString()
 
@@ -380,6 +391,7 @@ export async function getPrescriptionRecords(
   limit = 50
 ): Promise<PrescriptionRecord[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("pos_prescriptions")
@@ -405,6 +417,7 @@ export async function searchPrescriptions(
   query: string
 ): Promise<PrescriptionRecord[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     // Fetch recent prescriptions and filter client-side (Firestore doesn't support substring search)
     const snapshot = await db
@@ -445,6 +458,7 @@ export async function addInsuranceCompany(data: {
   contract_number?: string
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
+    if (!(await isStoreOwner(data.store_id))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const now = new Date().toISOString()
 
@@ -484,6 +498,7 @@ export async function addInsuranceCompany(data: {
  */
 export async function getInsuranceCompanies(storeId: string): Promise<InsuranceCompany[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("pos_insurance_companies")
@@ -504,6 +519,7 @@ export async function getInsuranceCompanies(storeId: string): Promise<InsuranceC
  */
 export async function toggleInsuranceCompany(storeId: string, companyId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const docRef = db.collection("pos_insurance_companies").doc(companyId)
     const doc = await docRef.get()
@@ -535,6 +551,7 @@ export async function createInsuranceClaim(data: {
   notes?: string
 }): Promise<{ success: boolean; claim_id?: string; copay_amount?: number; insurance_amount?: number; error?: string }> {
   try {
+    if (!(await isStoreOwner(data.store_id))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const now = new Date().toISOString()
 
@@ -589,6 +606,7 @@ export async function getInsuranceClaims(
   statusFilter?: InsuranceClaim["status"]
 ): Promise<InsuranceClaim[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     let query: FirebaseFirestore.Query = db
       .collection("pos_insurance_claims")
@@ -618,6 +636,7 @@ export async function updateClaimStatus(
   claimNumber?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const docRef = db.collection("pos_insurance_claims").doc(claimId)
     const doc = await docRef.get()
@@ -650,6 +669,7 @@ export async function findDrugAlternatives(
   productId: string
 ): Promise<{ success: boolean; alternatives?: DrugAlternative[]; active_ingredient?: string; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const productDoc = await db.collection("products").doc(productId).get()
 
@@ -713,6 +733,7 @@ export async function getPharmacyProductData(storeId: string): Promise<
   }>
 > {
   try {
+    if (!(await isStoreOwner(storeId))) return {}
     const db = getAdminDb()
     const snapshot = await db
       .collection("products")
@@ -755,6 +776,7 @@ export async function batchCheckExpiry(
   nearExpiry: { id: string; days: number; name: string }[]
 }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { expired: [], nearExpiry: [] }
     const db = getAdminDb()
     const now = new Date()
     const expired: string[] = []
@@ -822,6 +844,7 @@ export async function checkDrugInteractions(
   productIds: string[]
 ): Promise<{ warnings: { product_a: string; product_b: string; severity: string; description_ar: string; description_en: string }[] }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { warnings: [] }
     if (productIds.length < 2) return { warnings: [] }
 
     const db = getAdminDb()
@@ -890,6 +913,7 @@ export async function updateProductInteractionGroup(
   contraindications?: string[]
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const ref = db.collection("products").doc(productId)
     const doc = await ref.get()
@@ -918,6 +942,7 @@ export async function updateProductInteractionGroup(
  */
 export async function getFEFOProducts(storeId: string): Promise<BatchInventoryItem[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("products")
@@ -978,6 +1003,7 @@ export async function updateProductUnits(
   }
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const ref = db.collection("products").doc(productId)
     const doc = await ref.get()
@@ -1048,6 +1074,7 @@ export async function createOrUpdatePatient(
   }
 ): Promise<{ success: boolean; patient?: PatientFile; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const now = new Date().toISOString()
 
@@ -1104,6 +1131,7 @@ export async function createOrUpdatePatient(
  */
 export async function searchPatients(storeId: string, query: string): Promise<PatientFile[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("pos_patients")
@@ -1127,6 +1155,7 @@ export async function searchPatients(storeId: string, query: string): Promise<Pa
  */
 export async function getPatientByPhone(storeId: string, phone: string): Promise<PatientFile | null> {
   try {
+    if (!(await isStoreOwner(storeId))) return null
     const db = getAdminDb()
     const snapshot = await db
       .collection("pos_patients")
@@ -1160,6 +1189,7 @@ export async function recordPatientMedication(
   }[]
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const batch = db.batch()
     const now = new Date().toISOString()
@@ -1196,6 +1226,7 @@ export async function getPatientMedications(
   patientId: string
 ): Promise<PatientMedication[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("pos_patient_medications")
@@ -1221,6 +1252,7 @@ export async function checkPatientAllergies(
   productIds: string[]
 ): Promise<{ warnings: { product_name: string; allergy: string }[] }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { warnings: [] }
     const db = getAdminDb()
 
     // Get patient allergies
@@ -1279,6 +1311,7 @@ export async function generateDrugLabel(
   storeName?: string
 ): Promise<{ success: boolean; label?: DrugLabel; error?: string }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false, error: PHARMACY_ERROR.UNAUTHORIZED }
     const db = getAdminDb()
     const doc = await db.collection("products").doc(productId).get()
     if (!doc.exists || doc.data()?.store_id !== storeId) {
@@ -1314,6 +1347,7 @@ export async function generateDrugLabel(
  */
 export async function getBatchInventory(storeId: string): Promise<BatchInventoryItem[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snapshot = await db
       .collection("products")
@@ -1383,6 +1417,7 @@ export async function getEnhancedPharmacyData(storeId: string): Promise<
   }>
 > {
   try {
+    if (!(await isStoreOwner(storeId))) return {}
     const db = getAdminDb()
     const snapshot = await db
       .collection("products")

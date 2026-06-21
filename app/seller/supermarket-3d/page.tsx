@@ -46,7 +46,6 @@ export default function Supermarket3DPage() {
     const router = useRouter()
     const { t } = useLanguage()
     const {
-        setSelectedSection,
         selectedSectionId,
         setProducts,
         setShelves,

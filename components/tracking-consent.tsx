@@ -58,7 +58,7 @@ export function TrackingConsent() {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              className="rounded-lg bg-[#1F478B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163766]"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
               onClick={() => handleConsent(true)}
             >
               {t("قبول", "Accept")}

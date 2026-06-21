@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// قواعد أمان Firestore لمحلك.
+// شبه كل الوصول للبيانات يتم عبر Next.js server actions باستخدام Firebase Admin SDK،
+// وهو يتجاوز هذه القواعد. عميل الويب (Web SDK) يحتاج فقط:
+//   (1) قراءة مرجعية الفئات العامة،
+//   (2) قراءة ملف المستخدم الحالي (الخاص به فقط).
+// كل عمليات الكتابة — بما فيها حقل `role` الحسّاس — تمرّ عبر server actions،
+// فلا يستطيع العميل الكتابة هنا إطلاقًا (يسدّ رفع الصلاحية الذاتي إلى admin).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // مرجعية الفئات (تُقرأ قبل تسجيل الدخول في صفحة تسجيل البائع) — قراءة عامة، لا كتابة
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if false;
+      match /{sub=**} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // ملف المستخدم: يقرأ صاحبه ملفّه فقط. كل الكتابة سيرفر-سايد (Admin SDK).
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // كل ما عدا ذلك مرفوض للعميل (السيرفر يستخدم Admin SDK الذي يتجاوز القواعد)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -88,14 +88,14 @@ export function SellerHeader() {
                     className={cn(
                       "flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 relative group overflow-hidden",
                       isActive
-                        ? "bg-[#1F478B] text-white shadow-xl shadow-blue-900/10 scale-102"
-                        : "text-gray-500 hover:bg-blue-50/50 hover:text-[#1F478B]"
+                        ? "bg-primary text-primary-foreground shadow-xl shadow-primary/10 scale-102"
+                        : "text-gray-500 hover:bg-primary/10 hover:text-primary"
                     )}
                   >
                     {isActive && (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-white opacity-20" />
                     )}
-                    <Icon className={cn("h-5 w-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-white" : "text-gray-400 group-hover:text-[#1F478B]")} />
+                    <Icon className={cn("h-5 w-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-white" : "text-gray-400 group-hover:text-primary")} />
                     <span className="font-black text-[14px]">{item.label}</span>
                     {item.href === "/seller/orders" && pendingCount > 0 && (
                       <span className="ms-auto me-2 min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-black px-1.5 animate-pulse shadow-lg shadow-red-500/30">
@@ -113,7 +113,7 @@ export function SellerHeader() {
       <div className="p-6 border-t border-gray-50 bg-gray-50/30 space-y-3">
         <Button
           variant="ghost"
-          className="w-full justify-start gap-4 px-4 h-12 rounded-xl text-gray-500 hover:text-[#1F478B] hover:bg-blue-50/50 font-black text-sm transition-all"
+          className="w-full justify-start gap-4 px-4 h-12 rounded-xl text-gray-500 hover:text-primary hover:bg-primary/10 font-black text-sm transition-all"
           onClick={() => router.push("/")}
         >
           <Home className="h-5 w-5" />

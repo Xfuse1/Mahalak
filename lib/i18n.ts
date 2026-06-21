@@ -49,7 +49,7 @@ const resources = {
 
       // Footer
       quickLinks: "روابط سريعة",
-      copyright: "© 2025 محلك. جميع الحقوق محفوظة",
+      copyright: "© 2026 محلك. جميع الحقوق محفوظة",
       followUs: "تابعنا على فيسبوك",
       phone: "الهاتف",
       termsAndPolicies: "الشروط والسياسات",
@@ -170,7 +170,7 @@ const resources = {
 
       // Footer
       quickLinks: "Quick Links",
-      copyright: "© 2025 Mahalak. All Rights Reserved",
+      copyright: "© 2026 Mahalak. All Rights Reserved",
       followUs: "Follow us on Facebook",
       phone: "Phone",
       termsAndPolicies: "Terms and Policies",

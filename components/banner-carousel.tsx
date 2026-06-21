@@ -55,7 +55,7 @@ const BannerCarouselComponent = () => {
   return (
     <div className="relative overflow-hidden">
       {/* Background Blur Effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 to-purple-900/20 backdrop-blur-sm z-0"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-accent/10 backdrop-blur-sm z-0"></div>
       
       <div
         className="flex transition-transform duration-700 ease-out"
@@ -67,14 +67,13 @@ const BannerCarouselComponent = () => {
               src={slide.image || "/placeholder.svg"} 
               alt={slide.title} 
               fill 
-              className="object-cover" 
-              priority={index === 0} 
-              loading={index === 0 ? "eager" : "lazy"}
+              className="object-cover"
+              priority={index === 0}
               sizes="100vw"
               quality={90}
             />
             {/* Modern Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-l from-[#0f172a]/95 via-[#1e3a5f]/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-l from-[oklch(0.22_0.04_155)]/95 via-[oklch(0.30_0.05_155)]/70 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
             
             {/* Content */}
@@ -82,7 +81,7 @@ const BannerCarouselComponent = () => {
               <div className="container mx-auto px-4 md:px-8">
                 <div className="max-w-2xl">
                   {/* Decorative Element */}
-                  <div className="w-20 h-1 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full mb-6 animate-pulse"></div>
+                  <div className="w-20 h-1 bg-accent rounded-full mb-6"></div>
                   
                   <h2 className="text-3xl md:text-5xl lg:text-6xl font-extrabold mb-4 md:mb-6 text-white text-balance leading-tight drop-shadow-lg">
                     {slide.title}
@@ -95,7 +94,7 @@ const BannerCarouselComponent = () => {
                   <div className="mt-8">
                     <Link href="/search">
                       <Button 
-                        className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-8 py-6 text-lg rounded-xl shadow-xl hover:shadow-2xl transition-all hover:scale-105"
+                        className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold px-8 py-6 text-lg rounded-xl shadow-xl transition-colors"
                       >
                         {t("تصفح المنتجات", "Browse Products")}
                       </Button>

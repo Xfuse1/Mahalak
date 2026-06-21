@@ -26,7 +26,7 @@ export function CategoryContent({ category, products, stores }: CategoryContentP
         </div>
 
         <h1 className={`text-3xl font-bold mb-8 ${isRTL ? "text-right" : "text-left"}`}>
-          {t("فئة:", "Category:")} <span className="text-[#1F478B]">{category}</span>
+          {t("فئة:", "Category:")} <span className="text-primary">{category}</span>
         </h1>
 
         <Tabs defaultValue="stores" className="w-full">
@@ -43,7 +43,7 @@ export function CategoryContent({ category, products, stores }: CategoryContentP
               </div>
             ) : (
               <div className="text-center py-16">
-                <p className="text-xl text-gray-500 mb-4">
+                <p className="text-xl text-muted-foreground mb-4">
                   {t("لا توجد متاجر في هذه الفئة حالياً", "No stores in this category currently")}
                 </p>
               </div>
@@ -58,10 +58,10 @@ export function CategoryContent({ category, products, stores }: CategoryContentP
               </div>
             ) : (
               <div className="text-center py-16">
-                <p className="text-xl text-gray-500 mb-4">
+                <p className="text-xl text-muted-foreground mb-4">
                   {t("لا توجد منتجات في هذه الفئة حالياً", "No products in this category currently")}
                 </p>
-                <p className="text-gray-400">
+                <p className="text-muted-foreground">
                   {t("جرب تصفح فئات أخرى أو استخدم البحث", "Try browsing other categories or use search")}
                 </p>
               </div>

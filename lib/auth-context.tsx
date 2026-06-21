@@ -14,10 +14,11 @@ import {
   type Auth,
   type User as FirebaseUser,
 } from "firebase/auth"
-import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore"
+import { doc, getDoc, type Firestore } from "firebase/firestore"
 import { useTranslation } from "react-i18next"
 import { createStore, uploadStoreImage, updateStore } from "./actions/stores"
-import { createSession, destroySession } from "./actions/auth-session"
+import { createSession, destroySession, ensureUserProfile } from "./actions/auth-session"
+import { finalizePhoneVerification } from "./actions/profile"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 import { normalizeEgyptPhone } from "./utils/phone"
 
@@ -68,6 +69,7 @@ interface AuthContextType {
     country?: string,
     phone?: string,
     phoneVerified?: boolean,
+    phoneIdToken?: string,
   ) => Promise<boolean>
   logout: () => void
   isLoading: boolean
@@ -208,14 +210,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error("Invalid role for this account type")
         }
       } else {
-        // Create profile if it doesn't exist
-        const now = new Date().toISOString()
-        await setDoc(profileRef, {
+        // Create profile server-side (role مُعقَّم) — لا كتابة role من العميل
+        await createSession(await credential.user.getIdToken())
+        await ensureUserProfile({
           email,
           full_name: credential.user.displayName || email.split("@")[0],
-          role: role,
-          created_at: now,
-          updated_at: now,
+          role,
         })
       }
 
@@ -245,15 +245,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const credential = await signInWithPopup(auth, provider)
       const profileRef = doc(db, "users", credential.user.uid)
       const profileSnap = await getDoc(profileRef)
-      const now = new Date().toISOString()
 
       if (!profileSnap.exists()) {
-        await setDoc(profileRef, {
+        // Create profile server-side (role مُعقَّم إلى customer) — لا كتابة من العميل
+        await createSession(await credential.user.getIdToken())
+        await ensureUserProfile({
           email: credential.user.email || "",
           full_name: credential.user.displayName || credential.user.email?.split("@")[0] || "",
           role: "customer",
-          created_at: now,
-          updated_at: now,
         })
       }
 
@@ -298,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     country?: string,
     phone?: string,
     phoneVerified?: boolean,
+    phoneIdToken?: string,
   ): Promise<boolean> => {
     if (!auth || !db) {
       const message = "Firebase auth is not configured"
@@ -326,22 +326,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore profile update errors
       }
 
-      const now = new Date().toISOString()
-      const profileData = {
+      // إنشاء الملف الشخصي سيرفر-سايد (Admin SDK، role مُعقَّم) بدل الكتابة من العميل.
+      // phone_verified يُكتب false دائمًا ثم يُرفع سيرفر-سايد عبر finalizePhoneVerification.
+      await ensureUserProfile({
         email,
         full_name: name,
         role,
         phone: normalizedProfilePhone,
-        phone_verified: phoneVerified ?? false,
-        phone_verified_at: phoneVerified ? now : null,
         street: street ?? null,
         city: city ?? null,
         country: country ?? null,
-        created_at: now,
-        updated_at: now,
-      }
+      })
 
-      await setDoc(doc(db, "users", credential.user.uid), profileData)
+      // تأكيد التحقق من الهاتف سيرفر-سايد: يضبط phone_verified=true فقط إذا أثبت idToken ملكية الرقم
+      if (phoneVerified && phoneIdToken) {
+        try {
+          await finalizePhoneVerification(phoneIdToken)
+        } catch {
+          // غير حرج — يبقى phone_verified=false إن فشل التحقق
+        }
+      }
 
       if (role === "seller" && credential.user && sellerData?.storeName) {
         const normalizedSellerPhone = sellerData.phone ? normalizeEgyptPhone(sellerData.phone) : null

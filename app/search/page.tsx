@@ -19,6 +19,52 @@ import { searchStores, getStores } from "../../lib/actions/stores"
 import type { ProductListItem } from "../../lib/types/product"
 import type { StoreListItem } from "../../lib/types/store"
 
+// تطبيق الفلاتر/الترتيب — دالة نقية تُعاد استخدامها عند تغيير الاستعلام أو الفلاتر
+function applyFilters(list: ProductListItem[], filters: FilterState, isRTL: boolean): ProductListItem[] {
+  let filtered = [...list]
+
+  if (filters.priceMin !== null) {
+    filtered = filtered.filter((p) => p.price >= filters.priceMin!)
+  }
+  if (filters.priceMax !== null) {
+    filtered = filtered.filter((p) => p.price <= filters.priceMax!)
+  }
+
+  if (filters.daysAgo !== null && filters.daysAgo > 0) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - filters.daysAgo)
+    filtered = filtered.filter((p) => {
+      const date = new Date(p.updatedAt || p.createdAt || 0)
+      return date >= cutoff
+    })
+  }
+
+  switch (filters.sortBy) {
+    case "price-asc":
+      filtered.sort((a, b) => a.price - b.price)
+      break
+    case "price-desc":
+      filtered.sort((a, b) => b.price - a.price)
+      break
+    case "rating":
+      filtered.sort((a, b) => b.rating - a.rating)
+      break
+    case "newest":
+      filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+      break
+    case "name-asc":
+      filtered.sort((a, b) => a.name.localeCompare(b.name, isRTL ? "ar" : "en"))
+      break
+    case "name-desc":
+      filtered.sort((a, b) => b.name.localeCompare(a.name, isRTL ? "ar" : "en"))
+      break
+    default:
+      break
+  }
+
+  return filtered
+}
+
 function SearchResults() {
   const searchParams = useSearchParams()
   const query = searchParams.get("q") || ""
@@ -26,6 +72,7 @@ function SearchResults() {
   const [products, setProducts] = useState<ProductListItem[]>([])
   const [stores, setStores] = useState<StoreListItem[]>([])
   const [sortedProducts, setSortedProducts] = useState<ProductListItem[]>([])
+  const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null)
   const [loading, setLoading] = useState(true)
   const { language, t } = useLanguage()
 
@@ -56,7 +103,6 @@ function SearchResults() {
         }))
 
         setProducts(transformedProducts)
-        setSortedProducts(transformedProducts)
         setStores(storesData)
       } catch (error) {
         // Error handled silently - page shows empty results
@@ -68,56 +114,15 @@ function SearchResults() {
     fetchData()
   }, [query])
 
-  const handleFilterChange = useCallback(
-    (filters: FilterState) => {
-      let filtered = [...products]
+  // اشتقاق النتائج المعروضة من المنتجات + الفلاتر الحالية — يُعيد تطبيق الفلاتر تلقائيًا
+  // عند تغيّر الاستعلام (كانت الفلاتر تُفقد سابقًا عند كل بحث جديد).
+  useEffect(() => {
+    setSortedProducts(currentFilters ? applyFilters(products, currentFilters, isRTL) : products)
+  }, [products, currentFilters, isRTL])
 
-      // فلترة حسب السعر
-      if (filters.priceMin !== null) {
-        filtered = filtered.filter((p) => p.price >= filters.priceMin!)
-      }
-      if (filters.priceMax !== null) {
-        filtered = filtered.filter((p) => p.price <= filters.priceMax!)
-      }
-
-      // فلترة حسب تاريخ التحديث
-      if (filters.daysAgo !== null && filters.daysAgo > 0) {
-        const cutoff = new Date()
-        cutoff.setDate(cutoff.getDate() - filters.daysAgo)
-        filtered = filtered.filter((p) => {
-          const date = new Date(p.updatedAt || p.createdAt || 0)
-          return date >= cutoff
-        })
-      }
-
-      // ترتيب النتائج
-      switch (filters.sortBy) {
-        case "price-asc":
-          filtered.sort((a, b) => a.price - b.price)
-          break
-        case "price-desc":
-          filtered.sort((a, b) => b.price - a.price)
-          break
-        case "rating":
-          filtered.sort((a, b) => b.rating - a.rating)
-          break
-        case "newest":
-          filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
-          break
-        case "name-asc":
-          filtered.sort((a, b) => a.name.localeCompare(b.name, isRTL ? "ar" : "en"))
-          break
-        case "name-desc":
-          filtered.sort((a, b) => b.name.localeCompare(a.name, isRTL ? "ar" : "en"))
-          break
-        default:
-          break
-      }
-
-      setSortedProducts(filtered)
-    },
-    [products, isRTL],
-  )
+  const handleFilterChange = useCallback((filters: FilterState) => {
+    setCurrentFilters(filters)
+  }, [])
 
   const renderProductsGrid = () =>
     sortedProducts.length > 0 ? (

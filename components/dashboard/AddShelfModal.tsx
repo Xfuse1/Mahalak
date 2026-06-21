@@ -93,7 +93,7 @@ export default function AddShelfModal() {
                             type="number"
                             value={capacity}
                             onChange={(e) => setCapacity(parseInt(e.target.value) || 0)}
-                            className="w-full p-3 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1F478B]/20 focus:border-[#1F478B] text-right"
+                            className="w-full p-3 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-right"
                             min="1"
                             max="100"
                         />
@@ -110,7 +110,7 @@ export default function AddShelfModal() {
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        className="bg-[#1F478B] hover:bg-[#1a3d75] text-white px-8"
+                        className="bg-primary hover:bg-primary/90 text-white px-8"
                     >
                         {t("إضافة الرف", "Add Shelf")}
                     </Button>

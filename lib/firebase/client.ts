@@ -44,6 +44,9 @@ type OTPVerifyResult = {
   attemptsRemaining?: number
   phone?: string
   sessionLost?: boolean
+  // رمز هوية Firebase الناتج عن تسجيل الدخول بالهاتف — يحمل phone_number المُتحقَّق
+  // ويُمرَّر للسيرفر لإثبات ملكية الرقم (إعادة تعيين كلمة المرور / تأكيد التسجيل).
+  idToken?: string
 }
 
 const firebaseConfig = {
@@ -576,7 +579,14 @@ export async function verifyPhoneOTP(code: string, options: OTPVerifyOptions = {
   }
 
   try {
-    await confirmationState.result.confirm(code)
+    const cred = await confirmationState.result.confirm(code)
+    // التقاط رمز الهوية لإثبات ملكية الهاتف سيرفر-سايد (لا نثق بالتحقق العميل فقط)
+    let idToken: string | undefined
+    try {
+      idToken = await cred.user.getIdToken()
+    } catch {
+      idToken = undefined
+    }
     setConfirmationState(null, null, null)
     clearOTPSessionMeta(flow)
     clearOTPRateLimitData()
@@ -586,6 +596,7 @@ export async function verifyPhoneOTP(code: string, options: OTPVerifyOptions = {
       attemptsRemaining: 3,
       phone: sessionMeta.phone,
       sessionLost: false,
+      idToken,
     }
   } catch (error: any) {
     console.error("[auth/otp] Verify error:", error?.code || error)

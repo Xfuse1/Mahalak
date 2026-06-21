@@ -5,9 +5,28 @@ import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid, getCurrentUser, requireOwner } from "../auth/session"
+import { getCurrentDriverId } from "../auth/driver-session"
 import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "./notifications"
+import { applyOfferDiscount, getActiveOffersForStores } from "../utils/offer-discount"
+
+// تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
+// خصم المخزون إلى زيادة) أو الكسرية أو NaN القادمة من العميل.
+const MAX_LINE_QUANTITY = 100000
+function validateQuantity(raw: unknown): number {
+  const qty = Number(raw)
+  if (!Number.isInteger(qty) || qty <= 0 || qty > MAX_LINE_QUANTITY) {
+    throw new Error("Invalid quantity")
+  }
+  return qty
+}
+
+// تحقق من مبلغ مالي اختياري (رسوم/عمولة): رقم منتهٍ غير سالب، وإلا 0.
+function sanitizeMoney(raw: unknown): number {
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
 
 type RecordMap = {
   id: string
@@ -319,9 +338,11 @@ export async function getPendingOrdersCount(storeId: string): Promise<number> {
       .get()
     let count = singleSnap.size
 
-    // Count multi-store orders where this store's stop is pending
+    // Count multi-store orders where this store's stop is pending — مقيّدة بمتجر هذا البائع
+    // عبر الفهرس store_ids (array-contains) بدل قراءة كل طلبات المنصة على كل استطلاع.
     const multiSnap = await db.collection("orders")
       .where("order_type", "==", "multi_store")
+      .where("store_ids", "array-contains", storeId)
       .get()
     multiSnap.docs.forEach((doc) => {
       const stops: PickupStop[] = (doc.data().pickup_stops as PickupStop[]) || []
@@ -447,10 +468,28 @@ export async function updateOrderStatus(
         return { success: false, error: "Unauthorized: not your store order" }
       }
     } else {
-      // لا توجد جلسة Firebase → يُسمح فقط بمسار السائق المُعيّن (مصادقة PIN منفصلة — تحتاج تحصينًا لاحقًا)
-      if (callerRole !== "driver" || currentData.driver_id !== callerId) {
+      // لا توجد جلسة Firebase → يُسمح فقط بالسائق المُعيّن، مُصادَقًا عبر كوكي جلسة السائق
+      // (لا نثق بـ callerId/callerRole القادمين من العميل)
+      const sessionDriverId = await getCurrentDriverId()
+      if (!sessionDriverId || currentData.driver_id !== sessionDriverId) {
         return { success: false, error: "Unauthorized" }
       }
+    }
+
+    // قصر دائرة لو لم تتغيّر الحالة — يمنع تكرار الإشعارات/الخط الزمني وإعادة تشغيل آثار الإلغاء
+    if (currentData.status === status) {
+      const snap = await docRef.get()
+      return { success: true, data: snap.exists ? { ...snap.data(), id: snap.id } : null }
+    }
+
+    // منع الخروج من حالة نهائية (مُسلّم/ملغى) لغير الأدمن — يمنع إعادة التسليم وإحياء الطلبات الملغاة
+    const TERMINAL_STATUSES = ["delivered", "cancelled"]
+    if (
+      caller?.role !== "admin" &&
+      TERMINAL_STATUSES.includes(String(currentData.status)) &&
+      currentData.status !== status
+    ) {
+      return { success: false, error: "لا يمكن تغيير حالة طلب منتهٍ (مُسلّم/ملغى)" }
     }
 
     // Build update payload
@@ -482,6 +521,30 @@ export async function updateOrderStatus(
     }
 
     await docRef.set(updatePayload, { merge: true })
+
+    // استعادة المخزون عند الإلغاء — مرة واحدة فقط (علم stock_restored يمنع التكرار).
+    // مقصورة على الطلبات أحادية المتجر: الطلبات متعددة المتاجر تُستعاد لكل محطة عبر
+    // rejectStorePickup (وعناصرها في pickup_stops لا في order_items)، فتجنّبًا للاستعادة
+    // المزدوجة لا نلمسها هنا.
+    if (status === "cancelled" && currentData.order_type !== "multi_store" && !currentData.stock_restored) {
+      try {
+        const itemsSnap = await db.collection("order_items").where("order_id", "==", orderId).get()
+        const restoreBatch = db.batch()
+        for (const itemDoc of itemsSnap.docs) {
+          const it = itemDoc.data()
+          const qty = Number(it.quantity) || 0
+          if (it.product_id && qty > 0) {
+            restoreBatch.update(db.collection("products").doc(it.product_id), {
+              stock: FieldValue.increment(qty),
+            })
+          }
+        }
+        restoreBatch.update(docRef, { stock_restored: true })
+        await restoreBatch.commit()
+      } catch (restoreErr) {
+        logError("[orders] Error restoring stock on cancel:", restoreErr)
+      }
+    }
 
     // Send review request notification when order is delivered
     if (status === "delivered" && currentData?.customer_id) {
@@ -558,6 +621,9 @@ export async function createOrder(orderData: {
   }
   const db = getAdminDb()
   const now = new Date().toISOString()
+  // إعادة احتساب الخصم سيرفر-سايد حتى يُحاسَب العميل بالسعر المخفّض الذي رآه، لا الكامل.
+  const activeOffers = await getActiveOffersForStores([orderData.store_id])
+  const today = now.split("T")[0]
 
   try {
     const result = await db.runTransaction(async (transaction) => {
@@ -570,21 +636,33 @@ export async function createOrder(orderData: {
           throw new Error("Product not found")
         }
         const productData = productDoc.data()
+        const quantity = validateQuantity(item.quantity)
         const availableStock = productData?.stock ?? 0
-        if (item.quantity > availableStock) {
-          throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${item.quantity}) exceeds available stock (${availableStock})`)
+        if (quantity > availableStock) {
+          throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
         }
+        const basePrice = Number(productData?.price ?? item.price)
+        const finalPrice = applyOfferDiscount(
+          {
+            id: item.product_id,
+            category: productData?.category as string | undefined,
+            store_id: (productData?.store_id as string | undefined) ?? orderData.store_id,
+            price: basePrice,
+          },
+          activeOffers,
+          today,
+        )
         verifiedItems.push({
           product_id: item.product_id,
-          quantity: item.quantity,
-          price: productData?.price ?? item.price,
+          quantity,
+          price: finalPrice,
           productRef,
         })
       }
 
-      // Step 2: Calculate verified total
+      // Step 2: Calculate verified total (الكمية مُتحقَّقة، ورسوم التوصيل مُعقَّمة)
       const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const verifiedTotal = verifiedSubtotal + (orderData.delivery_price || 0)
+      const verifiedTotal = verifiedSubtotal + sanitizeMoney(orderData.delivery_price)
 
       const orderRef = db.collection("orders").doc()
 
@@ -611,7 +689,7 @@ export async function createOrder(orderData: {
       if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
       if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
       if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
-      if (orderData.delivery_price !== undefined) orderPayload.delivery_price = Number(orderData.delivery_price)
+      if (orderData.delivery_price !== undefined) orderPayload.delivery_price = sanitizeMoney(orderData.delivery_price)
 
       // Add driver information
       if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
@@ -679,6 +757,11 @@ export async function createContactInquiry(inquiryData: {
   price: number
   contact_method: "whatsapp" | "call"
 }) {
+  // الهوية تُشتق من الجلسة — لا نثق بـ customer_id القادم من العميل (يمنع تلفيق استفسارات باسم الغير)
+  if (!(await requireOwner(inquiryData.customer_id))) {
+    return { success: false, error: "Unauthorized" }
+  }
+
   const db = getAdminDb()
   const now = new Date().toISOString()
   const orderRef = db.collection("orders").doc()
@@ -757,24 +840,37 @@ export async function changeOrderDriver(
       return { success: false, error: "Driver cannot be changed at this stage" }
     }
 
+    // التحقق من السائق سيرفر-سايد: يجب أن يكون موجودًا ومعتمَدًا — ونأخذ اسمه من المستند
+    const driverSnap = await db.collection("drivers").doc(newDriverId).get()
+    if (!driverSnap.exists) {
+      return { success: false, error: "Driver not found" }
+    }
+    const driverData = driverSnap.data()
+    if (driverData?.is_approved === false) {
+      return { success: false, error: "Driver is not approved" }
+    }
+    const verifiedDriverName = (driverData?.name as string) || newDriverName
+    // سعر التوصيل مُعقَّم (لا سالب/NaN) — لا نثق بقيمة العميل الخام
+    const safeDeliveryPrice = sanitizeMoney(newDeliveryPrice)
+
     // Calculate new total (subtract old delivery price, add new)
     const oldDeliveryPrice = orderData.delivery_price || 0
     const productTotal = (orderData.total || 0) - oldDeliveryPrice
-    const newTotal = productTotal + newDeliveryPrice
+    const newTotal = productTotal + safeDeliveryPrice
 
     // Create timeline entry
     const timelineEntry: TimelineEntry = {
       status: "driver_changed",
       timestamp: now,
-      note: `تم تغيير السائق إلى ${newDriverName}`,
+      note: `تم تغيير السائق إلى ${verifiedDriverName}`,
     }
 
     // Build update payload
     const updatePayload: Record<string, unknown> = {
       status: "pending", // Reset to pending for new driver to accept
       driver_id: newDriverId,
-      driver_name: newDriverName,
-      delivery_price: newDeliveryPrice,
+      driver_name: verifiedDriverName,
+      delivery_price: safeDeliveryPrice,
       total: newTotal,
       driver_rejected_at: null,
       driver_rejection_reason: null,
@@ -852,6 +948,12 @@ export async function createMultiStoreOrder(orderData: {
   const db = getAdminDb()
   const now = new Date().toISOString()
   const orderRef = db.collection("orders").doc()
+  // إعادة احتساب الخصم سيرفر-سايد لكل متاجر الطلب (نفس السعر المخفّض الذي رآه العميل)
+  const storeIdsForOffers = Array.from(
+    new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean)),
+  ) as string[]
+  const activeOffers = await getActiveOffersForStores(storeIdsForOffers)
+  const today = now.split("T")[0]
 
   try {
     const result = await db.runTransaction(async (transaction) => {
@@ -868,15 +970,28 @@ export async function createMultiStoreOrder(orderData: {
             throw new Error("Product not found")
           }
           const productData = productDoc.data()
+          const quantity = validateQuantity(item.quantity)
           const availableStock = productData?.stock ?? 0
-          if (item.quantity > availableStock) {
-            throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${item.quantity}) exceeds available stock (${availableStock})`)
+          if (quantity > availableStock) {
+            throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
           }
+          const basePrice = Number(productData?.price ?? item.price)
+          const finalPrice = applyOfferDiscount(
+            {
+              id: item.product_id,
+              category: productData?.category as string | undefined,
+              store_id: (productData?.store_id as string | undefined) ?? stop.store_id,
+              price: basePrice,
+            },
+            activeOffers,
+            today,
+          )
           verifiedItems.push({
             ...item,
-            price: productData?.price ?? item.price,
+            quantity,
+            price: finalPrice,
           })
-          productRefs.push({ ref: productRef, quantity: item.quantity })
+          productRefs.push({ ref: productRef, quantity })
         }
         const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
         verifiedStops.push({
@@ -886,9 +1001,9 @@ export async function createMultiStoreOrder(orderData: {
         })
       }
 
-      // Calculate subtotal from verified stops
+      // Calculate subtotal from verified stops (رسوم التوصيل مُعقَّمة)
       const subtotal = verifiedStops.reduce((sum, stop) => sum + stop.subtotal, 0)
-      const total = subtotal + orderData.delivery_price
+      const total = subtotal + sanitizeMoney(orderData.delivery_price)
 
       // Prepare pickup stops with default status
       const stops: PickupStop[] = verifiedStops.map((stop) => ({
@@ -912,8 +1027,8 @@ export async function createMultiStoreOrder(orderData: {
         delivery_city: orderData.delivery_city || "",
         delivery_state: orderData.delivery_state || "",
         delivery_notes: orderData.delivery_notes || "",
-        delivery_price: Number(orderData.delivery_price),
-        driver_commission: Number(orderData.driver_commission),
+        delivery_price: sanitizeMoney(orderData.delivery_price),
+        driver_commission: sanitizeMoney(orderData.driver_commission),
         store_ids: storeIds,
         pickup_stops: stops,
         subtotal: Number(subtotal),
@@ -1014,69 +1129,70 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
   const now = new Date().toISOString()
 
   try {
-    const orderDoc = await docRef.get()
-    if (!orderDoc.exists) {
-      return { success: false, error: "Order not found" }
-    }
+    // معاملة ذرّية: القراءة + تعديل المصفوفة + الكتابة داخل runTransaction تمنع فقدان
+    // تحديثات متجر عند تأكيد متجرين بالتزامن (merge لا يدمج عناصر المصفوفات).
+    const txResult = await db.runTransaction(async (tx) => {
+      const orderDoc = await tx.get(docRef)
+      if (!orderDoc.exists) {
+        return { ok: false as const, error: "Order not found" }
+      }
 
-    const orderData = orderDoc.data()
-    if (orderData?.order_type !== "multi_store") {
-      return { success: false, error: "This is not a multi-store order" }
-    }
+      const orderData = orderDoc.data() as Record<string, any>
+      if (orderData?.order_type !== "multi_store") {
+        return { ok: false as const, error: "This is not a multi-store order" }
+      }
 
-    const stops: PickupStop[] = orderData.pickup_stops || []
-    const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      const stops: PickupStop[] = orderData.pickup_stops || []
+      const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      if (stopIndex === -1) {
+        return { ok: false as const, error: "Your store was not found in this order" }
+      }
+      if (stops[stopIndex].status !== "pending") {
+        return { ok: false as const, error: "This order has already been handled" }
+      }
 
-    if (stopIndex === -1) {
-      return { success: false, error: "Your store was not found in this order" }
-    }
+      stops[stopIndex].status = "confirmed"
+      stops[stopIndex].confirmed_at = now
 
-    if (stops[stopIndex].status !== "pending") {
-      return { success: false, error: "This order has already been handled" }
-    }
+      const allConfirmed = stops.every((s) => s.status === "confirmed" || s.status === "rejected")
+      const hasAnyConfirmed = stops.some((s) => s.status === "confirmed")
 
-    // Update stop status
-    stops[stopIndex].status = "confirmed"
-    stops[stopIndex].confirmed_at = now
-
-    // Check if all stores confirmed (excluding rejected ones)
-    const allConfirmed = stops.every((s) => s.status === "confirmed" || s.status === "rejected")
-    const hasAnyConfirmed = stops.some((s) => s.status === "confirmed")
-
-    // Timeline entry
-    const timelineEntry: TimelineEntry = {
-      status: "store_confirmed",
-      timestamp: now,
-      note: `${stops[stopIndex].store_name} أكد الطلب`,
-    }
-
-    const timeline = [...(orderData.timeline || []), timelineEntry]
-
-    const updatePayload: Record<string, unknown> = {
-      pickup_stops: stops,
-      timeline,
-      updated_at: now,
-    }
-
-    // If all stores responded
-    if (allConfirmed && hasAnyConfirmed) {
-      updatePayload.status = "confirmed"
-
-      // Recalculate total if some rejected
-      const activeStops = stops.filter((s) => s.status === "confirmed")
-      const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
-      updatePayload.subtotal = newSubtotal
-      updatePayload.total = newSubtotal + (orderData.delivery_price || 0) + (orderData.driver_commission || 0)
-
-      timeline.push({
-        status: "all_confirmed",
+      const timelineEntry: TimelineEntry = {
+        status: "store_confirmed",
         timestamp: now,
-        note: "كل المتاجر أكدت الطلب",
-      })
-      updatePayload.timeline = timeline
-    }
+        note: `${stops[stopIndex].store_name} أكد الطلب`,
+      }
+      const timeline = [...(orderData.timeline || []), timelineEntry]
 
-    await docRef.set(updatePayload, { merge: true })
+      const updatePayload: Record<string, unknown> = {
+        pickup_stops: stops,
+        timeline,
+        updated_at: now,
+      }
+
+      if (allConfirmed && hasAnyConfirmed) {
+        updatePayload.status = "confirmed"
+        const activeStops = stops.filter((s) => s.status === "confirmed")
+        const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
+        updatePayload.subtotal = newSubtotal
+        // يطابق صيغة الإنشاء: الإجمالي الفرعي + رسوم التوصيل فقط
+        updatePayload.total = newSubtotal + (orderData.delivery_price || 0)
+        timeline.push({
+          status: "all_confirmed",
+          timestamp: now,
+          note: "كل المتاجر أكدت الطلب",
+        })
+        updatePayload.timeline = timeline
+      }
+
+      tx.set(docRef, updatePayload, { merge: true })
+      return { ok: true as const, orderData, stops, stopIndex, allConfirmed, hasAnyConfirmed }
+    })
+
+    if (!txResult.ok) {
+      return { success: false, error: txResult.error }
+    }
+    const { orderData, stops, stopIndex, allConfirmed, hasAnyConfirmed } = txResult
 
     // Notify customer
     const notifBatch = db.batch()
@@ -1137,77 +1253,99 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
   const now = new Date().toISOString()
 
   try {
-    const orderDoc = await docRef.get()
-    if (!orderDoc.exists) {
-      return { success: false, error: "Order not found" }
-    }
+    // معاملة ذرّية تمنع فقدان التحديثات عند رفض/تأكيد متجرين بالتزامن
+    const txResult = await db.runTransaction(async (tx) => {
+      const orderDoc = await tx.get(docRef)
+      if (!orderDoc.exists) {
+        return { ok: false as const, error: "Order not found" }
+      }
 
-    const orderData = orderDoc.data()
-    if (orderData?.order_type !== "multi_store") {
-      return { success: false, error: "This is not a multi-store order" }
-    }
+      const orderData = orderDoc.data() as Record<string, any>
+      if (orderData?.order_type !== "multi_store") {
+        return { ok: false as const, error: "This is not a multi-store order" }
+      }
 
-    const stops: PickupStop[] = orderData.pickup_stops || []
-    const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      const stops: PickupStop[] = orderData.pickup_stops || []
+      const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      if (stopIndex === -1) {
+        return { ok: false as const, error: "Your store was not found in this order" }
+      }
+      if (stops[stopIndex].status !== "pending") {
+        return { ok: false as const, error: "This order has already been handled" }
+      }
 
-    if (stopIndex === -1) {
-      return { success: false, error: "Your store was not found in this order" }
-    }
+      stops[stopIndex].status = "rejected"
+      stops[stopIndex].rejected_at = now
+      stops[stopIndex].rejection_reason = reason || "المتجر غير متاح"
 
-    if (stops[stopIndex].status !== "pending") {
-      return { success: false, error: "This order has already been handled" }
-    }
+      const allRejected = stops.every((s) => s.status === "rejected")
+      const allResponded = stops.every((s) => s.status === "confirmed" || s.status === "rejected")
+      const hasAnyConfirmed = stops.some((s) => s.status === "confirmed")
 
-    // Update stop status
-    stops[stopIndex].status = "rejected"
-    stops[stopIndex].rejected_at = now
-    stops[stopIndex].rejection_reason = reason || "المتجر غير متاح"
-
-    // Check if ALL stores rejected
-    const allRejected = stops.every((s) => s.status === "rejected")
-    const allResponded = stops.every((s) => s.status === "confirmed" || s.status === "rejected")
-    const hasAnyConfirmed = stops.some((s) => s.status === "confirmed")
-
-    const timelineEntry: TimelineEntry = {
-      status: "store_rejected",
-      timestamp: now,
-      note: `${stops[stopIndex].store_name} رفض الطلب: ${reason || "غير متاح"}`,
-    }
-
-    const timeline = [...(orderData.timeline || []), timelineEntry]
-
-    const updatePayload: Record<string, unknown> = {
-      pickup_stops: stops,
-      timeline,
-      updated_at: now,
-    }
-
-    if (allRejected) {
-      // All stores rejected → cancel order
-      updatePayload.status = "cancelled"
-      timeline.push({
-        status: "cancelled",
+      const timelineEntry: TimelineEntry = {
+        status: "store_rejected",
         timestamp: now,
-        note: "تم إلغاء الطلب لأن جميع المتاجر رفضت",
-      })
-      updatePayload.timeline = timeline
-    } else if (allResponded && hasAnyConfirmed) {
-      // Some confirmed, some rejected → proceed
-      updatePayload.status = "confirmed"
-      const activeStops = stops.filter((s) => s.status === "confirmed")
-      const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
-      updatePayload.subtotal = newSubtotal
-      updatePayload.total = newSubtotal + (orderData.delivery_price || 0) + (orderData.driver_commission || 0)
+        note: `${stops[stopIndex].store_name} رفض الطلب: ${reason || "غير متاح"}`,
+      }
+      const timeline = [...(orderData.timeline || []), timelineEntry]
 
-      timeline.push({
-        status: "all_confirmed",
-        timestamp: now,
-        note: "تم تأكيد الطلب من المتاجر المتاحة",
-      })
-      updatePayload.timeline = timeline
+      const updatePayload: Record<string, unknown> = {
+        pickup_stops: stops,
+        timeline,
+        updated_at: now,
+      }
+
+      if (allRejected) {
+        updatePayload.status = "cancelled"
+        timeline.push({
+          status: "cancelled",
+          timestamp: now,
+          note: "تم إلغاء الطلب لأن جميع المتاجر رفضت",
+        })
+        updatePayload.timeline = timeline
+      } else if (allResponded && hasAnyConfirmed) {
+        updatePayload.status = "confirmed"
+        const activeStops = stops.filter((s) => s.status === "confirmed")
+        const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
+        updatePayload.subtotal = newSubtotal
+        // يطابق صيغة الإنشاء: الإجمالي الفرعي + رسوم التوصيل فقط
+        updatePayload.total = newSubtotal + (orderData.delivery_price || 0)
+        timeline.push({
+          status: "all_confirmed",
+          timestamp: now,
+          note: "تم تأكيد الطلب من المتاجر المتاحة",
+        })
+        updatePayload.timeline = timeline
+      }
+
+      tx.set(docRef, updatePayload, { merge: true })
+      return { ok: true as const, orderData, stops, stopIndex, allRejected }
+    })
+
+    if (!txResult.ok) {
+      return { success: false, error: txResult.error }
     }
+    const { orderData, stops, stopIndex, allRejected } = txResult
 
-    await docRef.set(updatePayload, { merge: true })
+    // استعادة مخزون عناصر المتجر الرافض — آمنة من التكرار بفضل فحص الحالة pending أعلاه.
+    // المخزون خُصم عند إنشاء الطلب، فيجب إعادته عند رفض المتجر وإلا يتسرّب نهائيًا.
+    try {
+      const rejectedItems = stops[stopIndex].items || []
+      if (rejectedItems.length > 0) {
+        const restoreBatch = db.batch()
+        for (const it of rejectedItems) {
+          const qty = Number(it.quantity) || 0
+          if (it.product_id && qty > 0) {
+            restoreBatch.update(db.collection("products").doc(it.product_id), {
+              stock: FieldValue.increment(qty),
+            })
+          }
+        }
+        await restoreBatch.commit()
+      }
+    } catch (restoreErr) {
+      logError("[orders] Error restoring stock on store rejection:", restoreErr)
+    }
 
     // Notifications
     const notifBatch = db.batch()
@@ -1260,72 +1398,82 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
 }
 
 // Driver marks pickup from a specific store
-export async function markStorePickedUp(orderId: string, driverId: string, storeId: string) {
-  // ملاحظة أمنية: السائقون يُصادَقون عبر نظام PIN منفصل (مجموعة drivers) وليس جلسة Firebase.
-  // هذه الدالة تحتاج تحصينًا ضمن مسار مصادقة السائق (متابعة لاحقة).
+// driverId يُحتفظ به للتوافق مع المستدعي لكن لا يُوثَق به؛ الهوية من جلسة السائق سيرفر-سايد.
+export async function markStorePickedUp(orderId: string, _driverId: string, storeId: string) {
+  // مصادقة السائق سيرفر-سايد عبر كوكي الجلسة (لا نثق بـ driverId القادم من العميل/الرابط)
+  const sessionDriverId = await getCurrentDriverId()
+  if (!sessionDriverId) {
+    return { success: false, error: "Unauthorized" }
+  }
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
   const now = new Date().toISOString()
 
   try {
-    const orderDoc = await docRef.get()
-    if (!orderDoc.exists) {
-      return { success: false, error: "Order not found" }
-    }
+    // معاملة ذرّية تمنع فقدان التحديثات عند استلام السائق من متجرين بالتتابع السريع
+    const txResult = await db.runTransaction(async (tx) => {
+      const orderDoc = await tx.get(docRef)
+      if (!orderDoc.exists) {
+        return { ok: false as const, error: "Order not found" }
+      }
 
-    const orderData = orderDoc.data()
-    if (orderData?.driver_id !== driverId) {
-      return { success: false, error: "You are not allowed to update this order" }
-    }
+      const orderData = orderDoc.data() as Record<string, any>
+      if (orderData?.driver_id !== sessionDriverId) {
+        return { ok: false as const, error: "You are not allowed to update this order" }
+      }
 
-    const stops: PickupStop[] = orderData.pickup_stops || []
-    const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      const stops: PickupStop[] = orderData.pickup_stops || []
+      const stopIndex = stops.findIndex((s) => s.store_id === storeId)
+      if (stopIndex === -1) {
+        return { ok: false as const, error: "Store not found in this order" }
+      }
+      if (stops[stopIndex].status !== "confirmed") {
+        return { ok: false as const, error: "Store has not confirmed this order yet" }
+      }
 
-    if (stopIndex === -1) {
-      return { success: false, error: "Store not found in this order" }
-    }
+      stops[stopIndex].status = "picked_up"
+      stops[stopIndex].picked_up_at = now
 
-    if (stops[stopIndex].status !== "confirmed") {
-      return { success: false, error: "Store has not confirmed this order yet" }
-    }
+      // الطلب يصبح "في الطريق" فقط عندما تُستلم كل المحطات غير المرفوضة — بما فيها
+      // أي محطة ما زالت pending (وإلا يُخطَر العميل مبكرًا وتُترك بضاعة محطة لم تؤكَّد).
+      const activeStops = stops.filter((s) => s.status !== "rejected")
+      const allPickedUp = activeStops.length > 0 && activeStops.every((s) => s.status === "picked_up")
+      const pickedCount = stops.filter((s) => s.status === "picked_up").length
+      const totalActive = activeStops.length
 
-    // Mark as picked up
-    stops[stopIndex].status = "picked_up"
-    stops[stopIndex].picked_up_at = now
-
-    // Check if all confirmed stores are picked up
-    const confirmedStops = stops.filter((s) => s.status === "picked_up" || s.status === "confirmed")
-    const allPickedUp = confirmedStops.every((s) => s.status === "picked_up")
-    const pickedCount = stops.filter((s) => s.status === "picked_up").length
-    const totalActive = stops.filter((s) => s.status !== "rejected").length
-
-    const timelineEntry: TimelineEntry = {
-      status: "picked_up_from_store",
-      timestamp: now,
-      note: `السائق استلم من ${stops[stopIndex].store_name} (${pickedCount}/${totalActive})`,
-    }
-
-    const timeline = [...(orderData.timeline || []), timelineEntry]
-
-    const updatePayload: Record<string, unknown> = {
-      pickup_stops: stops,
-      timeline,
-      updated_at: now,
-    }
-
-    if (allPickedUp) {
-      updatePayload.status = "on_the_way"
-      timeline.push({
-        status: "on_the_way",
+      const timelineEntry: TimelineEntry = {
+        status: "picked_up_from_store",
         timestamp: now,
-        note: "السائق استلم كل المنتجات وفي الطريق للعميل",
-      })
-      updatePayload.timeline = timeline
-    } else {
-      updatePayload.status = "picking_up"
-    }
+        note: `السائق استلم من ${stops[stopIndex].store_name} (${pickedCount}/${totalActive})`,
+      }
+      const timeline = [...(orderData.timeline || []), timelineEntry]
 
-    await docRef.set(updatePayload, { merge: true })
+      const updatePayload: Record<string, unknown> = {
+        pickup_stops: stops,
+        timeline,
+        updated_at: now,
+      }
+
+      if (allPickedUp) {
+        updatePayload.status = "on_the_way"
+        timeline.push({
+          status: "on_the_way",
+          timestamp: now,
+          note: "السائق استلم كل المنتجات وفي الطريق للعميل",
+        })
+        updatePayload.timeline = timeline
+      } else {
+        updatePayload.status = "picking_up"
+      }
+
+      tx.set(docRef, updatePayload, { merge: true })
+      return { ok: true as const, orderData, stops, stopIndex, allPickedUp, pickedCount, totalActive }
+    })
+
+    if (!txResult.ok) {
+      return { success: false, error: txResult.error }
+    }
+    const { orderData, stops, stopIndex, allPickedUp, pickedCount, totalActive } = txResult
 
     // Notify customer
     const notifRef = db.collection("notifications").doc()
@@ -1393,7 +1541,11 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
 
 // Get multi-store orders for a driver
 export async function getMultiStoreOrdersForDriver(driverId: string) {
-  // ملاحظة أمنية: مسار السائق يعتمد على مصادقة PIN المنفصلة (يحتاج تحصينًا لاحقًا)
+  // مصادقة السائق سيرفر-سايد عبر كوكي الجلسة — لا نُرجع طلبات سائق آخر بناءً على معرّف من العميل
+  const sessionDriverId = await getCurrentDriverId()
+  if (!sessionDriverId || sessionDriverId !== driverId) {
+    return { success: false, error: "Unauthorized", orders: [] }
+  }
   const db = getAdminDb()
 
   try {
@@ -1503,131 +1655,143 @@ export async function addStopsToMultiStoreOrder(orderId: string, customerId: str
   }
   const db = getAdminDb()
   const now = new Date().toISOString()
+  // العروض تُجلب خارج المعاملة لإعادة احتساب السعر سيرفر-سايد (لا نثق بسعر/إجمالي العميل)
+  const storeIdsForOffers = Array.from(new Set((newStops || []).map((s) => s.store_id).filter(Boolean))) as string[]
+  const activeOffers = await getActiveOffersForStores(storeIdsForOffers)
+  const today = now.split("T")[0]
 
   try {
-    const orderDoc = await db.collection("orders").doc(orderId).get()
-    if (!orderDoc.exists) {
-      return { success: false, error: "Order not found" }
-    }
-    
-    const orderData = orderDoc.data()
-    if (!orderData) {
-      return { success: false, error: "Order data is unavailable" }
-    }
-    
-    if (orderData.customer_id !== customerId) {
-      return { success: false, error: "You are not authorized to edit this order" }
-    }
-    
-    if (orderData.order_type !== "multi_store") {
-      return { success: false, error: "This is not a multi-store order" }
-    }
+    // كل شيء داخل معاملة واحدة: التحقق + تحديث الطلب + إنشاء العناصر + خصم المخزون.
+    // يمنع الفساد عند الفشل الجزئي (كان 3 commits منفصلة) ويمنع البيع الزائد عند التزامن.
+    const txResult = await db.runTransaction(async (tx) => {
+      const orderRef = db.collection("orders").doc(orderId)
+      const orderDoc = await tx.get(orderRef)
+      if (!orderDoc.exists) {
+        return { ok: false as const, error: "Order not found" }
+      }
+      const orderData = orderDoc.data() as Record<string, any>
+      if (!orderData) {
+        return { ok: false as const, error: "Order data is unavailable" }
+      }
+      if (orderData.customer_id !== customerId) {
+        return { ok: false as const, error: "You are not authorized to edit this order" }
+      }
+      if (orderData.order_type !== "multi_store") {
+        return { ok: false as const, error: "This is not a multi-store order" }
+      }
+      if (orderData.status === "delivered" || orderData.status === "cancelled") {
+        return { ok: false as const, error: "Completed or cancelled orders cannot be edited" }
+      }
 
-    // Check order is not delivered or cancelled
-    if (orderData.status === "delivered" || orderData.status === "cancelled") {
-      return { success: false, error: "Completed or cancelled orders cannot be edited" }
-    }
-    
-    // Validate stock for new items
-    for (const stop of newStops) {
-      for (const item of stop.items) {
-        const productDoc = await db.collection("products").doc(item.product_id).get()
-        if (!productDoc.exists) {
-          return { success: false, error: `Product "${item.name}" was not found` }
-        }
-        const productData = productDoc.data()
-        const availableStock = productData?.stock ?? 0
-        if (item.quantity > availableStock) {
-          return { 
-            success: false, 
-            error: `Requested quantity for "${item.name}" (${item.quantity}) exceeds available stock (${availableStock})` 
-          }
+      // تجميع الكمية المطلوبة لكل منتج (مُتحقَّقة) — يمنع خصمًا مزدوجًا لو تكرر المنتج
+      const qtyByProduct = new Map<string, number>()
+      for (const stop of newStops) {
+        for (const item of stop.items) {
+          const q = validateQuantity(item.quantity)
+          qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + q)
         }
       }
-    }
-    
-    const existingStops: PickupStop[] = orderData.pickup_stops || []
-    
-    // Prepare new stops with pending status
-    const formattedNewStops: PickupStop[] = newStops.map(stop => ({
-      ...stop,
-      status: "pending",
-      confirmed_at: null,
-      picked_up_at: null,
-      rejected_at: null,
-      rejection_reason: null,
-    }))
-    
-    // Merge: keep all existing stops + add new ones
-    const updatedStops = [...existingStops, ...formattedNewStops]
-    const updatedStoreIds = Array.from(new Set(updatedStops.map((s) => s.store_id).filter(Boolean)))
-    
-    // Recalculate totals (active = confirmed + pending, exclude rejected)
-    const activeStops = updatedStops.filter(s => s.status !== "rejected")
-    const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
-    const newTotal = newSubtotal + (orderData.delivery_price || 0) + (orderData.driver_commission || 0)
-    
-    // Timeline entry
-    const storeNames = newStops.map(s => s.store_name).join("، ")
-    const timelineEntry: TimelineEntry = {
-      status: "order_edited",
-      timestamp: now,
-      note: `العميل أضاف منتجات من: ${storeNames}`,
-    }
-    
-    const timeline = [...(orderData.timeline || []), timelineEntry]
-    
-    // If order was confirmed (all previous stores responded), set back to pending since new stores need to confirm
-    let newStatus = orderData.status
-    if (orderData.status === "confirmed") {
-      newStatus = "pending"
-    }
-    
-    const updatePayload: Record<string, unknown> = {
-      pickup_stops: updatedStops,
-      store_ids: updatedStoreIds,
-      subtotal: newSubtotal,
-      total: newTotal,
-      timeline,
-      status: newStatus,
-      updated_at: now,
-    }
-    
-    await db.collection("orders").doc(orderId).set(updatePayload, { merge: true })
-    
-    // Create order_items for new stops
-    const itemsBatch = db.batch()
-    for (let i = 0; i < formattedNewStops.length; i++) {
-      const stop = formattedNewStops[i]
-      for (const item of stop.items) {
-        const itemRef = db.collection("order_items").doc()
-        itemsBatch.set(itemRef, {
-          order_id: orderId,
-          product_id: item.product_id,
-          quantity: Number(item.quantity),
-          price: Number(item.price),
-          store_id: stop.store_id,
-          created_at: now,
+      // كل القراءات قبل أي كتابة (شرط معاملات Firestore) — مع التقاط السعر/الفئة للاحتساب
+      const productRefs = new Map<string, FirebaseFirestore.DocumentReference>()
+      const productInfo = new Map<string, { price: number; category?: string; store_id?: string }>()
+      for (const [pid, qty] of Array.from(qtyByProduct.entries())) {
+        const ref = db.collection("products").doc(pid)
+        const snap = await tx.get(ref)
+        if (!snap.exists) {
+          return { ok: false as const, error: "Product was not found" }
+        }
+        const pdata = snap.data() || {}
+        const availableStock = pdata.stock ?? 0
+        if (qty > availableStock) {
+          return { ok: false as const, error: `Requested quantity exceeds available stock (${availableStock})` }
+        }
+        productRefs.set(pid, ref)
+        productInfo.set(pid, {
+          price: Number(pdata.price ?? 0),
+          category: pdata.category as string | undefined,
+          store_id: pdata.store_id as string | undefined,
         })
       }
-    }
-    await itemsBatch.commit()
-    
-    // Deduct stock for new items
-    const stockBatch = db.batch()
-    for (const stop of newStops) {
-      for (const item of stop.items) {
-        const productRef = db.collection("products").doc(item.product_id)
-        const productDoc = await productRef.get()
-        if (productDoc.exists) {
-          const currentStock = productDoc.data()?.stock ?? 0
-          const newStock = Math.max(0, currentStock - item.quantity)
-          stockBatch.update(productRef, { stock: newStock, updated_at: now })
+
+      // إعادة بناء العناصر بأسعار السيرفر (مع الخصم) وإعادة احتساب الإجماليات — تجاهل سعر/إجمالي العميل
+      const existingStops: PickupStop[] = orderData.pickup_stops || []
+      const formattedNewStops: PickupStop[] = newStops.map((stop) => {
+        const verifiedItems = stop.items.map((item) => {
+          const info = productInfo.get(item.product_id)
+          const serverPrice = applyOfferDiscount(
+            {
+              id: item.product_id,
+              category: info?.category,
+              store_id: info?.store_id ?? stop.store_id,
+              price: info?.price ?? 0,
+            },
+            activeOffers,
+            today,
+          )
+          return { ...item, quantity: validateQuantity(item.quantity), price: serverPrice }
+        })
+        const verifiedSubtotal = verifiedItems.reduce((s, it) => s + it.price * it.quantity, 0)
+        return {
+          ...stop,
+          items: verifiedItems,
+          subtotal: verifiedSubtotal,
+          status: "pending",
+          confirmed_at: null,
+          picked_up_at: null,
+          rejected_at: null,
+          rejection_reason: null,
+        } as PickupStop
+      })
+      const updatedStops = [...existingStops, ...formattedNewStops]
+      const updatedStoreIds = Array.from(new Set(updatedStops.map((s) => s.store_id).filter(Boolean)))
+      const activeStops = updatedStops.filter((s) => s.status !== "rejected")
+      const newSubtotal = activeStops.reduce((sum, s) => sum + s.subtotal, 0)
+      const newTotal = newSubtotal + sanitizeMoney(orderData.delivery_price)
+      const storeNames = newStops.map((s) => s.store_name).join("، ")
+      const timeline = [
+        ...(orderData.timeline || []),
+        { status: "order_edited", timestamp: now, note: `العميل أضاف منتجات من: ${storeNames}` } as TimelineEntry,
+      ]
+      const newStatus = orderData.status === "confirmed" ? "pending" : orderData.status
+
+      // الكتابات
+      tx.set(
+        orderRef,
+        {
+          pickup_stops: updatedStops,
+          store_ids: updatedStoreIds,
+          subtotal: newSubtotal,
+          total: newTotal,
+          timeline,
+          status: newStatus,
+          updated_at: now,
+        },
+        { merge: true },
+      )
+      for (const stop of formattedNewStops) {
+        for (const item of stop.items) {
+          const itemRef = db.collection("order_items").doc()
+          tx.set(itemRef, {
+            order_id: orderId,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            price: item.price,
+            store_id: stop.store_id,
+            created_at: now,
+          })
         }
       }
+      for (const [pid, qty] of Array.from(qtyByProduct.entries())) {
+        tx.update(productRefs.get(pid)!, { stock: FieldValue.increment(-qty), updated_at: now })
+      }
+      return { ok: true as const, orderData, formattedNewStops }
+    })
+
+    if (!txResult.ok) {
+      return { success: false, error: txResult.error }
     }
-    await stockBatch.commit()
-    
+    const { orderData, formattedNewStops } = txResult
+
     // Notify new stores
     const notifBatch = db.batch()
     for (const stop of formattedNewStops) {

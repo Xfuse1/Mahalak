@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// تخزين صور المنتجات/المتاجر يتم عبر Supabase Storage، لا عبر Firebase Storage.
+// لذا نمنع كل وصول العميل لـ Firebase Storage عبر SDK (روابط التنزيل العامة لا تتأثر).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

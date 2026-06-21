@@ -7,7 +7,7 @@ import { StoreCard } from "../store-card"
 import { useLanguage } from "../../lib/language-context"
 import Link from "next/link"
 import { Button } from "../ui/button"
-import { Package, Store } from "lucide-react"
+import { Package, Store, ShoppingBasket, HeartPulse, Shirt, Smartphone, UtensilsCrossed, Sofa, Wrench } from "lucide-react"
 import { memo } from "react"
 import type { ProductListItem } from "@/lib/types/product"
 import type { StoreListItem } from "@/lib/types/store"
@@ -28,12 +28,12 @@ export function HeroBanner() {
 export function SearchSection() {
   const { t } = useLanguage()
   return (
-    <section className="py-10 bg-gradient-to-b from-white to-gray-50 border-b">
+    <section className="py-10 bg-background border-b border-border">
       <div className="container mx-auto px-4">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("ابحث عن أي شيء", "Search for anything")}</h2>
-            <p className="text-gray-500">{t("آلاف المنتجات والمتاجر في انتظارك", "Thousands of products and stores await you")}</p>
+            <h2 className="text-2xl font-bold text-foreground mb-2">{t("ابحث عن أي شيء", "Search for anything")}</h2>
+            <p className="text-muted-foreground">{t("آلاف المنتجات والمتاجر في انتظارك", "Thousands of products and stores await you")}</p>
           </div>
           <SearchBar
             placeholder={t("ابحث عن منتجات أو متاجر...", "Search for products or stores...")}
@@ -48,31 +48,31 @@ export function SearchSection() {
 export function CategoriesSection() {
   const { t } = useLanguage()
   return (
-    <section className="py-16 bg-gradient-to-b from-gray-50 to-white">
+    <section className="py-16 bg-secondary/30">
       <div className="container mx-auto px-4">
         <div className="text-center mb-10">
-          <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("تصفح حسب الفئة", "Browse by Category")}</h2>
-          <p className="text-gray-500 text-base md:text-lg">{t("اختر الفئة التي تناسبك", "Choose the category that suits you")}</p>
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-3 text-foreground">{t("تصفح حسب الفئة", "Browse by Category")}</h2>
+          <p className="text-muted-foreground text-base md:text-lg">{t("اختر الفئة التي تناسبك", "Choose the category that suits you")}</p>
         </div>
 
         <div className="overflow-x-auto pb-4 mb-10 scrollbar-hide">
           <div className="flex gap-4 justify-center min-w-max px-2">
             {[
-              { href: "/category/بقالة", color: "from-emerald-400 to-emerald-600", hoverShadow: "hover:shadow-emerald-500/30", icon: "🛒", ar: "بقالة", en: "Grocery" },
-              { href: "/category/صحة", color: "from-rose-400 to-rose-600", hoverShadow: "hover:shadow-rose-500/30", icon: "💊", ar: "صحة", en: "Health" },
-              { href: "/category/ملابس", color: "from-violet-400 to-violet-600", hoverShadow: "hover:shadow-violet-500/30", icon: "👕", ar: "ملابس", en: "Clothing" },
-              { href: "/category/إلكترونيات", color: "from-blue-400 to-blue-600", hoverShadow: "hover:shadow-blue-500/30", icon: "📱", ar: "إلكترونيات", en: "Electronics" },
-              { href: "/category/أغذية", color: "from-amber-400 to-orange-500", hoverShadow: "hover:shadow-orange-500/30", icon: "🍔", ar: "أغذية", en: "Food" },
-              { href: "/category/أثاث", color: "from-amber-600 to-amber-800", hoverShadow: "hover:shadow-amber-500/30", icon: "🪑", ar: "أثاث", en: "Furniture" },
-              { href: "/category/خدمات أخرى", color: "from-slate-500 to-slate-700", hoverShadow: "hover:shadow-slate-500/30", icon: "⚡", ar: "أخرى", en: "Other Services" },
+              { href: "/category/بقالة", color: "from-emerald-400 to-emerald-600", hoverShadow: "hover:shadow-emerald-500/30", icon: ShoppingBasket, ar: "بقالة", en: "Grocery" },
+              { href: "/category/صحة", color: "from-rose-400 to-rose-600", hoverShadow: "hover:shadow-rose-500/30", icon: HeartPulse, ar: "صحة", en: "Health" },
+              { href: "/category/ملابس", color: "from-violet-400 to-violet-600", hoverShadow: "hover:shadow-violet-500/30", icon: Shirt, ar: "ملابس", en: "Clothing" },
+              { href: "/category/إلكترونيات", color: "from-blue-400 to-blue-600", hoverShadow: "hover:shadow-blue-500/30", icon: Smartphone, ar: "إلكترونيات", en: "Electronics" },
+              { href: "/category/أغذية", color: "from-amber-400 to-orange-500", hoverShadow: "hover:shadow-orange-500/30", icon: UtensilsCrossed, ar: "أغذية", en: "Food" },
+              { href: "/category/أثاث", color: "from-amber-600 to-amber-800", hoverShadow: "hover:shadow-amber-500/30", icon: Sofa, ar: "أثاث", en: "Furniture" },
+              { href: "/category/خدمات أخرى", color: "from-slate-500 to-slate-700", hoverShadow: "hover:shadow-slate-500/30", icon: Wrench, ar: "أخرى", en: "Other Services" },
             ].map((cat) => (
               <Link
                 key={cat.href}
                 href={cat.href}
-                className={`bg-gradient-to-br ${cat.color} text-white p-6 rounded-2xl text-center hover:shadow-2xl ${cat.hoverShadow} transition-all transform hover:scale-105 hover:-translate-y-1 min-w-[140px] group`}
+                className={`bg-gradient-to-br ${cat.color} text-white p-6 rounded-2xl text-center shadow-sm hover:shadow-lg ${cat.hoverShadow} transition-shadow min-w-[140px] group`}
               >
                 <div className="bg-white/20 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  {cat.icon}
+                  <cat.icon className="h-6 w-6 text-white" strokeWidth={2} />
                 </div>
                 <p className="font-bold text-lg whitespace-nowrap">{t(cat.ar, cat.en)}</p>
               </Link>
@@ -84,12 +84,10 @@ export function CategoriesSection() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           <Link
             href="/search"
-            className="relative bg-gradient-to-br from-[#1e3a5f] via-[#2563eb] to-[#3b82f6] text-white p-8 rounded-2xl hover:shadow-2xl hover:shadow-blue-500/30 transition-all transform hover:scale-[1.02] hover:-translate-y-1 overflow-hidden group"
+            className="relative bg-primary text-primary-foreground p-8 rounded-2xl hover:bg-primary/90 transition-colors overflow-hidden group"
           >
-            <div className="absolute inset-0 bg-[url('/pattern.svg')] opacity-10"></div>
-            <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative flex items-center gap-4">
-              <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm group-hover:scale-110 transition-transform">
+              <div className="bg-white/15 p-4 rounded-xl group-hover:scale-105 transition-transform">
                 <Package className="h-8 w-8" />
               </div>
               <div>
@@ -100,12 +98,10 @@ export function CategoriesSection() {
           </Link>
           <Link
             href="/store"
-            className="relative bg-gradient-to-br from-[#2563eb] via-[#3b82f6] to-[#60a5fa] text-white p-8 rounded-2xl hover:shadow-2xl hover:shadow-blue-500/30 transition-all transform hover:scale-[1.02] hover:-translate-y-1 overflow-hidden group"
+            className="relative bg-accent text-accent-foreground p-8 rounded-2xl hover:bg-accent/90 transition-colors overflow-hidden group"
           >
-            <div className="absolute inset-0 bg-[url('/pattern.svg')] opacity-10"></div>
-            <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative flex items-center gap-4">
-              <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm group-hover:scale-110 transition-transform">
+              <div className="bg-black/10 p-4 rounded-xl group-hover:scale-105 transition-transform">
                 <Store className="h-8 w-8" />
               </div>
               <div>
@@ -123,14 +119,14 @@ export function CategoriesSection() {
 export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
   const { t } = useLanguage()
   return (
-    <section className="py-16 bg-white">
+    <section className="py-16 bg-background">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("متاجر مميزة", "Featured Stores")}</h2>
-            <p className="text-gray-500 mt-2">{t("اكتشف أفضل المتاجر", "Discover the best stores")}</p>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground">{t("متاجر مميزة", "Featured Stores")}</h2>
+            <p className="text-muted-foreground mt-2">{t("اكتشف أفضل المتاجر", "Discover the best stores")}</p>
           </div>
-          <Button variant="outline" asChild className="rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all">
+          <Button variant="outline" asChild className="rounded-xl hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors">
             <Link href="/store">{t("عرض الكل", "View All")}</Link>
           </Button>
         </div>
@@ -147,14 +143,14 @@ export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
 export function FeaturedProducts({ products }: { products: ProductListItem[] }) {
   const { t } = useLanguage()
   return (
-    <section className="py-16 bg-gradient-to-b from-gray-50 to-white">
+    <section className="py-16 bg-secondary/30">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">{t("منتجات مميزة", "Featured Products")}</h2>
-            <p className="text-gray-500 mt-2">{t("أفضل المنتجات المتاحة", "Best available products")}</p>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground">{t("منتجات مميزة", "Featured Products")}</h2>
+            <p className="text-muted-foreground mt-2">{t("أفضل المنتجات المتاحة", "Best available products")}</p>
           </div>
-          <Button variant="outline" asChild className="rounded-xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all">
+          <Button variant="outline" asChild className="rounded-xl hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors">
             <Link href="/search">{t("عرض الكل", "View All")}</Link>
           </Button>
         </div>
@@ -171,16 +167,11 @@ export function FeaturedProducts({ products }: { products: ProductListItem[] }) 
 export function CTASection() {
   const { t } = useLanguage()
   return (
-    <section className="py-20 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#1e3a5f] to-[#1e40af]"></div>
-      <div className="absolute inset-0 bg-[url('/pattern.svg')] opacity-5"></div>
-      <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
-      <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
-      
+    <section className="py-20 relative overflow-hidden bg-[oklch(0.30_0.05_155)]">
       <div className="container mx-auto px-4 text-center relative z-10">
         <div className="max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-white/80 text-sm mb-6">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+          <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full text-white/90 text-sm mb-6">
+            <span className="w-2 h-2 bg-accent rounded-full animate-pulse"></span>
             {t("انضم إلينا الآن", "Join us now")}
           </div>
           <h2 className="text-2xl md:text-4xl lg:text-5xl font-extrabold mb-6 text-white">{t("هل أنت صاحب متجر؟", "Are you a store owner?")}</h2>
@@ -190,7 +181,7 @@ export function CTASection() {
               "Join our platform and start selling your products to thousands of customers",
             )}
           </p>
-          <Button size="lg" asChild className="bg-white text-blue-900 hover:bg-gray-100 font-bold px-10 py-7 text-lg rounded-2xl shadow-2xl hover:shadow-white/20 hover:scale-105 transition-all">
+          <Button size="lg" asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold px-10 py-7 text-lg rounded-xl transition-colors">
             <Link href="/auth?role=seller">{t("ابدأ البيع الآن", "Start Selling Now")}</Link>
           </Button>
         </div>

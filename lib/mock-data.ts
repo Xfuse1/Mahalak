@@ -155,9 +155,5 @@ export const storeCategorySubcategories: Record<string, { id: string; name: stri
   ],
 }
 
-// Helper: get subcategories for a store based on its category
-export function getSubcategoriesForStore(storeCategory: string) {
-  return storeCategorySubcategories[storeCategory] || storeCategorySubcategories["أخرى"] || grocerySubcategories
-}
 
 

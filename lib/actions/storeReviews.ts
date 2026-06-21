@@ -1,11 +1,14 @@
 "use server"
 
 import { getAdminDb } from "../firebase/admin"
-import { updateStore } from "./stores"
+import { getCurrentUid } from "@/lib/auth/session"
 
 type ReviewRecord = Record<string, any>
 
 export async function getUserStoreReview(storeId: string, customerId: string) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== customerId) return null
+
   const db = getAdminDb()
 
   const snapshot = await db
@@ -24,6 +27,12 @@ export async function getUserStoreReview(storeId: string, customerId: string) {
 }
 
 export async function upsertStoreReview(storeId: string, customerId: string, rating: number, comment?: string) {
+  // الهوية تُشتق من الجلسة الموثّقة — لا نثق بـ customerId القادم من العميل
+  const uid = await getCurrentUid()
+  if (!uid || uid !== customerId) {
+    return { success: false, average: null, error: "Unauthorized" }
+  }
+
   const db = getAdminDb()
 
   // التحقق من أن العميل أجرى طلباً واحداً على الأقل من هذا المتجر
@@ -72,7 +81,13 @@ export async function upsertStoreReview(storeId: string, customerId: string, rat
     const ratings = rowsSnap.docs.map((doc) => Number(doc.data().rating || 0))
     const avg = ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0
 
-    await updateStore(storeId, { rating: avg })
+    // الكتابة مباشرة عبر admin — لا نمرّ عبر updateStore المحميّة بملكية المتجر،
+    // لأن المُقيّم عميل (uid !== storeId) فكانت updateStore تفشل دائمًا والتقييم لا يُحفظ.
+    await db.collection("users").doc(storeId).update({
+      "store.rating": avg,
+      "store.rating_count": ratings.length,
+      "store.updated_at": now,
+    })
 
     return { success: true, average: avg }
   } catch (error: any) {

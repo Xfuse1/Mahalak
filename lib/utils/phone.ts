@@ -41,10 +41,6 @@ export function normalizeEgyptPhone(rawPhone: string): string | null {
   return `+20${localPhone.slice(1)}`
 }
 
-export function isValidEgyptPhone(rawPhone: string) {
-  return normalizeEgyptPhone(rawPhone) !== null
-}
-
 export function getEgyptPhoneLookupCandidates(rawPhone: string): string[] {
   const candidates = new Set<string>()
   const sanitized = sanitizePhone(rawPhone)
@@ -62,13 +58,4 @@ export function getEgyptPhoneLookupCandidates(rawPhone: string): string[] {
   }
 
   return Array.from(candidates).filter(Boolean)
-}
-
-export function maskEgyptPhone(rawPhone: string) {
-  const normalizedPhone = normalizeEgyptPhone(rawPhone)
-  if (!normalizedPhone) {
-    return rawPhone
-  }
-
-  return `${normalizedPhone.slice(0, 6)}****${normalizedPhone.slice(-2)}`
 }

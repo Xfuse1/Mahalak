@@ -141,7 +141,7 @@ export default function AccountPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, t])
 
-  if (isLoading || !user) {
+  if (isLoading || !user || user.role === "seller") {
     return null
   }
 
@@ -606,7 +606,7 @@ export default function AccountPage() {
                     </div>
                     <div>
                       <CardTitle className="text-xl text-white">{user.name || t("مستخدم", "User")}</CardTitle>
-                      <CardDescription className="text-blue-100">{user.role === "seller" ? t("تاجر", "Seller") : t("عميل", "Customer")}</CardDescription>
+                      <CardDescription className="text-blue-100">{t("عميل", "Customer")}</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -656,7 +656,7 @@ export default function AccountPage() {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 mb-1">{t("نوع الحساب", "Account Type")}</p>
-                        <p className="font-medium text-gray-800">{user.role === "seller" ? t("تاجر", "Seller") : t("عميل", "Customer")}</p>
+                        <p className="font-medium text-gray-800">{t("عميل", "Customer")}</p>
                       </div>
                     </div>
                   </div>

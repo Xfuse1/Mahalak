@@ -91,10 +91,13 @@ export default function SellerOrdersPage() {
   const [storeId, setStoreId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    // انتظر انتهاء تحميل المصادقة قبل أي تحويل — وإلا يُطرد البائع لحظة التحميل (user=null)
+    if (isLoading) return
+    if (!user) {
       router.push("/auth?role=seller")
+      return
     }
-    if (user?.role !== "seller") {
+    if (user.role !== "seller") {
       router.push("/")
     }
   }, [user, isLoading, router])
@@ -737,7 +740,7 @@ export default function SellerOrdersPage() {
                         </h3>
                         <div className="space-y-2">
                           {selectedMultiOrder.pickup_stops
-                            .filter((stop: PickupStop) => stop.store_id !== user?.id)
+                            .filter((stop: PickupStop) => stop.store_id !== storeId)
                             .map((stop: PickupStop, idx: number) => (
                               <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl text-sm">
                                 <span className="font-medium">{stop.store_name}</span>

@@ -1,12 +1,13 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { getAdminAuth } from "@/lib/firebase/admin"
+import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin"
 import { logError } from "@/lib/logger"
 import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_OPTIONS,
   SESSION_EXPIRES_IN_MS,
+  getCurrentUid,
 } from "@/lib/auth/session"
 
 /**
@@ -24,6 +25,62 @@ export async function createSession(idToken: string): Promise<{ success: boolean
   } catch (error) {
     logError("[auth-session] Failed to create session:", error)
     return { success: false }
+  }
+}
+
+type EnsureProfileInput = {
+  email?: string
+  full_name?: string
+  role?: "customer" | "seller"
+  phone?: string | null
+  street?: string | null
+  city?: string | null
+  country?: string | null
+}
+
+/**
+ * ينشئ مستند ملف المستخدم سيرفر-سايد (Admin SDK) إذا لم يكن موجودًا.
+ * الهوية من كوكي الجلسة فقط، و`role` مُعقَّم: لا يُسمح إلا بـ customer/seller من العميل
+ * (أبدًا admin/driver) — هذا يسدّ رفع الصلاحية الذاتي عبر كتابة role من Web SDK.
+ * موجود مسبقًا؟ لا نلمس role أو الحقول الحسّاسة — فقط نُرجع الدور الحالي.
+ */
+export async function ensureUserProfile(
+  input: EnsureProfileInput,
+): Promise<{ success: boolean; created?: boolean; role?: string; error?: string }> {
+  try {
+    const uid = await getCurrentUid()
+    if (!uid) {
+      return { success: false, error: "Unauthenticated" }
+    }
+    const db = getAdminDb()
+    const ref = db.collection("users").doc(uid)
+    const snap = await ref.get()
+
+    // تعقيم الدور: العميل لا يستطيع منح نفسه admin/driver
+    const safeRole: "customer" | "seller" = input.role === "seller" ? "seller" : "customer"
+
+    if (!snap.exists) {
+      const now = new Date().toISOString()
+      await ref.set({
+        email: input.email ?? "",
+        full_name: input.full_name ?? "",
+        role: safeRole,
+        phone: input.phone ?? null,
+        phone_verified: false,
+        phone_verified_at: null,
+        street: input.street ?? null,
+        city: input.city ?? null,
+        country: input.country ?? null,
+        created_at: now,
+        updated_at: now,
+      })
+      return { success: true, created: true, role: safeRole }
+    }
+
+    return { success: true, created: false, role: (snap.data()?.role as string) || "customer" }
+  } catch (error) {
+    logError("[auth-session] Failed to ensure user profile:", error)
+    return { success: false, error: "Failed to ensure profile" }
   }
 }
 

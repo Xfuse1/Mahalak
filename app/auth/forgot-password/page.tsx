@@ -146,19 +146,6 @@ export default function ForgotPasswordPage() {
     setError("")
 
     try {
-      let resolvedUserId = userId
-      if (!resolvedUserId) {
-        const userResult = await getUserByPhone(phone)
-        if (!userResult.success || !userResult.data?.id) {
-          setError(t("تعذر العثور على الحساب المرتبط بهذا الرقم", "Could not find the account for this phone number"))
-          setStep("phone")
-          return
-        }
-
-        resolvedUserId = userResult.data.id
-        setUserId(resolvedUserId)
-      }
-
       const result = await verifyPhoneOTP(otpCode, { flow: OTP_FLOW })
       syncOtpState()
 
@@ -168,12 +155,21 @@ export default function ForgotPasswordPage() {
         return
       }
 
-      const tokenResult = await generatePasswordResetToken(resolvedUserId)
-      if (!tokenResult.success || !tokenResult.token) {
+      // إثبات ملكية الهاتف يتم سيرفر-سايد عبر رمز هوية Firebase — لا نثق بـ userId من العميل
+      if (!result.idToken) {
+        setError(t("تعذّر إثبات ملكية الرقم. أعد إرسال الكود وحاول مجددًا", "Could not verify phone ownership. Please resend the code and try again"))
+        setSessionLost(true)
+        return
+      }
+
+      const tokenResult = await generatePasswordResetToken(result.idToken)
+      if (!tokenResult.success || !tokenResult.token || !tokenResult.userId) {
         setError(t("حدث خطأ. يرجى المحاولة مرة أخرى", "An error occurred. Please try again"))
         return
       }
 
+      // نعتمد الـ userId المُشتق سيرفر-سايد من الرقم المُتحقَّق
+      setUserId(tokenResult.userId)
       setResetToken(tokenResult.token)
       setStep("new-password")
     } catch (verifyError) {

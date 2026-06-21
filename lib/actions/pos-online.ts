@@ -1,8 +1,43 @@
 "use server"
 
 import { getAdminDb } from "@/lib/firebase/admin"
+import { getCurrentUid } from "@/lib/auth/session"
 import { FieldValue } from "firebase-admin/firestore"
 import { serializeData } from "@/lib/firebase/firestore-helpers"
+
+/**
+ * يتحقق أن المستدعي (من الجلسة) هو مالك المتجر.
+ * معرّف المتجر = معرّف المستخدم. لا نثق بأي storeId قادم من العميل.
+ */
+async function isStoreOwner(storeId: string): Promise<boolean> {
+  const uid = await getCurrentUid()
+  return uid != null && uid === storeId
+}
+
+// جلب عناصر عدة طلبات دفعةً واحدة (chunks of 10 بسبب حد Firestore على in) — يتجنّب N+1.
+async function fetchOrderItemsGrouped(
+  db: FirebaseFirestore.Firestore,
+  orderIds: string[],
+): Promise<Map<string, FirebaseFirestore.DocumentData[]>> {
+  const grouped = new Map<string, FirebaseFirestore.DocumentData[]>()
+  const ids = orderIds.filter(Boolean)
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10))
+  const snaps = await Promise.all(
+    chunks.map((chunk) => db.collection("order_items").where("order_id", "in", chunk).get()),
+  )
+  for (const snap of snaps) {
+    for (const d of snap.docs) {
+      const data = d.data()
+      const oid = data.order_id
+      if (!oid) continue
+      const arr = grouped.get(oid) || []
+      arr.push(data)
+      grouped.set(oid, arr)
+    }
+  }
+  return grouped
+}
 
 // ==================== TYPES ====================
 
@@ -103,6 +138,7 @@ export type OnlineSalesReport = {
 
 export async function getShippingZones(storeId: string): Promise<ShippingZone[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/shipping_zones`).orderBy("name", "asc").get()
     return snap.docs.map(doc => serializeData({ id: doc.id, ...doc.data() })) as ShippingZone[]
@@ -117,6 +153,7 @@ export async function createShippingZone(
   data: Omit<ShippingZone, "id" | "created_at">
 ): Promise<{ success: boolean; zone?: ShippingZone }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const docRef = db.collection(`stores/${storeId}/shipping_zones`).doc()
     const payload = {
@@ -137,6 +174,7 @@ export async function updateShippingZone(
   data: Partial<Omit<ShippingZone, "id" | "created_at">>
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/shipping_zones/${zoneId}`).update(data)
     return { success: true }
@@ -151,6 +189,7 @@ export async function deleteShippingZone(
   zoneId: string
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/shipping_zones/${zoneId}`).delete()
     return { success: true }
@@ -164,6 +203,7 @@ export async function deleteShippingZone(
 
 export async function getTierPricing(storeId: string, productId?: string): Promise<TierPricing[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     let query = db.collection(`stores/${storeId}/tier_pricing`).orderBy("min_qty", "asc") as FirebaseFirestore.Query
     if (productId) {
@@ -184,6 +224,7 @@ export async function saveTierPricing(
   tiers: { min_qty: number; price: number }[]
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const batch = db.batch()
     const ref = db.collection(`stores/${storeId}/tier_pricing`)
@@ -216,6 +257,9 @@ export async function saveTierPricing(
 
 export async function getPaymentConfig(storeId: string): Promise<PaymentMethodConfig> {
   try {
+    if (!(await isStoreOwner(storeId))) {
+      return { cod_enabled: false, wallet_enabled: false, instapay_enabled: false }
+    }
     const db = getAdminDb()
     const doc = await db.doc(`stores/${storeId}/settings/payment_config`).get()
     if (doc.exists) {
@@ -237,6 +281,7 @@ export async function savePaymentConfig(
   config: PaymentMethodConfig
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     await db.doc(`stores/${storeId}/settings/payment_config`).set(config, { merge: true })
     return { success: true }
@@ -250,8 +295,9 @@ export async function savePaymentConfig(
 
 export async function getIncomingOnlineOrders(storeId: string): Promise<OnlineOrderForPOS[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
-    
+
     // Get single-store orders
     const ordersSnap = await db.collection("orders")
       .where("store_id", "==", storeId)
@@ -262,26 +308,23 @@ export async function getIncomingOnlineOrders(storeId: string): Promise<OnlineOr
 
     const orders: OnlineOrderForPOS[] = []
 
-    for (const doc of ordersSnap.docs) {
+    // استبعاد طلبات الاستفسار ثم جلب عناصر كل الطلبات دفعةً واحدة (بدل query لكل طلب)
+    const relevantDocs = ordersSnap.docs.filter((doc) => {
       const data = doc.data()
-      // Skip inquiry-type orders
-      if (data.order_type === "inquiry" || data.delivery_address === "Contact via WhatsApp" || data.delivery_address === "Contact via Phone") continue
+      return !(data.order_type === "inquiry" || data.delivery_address === "Contact via WhatsApp" || data.delivery_address === "Contact via Phone")
+    })
+    const itemsByOrder = await fetchOrderItemsGrouped(db, relevantDocs.map((d) => d.id))
 
-      // Get order items
-      const itemsSnap = await db.collection("order_items")
-        .where("order_id", "==", doc.id)
-        .get()
+    for (const doc of relevantDocs) {
+      const data = doc.data()
 
-      const items = itemsSnap.docs.map(d => {
-        const itemData = d.data()
-        return {
-          product_id: itemData.product_id || "",
-          name: itemData.name || "",
-          quantity: itemData.quantity || 1,
-          price: itemData.price || 0,
-          image_url: itemData.image_url || null,
-        }
-      })
+      const items = (itemsByOrder.get(doc.id) || []).map((itemData) => ({
+        product_id: itemData.product_id || "",
+        name: itemData.name || "",
+        quantity: itemData.quantity || 1,
+        price: itemData.price || 0,
+        image_url: itemData.image_url || null,
+      }))
 
       orders.push(serializeData({
         id: doc.id,
@@ -319,10 +362,14 @@ export async function updateOnlineOrderStatus(
   note?: string
 ): Promise<{ success: boolean }> {
   try {
+    const uid = await getCurrentUid()
+    if (!uid) return { success: false }
     const db = getAdminDb()
     const orderRef = db.doc(`orders/${orderId}`)
     const orderDoc = await orderRef.get()
     if (!orderDoc.exists) return { success: false }
+    // فقط متجر صاحب الطلب يحقّ له تعديل حالته
+    if (orderDoc.data()?.store_id !== uid) return { success: false }
 
     const now = new Date().toISOString()
     const timelineEntry = { status: newStatus, timestamp: now, note: note || undefined }
@@ -346,9 +393,15 @@ export async function confirmOnlinePayment(
   transactionRef?: string
 ): Promise<{ success: boolean }> {
   try {
+    const uid = await getCurrentUid()
+    if (!uid) return { success: false }
     const db = getAdminDb()
+    const orderRef = db.doc(`orders/${orderId}`)
+    const orderSnap = await orderRef.get()
+    // فقط متجر صاحب الطلب يحقّ له تأكيد الدفع
+    if (!orderSnap.exists || orderSnap.data()?.store_id !== uid) return { success: false }
     const now = new Date().toISOString()
-    await db.doc(`orders/${orderId}`).update({
+    await orderRef.update({
       payment_status: "confirmed",
       payment_confirmed_at: now,
       payment_method: method,
@@ -374,6 +427,7 @@ export async function getLowStockProducts(
   threshold: number = 5
 ): Promise<{ id: string; name: string; stock: number; price: number; image_url?: string }[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection("products")
       .where("store_id", "==", storeId)
@@ -400,6 +454,7 @@ export async function createOnlineReturn(
   data: Omit<OnlineReturn, "id" | "store_id" | "created_at" | "status">
 ): Promise<{ success: boolean; returnDoc?: OnlineReturn }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const docRef = db.collection(`stores/${storeId}/online_returns`).doc()
     const payload = {
@@ -418,6 +473,7 @@ export async function createOnlineReturn(
 
 export async function getOnlineReturns(storeId: string): Promise<OnlineReturn[]> {
   try {
+    if (!(await isStoreOwner(storeId))) return []
     const db = getAdminDb()
     const snap = await db.collection(`stores/${storeId}/online_returns`)
       .orderBy("created_at", "desc")
@@ -437,6 +493,7 @@ export async function updateOnlineReturnStatus(
   note?: string
 ): Promise<{ success: boolean }> {
   try {
+    if (!(await isStoreOwner(storeId))) return { success: false }
     const db = getAdminDb()
     const updateData: Record<string, unknown> = { status }
     if (status === "refunded" || status === "approved" || status === "rejected") {
@@ -472,8 +529,9 @@ export async function getOnlineSalesReport(
   }
 
   try {
+    if (!(await isStoreOwner(storeId))) return emptyReport
     const db = getAdminDb()
-    
+
     // Get all orders in date range
     const ordersSnap = await db.collection("orders")
       .where("store_id", "==", storeId)
@@ -492,10 +550,12 @@ export async function getOnlineSalesReport(
     const productMap: Record<string, { name: string; qty: number; revenue: number }> = {}
     const dailyMap: Record<string, { orders: number; revenue: number }> = {}
 
-    for (const doc of ordersSnap.docs) {
+    // استبعاد الاستفسارات ثم جلب عناصر كل الطلبات دفعةً واحدة (بدل query لكل طلب)
+    const reportDocs = ordersSnap.docs.filter((doc) => doc.data().order_type !== "inquiry")
+    const reportItemsByOrder = await fetchOrderItemsGrouped(db, reportDocs.map((d) => d.id))
+
+    for (const doc of reportDocs) {
       const data = doc.data()
-      // Skip inquiries
-      if (data.order_type === "inquiry") continue
 
       const orderTotal = data.total || 0
       totalRevenue += orderTotal
@@ -518,13 +578,7 @@ export async function getOnlineSalesReport(
         dailyMap[day].revenue += orderTotal
       }
 
-      // Get items for this order  
-      const itemsSnap = await db.collection("order_items")
-        .where("order_id", "==", doc.id)
-        .get()
-      
-      for (const itemDoc of itemsSnap.docs) {
-        const item = itemDoc.data()
+      for (const item of reportItemsByOrder.get(doc.id) || []) {
         const qty = item.quantity || 1
         totalItemsSold += qty
         const pid = item.product_id || "unknown"

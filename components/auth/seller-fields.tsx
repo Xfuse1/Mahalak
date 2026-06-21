@@ -86,9 +86,9 @@ export function SellerFields(props: SellerFieldsProps) {
   } = props
 
   const fieldClassName =
-    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition placeholder:text-slate-400 focus-visible:border-blue-400 focus-visible:ring-blue-100 sm:h-14"
+    "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/20 sm:h-14"
   const uploadTileClassName =
-    "w-full rounded-2xl border border-dashed border-slate-200 bg-white transition shadow-[0_8px_24px_rgba(15,23,42,0.04)] hover:border-blue-300 hover:bg-blue-50/60"
+    "w-full rounded-2xl border border-dashed border-slate-200 bg-white transition shadow-[0_8px_24px_rgba(15,23,42,0.04)] hover:border-primary/50 hover:bg-primary/10"
 
   return (
     <div className="space-y-6">
@@ -149,7 +149,7 @@ export function SellerFields(props: SellerFieldsProps) {
                 name="storeDescription"
                 dir="auto"
                 placeholder={t("وصف مختصر عن متجرك", "Brief description of your store")}
-                className="min-h-[110px] resize-none rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] placeholder:text-slate-400 focus-visible:border-blue-400 focus-visible:ring-blue-100"
+                className="min-h-[110px] resize-none rounded-2xl border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,0.04)] placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/20"
                 style={{ textAlign: isRTL ? "right" : "left", unicodeBidi: "plaintext" } as React.CSSProperties}
               />
             </div>
@@ -198,7 +198,7 @@ export function SellerFields(props: SellerFieldsProps) {
               <div className="flex min-h-[112px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
                 {storeLogoPreview ? (
                   <div className="relative">
-                    <div className="h-24 w-24 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+                    <div className="h-24 w-24 overflow-hidden rounded-2xl border border-primary/20 bg-white shadow-sm">
                       <Image src={storeLogoPreview} alt="Store Logo Preview" width={96} height={96} className="h-full w-full object-cover" />
                     </div>
                     <button
@@ -244,14 +244,14 @@ export function SellerFields(props: SellerFieldsProps) {
               type="button"
               onClick={getCurrentLocation}
               disabled={isGettingLocation}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isGettingLocation ? t("جارٍ تحديد الموقع...", "Getting location...") : t("تحديد موقعي الحالي", "Use current location")}
             </button>
             <button
               type="button"
               onClick={() => setShowMapPicker(true)}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-primary/50 hover:text-primary"
             >
               {t("اختيار الموقع من الخريطة", "Pick location from map")}
             </button>

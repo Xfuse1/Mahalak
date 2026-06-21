@@ -1,6 +1,7 @@
 "use server"
 
 import { getAdminDb } from "@/lib/firebase/admin"
+import { getCurrentUid } from "@/lib/auth/session"
 
 type ReviewRecord = Record<string, any>
 
@@ -8,6 +9,9 @@ type ReviewRecord = Record<string, any>
  * Get a specific user's review for a product (or null).
  */
 export async function getUserReview(productId: string, customerId: string) {
+  const uid = await getCurrentUid()
+  if (!uid || uid !== customerId) return null
+
   const db = getAdminDb()
 
   const snapshot = await db
@@ -30,6 +34,12 @@ export async function getUserReview(productId: string, customerId: string) {
  * Recomputes products.rating and products.rating_count.
  */
 export async function upsertReview(productId: string, customerId: string, rating: number) {
+  // الهوية تُشتق من الجلسة الموثّقة — لا نثق بـ customerId القادم من العميل
+  const uid = await getCurrentUid()
+  if (!uid || uid !== customerId) {
+    return { success: false, error: "Unauthorized", average: 0, count: 0 }
+  }
+
   const db = getAdminDb()
 
   // التحقق من أن العميل اشترى هذا المنتج
@@ -137,6 +147,12 @@ export async function createOrderReview(data: {
   }>
 }) {
   try {
+    // الهوية تُشتق من الجلسة الموثّقة — لا نثق بـ customer_id القادم من العميل
+    const uid = await getCurrentUid()
+    if (!uid || uid !== data.customer_id) {
+      return { success: false, error: "Unauthorized" }
+    }
+
     const db = getAdminDb()
     const now = new Date().toISOString()
 
@@ -191,7 +207,7 @@ export async function createOrderReview(data: {
 }
 
 // Update driver's average rating
-async function updateDriverRatingAverage(driverId: string, newRating: number) {
+async function updateDriverRatingAverage(driverId: string, _newRating: number) {
   try {
     const db = getAdminDb()
     const driverRef = db.collection("drivers").doc(driverId)
@@ -199,18 +215,21 @@ async function updateDriverRatingAverage(driverId: string, newRating: number) {
 
     if (!driverDoc.exists) return
 
-    const driverData = driverDoc.data()
-    const currentRating = driverData?.rating || 0
-    const totalDeliveries = driverData?.total_deliveries || driverData?.totalDeliveries || 0
-
-    // Calculate new average rating
-    const newAvgRating = totalDeliveries > 0
-      ? ((currentRating * totalDeliveries) + newRating) / (totalDeliveries + 1)
-      : newRating
+    // إعادة الحساب من المصدر: كل تقييمات السائق في order_reviews — حتى لا يختلط
+    // عدّاد التقييمات بعدّاد التوصيلات (total_deliveries) كما كان يحدث سابقًا.
+    const reviewsSnap = await db
+      .collection("order_reviews")
+      .where("driver_id", "==", driverId)
+      .get()
+    const ratings = reviewsSnap.docs
+      .map((doc) => Number(doc.data().driver_rating || 0))
+      .filter((n) => n > 0)
+    const ratingCount = ratings.length
+    const avg = ratingCount > 0 ? ratings.reduce((a, b) => a + b, 0) / ratingCount : 0
 
     await driverRef.update({
-      rating: Math.round(newAvgRating * 10) / 10,
-      total_deliveries: totalDeliveries + 1,
+      rating: Math.round(avg * 10) / 10,
+      rating_count: ratingCount,
       updated_at: new Date().toISOString(),
     })
   } catch (_error) {

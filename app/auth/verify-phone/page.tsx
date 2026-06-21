@@ -136,7 +136,7 @@ export default function VerifyPhonePage() {
     }
   }, [phoneParam, roleEntryPath, router])
 
-  const completeRegistration = async () => {
+  const completeRegistration = async (phoneIdToken?: string) => {
     const token = sessionStorage.getItem("pendingRegistrationToken")
     if (!token) {
       setError(t("بيانات التسجيل غير متاحة. أعد التسجيل مرة أخرى.", "Registration data is unavailable. Please register again."))
@@ -163,6 +163,7 @@ export default function VerifyPhonePage() {
         pendingData.country,
         pendingData.phone,
         true,
+        phoneIdToken,
       )
     }
 
@@ -198,6 +199,7 @@ export default function VerifyPhonePage() {
       pendingData.country,
       undefined,
       true,
+      phoneIdToken,
     )
   }
 
@@ -226,7 +228,7 @@ export default function VerifyPhonePage() {
       }
 
       setRegistering(true)
-      const success = await completeRegistration()
+      const success = await completeRegistration(result.idToken)
       if (!success) {
         return
       }

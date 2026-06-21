@@ -107,8 +107,9 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
 
         const now = new Date()
         const activeOffers = offersData.filter((offer: any) => {
-          const startDate = new Date(offer.start_date)
-          const endDate = new Date(offer.end_date)
+          // end_date شامل لليوم الأخير (نهاية اليوم) وبداية اليوم لـ start_date
+          const startDate = new Date(offer.start_date + "T00:00:00.000Z")
+          const endDate = new Date(offer.end_date + "T23:59:59.999Z")
           return startDate <= now && endDate >= now
         })
         setOffers(activeOffers as Offer[])
@@ -240,22 +241,27 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
     window.location.href = `tel:${store.phone}`
   }
 
+  // أبرز عرض نشط (أعلى نسبة خصم) لعرضه في الشريط العلوي
+  const topOffer = offers.length
+    ? offers.reduce((best, o) => (o.discount_percentage > best.discount_percentage ? o : best), offers[0])
+    : null
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      {offers.length > 0 && (
+      {topOffer && (
         <div className="bg-green-600 text-white py-2 md:py-3 shadow-md animate-in fade-in slide-in-from-top duration-500 overflow-hidden relative">
           <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 text-center">
             <div className="flex flex-wrap items-center justify-center gap-2 font-bold text-base md:text-xl">
               <Tag className="h-5 w-5 md:h-6 md:w-6 animate-bounce" />
-              <span>{offers[0].title}</span>
+              <span>{topOffer.title}</span>
               <span className="bg-yellow-400 text-green-800 px-2 py-0.5 rounded-full text-xs md:text-sm">
-                {offers[0].discount_percentage}% {t("خصم", "OFF")}
+                {topOffer.discount_percentage}% {t("خصم", "OFF")}
               </span>
             </div>
             <p className="hidden md:block text-green-50/90 text-sm">
-              {offers[0].description} • {t("يسري حتى", "Valid until")}: {new Date(offers[0].end_date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+              {topOffer.description} • {t("يسري حتى", "Valid until")}: {new Date(topOffer.end_date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
             </p>
           </div>
         </div>

@@ -111,14 +111,14 @@ export default function ProductModal() {
                                             key={product.id}
                                             onClick={() => addProductToShelf(selectedShelfId!, product.id)}
                                             disabled={shelfProducts.length >= (currentShelf?.capacity || 0)}
-                                            className="w-full flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl hover:border-[#1F478B] hover:shadow-md transition-all group disabled:opacity-50"
+                                            className="w-full flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl hover:border-primary hover:shadow-md transition-all group disabled:opacity-50"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden group-hover:bg-blue-50 transition-colors">
+                                                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden group-hover:bg-primary/10 transition-colors">
                                                     {product.textureURL ? (
                                                         <Image src={product.textureURL} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <Package className="w-5 h-5 text-gray-400 group-hover:text-[#1F478B]" />
+                                                        <Package className="w-5 h-5 text-gray-400 group-hover:text-primary" />
                                                     )}
                                                 </div>
                                                 <div className="text-right">
@@ -126,7 +126,7 @@ export default function ProductModal() {
                                                     <p className="text-[10px] text-gray-400 capitalize">{product.category}</p>
                                                 </div>
                                             </div>
-                                            <div className="p-1.5 bg-gray-50 rounded-lg text-gray-400 group-hover:bg-[#1F478B] group-hover:text-white transition-all">
+                                            <div className="p-1.5 bg-gray-50 rounded-lg text-gray-400 group-hover:bg-primary group-hover:text-white transition-all">
                                                 <Plus className="w-4 h-4" />
                                             </div>
                                         </button>
@@ -151,7 +151,7 @@ export default function ProductModal() {
                                 }
                                 toggleModal(false);
                             }}
-                            className="bg-[#1F478B] hover:bg-[#1a3d75] text-white px-8"
+                            className="bg-primary hover:bg-primary/90 text-white px-8"
                         >
                             {t("تأكيد", "Confirm")}
                         </Button>

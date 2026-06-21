@@ -118,7 +118,7 @@ export function Header() {
   }
 
   return (
-    <header suppressHydrationWarning className="sticky top-0 z-50 bg-gradient-to-r from-[#0f172a] via-[#1e3a5f] to-[#1e40af] text-white shadow-lg backdrop-blur-sm">
+    <header suppressHydrationWarning className="sticky top-0 z-50 bg-[oklch(0.30_0.05_155)] text-white shadow-lg backdrop-blur-sm">
       <div className="container mx-auto px-2 md:px-4">
         <div className="flex items-center justify-between h-16 md:h-18 gap-2">
           <Link href="/" className="hover:opacity-90 transition-all duration-300 flex-shrink-0 hover:scale-105">
@@ -150,7 +150,7 @@ export function Header() {
             >
               <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
               {cartItemsCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
+                <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
                   {cartItemsCount > 99 ? "99+" : cartItemsCount}
                 </span>
               )}
@@ -168,7 +168,7 @@ export function Header() {
                   >
                     <Bell className="h-4 w-4 md:h-5 md:w-5" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
+                      <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg animate-pulse">
                         {unreadCount > 9 ? "9+" : unreadCount}
                       </span>
                     )}
@@ -186,9 +186,9 @@ export function Header() {
 
                       {/* Dropdown */}
                       <div className="fixed left-2 right-2 top-16 md:absolute md:left-0 md:right-auto md:top-full md:mt-3 md:w-96 max-h-[70vh] md:max-h-[32rem] overflow-hidden bg-white/95 backdrop-blur-2xl rounded-2xl md:rounded-[2rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] border border-white/40 z-50 animate-in fade-in zoom-in-95 duration-300 origin-top md:origin-top-left">
-                        <div className="p-6 border-b border-gray-100/50 bg-gradient-to-br from-blue-50/80 via-white to-purple-50/30 flex items-center justify-between">
+                        <div className="p-6 border-b border-border bg-secondary/50 flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
+                            <div className="bg-primary p-2 rounded-xl shadow-lg shadow-primary/20">
                               <Bell className="h-5 w-5 text-white" />
                             </div>
                             <h3 className="font-extrabold text-gray-900 text-xl">
@@ -205,7 +205,7 @@ export function Header() {
                         <div className="overflow-y-auto max-h-[25rem] scrollbar-thin scrollbar-thumb-gray-200">
                           {loadingNotifications ? (
                             <div className="p-10 text-center">
-                              <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
                               <p className="text-gray-500 font-medium">{t("جاري التحميل...", "Loading...")}</p>
                             </div>
                           ) : notifications.length === 0 ? (
@@ -221,24 +221,24 @@ export function Header() {
                               {notifications.map((notification) => (
                                 <div
                                   key={notification.id}
-                                  className={`p-4 cursor-pointer hover:bg-blue-50/30 transition-all duration-200 group relative ${!notification.is_read ? "bg-blue-50/50" : ""
+                                  className={`p-4 cursor-pointer hover:bg-primary/5 transition-all duration-200 group relative ${!notification.is_read ? "bg-primary/10" : ""
                                     }`}
                                   onClick={() => handleNotificationItemClick(notification)}
                                 >
                                   <div className="flex items-start gap-4">
-                                    <div className={`mt-1 h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${notification.type === 'order_status' ? 'bg-orange-100 text-orange-600' :
-                                      notification.type === 'review_request' ? 'bg-purple-100 text-purple-600' :
-                                        'bg-blue-100 text-blue-600'
+                                    <div className={`mt-1 h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${notification.type === 'order_status' ? 'bg-accent/20 text-accent-foreground' :
+                                      notification.type === 'review_request' ? 'bg-primary/10 text-primary' :
+                                        'bg-info/10 text-info'
                                       }`}>
                                       <Bell className="h-5 w-5" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex justify-between items-start mb-1">
-                                        <p className={`font-bold text-sm truncate ${!notification.is_read ? "text-blue-900" : "text-gray-700"}`}>
+                                        <p className={`font-bold text-sm truncate ${!notification.is_read ? "text-foreground" : "text-muted-foreground"}`}>
                                           {notification.title}
                                         </p>
                                         {!notification.is_read && (
-                                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-pulse flex-shrink-0 ms-2" />
+                                          <span className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse flex-shrink-0 ms-2" />
                                         )}
                                       </div>
                                       <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
@@ -265,9 +265,9 @@ export function Header() {
                         </div>
 
                         {notifications.length > 0 && (
-                          <div className="p-3 bg-gray-50/50 border-t border-gray-100 text-center">
+                          <div className="p-3 bg-secondary/40 border-t border-border text-center">
                             <button
-                              className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors py-2 px-4 rounded-xl hover:bg-blue-100/50"
+                              className="text-xs font-bold text-primary hover:text-primary/80 transition-colors py-2 px-4 rounded-xl hover:bg-primary/10"
                               onClick={async (e) => {
                                 e.stopPropagation()
                                 if (!user?.id) return
@@ -310,7 +310,7 @@ export function Header() {
               </>
             ) : (
               <Button
-                className="bg-white text-[#1e40af] hover:bg-gray-50 hover:scale-105 active:scale-95 font-bold text-xs md:text-sm px-4 md:px-6 h-9 md:h-10 shadow-lg transition-all duration-300 rounded-xl border-2 border-white/50 hover:border-white"
+                className="bg-white text-primary hover:bg-white/90 active:scale-95 font-bold text-xs md:text-sm px-4 md:px-6 h-9 md:h-10 shadow-lg transition-all duration-300 rounded-xl border-2 border-white/50 hover:border-white"
                 onClick={() => router.push("/auth")}
               >
                 {t("تسجيل الدخول", "Login")}

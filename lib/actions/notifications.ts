@@ -63,10 +63,11 @@ export async function getUserNotifications(userId: string, limit: number = 20): 
     } catch (indexError: any) {
       // If index error, fallback to simple query and sort in memory
       console.warn("[v0] Index not found for notifications, falling back to simple query:", indexError?.message)
+      // بدون limit صغير: نجلب نطاقًا أوسع ثم نرتّب في الذاكرة كي لا تخرج الأحدث من النافذة
       snapshot = await db
         .collection("notifications")
         .where("user_id", "==", userId)
-        .limit(limit * 2) // Get more to have room for sorting
+        .limit(200)
         .get()
     }
 

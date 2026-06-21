@@ -41,7 +41,7 @@ export function LoginForm({
           type="text"
           required
           placeholder={t("example@email.com أو 01012345678", "example@email.com or 01012345678")}
-          className="h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-blue-100 sm:h-14 sm:text-base"
+          className="h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-primary/20 sm:h-14 sm:text-base"
         />
       </div>
 
@@ -50,7 +50,7 @@ export function LoginForm({
           <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 sm:text-base">
             {t("كلمة المرور", "Password")}
           </Label>
-          <Link href="/auth/forgot-password" className="text-xs font-medium text-blue-600 hover:text-blue-800 sm:text-sm">
+          <Link href="/auth/forgot-password" className="text-xs font-medium text-primary hover:text-primary/80 sm:text-sm">
             {t("هل نسيت كلمة السر؟", "Forgot Password?")}
           </Link>
         </div>
@@ -62,7 +62,7 @@ export function LoginForm({
             type={showPassword ? "text" : "password"}
             required
             placeholder="••••••••"
-            className="h-12 rounded-2xl border-slate-200 bg-white px-4 pe-12 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-blue-100 sm:h-14 sm:text-base"
+            className="h-12 rounded-2xl border-slate-200 bg-white px-4 pe-12 text-sm shadow-sm transition focus-visible:ring-4 focus-visible:ring-primary/20 sm:h-14 sm:text-base"
           />
           <button
             type="button"
@@ -76,7 +76,7 @@ export function LoginForm({
 
       <Button
         type="submit"
-        className="h-12 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-sm font-bold shadow-lg transition hover:from-blue-700 hover:to-blue-800 sm:h-14 sm:text-base"
+        className="h-12 w-full rounded-2xl bg-primary text-primary-foreground text-sm font-bold shadow-lg transition hover:bg-primary/90 sm:h-14 sm:text-base"
         disabled={isLoading || isGoogleLoading}
       >
         {isLoading ? t("جاري تسجيل الدخول...", "Logging in...") : t("تسجيل الدخول", "Login")}
@@ -104,7 +104,7 @@ export function LoginForm({
 
       <p className="text-center text-sm text-slate-500">
         {t("لا تمتلك حسابًا؟", "Don't have an account?")}{" "}
-        <Link href={registerHref} className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+        <Link href={registerHref} className="font-semibold text-primary hover:text-primary/80 hover:underline">
           {t("أنشئ حساب الآن", "Create one now")}
         </Link>
       </p>

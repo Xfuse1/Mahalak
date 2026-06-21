@@ -123,10 +123,10 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                     className={`
                                         z-10 flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-500
                                         ${isCompleted
-                                            ? "bg-[#1F478B] border-[#1F478B] text-white shadow-md shadow-[#1F478B]/20"
+                                            ? "bg-primary border-primary text-white shadow-md shadow-primary/20"
                                             : "bg-white border-gray-200 text-gray-300"
                                         }
-                                        ${isCurrent ? "ring-4 ring-[#1F478B]/20 scale-110" : ""}
+                                        ${isCurrent ? "ring-4 ring-primary/20 scale-110" : ""}
                                     `}
                                 >
                                     {isCurrent && !isCancelled ? (
@@ -139,7 +139,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                 {!isLast && (
                                     <div
                                         className={`w-0.5 h-20 transition-colors duration-500 ease-in-out ${index < currentIndex && !isCancelled
-                                            ? "bg-[#1F478B]"
+                                            ? "bg-primary"
                                             : "bg-gray-100"
                                             }`}
                                     />
@@ -150,7 +150,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                             <div className={`flex-1 pb-10 ${isLast ? "pb-0" : ""} pt-1`}>
                                 <div className={`
                                     flex items-start justify-between p-3 rounded-lg transition-colors
-                                    ${isCurrent ? "bg-[#1F478B]/5 border border-[#1F478B]/10" : "hover:bg-gray-50"}
+                                    ${isCurrent ? "bg-primary/5 border border-primary/10" : "hover:bg-gray-50"}
                                 `}>
                                     <div>
                                         <h4
@@ -174,7 +174,7 @@ export function OrderTrackingTimeline({ currentStatus, timeline, createdAt }: Or
                                         )}
                                     </div>
                                     {isCurrent && (
-                                        <span className="px-3 py-1 text-xs font-bold bg-[#1F478B] text-white rounded-full shadow-sm animate-in fade-in slide-in-from-end-4">
+                                        <span className="px-3 py-1 text-xs font-bold bg-primary text-white rounded-full shadow-sm animate-in fade-in slide-in-from-end-4">
                                             {t("الآن", "Now")}
                                         </span>
                                     )}

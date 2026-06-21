@@ -150,15 +150,48 @@ function extractStore(doc: DocumentSnapshot): Store | null {
   const address = storeData.address || cityStreetAddress || ""
   const description = storeData.description || ""
 
+  // قائمة سماح بالحقول العامة فقط — نمنع تسريب بيانات KYC الحسّاسة للبائع
+  // (الرقم القومي owner_id_number وروابط صور البطاقة/السجل التجاري/البطاقة الضريبية)
+  // لأي زائر عبر server actions العامة (getStore/getStores تُستهلك في صفحات عامة).
   return serializeData({
     id: doc.id, // Store ID = User ID
     seller_id: doc.id,
-    ...storeData,
     name,
     phone,
     address,
     description,
+    category: storeData.category,
+    category_id: storeData.category_id,
+    latitude: storeData.latitude ?? null,
+    longitude: storeData.longitude ?? null,
+    whatsapp_number: storeData.whatsapp_number,
+    support_email: storeData.support_email,
+    image_url: storeData.image_url,
+    open_time: storeData.open_time,
+    close_time: storeData.close_time,
+    working_days: storeData.working_days,
+    return_policy: storeData.return_policy,
+    is_approved: storeData.is_approved,
+    rating: storeData.rating,
+    created_at: storeData.created_at,
+    updated_at: storeData.updated_at,
   }) as Store;
+}
+
+// نسخة خاصة بالمالك تشمل حقول KYC — تُستخدم فقط في لوحة البائع بعد التحقق من الجلسة.
+function extractStoreForOwner(doc: DocumentSnapshot): Store | null {
+  const base = extractStore(doc)
+  if (!base) return null
+  const storeData = (doc.data() as any)?.store || {}
+  return serializeData({
+    ...base,
+    owner_id_number: storeData.owner_id_number,
+    id_card_image_url: storeData.id_card_image_url ?? null,
+    id_card_image_back_url: storeData.id_card_image_back_url ?? null,
+    commercial_register_image_url: storeData.commercial_register_image_url ?? null,
+    tax_card_image_url: storeData.tax_card_image_url ?? null,
+    tax_card_image_back_url: storeData.tax_card_image_back_url ?? null,
+  }) as Store
 }
 
 // Internal implementation
@@ -258,7 +291,15 @@ export async function getStore(id: string) {
 }
 
 export async function getStoreByUserId(userId: string) {
-  // Since store is embedded in user document, store ID = user ID
+  // Since store is embedded in user document, store ID = user ID.
+  // المالك (تطابق الجلسة) يحصل على بياناته الكاملة شاملة KYC (للوحة الإعدادات)؛
+  // غير المالك يحصل على النسخة العامة فقط (بدون الرقم القومي/صور المستندات).
+  const uid = await getCurrentUid()
+  if (uid && uid === userId) {
+    const docSnap = await getAdminDb().collection("users").doc(userId).get()
+    if (!docSnap.exists) return null
+    return extractStoreForOwner(docSnap)
+  }
   return getStore(userId)
 }
 

@@ -93,7 +93,7 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
       <DialogContent className="max-w-2xl w-[95vw] p-0 overflow-hidden">
         <DialogHeader className="p-4 pb-2">
           <DialogTitle className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-blue-600" />
+            <MapPin className="h-5 w-5 text-primary" />
             {isAr ? "تحديد الموقع من الخريطة" : "Pick Location from Map"}
           </DialogTitle>
           <p className="text-sm text-gray-500">
@@ -104,7 +104,7 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
         <div className="relative w-full h-[400px]" ref={mapRef}>
           {!isLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           )}
         </div>
@@ -120,7 +120,7 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
             <Button type="button" variant="outline" onClick={onClose}>
               {isAr ? "إلغاء" : "Cancel"}
             </Button>
-            <Button type="button" onClick={handleConfirm} className="bg-blue-600 hover:bg-blue-700">
+            <Button type="button" onClick={handleConfirm} className="bg-primary hover:bg-primary/90">
               {isAr ? "تأكيد الموقع" : "Confirm Location"}
             </Button>
           </DialogFooter>

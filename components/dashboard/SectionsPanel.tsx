@@ -32,7 +32,7 @@ export default function SectionsPanel() {
                         className={cn(
                             "w-full flex items-center gap-3 p-4 rounded-xl transition-all text-right",
                             isActive
-                                ? "bg-[#1F478B] text-white shadow-lg"
+                                ? "bg-primary text-white shadow-lg"
                                 : "hover:bg-gray-50 text-gray-600"
                         )}
                     >
@@ -48,7 +48,7 @@ export default function SectionsPanel() {
                             </div>
                             <div className={cn(
                                 "text-[10px]",
-                                isActive ? "text-blue-100" : "text-gray-400"
+                                isActive ? "text-primary-foreground/80" : "text-gray-400"
                             )}>
                                 {sectionShelves.length} {t("رف", "shelves")} | {productCount} {t("منتج", "products")}
                             </div>

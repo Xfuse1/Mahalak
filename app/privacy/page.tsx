@@ -99,7 +99,7 @@ export default function PrivacyPage() {
             </h1>
             <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
               <Lock className="w-4 h-4" />
-              {t("آخر تحديث: يناير 2024", "Last updated: January 2024")}
+              {t("آخر تحديث: يونيو 2026", "Last updated: June 2026")}
             </p>
           </div>
 

@@ -9,18 +9,12 @@ const FooterComponent = () => {
   const { t } = useLanguage()
 
   return (
-    <footer className="bg-gradient-to-b from-gray-900 via-gray-900 to-black text-white mt-16 relative overflow-hidden">
-      {/* Decorative Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl"></div>
-      </div>
-      
+    <footer className="bg-[oklch(0.24_0.04_155)] text-white mt-16 relative overflow-hidden">
       <div className="container mx-auto px-4 py-16 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 lg:gap-12">
           {/* About */}
           <div className="space-y-4">
-            <h3 className="text-lg md:text-xl lg:text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">{t("الرئيسية", "Home")}</h3>
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold text-white">{t("الرئيسية", "Home")}</h3>
             <p className="text-gray-400 text-sm leading-relaxed">{t("منصة محلك - وجهتك الأولى للتسوق من المتاجر المحلية", "Mahalak - Your go-to platform for shopping from local stores")}</p>
             <div className="flex items-center gap-4 pt-4">
               <a
@@ -73,25 +67,25 @@ const FooterComponent = () => {
             <ul className="space-y-3 text-sm">
               <li>
                 <Link href="/about" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("من نحن", "About Us")}
                 </Link>
               </li>
               <li>
                 <Link href="/faq" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("الأسئلة الشائعة", "FAQ")}
                 </Link>
               </li>
               <li>
                 <Link href="/store" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("المتاجر", "Stores")}
                 </Link>
               </li>
               <li>
                 <Link href="/search" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("المنتجات", "Products")}
                 </Link>
               </li>
@@ -104,13 +98,13 @@ const FooterComponent = () => {
             <ul className="space-y-3 text-sm">
               <li>
                 <Link href="/privacy" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("سياسة الخصوصية", "Privacy Policy")}
                 </Link>
               </li>
               <li>
                 <Link href="/terms" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full group-hover:scale-150 transition-transform"></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
                   {t("شروط الاستخدام", "Terms of Use")}
                 </Link>
               </li>
@@ -122,7 +116,7 @@ const FooterComponent = () => {
             <h4 className="font-bold text-lg text-white">{t("اتصل بنا", "Contact Us")}</h4>
             <div className="space-y-3">
               <a href="mailto:contact@mahalk.com" className="flex items-center gap-3 text-gray-400 hover:text-white transition-colors group">
-                <div className="p-2 bg-white/5 rounded-lg group-hover:bg-blue-600 transition-colors">
+                <div className="p-2 bg-white/5 rounded-lg group-hover:bg-primary transition-colors">
                   <Mail className="h-4 w-4" />
                 </div>
                 <span className="text-sm">contact@mahalk.com</span>

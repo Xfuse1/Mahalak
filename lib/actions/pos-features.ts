@@ -490,10 +490,60 @@ export async function createPOSReturn(data: {
     const db = getAdminDb()
     const now = new Date().toISOString()
 
-    // Restore stock for returned items
-    const batch = db.batch()
+    // 1) تحميل الفاتورة الأصلية والتأكد من أنها لنفس المتجر
+    const saleSnap = await db.collection("pos_sales").doc(data.original_sale_id).get()
+    if (!saleSnap.exists || saleSnap.data()?.store_id !== data.store_id) {
+      return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
+    }
+    const sale = saleSnap.data() as { items?: Array<{ product_id?: string; quantity?: number; price?: number }> }
+    const soldMap = new Map<string, { qty: number; price: number }>()
+    for (const it of sale.items || []) {
+      if (!it.product_id) continue
+      const prev = soldMap.get(it.product_id)
+      soldMap.set(it.product_id, {
+        qty: (prev?.qty || 0) + (Number(it.quantity) || 0),
+        price: Number(it.price) || prev?.price || 0,
+      })
+    }
 
+    // 2) مجموع ما أُرجِع سابقًا لنفس الفاتورة لكل منتج (لمنع تجاوز المُباع)
+    const priorReturnsSnap = await db
+      .collection("pos_returns")
+      .where("original_sale_id", "==", data.original_sale_id)
+      .get()
+    const returnedMap = new Map<string, number>()
+    for (const rdoc of priorReturnsSnap.docs) {
+      for (const it of (rdoc.data().items || []) as Array<{ product_id?: string; quantity?: number }>) {
+        if (!it.product_id) continue
+        returnedMap.set(it.product_id, (returnedMap.get(it.product_id) || 0) + (Number(it.quantity) || 0))
+      }
+    }
+
+    // 3) التحقق من كل صنف وإعادة احتساب مبلغ الاسترجاع من أسعار الفاتورة (لا نثق بمبلغ العميل)
+    const verifiedItems: POSReturnItem[] = []
+    let computedRefund = 0
     for (const item of data.items) {
+      const qty = Number(item.quantity)
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
+      }
+      const sold = soldMap.get(item.product_id)
+      if (!sold) {
+        return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
+      }
+      const alreadyReturned = returnedMap.get(item.product_id) || 0
+      if (alreadyReturned + qty > sold.qty) {
+        return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
+      }
+      const lineTotal = roundMoney(sold.price * qty)
+      computedRefund += lineTotal
+      verifiedItems.push({ product_id: item.product_id, name: item.name, price: sold.price, quantity: qty, total: lineTotal })
+    }
+    const refundAmount = roundMoney(computedRefund)
+
+    // 4) استعادة المخزون (بالكميات المُتحقَّقة) + إنشاء سجل المرتجع
+    const batch = db.batch()
+    for (const item of verifiedItems) {
       const productRef = db.collection("products").doc(item.product_id)
       const productDoc = await productRef.get()
       if (productDoc.exists) {
@@ -505,15 +555,14 @@ export async function createPOSReturn(data: {
       }
     }
 
-    // Create return record
     const returnRef = db.collection("pos_returns").doc()
     const returnPayload = {
       store_id: data.store_id,
       original_sale_id: data.original_sale_id,
       original_sale_number: data.original_sale_number,
-      items: data.items,
+      items: verifiedItems,
       return_type: data.return_type,
-      refund_amount: roundMoney(data.refund_amount),
+      refund_amount: refundAmount,
       refund_method: data.refund_method,
       reason: data.reason || null,
       customer_name: data.customer_name || null,
@@ -854,15 +903,21 @@ export async function validatePOSCoupon(storeId: string, code: string, orderTota
 }
 
 export async function redeemPOSCoupon(storeId: string, couponId: string) {
+  // مصادقة المالك (بقية دوال الملف تفعل ذلك؛ كانت مفقودة هنا)
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) return
   try {
     const db = getAdminDb()
     const docRef = db.collection("pos_coupons").doc(couponId)
-    const doc = await docRef.get()
-
-    if (!doc.exists || doc.data()?.store_id !== storeId) return
-
-    await docRef.update({
-      used_count: (Number(doc.data()?.used_count) || 0) + 1,
+    // زيادة ذرّية للعدّاد مع إعادة التحقق من الحد داخل معاملة (يمنع تجاوز max_uses عند التزامن)
+    await db.runTransaction(async (tx) => {
+      const doc = await tx.get(docRef)
+      if (!doc.exists || doc.data()?.store_id !== storeId) return
+      const data = doc.data() || {}
+      const used = Number(data.used_count) || 0
+      const maxUses = data.max_uses != null ? Number(data.max_uses) : null
+      if (maxUses != null && used >= maxUses) return
+      tx.update(docRef, { used_count: used + 1 })
     })
   } catch (error) {
     logError("[redeemPOSCoupon] Error:", error)

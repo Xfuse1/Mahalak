@@ -2,6 +2,7 @@
 
 import { getAdminDb } from "../firebase/admin"
 import { logError } from "../logger"
+import { createDriverSession, clearDriverSession } from "../auth/driver-session"
 
 export type Driver = {
   id: string
@@ -102,10 +103,18 @@ export async function verifyDriverLogin(driverId: string, pin: string): Promise<
     if (!doc.exists) return { success: false }
     const data = doc.data()
     if (data?.pin !== pin) return { success: false }
+    // إصدار جلسة سائق موثّقة سيرفر-سايد (كوكي) — تُستخدم لتأمين دوال السائق
+    await createDriverSession(driverId)
     return { success: true }
   } catch {
     return { success: false }
   }
+}
+
+// تسجيل خروج السائق (إنهاء الجلسة)
+export async function driverLogout(): Promise<{ success: boolean }> {
+  await clearDriverSession()
+  return { success: true }
 }
 
 // Get driver commission rate from settings

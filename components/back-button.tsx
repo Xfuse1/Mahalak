@@ -13,7 +13,7 @@ export function BackButton() {
     <Button
       variant="default"
       onClick={() => router.back()}
-      className="mb-4 bg-[#1F478B] hover:bg-[#1a3a70]"
+      className="mb-4 bg-primary hover:bg-primary/90"
     >
       <ArrowLeft className="me-2 h-4 w-4" />
       {t('رجوع', 'Back')}

@@ -4,11 +4,12 @@ import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestor
 import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
-import { getCurrentUid } from "../auth/session"
+import { getCurrentUid, requireOwner } from "../auth/session"
 import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
+import { findBestDiscount as findBestDiscountShared } from "../utils/offer-discount"
 
 type ProductRecord = {
   id?: string
@@ -149,25 +150,7 @@ function findBestDiscount(
   activeOffers: OfferRecord[],
   today: string
 ): { discount_percentage: number; offer_title: string | null } {
-  let bestDiscount = 0
-  let offerTitle: string | null = null
-
-  for (const offer of activeOffers) {
-    if ((offer.start_date && offer.start_date > today) || (offer.end_date && offer.end_date < today)) continue
-    const d = Number(offer.discount_percentage ?? 0)
-    if (d <= bestDiscount) continue
-
-    if (offer.product_id === product.id && offer.store_id === product.store_id) {
-      bestDiscount = d
-      offerTitle = offer.title || null
-    } else if (!offer.product_id && offer.category === product.category && offer.store_id === product.store_id) {
-      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
-    } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
-      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
-    }
-  }
-
-  return { discount_percentage: bestDiscount, offer_title: offerTitle }
+  return findBestDiscountShared(product, activeOffers, today)
 }
 
 // Internal implementation (no cache)
@@ -517,12 +500,22 @@ export async function deleteProduct(id: string, callerUserId?: string) {
 
 export async function getProductsByStoreId(storeId: string) {
   const db = getAdminDb()
+  // هل المستدعي هو مالك المتجر؟ غير المالك لا يجب أن يرى تكلفة/ربح المنتج.
+  const isOwner = await requireOwner(storeId)
   const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
-  const products = snapshot.docs.map((doc: DocumentSnapshot) => ({ id: doc.id, ...(doc.data() as ProductRecord) }))
+  const products = snapshot.docs.map((doc: DocumentSnapshot) => {
+    const data = doc.data() as ProductRecord
+    if (!isOwner) {
+      delete (data as Record<string, unknown>).cost_price
+      delete (data as Record<string, unknown>).profit_per_unit
+    }
+    return { id: doc.id, ...data }
+  })
 
   // Fetch active offers for this store
   const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
-  const today = new Date().toISOString()
+  // مقارنة بصيغة YYYY-MM-DD فقط — تواريخ العروض مخزّنة date-only، فلا نقارنها بـ ISO datetime
+  const today = new Date().toISOString().split("T")[0]
   const activeOffers = offersSnapshot.docs
     .map((doc) => doc.data() as OfferRecord)
     .filter((offer) => {

@@ -156,7 +156,6 @@ export default function SupermarketSimulator() {
     const cartCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems]);
     const [money, setMoney] = useState(500);
     const [showCheckout, setShowCheckout] = useState(false);
-    const toggleDashboard = useProductStore(state => state.toggleDashboard);
     const [message, setMessage] = useState('');
     const [isCartMinimized, setIsCartMinimized] = useState(true); // Start minimized/as button
     const [catalog, setCatalog] = useState<SimProduct[]>([]);
@@ -978,6 +977,7 @@ export default function SupermarketSimulator() {
         const shelfRailGeom = new THREE.BoxGeometry(6.9, 0.1, 0.03);
         const shelfFrameGeom = new THREE.BoxGeometry(0.25, 3.6, 0.8);
         const shelfHeaderGeom = new THREE.BoxGeometry(7.2, 0.4, 0.85);
+        const shelfLedGeom = new THREE.BoxGeometry(6.8, 0.02, 0.6);
 
         function recordShelfInstances(worldMatrix: THREE.Matrix4) {
             const m = new THREE.Matrix4();
@@ -988,7 +988,7 @@ export default function SupermarketSimulator() {
 
             // Header
             registerShelfPart('header', shelfHeaderGeom, shelfMat, m.makeTranslation(0, 3.5, 0.3), worldMatrix);
-            registerShelfPart('header_led', new THREE.BoxGeometry(6.8, 0.02, 0.6), ledMat, m.makeTranslation(0, 3.25, 0.3), worldMatrix);
+            registerShelfPart('header_led', shelfLedGeom, ledMat, m.makeTranslation(0, 3.25, 0.3), worldMatrix);
 
             // Boards & Rails
             for (let lvl = 0; lvl < 6; lvl++) {
@@ -2210,6 +2210,8 @@ export default function SupermarketSimulator() {
             // Cleanup
             if (heldMeshRef.current) {
                 camera.remove(heldMeshRef.current);
+                // التخلص من الـ geometry المستنسخة (المادة مشتركة فلا نتخلص منها)
+                heldMeshRef.current.geometry.dispose();
                 heldMeshRef.current = null;
             }
             heldProductRef.current = null;

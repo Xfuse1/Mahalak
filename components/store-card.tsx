@@ -28,11 +28,11 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className="group">
       <Link href={`/store/${store.id}`}>
-        <Card className="overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 h-full border-0 bg-white shadow-md group-hover:shadow-blue-500/10">
-          <div className="aspect-video relative bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+        <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full border border-border bg-card shadow-sm group-hover:shadow-primary/10">
+          <div className="aspect-video relative bg-muted overflow-hidden">
             {store.activeOffer && (
               <div className="absolute top-3 left-3 z-10">
-                <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white border-none px-3 py-1.5 flex items-center gap-1.5 shadow-lg animate-pulse">
+                <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground border-none px-3 py-1.5 flex items-center gap-1.5 shadow-lg animate-pulse">
                   <Tag className="h-3.5 w-3.5" />
                   {t("عرض خاص", "Special Offer")} {store.activeOffer.discount_percentage}%
                 </Badge>
@@ -59,15 +59,15 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
           <CardContent className={`p-5 space-y-3 ${isRTL ? "text-right" : "text-left"}`}>
             {/* الاسم والفئة */}
             <div className={`flex items-start gap-2 ${isRTL ? "flex-row-reverse" : "flex-row"} justify-between`}>
-              <h3 className="font-bold text-lg line-clamp-1 flex-1 group-hover:text-blue-600 transition-colors">{store.name}</h3>
-              <Badge variant="secondary" className="flex-shrink-0 bg-blue-50 text-blue-700 border-blue-200">
+              <h3 className="font-bold text-lg line-clamp-1 flex-1 group-hover:text-primary transition-colors">{store.name}</h3>
+              <Badge variant="secondary" className="flex-shrink-0 bg-primary/10 text-primary border-primary/20">
                 {store.category}
               </Badge>
             </div>
 
             {/* العنوان */}
-            <div className={`flex items-center gap-2 text-gray-500 ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
-              <div className="p-1 bg-gray-100 rounded-md">
+            <div className={`flex items-center gap-2 text-muted-foreground ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
+              <div className="p-1 bg-muted rounded-md">
                 <MapPin className="h-3.5 w-3.5" />
               </div>
               <span className="line-clamp-1 text-sm">
@@ -76,10 +76,10 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
             </div>
 
             {/* الوصف */}
-            <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{store.description}</p>
+            <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">{store.description}</p>
 
             {/* التقييم */}
-            <div className={`flex items-center pt-3 border-t border-gray-100 ${isRTL ? "justify-start" : "justify-start"}`}>
+            <div className={`flex items-center pt-3 border-t border-border ${isRTL ? "justify-start" : "justify-start"}`}>
               <div className={`flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-full ${isRTL ? "flex-row-reverse" : "flex-row"}`}>
                 <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                 <span className="text-sm font-bold text-amber-700">{store.rating}</span>

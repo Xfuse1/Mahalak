@@ -36,8 +36,8 @@ function ProductCardComponent({ product }: ProductCardProps) {
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className="min-w-0 group">
       <Link href={`/product/${product.id}`}>
-        <Card className="overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 h-full border-0 bg-white shadow-md group-hover:shadow-blue-500/10">
-          <div className="aspect-square relative bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+        <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full border border-border bg-card shadow-sm group-hover:shadow-primary/10">
+          <div className="aspect-square relative bg-muted overflow-hidden">
             <Image
               src={product.image_url || product.image || "/placeholder.svg"}
               alt={product.name}
@@ -66,36 +66,36 @@ function ProductCardComponent({ product }: ProductCardProps) {
             {product.rating > 0 && (
               <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1 shadow-md">
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                <span className="text-xs font-bold text-gray-700">{product.rating}</span>
+                <span className="text-xs font-bold text-foreground">{product.rating}</span>
               </div>
             )}
           </div>
           <CardContent className="p-4 space-y-2.5">
-            <h3 className="font-bold text-base line-clamp-2 leading-snug text-gray-800 group-hover:text-blue-600 transition-colors">{product.name}</h3>
+            <h3 className="font-bold text-base line-clamp-2 leading-snug text-foreground group-hover:text-primary transition-colors">{product.name}</h3>
             {product.category && (
-              <span className="inline-block text-xs font-medium bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full w-fit">
+              <span className="inline-block text-xs font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-full w-fit">
                 {product.category}
               </span>
             )}
             {product.storeName && (
-              <p className="text-sm text-gray-500 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
                 {product.storeName}
               </p>
             )}
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between pt-2 border-t border-border">
               {hasDiscount ? (
                 <div className="flex flex-col">
-                  <p className="text-sm text-gray-400 line-through">
+                  <p className="text-sm text-muted-foreground line-through">
                     {product.price.toLocaleString()} {t("جنيه", "EGP")}
                   </p>
-                  <p className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
-                    {discountedPrice.toLocaleString()} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
+                  <p className="text-xl font-extrabold text-primary">
+                    {discountedPrice.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
                   </p>
                 </div>
               ) : (
-                <p className="text-xl font-extrabold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                  {product.price} <span className="text-sm font-medium text-gray-500">{t("جنيه", "EGP")}</span>
+                <p className="text-xl font-extrabold text-primary">
+                  {product.price} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
                 </p>
               )}
             </div>

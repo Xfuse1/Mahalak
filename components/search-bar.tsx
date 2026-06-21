@@ -87,6 +87,12 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
         }
         setQuery(transcript)
         setIsListening(false)
+        // بعد التعرّف على الصوت ننفّذ نفس مسار البحث (مثل الإرسال)
+        if (onSearch) {
+          onSearch(transcript)
+        } else {
+          router.push(`/search?q=${encodeURIComponent(transcript)}`)
+        }
       }
 
       recognition.onerror = () => {
@@ -110,7 +116,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
         <Label htmlFor="search-input" className="sr-only">
           {searchPlaceholder}
         </Label>
-        <div className={`absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur-xl transition-opacity duration-300 ${isFocused ? 'opacity-100' : 'opacity-0'}`}></div>
+        <div className={`absolute inset-0 bg-gradient-to-r from-primary/15 to-accent/15 rounded-2xl blur-xl transition-opacity duration-300 ${isFocused ? 'opacity-100' : 'opacity-0'}`}></div>
         <Input
           id="search-input"
           type="text"
@@ -119,14 +125,14 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
           onChange={handleChange}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className={`relative border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 hover:border-blue-300 transition-all duration-300 h-14 rounded-2xl shadow-sm bg-white ${isRTL ? 'text-right pl-12 pr-5' : 'text-left pr-12 pl-5'} text-base`}
+          className={`relative border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/20 hover:border-primary/50 transition-all duration-300 h-14 rounded-2xl shadow-sm bg-card ${isRTL ? 'text-right pl-12 pr-5' : 'text-left pr-12 pl-5'} text-base`}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className={`absolute top-1/2 -translate-y-1/2 transition-all duration-300 rounded-xl ${isRTL ? 'left-2' : 'right-2'
-            } ${isListening ? "text-red-500 animate-pulse bg-red-50" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+            } ${isListening ? "text-destructive animate-pulse bg-destructive/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10"
             }`}
           onClick={handleVoiceSearch}
           title={t("البحث الصوتي", "Voice Search")}
@@ -137,7 +143,7 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
       </div>
       <Button 
         type="submit" 
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 px-6 md:px-8 h-14 text-white font-bold transition-all duration-300 rounded-2xl shadow-lg hover:shadow-xl hover:shadow-blue-500/25 hover:scale-105 active:scale-95 flex items-center gap-2"
+        className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 md:px-8 h-14 font-bold transition-colors duration-300 rounded-2xl shadow-lg active:scale-95 flex items-center gap-2"
       >
         <Search className="h-5 w-5" />
         <span className="hidden sm:inline">{t("بحث", "Search")}</span>

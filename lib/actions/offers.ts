@@ -34,10 +34,9 @@ function getErrorMessage(error: unknown) {
   return undefined
 }
 
-export async function getStoreOffers(storeId: string, callerId?: string) {
-  if (callerId && callerId !== storeId) {
-    return []
-  }
+export async function getStoreOffers(storeId: string, _callerId?: string) {
+  // العروض بيانات تسويقية شبه عامة تُعرض في صفحة المتجر للعملاء، فالقراءة عامة عمدًا.
+  // (الإنشاء/التعديل/الحذف محميّة بالملكية في الدوال أدناه عبر getCurrentUid.)
   const db = getAdminDb()
   const snapshot = await db
     .collection("offers")
@@ -55,6 +54,7 @@ export async function createOffer(formData: {
   discount_percentage: number
   start_date: string
   end_date: string
+  offerTarget?: "all" | "product" | "category"
   product_id?: string
   category?: string
   quantity?: number
@@ -77,6 +77,18 @@ export async function createOffer(formData: {
   }
 
   const db = getAdminDb()
+
+  // التحقق أن المنتج ينتمي لهذا المتجر عند ربط العرض بمنتج
+  if (formData.offerTarget === "product" || formData.product_id) {
+    if (!formData.product_id) {
+      return { success: false, error: "المنتج لا ينتمي لهذا المتجر" }
+    }
+    const productDoc = await db.collection("products").doc(formData.product_id).get()
+    if (!productDoc.exists || productDoc.data()?.store_id !== formData.store_id) {
+      return { success: false, error: "المنتج لا ينتمي لهذا المتجر" }
+    }
+  }
+
   const docRef = db.collection("offers").doc()
   const payload = {
     ...formData,
@@ -128,6 +140,15 @@ export async function updateOffer(
   }
   if (!uid || offerDoc.data()?.store_id !== uid) {
     return { success: false, error: "ليس لديك صلاحية لتعديل هذا العرض" }
+  }
+
+  // التحقق أن المنتج ينتمي لهذا المتجر عند تغيير المنتج المرتبط بالعرض
+  if (formData.product_id) {
+    const storeId = offerDoc.data()?.store_id
+    const productDoc = await db.collection("products").doc(formData.product_id).get()
+    if (!productDoc.exists || productDoc.data()?.store_id !== storeId) {
+      return { success: false, error: "المنتج لا ينتمي لهذا المتجر" }
+    }
   }
 
   try {
