@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw } from "lucide-react"
+import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw, KeyRound } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
@@ -493,6 +493,17 @@ export default function AccountPage() {
                                       style={{ width: `${activeStops.length > 0 ? (pickedCount / activeStops.length) * 100 : 0}%` }}
                                     />
                                   </div>
+                                </div>
+                              )}
+
+                              {/* UX-05: كود تأكيد التسليم — يعرضه العميل للسائق لإثبات الاستلام */}
+                              {order.status !== "cancelled" && order.status !== "delivered" && order.delivery_code && (
+                                <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <KeyRound className="h-4 w-4 text-primary flex-shrink-0" />
+                                    <span className="text-xs text-gray-600">{t("سلّم هذا الكود للسائق عند الاستلام", "Give this code to the driver on delivery")}</span>
+                                  </div>
+                                  <span className="font-extrabold text-lg tracking-[0.3em] text-primary">{order.delivery_code}</span>
                                 </div>
                               )}
                             </div>

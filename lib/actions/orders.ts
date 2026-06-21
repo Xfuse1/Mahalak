@@ -1035,6 +1035,8 @@ export async function createMultiStoreOrder(orderData: {
         total: Number(total),
         status: "pending",
         payment_status: "cod",
+        // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للسائق عند الاستلام
+        delivery_code: String(Math.floor(1000 + Math.random() * 9000)),
         timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],
         created_at: now,
         updated_at: now,
@@ -1503,6 +1505,75 @@ export async function markStorePickedUp(orderId: string, _driverId: string, stor
   } catch (error: unknown) {
     logError("[v0] Error marking store picked up:", error)
     return { success: false, error: getErrorMessage(error) || "Failed to update pickup status" }
+  }
+}
+
+// UX-05: إتمام التسليم للعميل بإثبات (كود تأكيد) — يحوّل الطلب إلى "delivered" ويسجّل النقدية المحصّلة (COD).
+export async function markOrderDeliveredByDriver(orderId: string, code: string) {
+  const sessionDriverId = await getCurrentDriverId()
+  if (!sessionDriverId) return { success: false, error: "Unauthorized" }
+  const db = getAdminDb()
+  const docRef = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+
+  try {
+    const txResult = await db.runTransaction(async (tx) => {
+      const orderDoc = await tx.get(docRef)
+      if (!orderDoc.exists) return { ok: false as const, error: "Order not found" }
+      const o = orderDoc.data() as Record<string, any>
+      if (o.driver_id !== sessionDriverId) return { ok: false as const, error: "غير مصرح لك بهذا الطلب" }
+      if (o.status === "delivered") return { ok: false as const, error: "تم تسليم الطلب بالفعل" }
+      if (o.status === "cancelled") return { ok: false as const, error: "الطلب ملغى" }
+      if (o.status !== "on_the_way") return { ok: false as const, error: "أكمل استلام كل المتاجر أولًا" }
+      // إثبات التسليم: مطابقة كود التأكيد الذي بحوزة العميل
+      const expected = String(o.delivery_code || "")
+      if (expected && String(code).trim() !== expected) {
+        return { ok: false as const, error: "كود التأكيد غير صحيح" }
+      }
+      const timeline = [
+        ...(o.timeline || []),
+        { status: "delivered", timestamp: now, note: "تم التسليم للعميل بكود التأكيد" } as TimelineEntry,
+      ]
+      tx.set(
+        docRef,
+        {
+          status: "delivered",
+          delivered_at: now,
+          cash_collected: Number(o.total || 0),
+          delivery_verified: true,
+          timeline,
+          updated_at: now,
+        },
+        { merge: true },
+      )
+      return { ok: true as const, customerId: o.customer_id as string }
+    })
+
+    if (!txResult.ok) return { success: false, error: txResult.error }
+
+    // إشعار العميل بالتسليم + طلب التقييم
+    try {
+      const notifRef = db.collection("notifications").doc()
+      await notifRef.set({
+        user_id: txResult.customerId,
+        type: "order_delivered",
+        title: "✅ تم تسليم طلبك",
+        title_en: "✅ Your order was delivered",
+        message: "نتمنى أن ينال إعجابك! قيّم تجربتك من فضلك.",
+        message_en: "We hope you enjoyed it! Please rate your experience.",
+        link: `/review/${orderId}`,
+        is_read: false,
+        created_at: now,
+      })
+    } catch (e) {
+      logError("[orders] delivered notification", e)
+    }
+
+    revalidatePath("/account")
+    return { success: true }
+  } catch (error: unknown) {
+    logError("[orders] markOrderDeliveredByDriver", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to mark delivered" }
   }
 }
 

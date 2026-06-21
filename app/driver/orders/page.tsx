@@ -21,9 +21,10 @@ import {
   ChevronDown,
   ChevronUp,
   Navigation,
+  Wallet,
 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { getMultiStoreOrdersForDriver, markStorePickedUp } from "@/lib/actions/orders"
+import { getMultiStoreOrdersForDriver, markStorePickedUp, markOrderDeliveredByDriver } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
 import { getDriverById, verifyDriverLogin } from "@/lib/actions/delivery"
 import type { Driver } from "@/lib/actions/delivery"
@@ -58,6 +59,7 @@ export default function DriverOrdersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({})
 
   const loadDriverData = async (id: string) => {
     if (!id) return
@@ -138,6 +140,30 @@ export default function DriverOrdersPage() {
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
       default:
         return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+    }
+  }
+
+  const handleDeliver = async (orderId: string) => {
+    const code = (deliveryCodes[orderId] || "").trim()
+    if (code.length < 4) return
+    setActionLoading(`deliver-${orderId}`)
+    try {
+      const res = await markOrderDeliveredByDriver(orderId, code)
+      if (res.success) {
+        toast.success(t("تم تسليم الطلب بنجاح 🎉", "Order delivered successfully 🎉"))
+        setDeliveryCodes((p) => {
+          const n = { ...p }
+          delete n[orderId]
+          return n
+        })
+        loadDriverData(driverId)
+      } else {
+        toast.error(res.error || t("تعذّر إتمام التسليم", "Failed to complete delivery"))
+      }
+    } catch {
+      toast.error(t("تعذّر إتمام التسليم", "Failed to complete delivery"))
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -262,6 +288,10 @@ export default function DriverOrdersPage() {
   // Active orders (not delivered/cancelled)
   const activeOrders = orders.filter((o) => !["delivered", "cancelled"].includes(o.status))
   const completedOrders = orders.filter((o) => ["delivered", "cancelled"].includes(o.status))
+  // UX-05: ملخّص المحفظة من الطلبات المسلَّمة
+  const deliveredOrders = orders.filter((o) => o.status === "delivered")
+  const deliveredCount = deliveredOrders.length
+  const cashCollected = deliveredOrders.reduce((sum, o) => sum + (o.total || 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
@@ -322,6 +352,27 @@ export default function DriverOrdersPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* UX-05: محفظة السائق — النقدية المحصّلة (COD) من الطلبات المسلَّمة */}
+        <Card className="mb-6 border-primary/20 bg-primary/5">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/15 rounded-xl">
+                <Wallet className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">{t("النقدية المحصّلة (دفع عند الاستلام)", "Cash collected (COD)")}</p>
+                <p className="text-xl font-extrabold text-primary">
+                  {cashCollected.toFixed(2)} <span className="text-sm font-normal text-gray-500">{t("جنيه", "EGP")}</span>
+                </p>
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">{deliveredCount}</p>
+              <p className="text-xs text-gray-500">{t("تسليمات", "Deliveries")}</p>
+            </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <div className="flex justify-center py-12">
@@ -403,6 +454,40 @@ export default function DriverOrdersPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* UX-05: إتمام التسليم بكود التأكيد عندما يكون الطلب في الطريق */}
+                      {order.status === "on_the_way" && (
+                        <div className="p-4 border-t bg-primary/5" onClick={(e) => e.stopPropagation()}>
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-200 mb-2 flex items-center gap-1">
+                            <CheckCircle className="w-4 h-4 text-primary" />
+                            {t("أدخل كود التأكيد من العميل لإتمام التسليم", "Enter the customer's confirmation code to complete delivery")}
+                          </p>
+                          <div className="flex gap-2">
+                            <Input
+                              value={deliveryCodes[order.id] || ""}
+                              onChange={(e) =>
+                                setDeliveryCodes((p) => ({ ...p, [order.id]: e.target.value.replace(/\D/g, "").slice(0, 4) }))
+                              }
+                              placeholder={t("كود من 4 أرقام", "4-digit code")}
+                              inputMode="numeric"
+                              className="h-10"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => handleDeliver(order.id)}
+                              disabled={actionLoading === `deliver-${order.id}` || (deliveryCodes[order.id] || "").length < 4}
+                              className="bg-primary hover:bg-primary/90 text-white whitespace-nowrap"
+                            >
+                              {actionLoading === `deliver-${order.id}` ? (
+                                <Loader2 className="w-4 h-4 animate-spin ms-1" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4 ms-1" />
+                              )}
+                              {t("تم التوصيل", "Delivered")}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Expanded: Pickup Stops */}
                       {isExpanded && (
