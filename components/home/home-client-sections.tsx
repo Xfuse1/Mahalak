@@ -4,6 +4,9 @@ import dynamic from "next/dynamic"
 import { SearchBar } from "../search-bar"
 import { ProductCard } from "../product-card"
 import { StoreCard } from "../store-card"
+import { NearbyControl } from "../nearby-control"
+import { useUserLocation } from "../../lib/location/user-location"
+import { storeDistanceKm } from "../../lib/utils/geo"
 import { useLanguage } from "../../lib/language-context"
 import Link from "next/link"
 import { Button } from "../ui/button"
@@ -119,20 +122,39 @@ export function CategoriesSection() {
 
 export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
   const { t } = useLanguage()
+  const { coords } = useUserLocation()
+
+  // IA-01: عند توفّر الموقع، أبرِز الأقرب إليك أولًا (المتاجر بلا إحداثيات تنزل للأسفل).
+  const displayed = coords
+    ? [...stores].sort((a, b) => {
+        const da = storeDistanceKm(coords, a)
+        const db = storeDistanceKm(coords, b)
+        if (da == null && db == null) return 0
+        if (da == null) return 1
+        if (db == null) return -1
+        return da - db
+      })
+    : stores
+
   return (
     <section className="py-16 bg-background">
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
           <div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground">{t("متاجر مميزة", "Featured Stores")}</h2>
-            <p className="text-muted-foreground mt-2">{t("اكتشف أفضل المتاجر", "Discover the best stores")}</p>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground">
+              {coords ? t("الأقرب إليك", "Nearest to You") : t("متاجر مميزة", "Featured Stores")}
+            </h2>
+            <p className="text-muted-foreground mt-2">{t("اكتشف أفضل المتاجر بجوارك", "Discover the best stores near you")}</p>
           </div>
           <Button variant="outline" asChild className="rounded-xl hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors">
             <Link href="/store">{t("عرض الكل", "View All")}</Link>
           </Button>
         </div>
+        <div className="mb-8">
+          <NearbyControl />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {stores.map((store) => (
+          {displayed.map((store) => (
             <MemoizedStoreCard key={store.id} store={store} />
           ))}
         </div>

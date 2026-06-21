@@ -8,5 +8,7 @@ export interface StoreListItem {
   phone?: string
   address?: string | { street?: string; city?: string; state?: string } | null
   logo?: string | null
+  latitude?: number | null
+  longitude?: number | null
   activeOffer?: { discount_percentage: number } | null
 }

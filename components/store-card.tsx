@@ -7,6 +7,8 @@ import { Star, MapPin, Tag, ArrowUpRight } from "lucide-react"
 import { Card, CardContent } from "./ui/card"
 import { Badge } from "./ui/badge"
 import { useLanguage } from "../lib/language-context"
+import { useUserLocation } from "../lib/location/user-location"
+import { storeDistanceKm, formatDistanceAr } from "../lib/utils/geo"
 import type { StoreListItem } from "@/lib/types/store"
 
 interface StoreCardProps {
@@ -15,7 +17,9 @@ interface StoreCardProps {
 
 const StoreCardComponent = ({ store }: StoreCardProps) => {
   const { t, language } = useLanguage()
+  const { coords } = useUserLocation()
   const isRTL = language === "ar"
+  const distance = storeDistanceKm(coords, store)
 
   // Format address from string or object
   const formatAddress = (addr: StoreListItem["address"]): string => {
@@ -36,6 +40,11 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
                   <Tag className="h-3.5 w-3.5" />
                   {t("عرض خاص", "Special Offer")} {store.activeOffer.discount_percentage}%
                 </Badge>
+              </div>
+            )}
+            {distance != null && (
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-primary/90 text-primary-foreground text-[11px] font-bold px-2 py-1 rounded-full shadow">
+                <MapPin className="h-3 w-3" /> {formatDistanceAr(distance)}
               </div>
             )}
             <Image

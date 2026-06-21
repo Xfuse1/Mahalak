@@ -108,7 +108,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 // مستندات KYC تُخزَّن في bucket خاص (kyc-documents) كمسارات. تُقدَّم عبر signed URLs
 // قصيرة العمر للمالك/الأدمن فقط. القيم القديمة (روابط http عامة) تُمرَّر كما هي.
-export const KYC_FIELDS = [
+// غير مُصدَّر: ملف "use server" لا يُصدّر إلا دوال async (Next.js)
+const KYC_FIELDS = [
   "id_card_image_url",
   "id_card_image_back_url",
   "commercial_register_image_url",

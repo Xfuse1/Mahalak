@@ -303,7 +303,7 @@ export default function SellerOrdersPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={loadOrders}
+                  onClick={() => loadOrders()}
                   disabled={loadingOrders}
                   className="rounded-xl"
                 >

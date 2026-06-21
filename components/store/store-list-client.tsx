@@ -2,7 +2,7 @@
 
 import { useState, memo } from "react"
 import { Card, CardContent } from "../ui/card"
-import { Star, Store as StoreIcon } from "lucide-react"
+import { Star, Store as StoreIcon, MapPin } from "lucide-react"
 import Link from "next/link"
 import { SearchBar } from "../search-bar"
 import { useLanguage } from "../../lib/language-context"
@@ -11,6 +11,9 @@ import { searchStores } from "../../lib/actions/stores"
 import { SkeletonGrid } from "../ui/skeleton-grid"
 import { EmptyState } from "../ui/empty-state"
 import { useToast } from "../ui/toast"
+import { useUserLocation } from "../../lib/location/user-location"
+import { storeDistanceKm, formatDistanceAr } from "../../lib/utils/geo"
+import { NearbyControl } from "../nearby-control"
 
 type Store = {
   id: string
@@ -21,9 +24,13 @@ type Store = {
   image_url: string | null
   phone: string
   address: string
+  latitude?: number | null
+  longitude?: number | null
 }
 
 function StoreCardItem({ store, index }: { store: Store; index: number }) {
+  const { coords } = useUserLocation()
+  const distance = storeDistanceKm(coords, store)
   return (
     <Link href={`/store/${store.id}`}>
       <Card
@@ -46,6 +53,12 @@ function StoreCardItem({ store, index }: { store: Store; index: number }) {
               {(store.rating || 0).toFixed(1)}
             </span>
           </div>
+          {distance != null && (
+            <div className="absolute top-3 left-3 z-10 bg-primary/90 text-primary-foreground rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg">
+              <MapPin className="h-3.5 w-3.5" />
+              <span className="font-bold text-xs">{formatDistanceAr(distance)}</span>
+            </div>
+          )}
         </div>
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-2 mb-3">
@@ -72,6 +85,19 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
   const [loading, setLoading] = useState(false)
   const { t } = useLanguage()
   const toast = useToast()
+  const { coords } = useUserLocation()
+
+  // IA-01: ترتيب «الأقرب إليك» — المتاجر بلا إحداثيات تنزل للأسفل (fallback آمن).
+  const displayedStores = coords
+    ? [...stores].sort((a, b) => {
+        const da = storeDistanceKm(coords, a)
+        const db = storeDistanceKm(coords, b)
+        if (da == null && db == null) return 0
+        if (da == null) return 1
+        if (db == null) return -1
+        return da - db
+      })
+    : stores
 
   const handleSearch = async (query: string) => {
     if (query.trim()) {
@@ -91,18 +117,22 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
 
   return (
     <>
-      <div className="mb-10 max-w-2xl">
+      <div className="mb-6 max-w-2xl">
         <SearchBar
           placeholder={t("ابحث عن متجر...", "Search for a store...")}
           onSearch={handleSearch}
         />
       </div>
 
+      <div className="mb-8">
+        <NearbyControl />
+      </div>
+
       {loading ? (
         <SkeletonGrid variant="store" count={6} />
-      ) : stores.length > 0 ? (
+      ) : displayedStores.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stores.map((store, index) => (
+          {displayedStores.map((store, index) => (
             <MemoizedStoreCardItem key={store.id} store={store} index={index} />
           ))}
         </div>

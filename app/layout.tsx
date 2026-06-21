@@ -6,6 +6,7 @@ import { AuthProvider } from "../lib/auth-context"
 import { I18nProvider } from "../lib/i18n-provider"
 import { LanguageProvider } from "../lib/language-context"
 import { LayoutClientComponents } from "../components/layout-client-components"
+import { LocationProvider } from "../lib/location/user-location"
 
 // VIS-01: تحميل خط Cairo فعليًا عبر next/font (self-hosted، محسّن، display:swap)
 // كان الخط مُعلَنًا في globals.css لكنه غير محمَّل إطلاقًا → كان التطبيق يعرض بخط النظام.
@@ -43,9 +44,11 @@ export default function RootLayout({
         <I18nProvider>
           <LanguageProvider>
             <AuthProvider>
-              <LayoutClientComponents>
-                {children}
-              </LayoutClientComponents>
+              <LocationProvider>
+                <LayoutClientComponents>
+                  {children}
+                </LayoutClientComponents>
+              </LocationProvider>
             </AuthProvider>
           </LanguageProvider>
         </I18nProvider>
