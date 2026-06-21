@@ -20,7 +20,7 @@ import { getUserByPhone, storePendingRegistration } from "../../../../lib/action
 import { SellerFields } from "../../../../components/auth/seller-fields"
 import { UploadDialog } from "../../../../components/auth/upload-dialog"
 import { normalizeEgyptPhone } from "../../../../lib/utils/phone"
-import { uploadStoreImage, checkStoreNameExists } from "../../../../lib/actions/stores"
+import { uploadStoreDocument, checkStoreNameExists } from "../../../../lib/actions/stores"
 import { getFirestoreClient } from "../../../../lib/firebase/client"
 import { collection, getDocs } from "firebase/firestore"
 import type { CategoryItem } from "../../../../components/auth/seller-fields"
@@ -381,7 +381,7 @@ export default function SellerRegisterPage() {
       }
 
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2)}`
-      const uploadFile = async (file: File | null, prefix: string): Promise<string | null> => {
+      const uploadFile = async (file: File | null, prefix: string, kind: "logo" | "kyc" = "kyc"): Promise<string | null> => {
         if (!file) {
           return null
         }
@@ -389,9 +389,11 @@ export default function SellerRegisterPage() {
         try {
           const uploadData = new FormData()
           uploadData.append("file", file)
-          uploadData.append("storeId", `${tempId}/${prefix}`)
-          const result = await uploadStoreImage(uploadData)
-          return result.success && result.url ? result.url : null
+          uploadData.append("regId", tempId)
+          uploadData.append("prefix", prefix)
+          uploadData.append("kind", kind)
+          const result = await uploadStoreDocument(uploadData)
+          return result.success && result.value ? result.value : null
         } catch (uploadError) {
           console.error(`[auth/register] Failed to pre-upload ${prefix}:`, uploadError)
           return null
@@ -406,12 +408,12 @@ export default function SellerRegisterPage() {
         taxCardImageFrontUrl,
         taxCardImageBackUrl,
       ] = await Promise.all([
-        uploadFile(storeLogo, "logo"),
-        uploadFile(idCardImageFront, "id-card-front"),
-        uploadFile(idCardImageBack, "id-card-back"),
-        uploadFile(commercialRegisterImage, "commercial-register"),
-        uploadFile(taxCardImageFront, "tax-card-front"),
-        uploadFile(taxCardImageBack, "tax-card-back"),
+        uploadFile(storeLogo, "logo", "logo"),
+        uploadFile(idCardImageFront, "id-card-front", "kyc"),
+        uploadFile(idCardImageBack, "id-card-back", "kyc"),
+        uploadFile(commercialRegisterImage, "commercial-register", "kyc"),
+        uploadFile(taxCardImageFront, "tax-card-front", "kyc"),
+        uploadFile(taxCardImageBack, "tax-card-back", "kyc"),
       ])
 
       const storeResult = await storePendingRegistration({
@@ -425,12 +427,12 @@ export default function SellerRegisterPage() {
         storeType,
         storeTypeId: selectedStoreTypeId,
         storeLogoUrl: storeLogoUrl || undefined,
-        ownerIdNumber: undefined,
-        idCardImageUrl: undefined,
-        idCardImageBackUrl: undefined,
-        commercialRegisterImageUrl: undefined,
-        taxCardImageUrl: undefined,
-        taxCardImageBackUrl: undefined,
+        ownerIdNumber: ownerIdNumber || undefined,
+        idCardImageUrl: idCardImageFrontUrl || undefined,
+        idCardImageBackUrl: idCardImageBackUrl || undefined,
+        commercialRegisterImageUrl: commercialRegisterImageUrl || undefined,
+        taxCardImageUrl: taxCardImageFrontUrl || undefined,
+        taxCardImageBackUrl: taxCardImageBackUrl || undefined,
         city,
         country,
         latitude: undefined,

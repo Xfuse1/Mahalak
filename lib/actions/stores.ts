@@ -8,6 +8,7 @@ import { getCurrentUid } from "../auth/session"
 import { createAdminClient } from "../supabase/server"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
+import { checkRateLimit } from "../utils/rate-limit"
 
 export type StoreRecord = {
   seller_id: string
@@ -500,5 +501,52 @@ export async function uploadStoreImage(formData: FormData) {
   } catch (error: unknown) {
     logError("[v0] Server upload error:", error)
     return { success: false, error: getErrorMessage(error, "Internal server error during upload") }
+  }
+}
+
+const ALLOWED_DOC_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+
+/**
+ * رفع مستند أثناء تسجيل بائع جديد (قبل إنشاء الحساب/الجلسة).
+ * الشعار (kind="logo") → bucket عام ويُعاد رابط عام. مستندات KYC (kind="kyc")
+ * → bucket خاص "kyc-documents" ويُعاد المسار فقط (يُقدَّم لاحقًا عبر signed URL للمالك/الأدمن).
+ * لا فحص ملكية (لا جلسة بعد) — محميّ بالتحقق من النوع/الحجم + حدّ معدل ضد الإساءة.
+ */
+export async function uploadStoreDocument(formData: FormData) {
+  const file = formData.get("file") as File | null
+  const kind = String(formData.get("kind") || "logo")
+  const regId = String(formData.get("regId") || "")
+  const prefix = String(formData.get("prefix") || "doc")
+
+  if (!file || !regId) return { success: false, error: "Missing file or registration id" }
+  if (!ALLOWED_DOC_TYPES.includes(file.type)) return { success: false, error: "نوع الملف غير مدعوم" }
+  if (file.size > 5 * 1024 * 1024) return { success: false, error: "الملف أكبر من 5MB" }
+  if (!(await checkRateLimit("uploadStoreDocument", 40, 10 * 60 * 1000))) {
+    return { success: false, error: "too_many_requests" }
+  }
+
+  try {
+    const supabase = await createAdminClient()
+    const ext = file.name.split(".").pop() || "jpg"
+    const path = `registrations/${regId}/${prefix}/${Math.random().toString(36).slice(2)}-${Date.now()}.${ext}`
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    if (kind === "kyc") {
+      // bucket خاص (deny public read) — يُنشأ تلقائيًا إن لم يكن موجودًا
+      await supabase.storage.createBucket("kyc-documents", { public: false }).catch(() => {})
+      const { error } = await supabase.storage.from("kyc-documents").upload(path, buffer, { contentType: file.type })
+      if (error) return { success: false, error: error.message }
+      return { success: true, value: path } // مسار خاص (لا رابط عام)
+    }
+
+    const { data, error } = await supabase.storage.from("product-images").upload(path, buffer, { contentType: file.type })
+    if (error) return { success: false, error: error.message }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("product-images").getPublicUrl(data.path)
+    return { success: true, value: publicUrl }
+  } catch (error: unknown) {
+    logError("[stores] uploadStoreDocument error:", error)
+    return { success: false, error: getErrorMessage(error, "Upload failed") }
   }
 }
