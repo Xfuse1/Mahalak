@@ -1,9 +1,9 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu, BookText } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -20,13 +20,17 @@ import {
 } from "./ui/sheet"
 import { getStoreByUserId } from "../lib/actions/stores"
 import { getPendingOrdersCount } from "../lib/actions/orders"
+import { useToast } from "./ui/toast"
+import { playNewOrderSound } from "../lib/utils/notification-sound"
 
 export function SellerHeader() {
   const pathname = usePathname()
   const { logout, user } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
+  const toast = useToast()
   const [pendingCount, setPendingCount] = useState(0)
+  const prevPendingRef = useRef<number | null>(null)
 
   useEffect(() => {
     const userId = user?.id
@@ -38,7 +42,16 @@ export function SellerHeader() {
         const store = await getStoreByUserId(userId)
         if (store && active) {
           const count = await getPendingOrdersCount(store.id)
-          if (active) setPendingCount(count)
+          if (active) {
+            // MOB-04: تنبيه فوري عند وصول طلب جديد (زيادة العدّاد) — صوت + إشعار.
+            const prev = prevPendingRef.current
+            if (prev !== null && count > prev) {
+              playNewOrderSound()
+              toast.info("طلب جديد 🛎️")
+            }
+            prevPendingRef.current = count
+            setPendingCount(count)
+          }
         }
       } catch (e) {
         logError("Error fetching pending count:", e)
@@ -46,18 +59,19 @@ export function SellerHeader() {
     }
 
     fetchPendingCount()
-    const interval = setInterval(fetchPendingCount, 30000) // refresh every 30s
+    const interval = setInterval(fetchPendingCount, 20000) // اقتراع كل 20 ثانية
     return () => {
       active = false
       clearInterval(interval)
     }
-  }, [user?.id])
+  }, [user?.id, toast])
 
   const navItems = [
     { href: "/seller/dashboard", label: t("لوحة التحكم", "Dashboard"), icon: LayoutDashboard },
     { href: "/seller/products", label: t("المنتجات", "Products"), icon: Package },
     { href: "/seller/orders", label: t("الطلبات", "Orders"), icon: ShoppingBag },
     { href: "/seller/offers", label: t("العروض", "Offers"), icon: Tag },
+    { href: "/seller/ledger", label: t("الديون", "Debts"), icon: BookText },
     { href: "/seller/settings", label: t("الإعدادات", "Settings"), icon: Settings },
   ]
 

@@ -104,10 +104,11 @@ export default function SellerOrdersPage() {
     }
   }, [user, isLoading, router])
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (opts?: { silent?: boolean }) => {
     if (!user?.id) return
+    const silent = opts?.silent === true
     try {
-      setLoadingOrders(true)
+      if (!silent) setLoadingOrders(true)
       const store = await getStoreByUserId(user.id)
       if (store) {
         setStoreId(store.id)
@@ -142,13 +143,16 @@ export default function SellerOrdersPage() {
       setOrders([])
       setMultiOrders([])
     } finally {
-      setLoadingOrders(false)
+      if (!silent) setLoadingOrders(false)
     }
   }, [user?.id, toast])
 
   useEffect(() => {
     if (user?.id && user?.role === "seller") {
       loadOrders()
+      // MOB-04: تحديث صامت دوري لظهور الطلبات الجديدة تلقائيًا
+      const interval = setInterval(() => loadOrders({ silent: true }), 20000)
+      return () => clearInterval(interval)
     }
   }, [loadOrders, user?.id, user?.role])
 

@@ -78,3 +78,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     return { uid, role: "customer" }
   }
 }
+
+/**
+ * يتطلب أن يكون المستخدم الموثّق أدمن، وإلا يرمي خطأً.
+ * للاستخدام كحارس في مسارات/أكشن الإدارة (الدور يُشتق سيرفر-سايد من قاعدة البيانات).
+ */
+export async function requireAdmin(): Promise<CurrentUser> {
+  const user = await getCurrentUser()
+  if (!user || user.role !== "admin") {
+    throw new Error("FORBIDDEN")
+  }
+  return user
+}
