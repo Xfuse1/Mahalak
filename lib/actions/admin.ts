@@ -8,6 +8,7 @@ import { getAdminDb } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
 import { createNotification } from "./notifications"
+import { signKycFields } from "./stores"
 import { logError } from "../logger"
 
 export type AdminStore = {
@@ -65,6 +66,8 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
 
     // قيد المراجعة (غير معتمد) أولًا
     stores.sort((a, b) => Number(a.is_approved) - Number(b.is_approved))
+    // تقديم مستندات KYC عبر signed URLs قصيرة العمر (الأدمن مخوّل) بدل روابط عامة
+    await Promise.all(stores.map((s) => signKycFields(s as unknown as Record<string, unknown>)))
     return { success: true, stores }
   } catch (error) {
     logError("[admin] getAdminStores", error)

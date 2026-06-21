@@ -105,6 +105,29 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+// مستندات KYC تُخزَّن في bucket خاص (kyc-documents) كمسارات. تُقدَّم عبر signed URLs
+// قصيرة العمر للمالك/الأدمن فقط. القيم القديمة (روابط http عامة) تُمرَّر كما هي.
+export const KYC_FIELDS = [
+  "id_card_image_url",
+  "id_card_image_back_url",
+  "commercial_register_image_url",
+  "tax_card_image_url",
+  "tax_card_image_back_url",
+] as const
+
+export async function signKycFields<T extends Record<string, unknown>>(store: T): Promise<T> {
+  let supabase: Awaited<ReturnType<typeof createAdminClient>> | null = null
+  for (const f of KYC_FIELDS) {
+    const v = store[f]
+    if (v && typeof v === "string" && !v.startsWith("http")) {
+      if (!supabase) supabase = await createAdminClient()
+      const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(v, 300)
+      ;(store as Record<string, unknown>)[f] = data?.signedUrl || null
+    }
+  }
+  return store
+}
+
 /**
  * Fetch the current category name from the categories collection by ID.
  * This ensures we always use the latest name even if admin renames it.
@@ -298,7 +321,8 @@ export async function getStoreByUserId(userId: string) {
   if (uid && uid === userId) {
     const docSnap = await getAdminDb().collection("users").doc(userId).get()
     if (!docSnap.exists) return null
-    return extractStoreForOwner(docSnap)
+    const owner = extractStoreForOwner(docSnap)
+    return owner ? await signKycFields(owner as Record<string, unknown>) as typeof owner : null
   }
   return getStore(userId)
 }
