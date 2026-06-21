@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { Cairo } from "next/font/google"
 import { AuthProvider } from "../lib/auth-context"
@@ -25,6 +25,11 @@ export const metadata: Metadata = {
     description: "اكتشف أفضل المنتجات والمتاجر المحلية",
     type: "website",
   },
+}
+
+// MOB-09: لون الثيم (أخضر الهوية) لشريط المتصفّح/تطبيق PWA
+export const viewport: Viewport = {
+  themeColor: "#1B7A4B",
 }
 
 export default function RootLayout({

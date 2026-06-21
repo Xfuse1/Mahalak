@@ -89,6 +89,12 @@ const FooterComponent = () => {
                   {t("المنتجات", "Products")}
                 </Link>
               </li>
+              <li>
+                <Link href="/support" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
+                  {t("الدعم والشكاوى", "Support")}
+                </Link>
+              </li>
             </ul>
           </div>
 

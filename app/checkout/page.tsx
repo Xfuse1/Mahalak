@@ -14,7 +14,7 @@ import { useCartStore } from "@/lib/stores/cart-store"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { User, Phone, MapPin, FileText, Navigation, Loader2 } from "lucide-react"
+import { User, Phone, MapPin, FileText, Navigation, Loader2, Banknote } from "lucide-react"
 import type { CheckoutItem } from "@/lib/types/checkout"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -278,11 +278,21 @@ export default function CheckoutPage() {
                 )
               })}
               <div className="border-t border-dashed pt-4 flex justify-between items-center">
-                <span className="font-bold text-gray-700">{t("الإجمالي", "Total")}</span>
+                <span className="font-bold text-foreground">{t("إجمالي المنتجات", "Items Total")}</span>
                 <span className="text-2xl font-extrabold text-primary">
-                  {total.toFixed(2)} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span>
+                  {total.toFixed(2)} <span className="text-base text-muted-foreground">{t("جنيه", "EGP")}</span>
                 </span>
               </div>
+              {/* TRU-01: إبراز الدفع عند الاستلام (الطريقة السائدة في السوق المصري) */}
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 p-3">
+                <Banknote className="h-5 w-5 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium text-foreground">
+                  {t("الدفع عند الاستلام نقدًا — لا حاجة لبطاقة بنكية", "Cash on delivery — no bank card needed")}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground text-center">
+                {t("تُضاف رسوم التوصيل عند اختيار التوصيل في الخطوة التالية", "Delivery fee is added at the next delivery step")}
+              </p>
             </CardContent>
           </Card>
 
