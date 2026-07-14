@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { User, LogOut, Cuboid, ShoppingCart, Bell, X } from "lucide-react"
+import { User, LogOut, ShoppingCart, Bell, X } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -10,7 +10,6 @@ import { useLanguage } from "../lib/language-context"
 import { useCartStore } from "@/lib/stores/cart-store"
 import { useEffect, useState } from "react"
 import { getUnreadNotificationsCount, getUserNotifications, markAllNotificationsAsRead, markNotificationAsRead, type Notification } from "@/lib/actions/notifications"
-import { isSimulatorEnabled } from "@/lib/actions/delivery"
 
 export function Header() {
   const { user, logout } = useAuth()
@@ -24,16 +23,6 @@ export function Header() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loadingNotifications, setLoadingNotifications] = useState(false)
-  const [simulatorEnabled, setSimulatorEnabled] = useState(false)
-
-  // Fetch simulator enabled status
-  useEffect(() => {
-    const fetchSimulatorStatus = async () => {
-      const enabled = await isSimulatorEnabled()
-      setSimulatorEnabled(enabled)
-    }
-    fetchSimulatorStatus()
-  }, [])
 
   // Fetch unread notifications count
   useEffect(() => {
@@ -112,7 +101,8 @@ export function Header() {
     setShowNotifications(false)
 
     const targetLink = notification.link || getNotificationFallbackLink(notification)
-    if (targetLink) {
+    // نتنقّل فقط لمسارات داخلية نسبية (دفاع في العمق ضد رابط خارجي/إعادة توجيه مخزَّن)
+    if (targetLink && targetLink.startsWith("/") && !targetLink.startsWith("//")) {
       router.push(targetLink)
     }
   }
@@ -127,20 +117,6 @@ export function Header() {
 
           {/* Navigation */}
           <nav className="flex items-center gap-1 md:gap-2">
-            {/* 3D Supermarket Link - Icon only on mobile - Only show if simulator is enabled */}
-            {simulatorEnabled && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex items-center justify-center text-white hover:bg-white/20 h-10 w-10 px-0 md:w-auto md:px-4 md:gap-2 rounded-xl transition-all duration-300 hover:scale-105"
-                onClick={() => router.push("/supermarket")}
-                title="3D Market"
-              >
-                <Cuboid className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="font-bold hidden md:inline ms-2">3D Market</span>
-              </Button>
-            )}
-
             {/* Cart Button */}
             <Button
               variant="ghost"
@@ -279,7 +255,7 @@ export function Header() {
                                 setUnreadCount(0)
                               }}
                             >
-                              {t("عرض جميع الإشعارات", "View All Notifications")}
+                              {t("تعليم الكل كمقروء", "Mark all as read")}
                             </button>
                           </div>
                         )}
