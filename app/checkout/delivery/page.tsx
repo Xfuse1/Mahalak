@@ -129,8 +129,17 @@ export default function DeliveryPage() {
   }, [user, authLoading, router])
 
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
-  const deliveryPrice = driverCommission
+  // رسوم التوصيل = سعر السائق المختار المعروض في بطاقته (وليس عمولة المنصّة الثابتة).
+  // driver_commission تبقى حصّة المنصّة المنفصلة. الخادم يعيد اشتقاق السعر من مستند السائق.
+  const deliveryPrice = selectedDriverData?.price ?? 0
   const grandTotal = total + deliveryPrice
+
+  // مفتاح idempotency ثابت طوال جلسة الدفع — يمنع طلبًا مكررًا عند الضغط المزدوج/إعادة المحاولة
+  const [idempotencyKey] = useState(() =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `idem-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
+  )
 
   const handleConfirmOrder = async () => {
     if (!selectedDriver || !checkoutData || !user) {
@@ -211,6 +220,7 @@ export default function DeliveryPage() {
           delivery_price: deliveryPrice,
           driver_commission: driverCommission,
           pickup_stops: pickupStops,
+          idempotency_key: idempotencyKey,
         })
 
         if (!result.success) {
@@ -242,6 +252,7 @@ export default function DeliveryPage() {
           driver_id: selectedDriverData?.id,
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,
+          idempotency_key: idempotencyKey,
           items: storeItems.map((item) => {
             const discountedPrice = item.discount_percentage && item.discount_percentage > 0
               ? item.price - (item.price * item.discount_percentage / 100)

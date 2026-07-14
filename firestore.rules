@@ -1,34 +1,41 @@
 rules_version = '2';
 
 // قواعد أمان Firestore لمحلك.
-// شبه كل الوصول للبيانات يتم عبر Next.js server actions باستخدام Firebase Admin SDK،
-// وهو يتجاوز هذه القواعد. عميل الويب (Web SDK) يحتاج فقط:
+// معظم وصول البيانات في تطبيق الويب الرئيسي يتم عبر Next.js server actions باستخدام
+// Firebase Admin SDK (يتجاوز هذه القواعد). عميل الويب العادي يحتاج فقط:
 //   (1) قراءة مرجعية الفئات العامة،
 //   (2) قراءة ملف المستخدم الحالي (الخاص به فقط).
-// كل عمليات الكتابة — بما فيها حقل `role` الحسّاس — تمرّ عبر server actions،
-// فلا يستطيع العميل الكتابة هنا إطلاقًا (يسدّ رفع الصلاحية الذاتي إلى admin).
+// لوحة الإدارة (تطبيق Flutter منفصل) تصل للبيانات مباشرة عبر Web SDK، لذا نمنح
+// حسابات الأدمن — المعرّفة عبر custom claim موقّع سيرفر-سايد (token.admin) لا يمكن
+// تزويره من العميل — قراءة/كتابة كاملة. المستخدم العادي لا يستطيع الكتابة إطلاقًا
+// (يسدّ رفع الصلاحية الذاتي إلى admin؛ كل كتابة حسّاسة تمرّ عبر server actions).
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // مرجعية الفئات (تُقرأ قبل تسجيل الدخول في صفحة تسجيل البائع) — قراءة عامة، لا كتابة
+    // أدمن اللوحة: يُحدَّد عبر custom claim موقّع سيرفر-سايد (لا يُزوَّر من العميل).
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // مرجعية الفئات (تُقرأ قبل تسجيل الدخول في صفحة تسجيل البائع) — قراءة عامة؛ الكتابة للأدمن فقط
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAdmin();
       match /{sub=**} {
         allow read: if true;
-        allow write: if false;
+        allow write: if isAdmin();
       }
     }
 
-    // ملف المستخدم: يقرأ صاحبه ملفّه فقط. كل الكتابة سيرفر-سايد (Admin SDK).
+    // ملف المستخدم: يقرأ صاحبه ملفّه فقط؛ الأدمن يقرأ/يكتب الكل (لوحة الإدارة).
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isAdmin();
     }
 
-    // كل ما عدا ذلك مرفوض للعميل (السيرفر يستخدم Admin SDK الذي يتجاوز القواعد)
+    // باقي المجموعات: أدمن اللوحة فقط (Web SDK). السيرفر يستخدم Admin SDK الذي يتجاوز القواعد.
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }

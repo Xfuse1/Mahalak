@@ -4,12 +4,13 @@ import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore"
 import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
+import { logServerError } from "../server-error-log"
 import { getCurrentUid, getCurrentUser, requireOwner } from "../auth/session"
 import { getCurrentDriverId } from "../auth/driver-session"
 import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "./notifications"
-import { applyOfferDiscount, getActiveOffersForStores } from "../utils/offer-discount"
+import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
 // خصم المخزون إلى زيادة) أو الكسرية أو NaN القادمة من العميل.
@@ -262,11 +263,21 @@ export async function getOrderById(orderId: string, callerUserId?: string) {
   }
 }
 
+// حدّ أقصى لقوائم الطلبات: يمنع إعادة قراءة كامل تاريخ الطلبات في كل استطلاع (تكلفة Firestore
+// تكبر بلا حد). نجلب الأحدث أولًا عبر فهرس (store_id/customer_id + created_at) الموجود مسبقًا.
+const STORE_ORDERS_LIMIT = 200
+const CUSTOMER_ORDERS_LIMIT = 100
+
 export async function getCustomerOrders(customerId: string) {
   // التحقق سيرفر-سايد: العميل يقرأ طلباته فقط
   if (!(await requireOwner(customerId))) return []
   const db = getAdminDb()
-  const snapshot = await db.collection("orders").where("customer_id", "==", customerId).get()
+  const snapshot = await db
+    .collection("orders")
+    .where("customer_id", "==", customerId)
+    .orderBy("created_at", "desc")
+    .limit(CUSTOMER_ORDERS_LIMIT)
+    .get()
   // Filter out multi-store and inquiry records from regular customer orders
   const orders: OrderRecord[] = snapshot.docs
     .map((doc) => ({ ...(doc.data() as Record<string, unknown>), id: doc.id } as OrderRecord))
@@ -367,7 +378,12 @@ export async function getStoreOrders(storeId: string, callerId: string) {
   }
 
   const db = getAdminDb()
-  const snapshot = await db.collection("orders").where("store_id", "==", storeId).get()
+  const snapshot = await db
+    .collection("orders")
+    .where("store_id", "==", storeId)
+    .orderBy("created_at", "desc")
+    .limit(STORE_ORDERS_LIMIT)
+    .get()
   // Exclude inquiry records from standard seller order lists
   const orders: OrderRecord[] = snapshot.docs
     .map((doc) => ({ ...(doc.data() as Record<string, unknown>), id: doc.id } as OrderRecord))
@@ -474,6 +490,11 @@ export async function updateOrderStatus(
       if (!sessionDriverId || currentData.driver_id !== sessionDriverId) {
         return { success: false, error: "Unauthorized" }
       }
+      // السائق لا يُنهي الطلب عبر هذا المسار: التسليم يتم حصراً عبر markOrderDeliveredByDriver
+      // (بكود تأكيد UX-05)، والإلغاء ليس من صلاحيته. بدون هذا القيد كان يقدر يعلّم "مُسلّم" بلا كود.
+      if (status === "delivered" || status === "cancelled") {
+        return { success: false, error: "على السائق إتمام التسليم عبر كود التأكيد" }
+      }
     }
 
     // قصر دائرة لو لم تتغيّر الحالة — يمنع تكرار الإشعارات/الخط الزمني وإعادة تشغيل آثار الإلغاء
@@ -526,21 +547,25 @@ export async function updateOrderStatus(
     // مقصورة على الطلبات أحادية المتجر: الطلبات متعددة المتاجر تُستعاد لكل محطة عبر
     // rejectStorePickup (وعناصرها في pickup_stops لا في order_items)، فتجنّبًا للاستعادة
     // المزدوجة لا نلمسها هنا.
-    if (status === "cancelled" && currentData.order_type !== "multi_store" && !currentData.stock_restored) {
+    if (status === "cancelled" && currentData.order_type !== "multi_store") {
       try {
         const itemsSnap = await db.collection("order_items").where("order_id", "==", orderId).get()
-        const restoreBatch = db.batch()
-        for (const itemDoc of itemsSnap.docs) {
-          const it = itemDoc.data()
-          const qty = Number(it.quantity) || 0
-          if (it.product_id && qty > 0) {
-            restoreBatch.update(db.collection("products").doc(it.product_id), {
-              stock: FieldValue.increment(qty),
-            })
+        // ذرّية: نعيد قراءة stock_restored داخل معاملة ونضبطه مرة واحدة، فلا يستعيد إلغاءان
+        // متزامنان (نقرتان / أدمن+تاجر) المخزون مرتين. الدُفعة السابقة لم تكن تكتشف التعارض.
+        await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(docRef)
+          if (fresh.data()?.stock_restored) return
+          for (const itemDoc of itemsSnap.docs) {
+            const it = itemDoc.data()
+            const qty = Number(it.quantity) || 0
+            if (it.product_id && qty > 0) {
+              tx.update(db.collection("products").doc(it.product_id), {
+                stock: FieldValue.increment(qty),
+              })
+            }
           }
-        }
-        restoreBatch.update(docRef, { stock_restored: true })
-        await restoreBatch.commit()
+          tx.update(docRef, { stock_restored: true })
+        })
       } catch (restoreErr) {
         logError("[orders] Error restoring stock on cancel:", restoreErr)
       }
@@ -613,6 +638,7 @@ export async function createOrder(orderData: {
   delivery_price?: number
   driver_id?: string
   driver_name?: string
+  idempotency_key?: string
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
@@ -625,26 +651,61 @@ export async function createOrder(orderData: {
   const activeOffers = await getActiveOffersForStores([orderData.store_id])
   const today = now.split("T")[0]
 
+  // سعر التوصيل يُشتق من مستند السائق سيرفر-سايد إن وُجد سائق — لا نثق بقيمة العميل (مبلغ COD).
+  let serverDeliveryPrice = sanitizeMoney(orderData.delivery_price)
+  if (orderData.driver_id) {
+    const driverSnap = await db.collection("drivers").doc(orderData.driver_id).get()
+    if (driverSnap.exists) {
+      serverDeliveryPrice = sanitizeMoney(Number(driverSnap.data()?.price ?? 0))
+    }
+  }
+
+  // تتبّع العروض المُطبَّقة لتحديث كميتها المستهلكة بعد نجاح المعاملة (حد كمية العرض)
+  const appliedOffers = new Map<string, number>()
+
   try {
     const result = await db.runTransaction(async (transaction) => {
+      appliedOffers.clear() // إعادة الضبط مع كل محاولة (المعاملة قد تُعاد)
+      // Step 0: idempotency — لو نفس مفتاح الدفع أنشأ طلبًا قبل كده، نرجّع الطلب القائم بدل تكراره.
+      // (يمنع الطلب المزدوج من الضغط المتكرر/إعادة محاولة الشبكة). المفتاح مُنمَّط بالعميل فلا يتصادم بين العملاء.
+      const idemRef = orderData.idempotency_key
+        ? db.collection("order_idempotency").doc(`${orderData.customer_id}:${orderData.idempotency_key}`)
+        : null
+      if (idemRef) {
+        const idemDoc = await transaction.get(idemRef)
+        if (idemDoc.exists) {
+          return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, storeId: orderData.store_id, deduped: true }
+        }
+      }
       // Step 1: Read and verify stock + prices atomically
-      const verifiedItems: { product_id: string; quantity: number; price: number; productRef: FirebaseFirestore.DocumentReference }[] = []
+      // تجميع الكميات حسب product_id قبل الفحص — يمنع تجاوز المخزون لو تكرّر نفس المنتج في عدة أسطر
+      // (كل سطر كان يُفحص ضد كامل المخزون ثم يُخصم على حدة → بيع بالسالب).
+      const qtyByProduct = new Map<string, number>()
       for (const item of orderData.items) {
-        const productRef = db.collection("products").doc(item.product_id)
+        const q = validateQuantity(item.quantity)
+        qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + q)
+      }
+
+      const verifiedItems: { product_id: string; quantity: number; price: number; productRef: FirebaseFirestore.DocumentReference }[] = []
+      for (const [productId, quantity] of qtyByProduct) {
+        const productRef = db.collection("products").doc(productId)
         const productDoc = await transaction.get(productRef)
         if (!productDoc.exists) {
           throw new Error("Product not found")
         }
         const productData = productDoc.data()
-        const quantity = validateQuantity(item.quantity)
         const availableStock = productData?.stock ?? 0
         if (quantity > availableStock) {
           throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
         }
-        const basePrice = Number(productData?.price ?? item.price)
+        // السعر يُشتق من مستند المنتج فقط — لا رجوع لسعر العميل (كان منفذًا للتلاعب بالسعر).
+        const basePrice = Number(productData?.price)
+        if (!Number.isFinite(basePrice) || basePrice <= 0) {
+          throw new Error(`Invalid price for "${productData?.name || 'product'}"`)
+        }
         const finalPrice = applyOfferDiscount(
           {
-            id: item.product_id,
+            id: productId,
             category: productData?.category as string | undefined,
             store_id: (productData?.store_id as string | undefined) ?? orderData.store_id,
             price: basePrice,
@@ -652,17 +713,28 @@ export async function createOrder(orderData: {
           activeOffers,
           today,
         )
+        const appliedOffer = findBestDiscount(
+          {
+            id: productId,
+            category: productData?.category as string | undefined,
+            store_id: (productData?.store_id as string | undefined) ?? orderData.store_id,
+          },
+          activeOffers,
+        )
+        if (appliedOffer.offer_id && appliedOffer.discount_percentage > 0) {
+          appliedOffers.set(appliedOffer.offer_id, (appliedOffers.get(appliedOffer.offer_id) || 0) + quantity)
+        }
         verifiedItems.push({
-          product_id: item.product_id,
+          product_id: productId,
           quantity,
           price: finalPrice,
           productRef,
         })
       }
 
-      // Step 2: Calculate verified total (الكمية مُتحقَّقة، ورسوم التوصيل مُعقَّمة)
+      // Step 2: Calculate verified total (الكمية مُتحقَّقة، ورسوم التوصيل مُشتقّة من السائق)
       const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const verifiedTotal = verifiedSubtotal + sanitizeMoney(orderData.delivery_price)
+      const verifiedTotal = verifiedSubtotal + serverDeliveryPrice
 
       const orderRef = db.collection("orders").doc()
 
@@ -689,7 +761,7 @@ export async function createOrder(orderData: {
       if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
       if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
       if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
-      if (orderData.delivery_price !== undefined) orderPayload.delivery_price = sanitizeMoney(orderData.delivery_price)
+      orderPayload.delivery_price = serverDeliveryPrice
 
       // Add driver information
       if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
@@ -724,8 +796,25 @@ export async function createOrder(orderData: {
         })
       }
 
-      return { orderId: orderRef.id, orderPayload, storeId: orderData.store_id }
+      // Step 6: تسجيل مفتاح idempotency داخل نفس المعاملة الذرّية
+      if (idemRef) {
+        transaction.set(idemRef, { order_id: orderRef.id, customer_id: orderData.customer_id, created_at: now })
+      }
+
+      return { orderId: orderRef.id, orderPayload: orderPayload as Record<string, unknown> | null, storeId: orderData.store_id, deduped: false }
     })
+
+    // لو كان الطلب مكررًا (نفس مفتاح idempotency) نرجّع الطلب القائم دون خصم مخزون/إشعار مرة أخرى
+    if (result.deduped) {
+      return { success: true, data: { id: result.orderId } }
+    }
+
+    // تحديث الكمية المستهلكة للعروض المُطبَّقة (غير حرج — لا يفشل الطلب)
+    try {
+      for (const [offerId, qty] of appliedOffers) {
+        await db.collection("offers").doc(offerId).update({ used_quantity: FieldValue.increment(qty) })
+      }
+    } catch { /* non-critical */ }
 
     // Notifications outside transaction (non-critical)
     try {
@@ -739,13 +828,15 @@ export async function createOrder(orderData: {
         link: "/seller/orders",
         data: { order_id: result.orderId, store_id: result.storeId },
       })
-    } catch {
-      // Silent: notification failure should not affect order
+    } catch (notifyErr) {
+      // إشعار البائع فشل — لا يفشل الطلب، لكن نسجّله (سبب محتمل لتأخّر قبول الطلبات)
+      await logServerError("createOrder.notify", notifyErr, { order_id: result.orderId, store_id: result.storeId })
     }
 
     revalidatePath("/account")
     return { success: true, data: { id: result.orderId, ...result.orderPayload } }
   } catch (error: unknown) {
+    await logServerError("createOrder", error, { customer_id: orderData.customer_id, store_id: orderData.store_id })
     return { success: false, error: getErrorMessage(error) || "Failed to create order" }
   }
 }
@@ -812,7 +903,7 @@ export async function changeOrderDriver(
   customerId: string,
   newDriverId: string,
   newDriverName: string,
-  newDeliveryPrice: number
+  _newDeliveryPrice: number
 ) {
   // التحقق سيرفر-سايد: العميل يعدّل طلبه فقط
   if (!(await requireOwner(customerId))) {
@@ -846,12 +937,15 @@ export async function changeOrderDriver(
       return { success: false, error: "Driver not found" }
     }
     const driverData = driverSnap.data()
-    if (driverData?.is_approved === false) {
+    // اعتماد السائق: نطبّع الحقلين (الحديث isApproved والقديم is_approved) ونرفض غير المعتمد أو
+    // الناقص كليهما. (سابقًا `=== false` كان يمرّر مستندات المخطط الحديث ومستندات ناقصة الحقلين.)
+    const driverApproved = driverData?.isApproved ?? driverData?.is_approved ?? false
+    if (!driverApproved) {
       return { success: false, error: "Driver is not approved" }
     }
     const verifiedDriverName = (driverData?.name as string) || newDriverName
-    // سعر التوصيل مُعقَّم (لا سالب/NaN) — لا نثق بقيمة العميل الخام
-    const safeDeliveryPrice = sanitizeMoney(newDeliveryPrice)
+    // سعر التوصيل يُشتق من مستند السائق سيرفر-سايد — لا نثق بقيمة العميل (كانت تسمح بجعله 0).
+    const safeDeliveryPrice = sanitizeMoney(Number(driverData?.price ?? 0))
 
     // Calculate new total (subtract old delivery price, add new)
     const oldDeliveryPrice = orderData.delivery_price || 0
@@ -940,6 +1034,7 @@ export async function createMultiStoreOrder(orderData: {
   delivery_price: number
   driver_commission: number
   pickup_stops: PickupStop[]
+  idempotency_key?: string
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
   if (!(await requireOwner(orderData.customer_id))) {
@@ -955,44 +1050,93 @@ export async function createMultiStoreOrder(orderData: {
   const activeOffers = await getActiveOffersForStores(storeIdsForOffers)
   const today = now.split("T")[0]
 
+  // سعر التوصيل يُشتق من مستند السائق سيرفر-سايد — لا نثق بقيمة العميل (مبلغ COD).
+  let serverDeliveryPrice = sanitizeMoney(orderData.delivery_price)
+  if (orderData.driver_id) {
+    const driverSnap = await db.collection("drivers").doc(orderData.driver_id).get()
+    if (driverSnap.exists) {
+      serverDeliveryPrice = sanitizeMoney(Number(driverSnap.data()?.price ?? 0))
+    }
+  }
+
+  // تتبّع العروض المُطبَّقة لتحديث كميتها المستهلكة بعد نجاح المعاملة (حد كمية العرض)
+  const appliedOffers = new Map<string, number>()
+
   try {
     const result = await db.runTransaction(async (transaction) => {
-      // Step 1: Read and verify stock + prices atomically
-      const verifiedStops: PickupStop[] = []
-      const productRefs: { ref: FirebaseFirestore.DocumentReference; quantity: number }[] = []
-
-      for (const stop of orderData.pickup_stops) {
-        const verifiedItems: PickupStop["items"] = []
-        for (const item of stop.items) {
-          const productRef = db.collection("products").doc(item.product_id)
-          const productDoc = await transaction.get(productRef)
-          if (!productDoc.exists) {
-            throw new Error("Product not found")
-          }
-          const productData = productDoc.data()
-          const quantity = validateQuantity(item.quantity)
-          const availableStock = productData?.stock ?? 0
-          if (quantity > availableStock) {
-            throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
-          }
-          const basePrice = Number(productData?.price ?? item.price)
-          const finalPrice = applyOfferDiscount(
-            {
-              id: item.product_id,
-              category: productData?.category as string | undefined,
-              store_id: (productData?.store_id as string | undefined) ?? stop.store_id,
-              price: basePrice,
-            },
-            activeOffers,
-            today,
-          )
-          verifiedItems.push({
-            ...item,
-            quantity,
-            price: finalPrice,
-          })
-          productRefs.push({ ref: productRef, quantity })
+      appliedOffers.clear() // إعادة الضبط مع كل محاولة (المعاملة قد تُعاد)
+      // Step 0: idempotency — منع الطلب المزدوج (نفس مفتاح الدفع) عبر مساحة اسم بالعميل
+      const idemRef = orderData.idempotency_key
+        ? db.collection("order_idempotency").doc(`${orderData.customer_id}:${orderData.idempotency_key}`)
+        : null
+      if (idemRef) {
+        const idemDoc = await transaction.get(idemRef)
+        if (idemDoc.exists) {
+          return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, stops: [] as PickupStop[], deduped: true }
         }
+      }
+      // Step 1: Read and verify stock + prices atomically.
+      // تجميع الكميات لكل product_id عبر كل المحطات — للفحص والخصم مرة واحدة فقط، فلا يتجاوز
+      // المخزون لو تكرّر نفس المنتج (كل تكرار كان يُفحص ضد كامل المخزون ويُخصم على حدة → بيع بالسالب).
+      const qtyByProduct = new Map<string, number>()
+      for (const stop of orderData.pickup_stops) {
+        for (const item of stop.items) {
+          const q = validateQuantity(item.quantity)
+          qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + q)
+        }
+      }
+
+      const priceByProduct = new Map<string, number>()
+      const productRefs: { ref: FirebaseFirestore.DocumentReference; quantity: number }[] = []
+      for (const [productId, totalQty] of qtyByProduct) {
+        const productRef = db.collection("products").doc(productId)
+        const productDoc = await transaction.get(productRef)
+        if (!productDoc.exists) {
+          throw new Error("Product not found")
+        }
+        const productData = productDoc.data()
+        const availableStock = productData?.stock ?? 0
+        if (totalQty > availableStock) {
+          throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${totalQty}) exceeds available stock (${availableStock})`)
+        }
+        // السعر يُشتق من مستند المنتج فقط — لا رجوع لسعر العميل.
+        const basePrice = Number(productData?.price)
+        if (!Number.isFinite(basePrice) || basePrice <= 0) {
+          throw new Error(`Invalid price for "${productData?.name || 'product'}"`)
+        }
+        const finalPrice = applyOfferDiscount(
+          {
+            id: productId,
+            category: productData?.category as string | undefined,
+            store_id: productData?.store_id as string | undefined,
+            price: basePrice,
+          },
+          activeOffers,
+          today,
+        )
+        priceByProduct.set(productId, finalPrice)
+        productRefs.push({ ref: productRef, quantity: totalQty })
+        const appliedOffer = findBestDiscount(
+          {
+            id: productId,
+            category: productData?.category as string | undefined,
+            store_id: productData?.store_id as string | undefined,
+          },
+          activeOffers,
+        )
+        if (appliedOffer.offer_id && appliedOffer.discount_percentage > 0) {
+          appliedOffers.set(appliedOffer.offer_id, (appliedOffers.get(appliedOffer.offer_id) || 0) + totalQty)
+        }
+      }
+
+      // بناء المحطات المُتحقَّقة بالسعر المُحتسب لكل منتج (المجاميع الفرعية تبقى لكل سطر كما هي)
+      const verifiedStops: PickupStop[] = []
+      for (const stop of orderData.pickup_stops) {
+        const verifiedItems: PickupStop["items"] = stop.items.map((item) => ({
+          ...item,
+          quantity: validateQuantity(item.quantity),
+          price: priceByProduct.get(item.product_id) ?? 0,
+        }))
         const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
         verifiedStops.push({
           ...stop,
@@ -1001,9 +1145,9 @@ export async function createMultiStoreOrder(orderData: {
         })
       }
 
-      // Calculate subtotal from verified stops (رسوم التوصيل مُعقَّمة)
+      // Calculate subtotal from verified stops (رسوم التوصيل مُشتقّة من السائق)
       const subtotal = verifiedStops.reduce((sum, stop) => sum + stop.subtotal, 0)
-      const total = subtotal + sanitizeMoney(orderData.delivery_price)
+      const total = subtotal + serverDeliveryPrice
 
       // Prepare pickup stops with default status
       const stops: PickupStop[] = verifiedStops.map((stop) => ({
@@ -1027,7 +1171,7 @@ export async function createMultiStoreOrder(orderData: {
         delivery_city: orderData.delivery_city || "",
         delivery_state: orderData.delivery_state || "",
         delivery_notes: orderData.delivery_notes || "",
-        delivery_price: sanitizeMoney(orderData.delivery_price),
+        delivery_price: serverDeliveryPrice,
         driver_commission: sanitizeMoney(orderData.driver_commission),
         store_ids: storeIds,
         pickup_stops: stops,
@@ -1074,8 +1218,25 @@ export async function createMultiStoreOrder(orderData: {
         })
       }
 
-      return { orderId: orderRef.id, orderPayload, stops }
+      // Step 5: تسجيل مفتاح idempotency داخل نفس المعاملة الذرّية
+      if (idemRef) {
+        transaction.set(idemRef, { order_id: orderRef.id, customer_id: orderData.customer_id, created_at: now })
+      }
+
+      return { orderId: orderRef.id, orderPayload: orderPayload as Record<string, unknown> | null, stops, deduped: false }
     })
+
+    // طلب مكرر (نفس مفتاح idempotency) → نرجّع الطلب القائم دون خصم/إشعار مكرر
+    if (result.deduped) {
+      return { success: true, data: { id: result.orderId } }
+    }
+
+    // تحديث الكمية المستهلكة للعروض المُطبَّقة (غير حرج — لا يفشل الطلب)
+    try {
+      for (const [offerId, qty] of appliedOffers) {
+        await db.collection("offers").doc(offerId).update({ used_quantity: FieldValue.increment(qty) })
+      }
+    } catch { /* non-critical */ }
 
     // Notifications outside transaction (non-critical)
     try {
@@ -1111,14 +1272,16 @@ export async function createMultiStoreOrder(orderData: {
       })
 
       await notifBatch.commit()
-    } catch {
-      // Silent: notification failure should not affect order
+    } catch (notifyErr) {
+      // إشعارات المتاجر/السائق فشلت — لا يفشل الطلب، لكن نسجّلها (قد تفسّر تأخّر القبول)
+      await logServerError("createMultiStoreOrder.notify", notifyErr, { order_id: result.orderId })
     }
 
     revalidatePath("/account")
     revalidatePath("/seller/orders")
     return { success: true, data: { id: result.orderId, ...result.orderPayload } }
   } catch (error: unknown) {
+    await logServerError("createMultiStoreOrder", error, { customer_id: orderData.customer_id })
     return { success: false, error: getErrorMessage(error) || "Failed to create order" }
   }
 }
@@ -1525,8 +1688,9 @@ export async function markOrderDeliveredByDriver(orderId: string, code: string) 
       if (o.status === "delivered") return { ok: false as const, error: "تم تسليم الطلب بالفعل" }
       if (o.status === "cancelled") return { ok: false as const, error: "الطلب ملغى" }
       if (o.status !== "on_the_way") return { ok: false as const, error: "أكمل استلام كل المتاجر أولًا" }
-      // إثبات التسليم: مطابقة كود التأكيد الذي بحوزة العميل
-      const expected = String(o.delivery_code || "")
+      // إثبات التسليم: لو الطلب يحمل كودًا (وكل الطلبات الجديدة تحمله) نطابقه بصرامة. الطلبات القديمة
+      // (قبل UX-05) بلا كود تُسمح بالإتمام حتى لا تعلق دون تسليم؛ السائق لا يقدر يحذف كود طلب جديد.
+      const expected = String(o.delivery_code || "").trim()
       if (expected && String(code).trim() !== expected) {
         return { ok: false as const, error: "كود التأكيد غير صحيح" }
       }

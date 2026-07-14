@@ -26,7 +26,7 @@ import {
 import { useLanguage } from "@/lib/language-context"
 import { getMultiStoreOrdersForDriver, markStorePickedUp, markOrderDeliveredByDriver } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
-import { getDriverById, verifyDriverLogin } from "@/lib/actions/delivery"
+import { getDriverById, verifyDriverLogin, driverLogout } from "@/lib/actions/delivery"
 import type { Driver } from "@/lib/actions/delivery"
 import { useToast } from "@/components/ui/toast"
 
@@ -101,6 +101,15 @@ export default function DriverOrdersPage() {
       const result = await verifyDriverLogin(driverIdInput.trim(), driverPin.trim())
       if (result.success) {
         loadDriverData(driverIdInput.trim())
+      } else if (result.locked) {
+        const mins = result.retryAfterMinutes || 15
+        setError(
+          t(
+            `تم قفل الدخول مؤقتًا بعد محاولات خاطئة كثيرة. حاول بعد ${mins} دقيقة.`,
+            `Login temporarily locked after too many attempts. Try again in ${mins} minutes.`,
+          ),
+        )
+        setLoading(false)
       } else {
         setError(t("رقم السائق أو PIN غير صحيح", "Invalid driver ID or PIN"))
         setLoading(false)
@@ -318,7 +327,12 @@ export default function DriverOrdersPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
+                  try {
+                    await driverLogout() // إنهاء جلسة السائق سيرفر-سايد (حذف الكوكي + مستند الجلسة)
+                  } catch {
+                    // غير حرج — نكمّل تنظيف الحالة محليًا على أي حال
+                  }
                   setDriverId("")
                   setDriver(null)
                   setOrders([])

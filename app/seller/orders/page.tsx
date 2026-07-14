@@ -150,8 +150,9 @@ export default function SellerOrdersPage() {
   useEffect(() => {
     if (user?.id && user?.role === "seller") {
       loadOrders()
-      // MOB-04: تحديث صامت دوري لظهور الطلبات الجديدة تلقائيًا
-      const interval = setInterval(() => loadOrders({ silent: true }), 20000)
+      // MOB-04: تحديث صامت دوري لظهور الطلبات الجديدة تلقائيًا.
+      // 45ث بدل 20ث لتقليل قراءات Firestore (الحل الجذري = push في Stage 3، لا الاستطلاع المتكرّر).
+      const interval = setInterval(() => loadOrders({ silent: true }), 45000)
       return () => clearInterval(interval)
     }
   }, [loadOrders, user?.id, user?.role])
@@ -412,8 +413,11 @@ export default function SellerOrdersPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <div className="space-y-4">
-                  {multiOrders.map((order) => {
+                  {multiOrders
+                    .filter((order) => filter === "all" || order.status === filter)
+                    .map((order) => {
                     const myStop = order.my_stop
+                    if (!myStop) return null // حارس دفاعي: my_stop مشتق من find() فقد يكون undefined
                     return (
                       <div key={order.id} className="border border-accent/30 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 bg-white">
                         <div className="flex items-center justify-between mb-4">
