@@ -11,6 +11,7 @@ import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "./notifications"
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
+import { sendPushToOwner } from "../server-push"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
 // خصم المخزون إلى زيادة) أو الكسرية أو NaN القادمة من العميل.
@@ -249,10 +250,13 @@ export async function getOrderById(orderId: string, callerUserId?: string) {
     const createdAt = orderData.created_at?.toDate?.()?.toISOString?.() || orderData.created_at
     const updatedAt = orderData.updated_at?.toDate?.()?.toISOString?.() || orderData.updated_at
 
+    // لا نُعيد كود التسليم عبر هذه الدالة (يستدعيها البائع أيضًا) — يبقى الإثبات مع العميل عبر قوائمه
+    const orderSafe = { ...orderData } as Record<string, unknown>
+    delete orderSafe.delivery_code
     return {
       id: orderDoc.id,
       order_id: orderDoc.id,
-      ...orderData,
+      ...orderSafe,
       items,
       created_at: createdAt,
       updated_at: updatedAt,
@@ -434,8 +438,12 @@ export async function getStoreOrders(storeId: string, callerId: string) {
 
   return orders.map((order) => {
     const profile = order.customer_id ? customerMap.get(order.customer_id) : null
+    // إخفاء كود التسليم عن البائع: هو الطرف الذي يُطالَب بالكود عند التسليم، فلا يجب أن يراه
+    // مسبقًا وإلا انهار إثبات COD (يقدر يعلّم "تم التوصيل" بلا حضور العميل). العميل يراه في /account.
+    const orderSafe = { ...order } as Record<string, unknown>
+    delete orderSafe.delivery_code
     return {
-      ...order,
+      ...orderSafe,
       profiles: profile
         ? {
           id: profile.id,
@@ -454,7 +462,8 @@ export async function updateOrderStatus(
   status: string,
   callerId: string,
   callerRole: "seller" | "driver" | "admin",
-  note?: string
+  note?: string,
+  deliveryCode?: string
 ) {
   const db = getAdminDb()
   const docRef = db.collection("orders").doc(orderId)
@@ -500,7 +509,9 @@ export async function updateOrderStatus(
     // قصر دائرة لو لم تتغيّر الحالة — يمنع تكرار الإشعارات/الخط الزمني وإعادة تشغيل آثار الإلغاء
     if (currentData.status === status) {
       const snap = await docRef.get()
-      return { success: true, data: snap.exists ? { ...snap.data(), id: snap.id } : null }
+      const noopData = snap.exists ? ({ ...snap.data(), id: snap.id } as Record<string, unknown>) : null
+      if (noopData) delete noopData.delivery_code // لا نسرّب كود التسليم للبائع/السائق في رد الحالة
+      return { success: true, data: noopData }
     }
 
     // منع الخروج من حالة نهائية (مُسلّم/ملغى) لغير الأدمن — يمنع إعادة التسليم وإحياء الطلبات الملغاة
@@ -538,6 +549,12 @@ export async function updateOrderStatus(
 
     // If order is delivered, mark delivery timestamp
     if (status === "delivered") {
+      // UX-05: إثبات التسليم — البائع يُنهي الطلب أحادي المتجر عبر القائمة بكود التأكيد الذي يعرضه العميل.
+      // لو الطلب يحمل كودًا (كل الطلبات الجديدة تحمله) نطابقه بصرامة؛ الطلبات القديمة بلا كود تُسمح (تسامح).
+      const expectedCode = String(currentData.delivery_code || "").trim()
+      if (expectedCode && String(deliveryCode || "").trim() !== expectedCode) {
+        return { success: false, error: "كود التأكيد غير صحيح" }
+      }
       updatePayload.delivered_at = now
     }
 
@@ -610,6 +627,13 @@ export async function updateOrderStatus(
         link: notificationLink,
         data: { order_id: orderId, status }
       })
+
+      // FCM web-push للعميل بتحديث الحالة (أفضل-جهد؛ لا يرمي أبدًا ولا-عملية حتى ضبط VAPID)
+      await sendPushToOwner("user", currentData.customer_id, {
+        title: "تحديث حالة الطلب",
+        body: message.ar,
+        link: notificationLink,
+      })
     }
   } catch (error: unknown) {
     logError("[v0] Error updating order status:", error)
@@ -619,7 +643,9 @@ export async function updateOrderStatus(
   const updatedSnap = await docRef.get()
   revalidatePath("/seller/orders")
   revalidatePath("/account")
-  return { success: true, data: updatedSnap.exists ? { ...updatedSnap.data(), id: updatedSnap.id } : null }
+  const updatedData = updatedSnap.exists ? ({ ...updatedSnap.data(), id: updatedSnap.id } as Record<string, unknown>) : null
+  if (updatedData) delete updatedData.delivery_code // لا نسرّب كود التسليم للبائع/السائق في رد الحالة
+  return { success: true, data: updatedData }
 }
 
 export async function createOrder(orderData: {
@@ -634,6 +660,7 @@ export async function createOrder(orderData: {
   delivery_latitude?: number
   delivery_longitude?: number
   delivery_notes?: string
+  landmark?: string
   delivery_company?: string
   delivery_price?: number
   driver_id?: string
@@ -746,6 +773,8 @@ export async function createOrder(orderData: {
         status: "pending",
         created_at: now,
         updated_at: now,
+        // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للبائع/السائق عند التسليم (مثل الطلب متعدد المتاجر)
+        delivery_code: String(Math.floor(1000 + Math.random() * 9000)),
         timeline: [
           {
             status: "ordered",
@@ -760,6 +789,7 @@ export async function createOrder(orderData: {
       if (orderData.delivery_city) orderPayload.delivery_city = orderData.delivery_city
       if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
       if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
+      if (orderData.landmark) orderPayload.landmark = orderData.landmark
       if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
       orderPayload.delivery_price = serverDeliveryPrice
 
@@ -832,6 +862,13 @@ export async function createOrder(orderData: {
       // إشعار البائع فشل — لا يفشل الطلب، لكن نسجّله (سبب محتمل لتأخّر قبول الطلبات)
       await logServerError("createOrder.notify", notifyErr, { order_id: result.orderId, store_id: result.storeId })
     }
+
+    // FCM web-push للبائع (أفضل-جهد؛ sendPushToOwner لا يرمي أبدًا ولا-عملية حتى ضبط VAPID)
+    await sendPushToOwner("user", result.storeId, {
+      title: "طلب جديد",
+      body: "لديك طلب جديد",
+      link: "/seller/orders",
+    })
 
     revalidatePath("/account")
     return { success: true, data: { id: result.orderId, ...result.orderPayload } }
@@ -1029,6 +1066,7 @@ export async function createMultiStoreOrder(orderData: {
   delivery_latitude?: number
   delivery_longitude?: number
   delivery_notes?: string
+  landmark?: string
   driver_id: string
   driver_name: string
   delivery_price: number
@@ -1171,6 +1209,7 @@ export async function createMultiStoreOrder(orderData: {
         delivery_city: orderData.delivery_city || "",
         delivery_state: orderData.delivery_state || "",
         delivery_notes: orderData.delivery_notes || "",
+        landmark: orderData.landmark || "",
         delivery_price: serverDeliveryPrice,
         driver_commission: sanitizeMoney(orderData.driver_commission),
         store_ids: storeIds,
@@ -1276,6 +1315,26 @@ export async function createMultiStoreOrder(orderData: {
       // إشعارات المتاجر/السائق فشلت — لا يفشل الطلب، لكن نسجّلها (قد تفسّر تأخّر القبول)
       await logServerError("createMultiStoreOrder.notify", notifyErr, { order_id: result.orderId })
     }
+
+    // FCM web-push لكل متجر محطة وللسائق (أفضل-جهد؛ لا يرمي أبدًا ولا-عملية حتى ضبط VAPID)
+    await Promise.all([
+      ...result.stops.map((stop) =>
+        sendPushToOwner("user", stop.store_id, {
+          title: "طلب جديد",
+          body: "لديك طلب جديد",
+          link: "/seller/orders",
+        }),
+      ),
+      ...(orderData.driver_id
+        ? [
+            sendPushToOwner("driver", orderData.driver_id, {
+              title: "طلب توصيل جديد",
+              body: "لديك طلب توصيل جديد",
+              link: `/driver/orders?driverId=${orderData.driver_id}`,
+            }),
+          ]
+        : []),
+    ])
 
     revalidatePath("/account")
     revalidatePath("/seller/orders")
@@ -1753,7 +1812,12 @@ export async function getMultiStoreOrdersForStore(storeId: string) {
       .get()
 
     const orders: OrderRecord[] = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
+      .map((doc) => {
+        // إخفاء كود التسليم عن البائع — وإلا أمكنه تعليم الطلب مُسلَّمًا بلا حضور العميل (إثبات COD)
+        const data = { id: doc.id, ...(doc.data() as Record<string, unknown>) } as Record<string, unknown>
+        delete data.delivery_code
+        return data as OrderRecord
+      })
       .filter((order) => order.order_type === "multi_store")
       .map((order) => {
         const stops: PickupStop[] = order.pickup_stops || []
@@ -1790,7 +1854,12 @@ export async function getMultiStoreOrdersForDriver(driverId: string) {
       .get()
 
     const orders: OrderRecord[] = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
+      .map((doc) => {
+        // إخفاء كود التسليم عن البائع/السائق — يُدخله السائق من العميل عند الباب (إثبات تسليم حقيقي)
+        const data = { id: doc.id, ...(doc.data() as Record<string, unknown>) } as Record<string, unknown>
+        delete data.delivery_code
+        return data as OrderRecord
+      })
       .filter((order) => order.order_type === "multi_store")
 
     // Sort by created_at descending in JS
@@ -1814,6 +1883,7 @@ export async function getCustomerMultiStoreOrders(customerId: string) {
       .where("customer_id", "==", customerId)
       .get()
 
+    // العميل يجب أن يرى كود التسليم (يعرضه للسائق عند الاستلام) — لا نحذفه من مسار العميل.
     const orders: OrderRecord[] = snapshot.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) } as OrderRecord))
       .filter((order) => order.order_type === "multi_store")

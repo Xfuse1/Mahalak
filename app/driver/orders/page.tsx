@@ -22,10 +22,14 @@ import {
   ChevronUp,
   Navigation,
   Wallet,
+  Phone,
+  MessageCircle,
+  FileText,
 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
 import { getMultiStoreOrdersForDriver, markStorePickedUp, markOrderDeliveredByDriver } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
+import { normalizeEgyptPhone } from "@/lib/utils/phone"
 import { getDriverById, verifyDriverLogin, driverLogout } from "@/lib/actions/delivery"
 import type { Driver } from "@/lib/actions/delivery"
 import { useToast } from "@/components/ui/toast"
@@ -34,7 +38,12 @@ type MultiOrder = {
   id: string
   customer_name: string
   customer_id: string
+  customer_phone?: string
   delivery_address: string
+  delivery_notes?: string
+  landmark?: string
+  delivery_latitude?: number
+  delivery_longitude?: number
   total: number
   status: string
   pickup_stops: PickupStop[]
@@ -100,6 +109,16 @@ export default function DriverOrdersPage() {
     try {
       const result = await verifyDriverLogin(driverIdInput.trim(), driverPin.trim())
       if (result.success) {
+        // FCM web-push للسائق بعد إنشاء جلسة السائق. استيراد ديناميكي محروس بمفتاح VAPID —
+        // بلا المفتاح لا تُحمَّل messaging-client (ولا firebase/messaging) إطلاقًا.
+        if (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+          import("@/lib/firebase/messaging-client")
+            .then((m) => {
+              m.registerForPush()
+              m.listenForegroundPush()
+            })
+            .catch(() => {})
+        }
         loadDriverData(driverIdInput.trim())
       } else if (result.locked) {
         const mins = result.retryAfterMinutes || 15
@@ -415,6 +434,10 @@ export default function DriverOrdersPage() {
                   const rejectedStops = stops.filter((s) => s.status === "rejected")
                   const activeStops = stops.filter((s) => s.status !== "rejected")
                   const isExpanded = expandedOrder === order.id
+                  // رقم واتساب بصيغة دولية بلا + (مثال: 201012345678) — نعيد استخدام مُطبّع الهاتف المصري
+                  const waNumber = order.customer_phone
+                    ? (normalizeEgyptPhone(order.customer_phone)?.replace("+", "") || "")
+                    : ""
 
                   return (
                     <Card
@@ -506,15 +529,69 @@ export default function DriverOrdersPage() {
                       {/* Expanded: Pickup Stops */}
                       {isExpanded && (
                         <div className="border-t dark:border-gray-700">
-                          {/* Delivery Address */}
+                          {/* Delivery Address + معلومات التواصل مع العميل (هاتف/علامة مميزة/ملاحظات) */}
                           <div className="p-3 bg-info/10 border-b dark:border-gray-700">
                             <div className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-info mt-0.5 shrink-0" />
-                              <div>
-                                <p className="text-xs font-medium text-info">
-                                  {t("عنوان التوصيل", "Delivery Address")}
-                                </p>
-                                <p className="text-sm">{order.delivery_address || t("غير محدد", "Not specified")}</p>
+                              <div className="flex-1 space-y-2">
+                                <div>
+                                  <p className="text-xs font-medium text-info">
+                                    {t("عنوان التوصيل", "Delivery Address")}
+                                  </p>
+                                  <p className="text-sm">{order.delivery_address || t("غير محدد", "Not specified")}</p>
+                                </div>
+
+                                {order.landmark && (
+                                  <p className="text-sm flex items-start gap-1 text-gray-700 dark:text-gray-300">
+                                    <MapPin className="w-3.5 h-3.5 text-info shrink-0 mt-0.5" />
+                                    <span><span className="font-medium">{t("علامة مميزة:", "Landmark:")}</span> {order.landmark}</span>
+                                  </p>
+                                )}
+
+                                {order.delivery_notes && (
+                                  <p className="text-sm flex items-start gap-1 text-gray-700 dark:text-gray-300">
+                                    <FileText className="w-3.5 h-3.5 text-info shrink-0 mt-0.5" />
+                                    <span><span className="font-medium">{t("ملاحظات:", "Notes:")}</span> {order.delivery_notes}</span>
+                                  </p>
+                                )}
+
+                                {/* أزرار التواصل السريع */}
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  {order.customer_phone && (
+                                    <>
+                                      <a
+                                        href={`tel:${order.customer_phone}`}
+                                        className="inline-flex items-center gap-1 text-xs font-medium bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 transition-colors"
+                                      >
+                                        <Phone className="w-3.5 h-3.5" />
+                                        {t("اتصال", "Call")}
+                                        <span className="tracking-wide">{order.customer_phone}</span>
+                                      </a>
+                                      {waNumber && (
+                                        <a
+                                          href={`https://wa.me/${waNumber}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-1.5 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          {t("واتساب", "WhatsApp")}
+                                        </a>
+                                      )}
+                                    </>
+                                  )}
+                                  {order.delivery_latitude != null && order.delivery_longitude != null && (
+                                    <a
+                                      href={`https://www.google.com/maps?q=${order.delivery_latitude},${order.delivery_longitude}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-medium bg-info/10 text-info px-2.5 py-1.5 rounded-lg hover:bg-info/20 transition-colors"
+                                    >
+                                      <Navigation className="w-3.5 h-3.5" />
+                                      {t("الخريطة", "Map")}
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>

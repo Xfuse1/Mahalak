@@ -1,6 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog"
+import { Input } from "./ui/input"
+import { Button } from "./ui/button"
+import { CheckCircle } from "lucide-react"
 import { updateOrderStatus } from "../lib/actions/orders"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "../lib/language-context"
@@ -18,31 +23,56 @@ export function OrderStatusSelector({ orderId, currentStatus, callerId, callerRo
   const router = useRouter()
   const { t } = useLanguage()
   const toast = useToast()
+  // UX-05: تسليم الطلب أحادي المتجر يتم عبر البائع — يطلب كود تأكيد يعرضه العميل قبل تعليمه "تم التوصيل"
+  const [codeDialogOpen, setCodeDialogOpen] = useState(false)
+  const [deliveryCode, setDeliveryCode] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleStatusChange = async (newStatus: string) => {
-    const result = await updateOrderStatus(orderId, newStatus, callerId, callerRole)
+  const applyStatus = async (newStatus: string, code?: string) => {
+    const result = await updateOrderStatus(orderId, newStatus, callerId, callerRole, undefined, code)
     if (result.success) {
       router.refresh()
       onUpdated?.()
     } else {
-      toast.error(t("فشل تحديث حالة الطلب", "Failed to update order status"))
+      toast.error(result.error || t("فشل تحديث حالة الطلب", "Failed to update order status"))
+    }
+    return result.success
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    // عند اختيار "تم التوصيل" نفتح نافذة إدخال كود التأكيد بدل تطبيق الحالة مباشرة
+    if (newStatus === "delivered") {
+      setDeliveryCode("")
+      setCodeDialogOpen(true)
+      return
+    }
+    await applyStatus(newStatus)
+  }
+
+  const handleConfirmDelivery = async () => {
+    setSubmitting(true)
+    const ok = await applyStatus("delivered", deliveryCode.trim())
+    setSubmitting(false)
+    if (ok) {
+      setCodeDialogOpen(false)
+      setDeliveryCode("")
     }
   }
 
   const getStatusText = (status: string) => {
     const statusMap: Record<string, { ar: string; en: string }> = {
-      pending: { ar: "\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629", en: "Pending" },
-      reviewing: { ar: "\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629", en: "Reviewing" },
-      processing: { ar: "\u0642\u064a\u062f \u0627\u0644\u062a\u062c\u0647\u064a\u0632", en: "Processing" },
-      confirmed: { ar: "\u062a\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f", en: "Confirmed" },
-      shipped: { ar: "\u062a\u0645 \u0627\u0644\u0634\u062d\u0646", en: "Shipped" },
-      on_the_way: { ar: "\u0641\u064a \u0627\u0644\u0637\u0631\u064a\u0642", en: "On The Way" },
-      picking_up: { ar: "\u0642\u064a\u062f \u0627\u0644\u0627\u0633\u062a\u0644\u0627\u0645", en: "Picking Up" },
-      picked_up: { ar: "\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u0644\u0627\u0645", en: "Picked Up" },
-      delivered: { ar: "\u062a\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644", en: "Delivered" },
-      cancelled: { ar: "\u0645\u0644\u063a\u064a", en: "Cancelled" },
-      driver_rejected: { ar: "\u0631\u0641\u0636 \u0627\u0644\u0633\u0627\u0626\u0642", en: "Driver Rejected" },
-      driver_changed: { ar: "\u062a\u0645 \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u0633\u0627\u0626\u0642", en: "Driver Changed" },
+      pending: { ar: "قيد المراجعة", en: "Pending" },
+      reviewing: { ar: "قيد المراجعة", en: "Reviewing" },
+      processing: { ar: "قيد التجهيز", en: "Processing" },
+      confirmed: { ar: "تم التأكيد", en: "Confirmed" },
+      shipped: { ar: "تم الشحن", en: "Shipped" },
+      on_the_way: { ar: "في الطريق", en: "On The Way" },
+      picking_up: { ar: "قيد الاستلام", en: "Picking Up" },
+      picked_up: { ar: "تم الاستلام", en: "Picked Up" },
+      delivered: { ar: "تم التوصيل", en: "Delivered" },
+      cancelled: { ar: "ملغي", en: "Cancelled" },
+      driver_rejected: { ar: "رفض السائق", en: "Driver Rejected" },
+      driver_changed: { ar: "تم تغيير السائق", en: "Driver Changed" },
     }
 
     const label = statusMap[status]
@@ -54,22 +84,67 @@ export function OrderStatusSelector({ orderId, currentStatus, callerId, callerRo
   }
 
   return (
-    <Select value={currentStatus} onValueChange={handleStatusChange}>
-      <SelectTrigger className="w-[180px]">
-        <SelectValue>{getStatusText(currentStatus)}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="reviewing">{t("\u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629", "Reviewing")}</SelectItem>
-        <SelectItem value="processing">{t("\u0642\u064a\u062f \u0627\u0644\u062a\u062c\u0647\u064a\u0632", "Processing")}</SelectItem>
-        <SelectItem value="confirmed">{t("\u062a\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f", "Confirmed")}</SelectItem>
-        <SelectItem value="shipped">{t("\u062a\u0645 \u0627\u0644\u0634\u062d\u0646", "Shipped")}</SelectItem>
-        <SelectItem value="on_the_way">{t("\u0641\u064a \u0627\u0644\u0637\u0631\u064a\u0642", "On The Way")}</SelectItem>
-        <SelectItem value="picking_up">{t("\u0642\u064a\u062f \u0627\u0644\u0627\u0633\u062a\u0644\u0627\u0645", "Picking Up")}</SelectItem>
-        <SelectItem value="picked_up">{t("\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u0644\u0627\u0645", "Picked Up")}</SelectItem>
-        <SelectItem value="driver_changed">{t("\u062a\u0645 \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u0633\u0627\u0626\u0642", "Driver Changed")}</SelectItem>
-        <SelectItem value="delivered">{t("\u062a\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644", "Delivered")}</SelectItem>
-        <SelectItem value="cancelled">{t("\u0645\u0644\u063a\u064a", "Cancelled")}</SelectItem>
-      </SelectContent>
-    </Select>
+    <>
+      <Select value={currentStatus} onValueChange={handleStatusChange}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue>{getStatusText(currentStatus)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="reviewing">{t("قيد المراجعة", "Reviewing")}</SelectItem>
+          <SelectItem value="processing">{t("قيد التجهيز", "Processing")}</SelectItem>
+          <SelectItem value="confirmed">{t("تم التأكيد", "Confirmed")}</SelectItem>
+          <SelectItem value="shipped">{t("تم الشحن", "Shipped")}</SelectItem>
+          <SelectItem value="on_the_way">{t("في الطريق", "On The Way")}</SelectItem>
+          <SelectItem value="picking_up">{t("قيد الاستلام", "Picking Up")}</SelectItem>
+          <SelectItem value="picked_up">{t("تم الاستلام", "Picked Up")}</SelectItem>
+          <SelectItem value="driver_changed">{t("تم تغيير السائق", "Driver Changed")}</SelectItem>
+          <SelectItem value="delivered">{t("تم التوصيل", "Delivered")}</SelectItem>
+          <SelectItem value="cancelled">{t("ملغي", "Cancelled")}</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* UX-05: نافذة إدخال كود تأكيد التسليم */}
+      <Dialog open={codeDialogOpen} onOpenChange={(open) => { if (!submitting) setCodeDialogOpen(open) }}>
+        <DialogContent className="max-w-sm" dir={t("rtl", "ltr")}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-primary" />
+              {t("تأكيد التسليم", "Confirm Delivery")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("أدخل كود التأكيد المكوّن من 4 أرقام الذي يعرضه العميل لإتمام التسليم", "Enter the 4-digit confirmation code shown by the customer to complete delivery")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              value={deliveryCode}
+              onChange={(e) => setDeliveryCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder={t("كود من 4 أرقام", "4-digit code")}
+              inputMode="numeric"
+              autoFocus
+              className="text-center text-lg tracking-[0.3em]"
+              onKeyDown={(e) => { if (e.key === "Enter" && deliveryCode.trim().length >= 4 && !submitting) handleConfirmDelivery() }}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleConfirmDelivery}
+                disabled={submitting || deliveryCode.trim().length < 4}
+                className="flex-1"
+              >
+                {submitting ? t("جاري...", "Processing...") : t("تأكيد التسليم", "Confirm Delivery")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCodeDialogOpen(false)}
+                disabled={submitting}
+                className="flex-1"
+              >
+                {t("إلغاء", "Cancel")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

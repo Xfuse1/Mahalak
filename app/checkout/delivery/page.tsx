@@ -22,6 +22,7 @@ type CheckoutData = {
   fullName: string
   phone: string
   street: string
+  landmark: string
   city: string
   state: string
   notes: string
@@ -167,7 +168,17 @@ export default function DeliveryPage() {
       }, {} as Record<string, { items: typeof items; store_name: string }>)
 
       const storeIds = Object.keys(itemsByStore)
-      const fullAddress = `${checkoutData.street}, ${checkoutData.city}${checkoutData.state ? `, ${checkoutData.state}` : ""}`
+      // نبني العنوان من الأجزاء غير الفارغة فقط (الشارع/المدينة اختياريان الآن) ونُضمّن العلامة
+      // المميزة كي تظهر لكل من يسلّم الطلب — بدل نص فارغ مثل "، " عند ترك الحقول فارغة.
+      const addressParts = [checkoutData.street, checkoutData.city, checkoutData.state]
+        .map((p) => (p || "").trim())
+        .filter(Boolean)
+      const fullAddress = [
+        addressParts.join("، "),
+        checkoutData.landmark ? `بجوار: ${checkoutData.landmark}` : "",
+      ]
+        .filter(Boolean)
+        .join(" — ")
 
       if (storeIds.length > 1) {
         // Multi-store order: create one order with pickup stops
@@ -215,6 +226,7 @@ export default function DeliveryPage() {
           delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
           delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
           delivery_notes: checkoutData.notes,
+          landmark: checkoutData.landmark,
           driver_id: selectedDriverData.id,
           driver_name: selectedDriverData.name,
           delivery_price: deliveryPrice,
@@ -249,6 +261,7 @@ export default function DeliveryPage() {
           delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
           delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
           delivery_notes: checkoutData.notes,
+          landmark: checkoutData.landmark,
           driver_id: selectedDriverData?.id,
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,

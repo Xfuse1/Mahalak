@@ -1,6 +1,7 @@
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app"
 import { getAuth } from "firebase-admin/auth"
 import { getFirestore } from "firebase-admin/firestore"
+import { getMessaging } from "firebase-admin/messaging"
 
 function getMissingFirebaseAdminEnv() {
   const missing: string[] = []
@@ -70,4 +71,8 @@ export function getAdminDb() {
 
 export function getAdminAuth() {
   return getAuth(initAdminApp())
+}
+
+export function getAdminMessaging() {
+  return getMessaging(initAdminApp())
 }

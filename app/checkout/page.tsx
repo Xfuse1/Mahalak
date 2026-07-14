@@ -11,8 +11,9 @@ import { BackButton } from "@/components/back-button"
 import { useLanguage } from "@/lib/language-context"
 import { useAuth } from "@/lib/auth-context"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { getCartPricing } from "@/lib/actions/products"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2, Banknote } from "lucide-react"
 import type { CheckoutItem } from "@/lib/types/checkout"
@@ -21,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner"
 export default function CheckoutPage() {
   const { t, language } = useLanguage()
   const { user, isLoading: authLoading } = useAuth()
-  const { items: cartItems } = useCartStore()
+  const { items: cartItems, syncPrices } = useCartStore()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -41,10 +42,33 @@ export default function CheckoutPage() {
     return sum + discountedPrice * item.quantity
   }, 0)
 
+  const [priceUpdated, setPriceUpdated] = useState(false)
+  const didSyncRef = useRef(false)
+  // إعادة تحقّق أسعار العربة من الخادم عند الدخول للدفع — حتى يطابق الإجمالي المعروض ما سيُحاسَب فعلًا
+  // (العربة تحفظ لقطة سعر/خصم قد تكون تقادمت بعد انتهاء عرض أو تعديل البائع للسعر).
+  useEffect(() => {
+    if (isBuyNowMode || didSyncRef.current || cartItems.length === 0) return
+    didSyncRef.current = true
+    ;(async () => {
+      try {
+        const pricing = await getCartPricing(cartItems.map((i) => i.id))
+        const changed = cartItems.some((i) => {
+          const f = pricing[i.id]
+          return f && (f.price !== i.price || (f.discount_percentage || 0) !== (i.discount_percentage || 0))
+        })
+        syncPrices(pricing)
+        if (changed) setPriceUpdated(true)
+      } catch {
+        // تجاهل — الخادم يعيد اشتقاق الإجمالي الفعلي عند إنشاء الطلب على أي حال
+      }
+    })()
+  }, [isBuyNowMode, cartItems, syncPrices])
+
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
     street: "",
+    landmark: "",
     city: "",
     state: "",
     notes: "",
@@ -180,8 +204,8 @@ export default function CheckoutPage() {
     // Mark form as attempted to show validation
     setAttempted(true)
     
-    // Validate required fields - location is required, address fields are optional
-    if (!formData.fullName || !formData.phone || !formData.latitude || !formData.longitude) {
+    // Validate required fields - landmark is the required locator; GPS is optional
+    if (!formData.fullName || !formData.phone || !formData.landmark) {
       return
     }
 
@@ -233,6 +257,12 @@ export default function CheckoutPage() {
               {t("يرجى مراجعة بياناتك قبل المتابعة", "Please review your information before proceeding")}
             </p>
           </div>
+
+          {priceUpdated && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm text-center">
+              {t("تم تحديث أسعار بعض المنتجات منذ إضافتها للعربة. الإجمالي المعروض محدّث.", "Some item prices changed since you added them to the cart. The total shown is now up to date.")}
+            </div>
+          )}
 
           {/* Order Summary */}
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
@@ -349,11 +379,11 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Location Detection Button - Required */}
+              {/* Location Detection Button - Optional convenience (improves delivery accuracy) */}
               <div className="space-y-2">
-                <Label className={`flex items-center gap-2 font-medium ${attempted && (!formData.latitude || !formData.longitude) ? "text-red-600" : "text-gray-700"}`}>
+                <Label className="flex items-center gap-2 font-medium text-gray-700">
                   <Navigation className="h-4 w-4" />
-                  {t("تحديد الموقع", "Detect Location")} *
+                  {t("تحديد الموقع (اختياري — يحسّن دقة التوصيل)", "Detect location (optional — improves delivery accuracy)")}
                 </Label>
                 <Button
                   type="button"
@@ -363,8 +393,6 @@ export default function CheckoutPage() {
                   className={`w-full h-12 rounded-xl transition-all ${
                     formData.latitude && formData.longitude
                       ? "border-emerald-500 text-emerald-600 bg-emerald-50"
-                      : attempted && (!formData.latitude || !formData.longitude)
-                      ? "border-red-500 text-red-500 hover:bg-red-50"
                       : "border-primary text-primary hover:bg-primary/5"
                   }`}
                 >
@@ -382,9 +410,6 @@ export default function CheckoutPage() {
                 </Button>
                 {locationError && (
                   <p className="text-sm text-red-600">{locationError}</p>
-                )}
-                {attempted && (!formData.latitude || !formData.longitude) && !locationError && (
-                  <p className="text-sm text-red-600">{t("يرجى تحديد موقعك للتوصيل", "Please detect your location for delivery")}</p>
                 )}
                 {formData.latitude && formData.longitude && (
                   <p className="text-sm text-emerald-600 flex items-center gap-1 bg-emerald-50 p-2 rounded-lg">
@@ -407,6 +432,26 @@ export default function CheckoutPage() {
                   placeholder={t("أدخل عنوانك التفصيلي", "Enter your detailed address")}
                   className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                 />
+              </div>
+
+              {/* Landmark - required locator (replaces GPS as the mandatory field) */}
+              <div className="space-y-2">
+                <Label htmlFor="landmark" className={`flex items-center gap-2 font-medium ${attempted && !formData.landmark ? "text-red-600" : "text-gray-700"}`}>
+                  <MapPin className="h-4 w-4" />
+                  {t("علامة مميزة", "Landmark")} *
+                </Label>
+                <Input
+                  id="landmark"
+                  name="landmark"
+                  value={formData.landmark}
+                  onChange={handleInputChange}
+                  placeholder={t("بجوار… / أقرب معلم معروف", "Next to… / nearest known landmark")}
+                  required
+                  className={`h-12 rounded-xl ${attempted && !formData.landmark ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:border-primary focus:ring-primary/20"}`}
+                />
+                {attempted && !formData.landmark && (
+                  <p className="text-sm text-red-600">{t("هذا الحقل مطلوب", "This field is required")}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

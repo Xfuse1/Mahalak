@@ -72,6 +72,7 @@ interface AuthContextType {
     phoneIdToken?: string,
   ) => Promise<boolean>
   logout: () => void
+  refreshProfile: () => Promise<void>
   isLoading: boolean
   error: string
 }
@@ -190,6 +191,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe()
   }, [auth, db, loadUserProfile])
 
+  // FCM web-push: نسجّل للإشعارات بعد تسجيل الدخول. استيراد ديناميكي محروس بمفتاح VAPID —
+  // بلا NEXT_PUBLIC_FIREBASE_VAPID_KEY لا تُحمَّل messaging-client (ولا firebase/messaging) إطلاقًا،
+  // فيبقى SDK الرسائل خارج حزمة العميل العامة تمامًا.
+  useEffect(() => {
+    if (!firebaseUser) return
+    if (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY && firebaseUser) {
+      import("./firebase/messaging-client")
+        .then((m) => {
+          m.registerForPush()
+          m.listenForegroundPush()
+        })
+        .catch(() => {})
+    }
+  }, [firebaseUser])
+
   const login = useCallback(async (email: string, password: string, role: "customer" | "seller"): Promise<boolean> => {
     if (!auth || !db) {
       const message = "Firebase auth is not configured"
@@ -209,9 +225,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await signOut(auth)
           throw new Error("Invalid role for this account type")
         }
-      } else {
-        // Create profile server-side (role مُعقَّم) — لا كتابة role من العميل
-        await createSession(await credential.user.getIdToken())
+      }
+
+      // إنشاء كوكي الجلسة (__session) وانتظاره قبل الرجوع — يضمن وجود الكوكي قبل التنقّل لمسار محميّ
+      // بالـmiddleware، تفاديًا لإعادة التوجيه لـ/auth بسبب سباق ضبط الكوكي عبر مستمع onAuthStateChanged.
+      await createSession(await credential.user.getIdToken())
+
+      if (!profileSnap.exists()) {
+        // إنشاء الملف سيرفر-سايد (role مُعقَّم) — لا كتابة role من العميل
         await ensureUserProfile({
           email,
           full_name: credential.user.displayName || email.split("@")[0],
@@ -246,9 +267,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profileRef = doc(db, "users", credential.user.uid)
       const profileSnap = await getDoc(profileRef)
 
+      // إنشاء كوكي الجلسة (__session) وانتظاره قبل الرجوع — يمنع سباق الـmiddleware (نفس سبب login)
+      await createSession(await credential.user.getIdToken())
+
       if (!profileSnap.exists()) {
         // Create profile server-side (role مُعقَّم إلى customer) — لا كتابة من العميل
-        await createSession(await credential.user.getIdToken())
         await ensureUserProfile({
           email: credential.user.email || "",
           full_name: credential.user.displayName || credential.user.email?.split("@")[0] || "",
@@ -428,9 +451,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFirebaseUser(null)
   }, [auth])
 
+  // إعادة تحميل ملف المستخدم من Firestore بعد تعديل البروفايل — router.refresh() وحده لا يحدّث
+  // حالة user المحفوظة في السياق (تُضبط فقط عبر مستمع onAuthStateChanged).
+  const refreshProfile = useCallback(async () => {
+    const current = auth?.currentUser
+    if (current) {
+      await loadUserProfile(current)
+    }
+  }, [auth, loadUserProfile])
+
   const contextValue = useMemo(
-    () => ({ user, firebaseUser, login, signInWithGoogle, register, logout, isLoading, error }),
-    [user, firebaseUser, login, signInWithGoogle, register, logout, isLoading, error],
+    () => ({ user, firebaseUser, login, signInWithGoogle, register, logout, refreshProfile, isLoading, error }),
+    [user, firebaseUser, login, signInWithGoogle, register, logout, refreshProfile, isLoading, error],
   )
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>

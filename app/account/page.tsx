@@ -38,6 +38,7 @@ type Order = {
   total: number
   status: string
   delivery_address: string
+  delivery_code?: string
   timeline?: TimelineEntry[]
   driver_id?: string
   driver_name?: string
@@ -66,7 +67,7 @@ type RejectedOrder = {
 }
 
 export default function AccountPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, refreshProfile } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const toast = useToast()
@@ -361,6 +362,16 @@ export default function AccountPage() {
                                   <span className="line-clamp-1">{order.delivery_address}</span>
                                 </div>
                               )}
+                              {/* UX-05: كود تأكيد التسليم — يعرضه العميل لمن يسلّمه الطلب لإثبات الاستلام */}
+                              {order.status !== "cancelled" && order.status !== "delivered" && order.delivery_code && (
+                                <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <KeyRound className="h-4 w-4 text-primary flex-shrink-0" />
+                                    <span className="text-xs text-gray-600">{t("سلّم هذا الكود عند استلام الطلب", "Give this code when you receive the order")}</span>
+                                  </div>
+                                  <span className="font-extrabold text-lg tracking-[0.3em] text-primary">{order.delivery_code}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -591,7 +602,7 @@ export default function AccountPage() {
                         <CreditCard className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{orders.reduce((sum, o) => sum + Number(o.total || 0), 0).toFixed(0)}</p>
+                        <p className="text-2xl font-bold">{orders.filter(o => o.status !== 'cancelled' && o.status !== 'refunded').reduce((sum, o) => sum + Number(o.total || 0), 0).toFixed(0)}</p>
                         <p className="text-xs text-accent-foreground/80">{t("إجمالي الإنفاق", "Total Spent")}</p>
                       </div>
                     </div>
@@ -604,7 +615,7 @@ export default function AccountPage() {
                         <Package className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{orders.filter(o => o.status === 'pending' || o.status === 'processing').length}</p>
+                        <p className="text-2xl font-bold">{orders.filter(o => !['delivered', 'cancelled', 'refunded'].includes(o.status)).length}</p>
                         <p className="text-xs text-amber-100">{t("طلبات نشطة", "Active Orders")}</p>
                       </div>
                     </div>
@@ -703,10 +714,13 @@ export default function AccountPage() {
                         if (!user?.id) return
                         const res = await updateProfile(user.id, { full_name: name, phone }, user.id)
                         if (res && res.success) {
-                          // refresh the page so AuthProvider reloads profile and UI reflects changes
+                          // تحديث حالة السياق (user) صراحةً — router.refresh وحده لا يكفي للحالة العميلة
+                          await refreshProfile()
                           router.refresh()
+                          toast.success(t("تم حفظ التغييرات", "Changes saved"))
                         } else {
                           console.error("[v0] Failed to update profile:", res?.error)
+                          toast.error(t("تعذّر حفظ التغييرات", "Could not save changes"))
                         }
                       } catch (err) {
                         console.error("[v0] Error submitting profile form:", err)
@@ -762,9 +776,12 @@ export default function AccountPage() {
                       try {
                         const res = await updateProfile(user.id, { street, city, country }, user.id)
                         if (res && res.success) {
+                          await refreshProfile()
                           router.refresh()
+                          toast.success(t("تم حفظ العنوان", "Address saved"))
                         } else {
                           console.error("[v0] Failed to update address:", res?.error)
+                          toast.error(t("تعذّر حفظ العنوان", "Could not save address"))
                         }
                       } catch (err) {
                         console.error("[v0] Error saving address:", err)

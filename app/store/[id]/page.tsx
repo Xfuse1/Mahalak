@@ -4,6 +4,7 @@ import { Header } from "../../../components/header"
 import { Footer } from "../../../components/footer"
 import { ProductCard } from "../../../components/product-card"
 import { BackButton } from "../../../components/back-button"
+import { ShareButton } from "../../../components/share-button"
 import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
 import { Button } from "../../../components/ui/button"
@@ -146,7 +147,9 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
     } catch (e) {
       // ignore tracking errors
     }
-  }, [store])
+    // نعتمد على معرّف المتجر الثابت بدل كائن store كاملًا — كان تغيّر مرجعه (مثلًا بعد تقييم)
+    // يعيد إطلاق PageView/ViewContent فيضخّم عدّادات Meta Pixel.
+  }, [store?.id])
 
   useEffect(() => {
     if (!store || !user) return
@@ -243,9 +246,11 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
     window.location.href = `tel:${store.phone}`
   }
 
-  // أبرز عرض نشط (أعلى نسبة خصم) لعرضه في الشريط العلوي
-  const topOffer = offers.length
-    ? offers.reduce((best, o) => (o.discount_percentage > best.discount_percentage ? o : best), offers[0])
+  // أبرز عرض نشط (أعلى نسبة خصم) للشريط العلوي — نرفع فقط العروض على مستوى المتجر (بلا
+  // product_id ولا category) حتى لا يظهر خصم منتج/فئة واحدة كخصم لكل المتجر (مضلِّل للعميل).
+  const storeWideOffers = offers.filter((o: any) => !o.product_id && !o.category)
+  const topOffer = storeWideOffers.length
+    ? storeWideOffers.reduce((best, o) => (o.discount_percentage > best.discount_percentage ? o : best), storeWideOffers[0])
     : null
 
   return (
@@ -290,7 +295,10 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
               </div>
 
               <div className="space-y-4 min-w-0">
-                <h1 className="text-2xl md:text-4xl font-bold break-words">{store.name}</h1>
+                <div className="flex items-start justify-between gap-3">
+                  <h1 className="text-2xl md:text-4xl font-bold break-words">{store.name}</h1>
+                  <ShareButton title={store.name} text={t(`شوف متجر ${store.name} على محلك`, `Check out ${store.name} on Mahalak`)} className="shrink-0" />
+                </div>
                 <p className="text-gray-600 text-base md:text-lg leading-relaxed break-words">{store.description}</p>
                 <div className="flex flex-wrap items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-1">
