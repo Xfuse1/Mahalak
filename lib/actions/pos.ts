@@ -74,10 +74,16 @@ type POSSaleData = {
   total: number
   amount_paid: number
   change: number
-  payment_method: "cash" | "card" | "wallet"
+  payment_method: "cash" | "card" | "wallet" | "split"
   customer_name?: string
   customer_phone?: string
   notes?: string
+  // خصومات إضافية اختيارية (كاشير الملابس): season_discount نسبة مئوية، والباقي مبالغ
+  season_discount?: number
+  invoice_discount?: number
+  loyalty_discount?: number
+  gift_card_amount?: number
+  split_payments?: Array<{ method?: string; amount?: number }>
 }
 
 type POSPaymentMethod = "cash" | "card" | "wallet" | "split"
@@ -620,9 +626,22 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         ? (calculatedSubtotal * (saleData.discount || 0)) / 100
         : Math.min(saleData.discount || 0, calculatedSubtotal)
 
-      // 3. Calculate total on server (الضريبة كمبلغ مطلق تُضاف للمجموع — كانت تُخزَّن وتُهمَل سابقًا)
+      // 2b. خصومات إضافية (كاشير الملابس): موسم(نسبة)/فاتورة/ولاء/بطاقة هدية — كانت تُطبَّق على
+      // العميل وتُهمَل سيرفر-سايد، فتُرفض مبيعات الكاش (PAYMENT_TOO_LOW) أو يُشحن الكارت بالكامل بينما
+      // يخصم العميل بطاقته/نقاطه (شحن مزدوج). نطويها في الإجمالي. المبالغ من نفس المتجر (نموذج ثقة الكاشير).
+      const seasonPct = Math.min(100, Math.max(0, Number(saleData.season_discount) || 0))
+      const seasonAmount = (calculatedSubtotal * seasonPct) / 100
+      const invoiceDisc = Math.max(0, Number(saleData.invoice_discount) || 0)
+      const loyaltyDisc = Math.max(0, Number(saleData.loyalty_discount) || 0)
+      const giftCardDisc = Math.max(0, Number(saleData.gift_card_amount) || 0)
+      const additionalDiscounts = Math.max(
+        0,
+        Math.min(calculatedSubtotal - discountAmount, seasonAmount + invoiceDisc + loyaltyDisc + giftCardDisc),
+      )
+
+      // 3. Calculate total on server (الضريبة كمبلغ مطلق تُضاف للمجموع)
       const taxAmount = Math.max(0, Number(saleData.tax) || 0)
-      const calculatedTotal = Math.max(0, calculatedSubtotal - discountAmount) + taxAmount
+      const calculatedTotal = Math.max(0, calculatedSubtotal - discountAmount - additionalDiscounts) + taxAmount
 
       // 4. Validate payment
       if (saleData.payment_method === "cash") {
@@ -633,10 +652,22 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
       const calculatedChange = saleData.payment_method === "cash"
         ? Math.max(0, (saleData.amount_paid || 0) - calculatedTotal)
         : 0
-      const calculatedTotalProfit = roundMoney(calculatedItemsProfit - discountAmount)
-      const cashCollected = saleData.payment_method === "cash"
-        ? Math.max(0, roundMoney((saleData.amount_paid || 0) - calculatedChange))
-        : 0
+      // بطاقة الهدية مبلغ مدفوع مسبقًا (تسوية التزام) لا تخفيض إيراد — نستثنيها من خصم الربح حتى لا
+      // تُسجَّل خسارة وهمية. الإجمالي نفسه لا يتغيّر (العميل يدفع نفس النقدية المخفّضة).
+      const profitReducibleDiscounts = Math.max(0, additionalDiscounts - giftCardDisc)
+      const calculatedTotalProfit = roundMoney(calculatedItemsProfit - discountAmount - profitReducibleDiscounts)
+      // النقدية المحصّلة: للكاش الفرق بعد الباقي؛ وللدفع المقسّم مجموع أجزاء الكاش
+      // (كانت تُهمَل للمقسّم فيَنقص جرد الوردية ويظهر فائض نقدي وهمي).
+      let cashCollected = 0
+      if (saleData.payment_method === "cash") {
+        cashCollected = Math.max(0, roundMoney((saleData.amount_paid || 0) - calculatedChange))
+      } else if (saleData.payment_method === "split" && Array.isArray(saleData.split_payments)) {
+        cashCollected = roundMoney(
+          saleData.split_payments
+            .filter((p) => p?.method === "cash")
+            .reduce((s, p) => s + (Number(p?.amount) || 0), 0),
+        )
+      }
 
       // 5. Create POS sale record with server-calculated values
       const saleRef = db.collection("pos_sales").doc()
@@ -646,6 +677,7 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         items: verifiedItems,
         subtotal: roundMoney(calculatedSubtotal),
         discount: roundMoney(discountAmount),
+        additional_discounts: roundMoney(additionalDiscounts),
         discount_type: saleData.discount_type,
         tax: roundMoney(taxAmount),
         total: roundMoney(calculatedTotal),
@@ -654,6 +686,7 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         amount_paid: saleData.payment_method === "cash" ? saleData.amount_paid : calculatedTotal,
         change: roundMoney(calculatedChange),
         payment_method: saleData.payment_method,
+        split_payments: Array.isArray(saleData.split_payments) ? saleData.split_payments : null,
         customer_name: saleData.customer_name || null,
         customer_phone: saleData.customer_phone || null,
         notes: saleData.notes || null,

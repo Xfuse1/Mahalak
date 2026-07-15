@@ -2,7 +2,16 @@ const EGYPT_LOCAL_MOBILE_REGEX = /^01[0125]\d{8}$/
 const EGYPT_CANONICAL_MOBILE_REGEX = /^\+201[0125]\d{8}$/
 
 function sanitizePhone(rawPhone: string) {
-  return rawPhone.replace(/[\s()-]/g, "")
+  // تحويل الأرقام العربية-الهندية (٠-٩) والفارسية الممتدة (۰-۹) إلى ASCII حتى لا تُرفض
+  // الأرقام المكتوبة بالعربية في تطبيق عربي أساسًا.
+  const westernized = rawPhone.replace(/[٠-٩۰-۹]/g, (ch) => {
+    const code = ch.charCodeAt(0)
+    const base = code >= 0x06f0 ? 0x06f0 : 0x0660
+    return String(code - base)
+  })
+  // إزالة المسافات/الأقواس/الشرطات، وتحويل بادئة 00 الدولية إلى + (مثل 0020… → +20…)
+  const cleaned = westernized.replace(/[\s()-]/g, "")
+  return cleaned.replace(/^00/, "+")
 }
 
 function toLocalEgyptPhone(rawPhone: string): string | null {

@@ -3,7 +3,7 @@
 // ADM-01: لوحة الأدمن — اعتماد/رفض المتاجر (حوكمة).
 // كل الأكشن تتحقق من دور admin سيرفر-سايد (يُشتق من قاعدة البيانات، لا من العميل).
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
@@ -47,7 +47,7 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
         const s = (data?.store || {}) as Record<string, any>
         return serializeData({
           id: d.id,
-          name: s.name || data?.full_name || "",
+          name: s.name || data?.full_name || "متجر بدون اسم",
           phone: s.phone || data?.phone || "",
           address: s.address || [data?.city, data?.street].filter(Boolean).join(", ") || "",
           category: s.category || "",
@@ -62,7 +62,8 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
           created_at: s.created_at || data?.created_at || "",
         }) as AdminStore
       })
-      .filter((s) => !!s.name)
+    // ملاحظة: لا نُرشّح على الاسم — كل مستند دوره seller يجب أن يكون قابلًا للمراجعة/الاعتماد
+    // (بائع بلا اسم كان يختفي تمامًا من قائمة الأدمن فلا يُعتمد ولا يُرفض).
 
     // قيد المراجعة (غير معتمد) أولًا
     stores.sort((a, b) => Number(a.is_approved) - Number(b.is_approved))
@@ -112,6 +113,9 @@ export async function setStoreApproval(storeId: string, approved: boolean) {
     }
 
     revalidatePath("/admin/stores")
+    // إبطال كاش المتاجر أيضًا حتى ينعكس الاعتماد/الرفض فورًا على الواجهة العامة (getStores/getStore)
+    revalidateTag("stores", "max")
+    revalidateTag(`store-${storeId}`, "max")
     return { success: true }
   } catch (error) {
     logError("[admin] setStoreApproval", error)

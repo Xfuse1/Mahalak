@@ -228,8 +228,12 @@ async function _getStoresImpl(category?: string) {
 
   const snapshot = await query.get()
 
-  // Extract stores from user documents
+  // Extract stores from user documents.
+  // إخفاء المتاجر المرفوضة صراحةً (is_approved === false) فقط — نُبقي المتاجر الحالية/قيد
+  // المراجعة (بدون الحقل) ظاهرة حتى لا يفرغ الموقع. للانتقال لـ"المعتمد فقط" لاحقًا:
+  // نعتمد المتاجر الحالية ثم نبدّل الشرط إلى === true.
   let stores: Store[] = snapshot.docs
+    .filter((doc) => (doc.data() as { store?: { is_approved?: boolean } })?.store?.is_approved !== false)
     .map((doc) => extractStore(doc))
     .filter((store): store is Store => store !== null)
 
@@ -252,6 +256,9 @@ async function _getStoresImpl(category?: string) {
   return stores.map((store) => {
     const storeOffer = activeOffers.find((offer) =>
       offer.store_id === store.id &&
+      // شارة "عرض خاص" على بطاقة المتجر فقط للعروض على مستوى المتجر (لا عرض منتج/فئة واحدة)
+      !(offer as { product_id?: string }).product_id &&
+      !(offer as { category?: string }).category &&
       (offer.start_date || "") <= today &&
       (offer.end_date || "") >= today
     )
@@ -300,6 +307,11 @@ async function _getStoreImpl(id: string) {
 
   const store = extractStore(docSnap)
   if (!store) {
+    return null
+  }
+
+  // إخفاء المتجر المرفوض صراحةً من العرض العام (المالك يرى متجره عبر getStoreByUserId)
+  if ((docSnap.data() as { store?: { is_approved?: boolean } })?.store?.is_approved === false) {
     return null
   }
 
@@ -397,9 +409,30 @@ export async function updateStore(
   // Store ID = User ID
   const userRef = db.collection("users").doc(id)
 
-  // Build the update object for nested store field
+  // قائمة سماح صريحة لحقول العرض القابلة للتعديل من المالك.
+  // منع mass-assignment: بدونها كان البائع يقدر يبعت { is_approved: true } فيعتمد متجره بنفسه،
+  // أو يزوّر rating، أو يكتب فوق created_at/حقول KYC. الاعتماد يتم فقط عبر أدمن (setStoreApproval).
+  const ALLOWED_STORE_FIELDS = [
+    "name",
+    "description",
+    "address",
+    "phone",
+    "image_url",
+    "category",
+    "open_time",
+    "close_time",
+    "working_days",
+    "support_email",
+    "whatsapp_number",
+    "return_policy",
+    "latitude",
+    "longitude",
+  ] as const
+
+  // Build the update object for nested store field (allowlisted only)
   const storeUpdates: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(formData)) {
+  for (const key of ALLOWED_STORE_FIELDS) {
+    const value = (formData as Record<string, unknown>)[key]
     if (value !== undefined) {
       storeUpdates[`store.${key}`] = value
     }

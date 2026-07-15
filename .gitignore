@@ -36,3 +36,5 @@ tmp
 nul
 env.download
 inspection/
+
+testsprite_tests\tmp\config.json

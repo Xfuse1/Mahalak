@@ -172,6 +172,8 @@ export default function CustomerRegisterPage() {
       }
 
       sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
+      // كلمة المرور تبقى في العميل فقط (لا تُخزَّن على الخادم)
+      if (password) sessionStorage.setItem("pendingRegistrationPassword", password)
       router.push(`/auth/verify-phone?phone=${encodeURIComponent(phone)}&role=customer&returnUrl=/`)
     } finally {
       setIsLoading(false)

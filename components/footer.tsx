@@ -133,7 +133,7 @@ const FooterComponent = () => {
 
         <div className="border-t border-gray-800 mt-12 pt-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-500 text-sm">{t("© 2025 محلك. جميع الحقوق محفوظة.", "© 2025 Mahalak. All Rights Reserved.")}</p>
+            <p className="text-gray-500 text-sm">{t(`© ${new Date().getFullYear()} محلك. جميع الحقوق محفوظة.`, `© ${new Date().getFullYear()} Mahalak. All Rights Reserved.`)}</p>
             <div className="flex items-center gap-2 text-gray-500 text-sm">
               <span>{t("صنع بـ", "Made with")}</span>
               <span className="text-red-500 animate-pulse">❤️</span>

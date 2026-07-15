@@ -22,6 +22,14 @@ export function MapPicker({ open, onClose, onLocationSelect, initialLat = 30.044
   const [selectedPos, setSelectedPos] = useState<{ lat: number; lng: number }>({ lat: initialLat, lng: initialLng })
   const [isLoaded, setIsLoaded] = useState(false)
 
+  // مزامنة الموقع المختار مع الإحداثيات الابتدائية عند فتح النافذة أو تغيّرها — بدونها كان
+  // "تأكيد" بلا سحب العلامة يُرسل القيمة القديمة (القاهرة الافتراضية) بدل الموقع المعروض.
+  useEffect(() => {
+    if (open) {
+      setSelectedPos({ lat: initialLat, lng: initialLng })
+    }
+  }, [open, initialLat, initialLng])
+
   useEffect(() => {
     if (!open) return
 

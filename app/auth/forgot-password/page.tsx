@@ -16,6 +16,7 @@ import { useLanguage } from "@/lib/language-context"
 import { clearPhoneAuth, getOTPStatus, sendPhoneOTP, verifyPhoneOTP } from "@/lib/firebase/client"
 import { generatePasswordResetToken, getUserByPhone, resetUserPassword } from "@/lib/actions/profile"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
+import { isPasswordValid, PASSWORD_POLICY_AR, PASSWORD_POLICY_EN } from "@/lib/utils/password"
 import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, Lock, Phone, RefreshCw, Shield } from "lucide-react"
 
 type Step = "phone" | "otp" | "new-password" | "success"
@@ -102,7 +103,8 @@ export default function ForgotPasswordPage() {
 
       const result = await getUserByPhone(normalizedPhone)
       if (!result.success || !result.data?.id) {
-        setError(t("رقم الهاتف غير مسجل في النظام", "Phone number is not registered"))
+        // رسالة محايدة لتقليل تعداد الحسابات (لا نؤكّد/ننفي التسجيل صراحةً)
+        setError(t("تعذّر بدء استعادة كلمة المرور لهذا الرقم. تأكد من الرقم وحاول مجددًا", "Could not start password recovery. Check the number and try again"))
         return
       }
 
@@ -236,8 +238,8 @@ export default function ForgotPasswordPage() {
         return
       }
 
-      if (newPassword.length < 6) {
-        setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+      if (!isPasswordValid(newPassword)) {
+        setError(t(PASSWORD_POLICY_AR, PASSWORD_POLICY_EN))
         return
       }
 

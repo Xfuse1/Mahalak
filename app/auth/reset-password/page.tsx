@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/lib/language-context"
+import { isPasswordValid, PASSWORD_POLICY_AR, PASSWORD_POLICY_EN } from "@/lib/utils/password"
 import { getFirebaseAuth } from "@/lib/firebase/client"
 import { confirmPasswordReset } from "firebase/auth"
 import { CheckCircle2 } from "lucide-react"
@@ -37,8 +38,8 @@ export default function ResetPasswordPage() {
       return
     }
 
-    if (password.length < 6) {
-      setError(t("كلمة المرور يجب أن تكون 6 أحرف على الأقل", "Password must be at least 6 characters"))
+    if (!isPasswordValid(password)) {
+      setError(t(PASSWORD_POLICY_AR, PASSWORD_POLICY_EN))
       setIsLoading(false)
       return
     }

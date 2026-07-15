@@ -791,22 +791,25 @@ export async function redeemGiftCard(
     if (!(await isStoreOwner(storeId))) return { success: false, remaining: 0 }
     const db = getAdminDb()
     const ref = db.doc(`stores/${storeId}/gift_cards/${cardId}`)
-    const doc = await ref.get()
-    if (!doc.exists) return { success: false, remaining: 0 }
-
-    const card = doc.data() as GiftCard
-    // منع المبالغ السالبة (التي قد تزيد الرصيد) وتجاوز الرصيد المتاح
-    const deducted = Math.max(0, Math.min(Number(amount) || 0, card.current_balance))
-    const remaining = card.current_balance - deducted
-
-    await ref.update({
-      current_balance: remaining,
-      status: remaining <= 0 ? "used" : "active",
-      used_transactions: FieldValue.arrayUnion({
-        amount: deducted,
-        date: new Date().toISOString(),
-        sale_id: saleId,
-      }),
+    // ذرّية: نعيد قراءة الرصيد داخل معاملة ونخصم مرة واحدة، فلا يستهلك استردادان متزامنان
+    // (محطّتا كاشير على نفس البطاقة) رصيدًا أكبر من المتاح (double-spend).
+    const remaining = await db.runTransaction(async (tx) => {
+      const doc = await tx.get(ref)
+      if (!doc.exists) throw new Error("GIFT_CARD_NOT_FOUND")
+      const card = doc.data() as GiftCard
+      // منع المبالغ السالبة (التي قد تزيد الرصيد) وتجاوز الرصيد المتاح
+      const deducted = Math.max(0, Math.min(Number(amount) || 0, card.current_balance))
+      const rem = card.current_balance - deducted
+      tx.update(ref, {
+        current_balance: rem,
+        status: rem <= 0 ? "used" : "active",
+        used_transactions: FieldValue.arrayUnion({
+          amount: deducted,
+          date: new Date().toISOString(),
+          sale_id: saleId,
+        }),
+      })
+      return rem
     })
 
     return { success: true, remaining }

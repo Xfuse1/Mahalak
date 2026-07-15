@@ -156,11 +156,31 @@ export async function createOrderReview(data: {
     const db = getAdminDb()
     const now = new Date().toISOString()
 
-    // Check if review already exists for this order
+    // تحميل الطلب والتحقق منه سيرفر-سايد — لا نثق بـ order_id/driver_id/driver_rating القادمة من العميل.
+    // بدون هذا يمكن حقن تقييمات مزيّفة بأرقام طلبات عشوائية على أي سائق.
+    // الطلبات مُفهرَسة بمعرّف المستند (لا يوجد حقل order_id بداخلها) — نحمّلها بالمعرّف مباشرة،
+    // مع رجوع احتياطي لاستعلام حقل order_id توافقًا مع أي بيانات قديمة.
+    let orderDocSnap = await db.collection("orders").doc(data.order_id).get()
+    if (!orderDocSnap.exists) {
+      const q = await db.collection("orders").where("order_id", "==", data.order_id).limit(1).get()
+      if (q.empty) {
+        return { success: false, error: "الطلب غير موجود" }
+      }
+      orderDocSnap = q.docs[0]
+    }
+    const orderData = orderDocSnap.data() as Record<string, any>
+    if (orderData.customer_id !== uid) {
+      return { success: false, error: "Unauthorized" }
+    }
+    if (orderData.status !== "delivered") {
+      return { success: false, error: "لا يمكن تقييم طلب لم يُسلَّم بعد" }
+    }
+
+    // منع التقييم المكرر لنفس الطلب
     const existingReview = await db
       .collection("order_reviews")
       .where("order_id", "==", data.order_id)
-      .where("customer_id", "==", data.customer_id)
+      .where("customer_id", "==", uid)
       .limit(1)
       .get()
 
@@ -168,15 +188,29 @@ export async function createOrderReview(data: {
       return { success: false, error: "لقد قمت بتقييم هذا الطلب مسبقاً" }
     }
 
-    // Create the order review
-    const reviewRef = await db.collection("order_reviews").add({
-      ...data,
-      created_at: now,
-    })
+    // اشتقاق السائق من الطلب نفسه، وتقييد التقييم في المدى 1..5
+    const serverDriverId: string | undefined = orderData.driver_id || undefined
+    const driverRating =
+      typeof data.driver_rating === "number" && data.driver_rating > 0
+        ? Math.max(1, Math.min(5, Math.round(data.driver_rating)))
+        : undefined
 
-    // Update driver rating if provided
-    if (data.driver_id && data.driver_rating) {
-      await updateDriverRatingAverage(data.driver_id, data.driver_rating)
+    // بناء المستند بحقول صريحة (بدل نشر data القادمة من العميل)
+    const reviewDoc: Record<string, any> = {
+      order_id: data.order_id,
+      customer_id: uid,
+      created_at: now,
+    }
+    if (serverDriverId) reviewDoc.driver_id = serverDriverId
+    if (driverRating) reviewDoc.driver_rating = driverRating
+    if (data.driver_comment) reviewDoc.driver_comment = String(data.driver_comment).slice(0, 2000)
+    if (data.products_ratings) reviewDoc.products_ratings = data.products_ratings
+
+    const reviewRef = await db.collection("order_reviews").add(reviewDoc)
+
+    // تحديث تقييم السائق فقط إن كان الطلب يخص سائقًا فعليًا
+    if (serverDriverId && driverRating) {
+      await updateDriverRatingAverage(serverDriverId, driverRating)
     }
 
     // Update each product's rating
@@ -186,19 +220,11 @@ export async function createOrderReview(data: {
       }
     }
 
-    // Mark the order as reviewed
-    const orderSnapshot = await db
-      .collection("orders")
-      .where("order_id", "==", data.order_id)
-      .limit(1)
-      .get()
-    
-    if (!orderSnapshot.empty) {
-      await orderSnapshot.docs[0].ref.update({
-        is_reviewed: true,
-        reviewed_at: now,
-      })
-    }
+    // وسم الطلب كمُقيَّم (نعيد استخدام المستند المُحمّل مسبقًا)
+    await orderDocSnap.ref.update({
+      is_reviewed: true,
+      reviewed_at: now,
+    })
 
     return { success: true, id: reviewRef.id }
   } catch (error: any) {

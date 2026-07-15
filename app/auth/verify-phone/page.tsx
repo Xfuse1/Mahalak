@@ -150,11 +150,13 @@ export default function VerifyPhonePage() {
     }
 
     const pendingData = pendingResult.data as Record<string, any>
+    // كلمة المرور من sessionStorage (لم تعد تُخزَّن على الخادم)؛ مع fallback على القيمة القديمة
+    const accountPassword = pendingData.password || sessionStorage.getItem("pendingRegistrationPassword") || undefined
 
     if (role === "customer") {
       return register(
         pendingData.email,
-        pendingData.password,
+        accountPassword,
         pendingData.name,
         "customer",
         undefined,
@@ -190,7 +192,7 @@ export default function VerifyPhonePage() {
 
     return register(
       pendingData.email,
-      pendingData.password,
+      accountPassword,
       pendingData.name,
       "seller",
       sellerData,
@@ -234,6 +236,7 @@ export default function VerifyPhonePage() {
       }
 
       sessionStorage.removeItem("pendingRegistrationToken")
+      sessionStorage.removeItem("pendingRegistrationPassword")
       clearPhoneAuth(OTP_FLOW)
       router.push(returnUrl)
     } catch (verifyError: any) {
@@ -264,6 +267,7 @@ export default function VerifyPhonePage() {
   const handleChangeNumber = () => {
     clearPhoneAuth(OTP_FLOW)
     sessionStorage.removeItem("pendingRegistrationToken")
+    sessionStorage.removeItem("pendingRegistrationPassword")
     router.push(roleEntryPath)
   }
 

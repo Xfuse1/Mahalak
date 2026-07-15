@@ -2,6 +2,7 @@
 
 import { getAdminDb } from "../firebase/admin"
 import { logError } from "../logger"
+import { getCurrentUid } from "../auth/session"
 
 export type Notification = {
   id: string
@@ -49,6 +50,9 @@ export async function createNotification(data: {
 // Get user's notifications
 export async function getUserNotifications(userId: string, limit: number = 20): Promise<Notification[]> {
   try {
+    // إشعارات المستخدم خاصة به فقط — نشتق الهوية من الجلسة ولا نثق بـ userId القادم من العميل
+    const uid = await getCurrentUid()
+    if (!uid || uid !== userId) return []
     const db = getAdminDb()
     
     // Try with orderBy first (requires composite index)
@@ -92,6 +96,8 @@ export async function getUserNotifications(userId: string, limit: number = 20): 
 // Get unread notifications count
 export async function getUnreadNotificationsCount(userId: string): Promise<number> {
   try {
+    const uid = await getCurrentUid()
+    if (!uid || uid !== userId) return 0
     const db = getAdminDb()
     const snapshot = await db
       .collection("notifications")
@@ -109,8 +115,16 @@ export async function getUnreadNotificationsCount(userId: string): Promise<numbe
 // Mark notification as read
 export async function markNotificationAsRead(notificationId: string) {
   try {
+    const uid = await getCurrentUid()
+    if (!uid) return { success: false, error: "Unauthorized" }
     const db = getAdminDb()
-    await db.collection("notifications").doc(notificationId).update({
+    const ref = db.collection("notifications").doc(notificationId)
+    // نتحقق أن الإشعار يخص المستخدم الحالي قبل تعديله (منع IDOR)
+    const snap = await ref.get()
+    if (!snap.exists || snap.data()?.user_id !== uid) {
+      return { success: false, error: "Unauthorized" }
+    }
+    await ref.update({
       is_read: true,
       read_at: new Date().toISOString(),
     })
@@ -125,6 +139,8 @@ export async function markNotificationAsRead(notificationId: string) {
 // Mark all unread notifications as read for a user
 export async function markAllNotificationsAsRead(userId: string) {
   try {
+    const uid = await getCurrentUid()
+    if (!uid || uid !== userId) return { success: false, error: "Unauthorized" }
     const db = getAdminDb()
     const unreadSnapshot = await db
       .collection("notifications")

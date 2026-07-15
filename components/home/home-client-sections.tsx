@@ -142,7 +142,7 @@ export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
         <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
           <div>
             <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-foreground">
-              {coords ? t("الأقرب إليك", "Nearest to You") : t("متاجر مميزة", "Featured Stores")}
+              {coords ? t("متاجر مميزة بالقرب منك", "Featured Stores Near You") : t("متاجر مميزة", "Featured Stores")}
             </h2>
             <p className="text-muted-foreground mt-2">{t("اكتشف أفضل المتاجر بجوارك", "Discover the best stores near you")}</p>
           </div>

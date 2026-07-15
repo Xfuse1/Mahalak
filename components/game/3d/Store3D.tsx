@@ -5,8 +5,8 @@ import Image from 'next/image';
 import * as THREE from 'three';
 import Link from 'next/link';
 import { useProductStore } from '../../../lib/stores/product-store';
-import { useCartStore } from '../../../lib/stores/cart-store';
-import { getProductsByStoreId } from '../../../lib/actions/products';
+import { useSimCartStore } from '../../../lib/stores/sim-cart-store';
+import { getProductsByStoreId, getProducts } from '../../../lib/actions/products';
 import { getSupermarketLayout } from '../../../lib/actions/layout';
 import { getStoreByUserId } from '../../../lib/actions/stores';
 import { useAuth } from '../../../lib/auth-context';
@@ -146,7 +146,8 @@ function isLayoutData(value: unknown): value is LayoutData {
 
 export default function SupermarketSimulator() {
     const mountRef = useRef<HTMLDivElement>(null);
-    const { items: cartItems, addItem, decrementItem, clear } = useCartStore();
+    // عربة المحاكي المعزولة (لا تلمس عربة التسوق الحقيقية mahalak-cart)
+    const { items: cartItems, addItem, decrementItem, clear } = useSimCartStore();
     const { user } = useAuth();
     const { t, language } = useLanguage();
     const isArabic = language === 'ar';
@@ -163,7 +164,10 @@ export default function SupermarketSimulator() {
     const [hoveredProduct, setHoveredProduct] = useState<SimProduct | null>(null);
     const hoverIdRef = useRef<string | null>(null);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const cursorRef = useRef<HTMLDivElement>(null);
+    // رسالة السحب تُقرأ من ref حيّ داخل مشهد WebGL دون إعادة بنائه عند تبديل اللغة
+    const dragToAddMessageRef = useRef(dragToAddMessage);
+    useEffect(() => { dragToAddMessageRef.current = dragToAddMessage; }, [dragToAddMessage]);
     const [isHovering, setIsHovering] = useState(false);
     const [fps, setFps] = useState(60);
     const [isLockedState, setIsLockedState] = useState(false);
@@ -223,6 +227,15 @@ export default function SupermarketSimulator() {
                     } catch (_err) {
                         // Failed to fetch user store
                     }
+                }
+
+                // احتياطي: بلا متجر خاص بالمستخدم (زائر/غير بائع سوبرماركت) نعرض كتالوجًا عامًا
+                // بدل متجر ثلاثي الأبعاد فارغ تمامًا.
+                if (products.length === 0) {
+                    try {
+                        const publicProducts = await getProducts();
+                        products = (Array.isArray(publicProducts) ? publicProducts : []).slice(0, 160) as StoreProductRecord[];
+                    } catch (_e) { /* تجاهل — يبقى فارغًا */ }
                 }
 
                 layoutDataRef.current = fetchedLayout;
@@ -2055,7 +2068,11 @@ export default function SupermarketSimulator() {
         const onMove = (clientX: number, clientY: number) => {
             // Update 2D cursor position
             lastPointerRef.current = { x: clientX, y: clientY };
-            setMousePos({ x: clientX, y: clientY });
+            // نكتب موضع المؤشّر مباشرة على عنصر DOM عبر ref — تفادي setState على كل حركة ماوس (re-render)
+            if (cursorRef.current) {
+                cursorRef.current.style.left = clientX + "px";
+                cursorRef.current.style.top = clientY + "px";
+            }
 
             if (!mountRef.current) return;
             const rect = mountRef.current.getBoundingClientRect();
@@ -2187,7 +2204,7 @@ export default function SupermarketSimulator() {
             // Manual Drop Check: Only add to cart if released over the lower half (Cart area)
             // mouse.y range is [-1, 1], -1 is bottom. -0.2 and below is roughly the cart/bottom HUD area.
             if (mouse.y < -0.2) {
-                addItem({
+                const added = addItem({
                     id: p.id,
                     name: p.name,
                     price: p.price,
@@ -2198,12 +2215,12 @@ export default function SupermarketSimulator() {
                     description: p.description,
                     stock: Number(p.stock ?? 0)
                 });
-                setMessage(`+ ${p.name}`);
+                setMessage(added ? `+ ${p.name}` : (isArabic ? 'غير متوفر' : 'Out of stock'));
                 setTimeout(() => setMessage(''), 1000);
             } else {
                 // If it was a quick click and we are on mobile or simple mode, add it anyway?
                 // Actually, let's stick to the button for clarity.
-                setMessage(dragToAddMessage);
+                setMessage(dragToAddMessageRef.current);
                 setTimeout(() => setMessage(''), 800);
             }
 
@@ -2361,9 +2378,11 @@ export default function SupermarketSimulator() {
             renderer.dispose();
             rendererRef.current = null;
         }
-        // يُعاد بناء المشهد عند تغيّر هذه القيم فقط؛ addItem (ثابت من zustand) وcatalog مقصود استثناؤهما
+        // يُعاد بناء المشهد فقط عند تحميل الكتالوج — أزلنا isArabic/dragToAddMessage من التبعيات حتى
+        // لا يُعاد بناء مشهد WebGL كاملًا عند تبديل اللغة (تجميد ثوانٍ على الموبايل). رسالة السحب
+        // تُقرأ من ref حيّ؛ لافتات الأقسام تبقى بلغة وقت البناء (مقبول — التبديل داخل المحاكي نادر).
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [catalogLoaded, dragToAddMessage, isArabic]);
+    }, [catalogLoaded]);
 
     const handleCheckout = () => {
         if (total === 0) return;
@@ -2512,11 +2531,9 @@ export default function SupermarketSimulator() {
             </div>
 
 
-            {/* Dynamic 2D Cursor/Pointer */}
-            <div style={{
+            {/* Dynamic 2D Cursor/Pointer — الموضع (left/top) يُدار عبر cursorRef لتفادي re-render */}
+            <div ref={cursorRef} style={{
                 position: 'fixed',
-                left: mousePos.x,
-                top: mousePos.y,
                 width: isHovering ? '36px' : '24px',
                 height: isHovering ? '36px' : '24px',
                 border: isHovering ? '3px solid #ffbb33' : '2px solid rgba(255,255,255,0.8)',
@@ -2627,7 +2644,7 @@ export default function SupermarketSimulator() {
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        addItem({
+                                        const added = addItem({
                                             id: hoveredProduct.id,
                                             name: hoveredProduct.name,
                                             price: hoveredProduct.price,
@@ -2638,7 +2655,7 @@ export default function SupermarketSimulator() {
                                             description: hoveredProduct.description,
                                             stock: Number(hoveredProduct.stock ?? 0)
                                         });
-                                        setMessage(`+ ${hoveredProduct.name}`);
+                                        setMessage(added ? `+ ${hoveredProduct.name}` : (isArabic ? 'غير متوفر' : 'Out of stock'));
                                         setTimeout(() => setMessage(''), 1000);
                                     }}
                                     onMouseDown={(e) => e.stopPropagation()}

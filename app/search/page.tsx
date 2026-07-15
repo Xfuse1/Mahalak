@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect, useCallback } from "react"
+import { useState, Suspense, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Header } from "../../components/header"
 import { Footer } from "../../components/footer"
@@ -84,7 +84,10 @@ function SearchResults() {
 
   const isRTL = language === "ar"
 
+  const requestIdRef = useRef(0)
+
   const fetchData = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(false)
     try {
@@ -99,6 +102,9 @@ function SearchResults() {
         ;[productsData, storesData] = await Promise.all([searchProducts(query), searchStores(query)])
       }
 
+      // تجاهل نتائج بحث قديم إن بدأ بحث أحدث — منع ظهور نتائج استعلام سابق فوق الحالي (سباق)
+      if (requestId !== requestIdRef.current) return
+
       // Transform products to match the expected format
       const transformedProducts = productsData.map((product: any) => ({
         ...product,
@@ -111,10 +117,11 @@ function SearchResults() {
       setProducts(transformedProducts)
       setStores(storesData)
     } catch (err) {
+      if (requestId !== requestIdRef.current) return
       logError("[search] fetchData", err)
       setError(true)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [query])
 
@@ -173,7 +180,7 @@ function SearchResults() {
               {isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
 
               <div className="flex-1 w-full">
-                <SearchBar placeholder={t("ابحث عن منتجات، متاجر...", "Search for products, stores...")} />
+                <SearchBar placeholder={t("ابحث عن منتجات، متاجر...", "Search for products, stores...")} initialValue={query} />
               </div>
 
               {!isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}

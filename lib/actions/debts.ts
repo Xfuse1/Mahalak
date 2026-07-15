@@ -101,9 +101,12 @@ export async function createDebt(input: {
   })
 
   try {
-    await docRef.set(account)
+    // دفعة ذرّية: الحساب وحركة الرصيد الافتتاحي يُكتبان معًا، فلا يبقى حساب بلا تاريخ
+    // (وبالتالي لا حسابات مكرّرة عند إعادة المحاولة بعد فشل الحركة الثانية).
+    const batch = db.batch()
+    batch.set(docRef, account)
     if (initial > 0) {
-      await db.collection("debt_transactions").doc().set({
+      batch.set(db.collection("debt_transactions").doc(), {
         debt_id: docRef.id,
         store_id: uid,
         type: "debt",
@@ -112,6 +115,7 @@ export async function createDebt(input: {
         created_at: now,
       })
     }
+    await batch.commit()
   } catch (error) {
     return { success: false, error: getErrorMessage(error) || "تعذّر إنشاء الحساب" }
   }
@@ -146,8 +150,13 @@ export async function addDebtTransaction(
         throw new Error("FORBIDDEN")
       }
       const current = Number(snap.data()?.balance) || 0
+      // منع الدفعة التي تتجاوز الرصيد المتبقّي — سابقًا كان الرصيد يُقصّ إلى 0 بينما تُسجَّل
+      // الحركة بالمبلغ الكامل، فيختلّ الدفتر (مجموع الحركات ≠ الرصيد) ويُحتسب فائض للعميل خطأً.
+      if (input.type === "payment" && amount > current) {
+        throw new Error("PAYMENT_EXCEEDS_BALANCE")
+      }
       const delta = input.type === "debt" ? amount : -amount
-      const newBalance = Math.max(0, current + delta)
+      const newBalance = current + delta
       tx.update(debtRef, { balance: newBalance, updated_at: now })
       const txRef = db.collection("debt_transactions").doc()
       tx.set(
@@ -168,6 +177,9 @@ export async function addDebtTransaction(
   } catch (error) {
     if (getErrorMessage(error) === "FORBIDDEN") {
       return { success: false, error: "ليس لديك صلاحية" }
+    }
+    if (getErrorMessage(error) === "PAYMENT_EXCEEDS_BALANCE") {
+      return { success: false, error: "المبلغ أكبر من الرصيد المتبقّي" }
     }
     return { success: false, error: getErrorMessage(error) || "تعذّر تسجيل الحركة" }
   }
@@ -213,10 +225,19 @@ export async function deleteDebt(debtId: string) {
   }
   try {
     const txSnap = await db.collection("debt_transactions").where("debt_id", "==", debtId).get()
-    const batch = db.batch()
-    txSnap.docs.forEach((d) => batch.delete(d.ref))
-    batch.delete(debtRef)
-    await batch.commit()
+    const docs = txSnap.docs
+    // تقسيم على دفعات ≤450 — دفعة Firestore الواحدة محدودة بـ500 عملية، فعميل بكثير من
+    // الحركات كان يجعل الحذف يفشل كليًّا (all-or-nothing) ويتعذّر حذف الحساب أبدًا.
+    const CHUNK = 450
+    for (let i = 0; i < docs.length; i += CHUNK) {
+      const batch = db.batch()
+      docs.slice(i, i + CHUNK).forEach((d) => batch.delete(d.ref))
+      if (i + CHUNK >= docs.length) batch.delete(debtRef) // نحذف الحساب في آخر دفعة
+      await batch.commit()
+    }
+    if (docs.length === 0) {
+      await debtRef.delete()
+    }
   } catch (error) {
     return { success: false, error: getErrorMessage(error) || "تعذّر الحذف" }
   }

@@ -1,6 +1,7 @@
 "use server"
 
 import type { DocumentSnapshot, Firestore, Query } from "firebase-admin/firestore"
+import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
@@ -9,7 +10,7 @@ import { createAdminClient } from "../supabase/server"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
-import { findBestDiscount as findBestDiscountShared } from "../utils/offer-discount"
+import { findBestDiscount as findBestDiscountShared, getActiveOffersForStores } from "../utils/offer-discount"
 
 type ProductRecord = {
   id?: string
@@ -199,7 +200,7 @@ async function _getProductsImpl(category?: string) {
       const store = product.store_id ? storeMap.get(product.store_id) : undefined
       const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
 
-      return serializeData({
+      return publicProductPayload({
         ...product,
         stores: store ? { name: store.name } : null,
         discount_percentage,
@@ -234,7 +235,7 @@ async function _getProductsImpl(category?: string) {
     const store = product.store_id ? storeMap.get(product.store_id) : undefined
     const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
 
-    return serializeData({
+    return publicProductPayload({
       ...product,
       stores: store ? { name: store.name } : null,
       discount_percentage,
@@ -268,7 +269,7 @@ async function _getProductImpl(id: string) {
   const productWithStore = attachStore(product, storeMap)
 
   if (!product.store_id) {
-    return serializeData({
+    return publicProductPayload({
       ...productWithStore,
       discount_percentage: 0,
       offer_title: null,
@@ -283,7 +284,7 @@ async function _getProductImpl(id: string) {
   const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
   const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
 
-  return serializeData({
+  return publicProductPayload({
     ...productWithStore,
     discount_percentage,
     offer_title
@@ -297,6 +298,59 @@ export async function getProduct(id: string) {
     ["product", id],
     { revalidate: 120, tags: ["products", `product-${id}`] }
   )()
+}
+
+// إسقاط عام للمنتج قبل إرساله لأي عميل: يحذف الحقول الداخلية الحسّاسة (سعر الشراء والربح)
+// ويضيف storeName الموحّد. يمنع كشف هامش الربح لأي زائر عبر DevTools/حمولة RSC.
+function publicProductPayload(obj: Record<string, unknown>) {
+  const out = { ...obj }
+  delete out.cost_price
+  delete out.profit_per_unit
+  if (out.storeName === undefined) {
+    const stores = out.stores as { name?: string } | null | undefined
+    out.storeName = stores?.name ?? null
+  }
+  return serializeData(out)
+}
+
+// جالب منتج واحد للمالك فقط (يشمل التكلفة/الربح) — لنموذج تعديل المنتج. غير المالك يُرجَع null.
+export async function getOwnedProduct(id: string) {
+  const db = getAdminDb()
+  const snap = await db.collection("products").doc(id).get()
+  if (!snap.exists) return null
+  const data = snap.data() as ProductRecord
+  const uid = await getCurrentUid()
+  if (!uid || data.store_id !== uid) return null
+  return serializeData({ id: snap.id, ...data })
+}
+
+// تسعير حالي (سيرفر-سايد) لمنتجات العربة قبل الدفع — لمواءمة الإجمالي المعروض مع ما سيُحاسَب فعلًا
+// (العربة تحفظ لقطة سعر/خصم قد تتقادم). يُرجع السعر ونسبة الخصم الحاليّين لكل معرّف فقط.
+export async function getCartPricing(
+  productIds: string[],
+): Promise<Record<string, { price: number; discount_percentage: number }>> {
+  const ids = Array.from(new Set((productIds || []).filter((id) => typeof id === "string" && id))).slice(0, 100)
+  if (!ids.length) return {}
+  const db = getAdminDb()
+  const snaps = await Promise.all(ids.map((id) => db.collection("products").doc(id).get()))
+  const products: Array<{ id: string; data: ProductRecord }> = []
+  const storeIds = new Set<string>()
+  for (const snap of snaps) {
+    if (!snap.exists) continue
+    const data = snap.data() as ProductRecord
+    products.push({ id: snap.id, data })
+    if (typeof data.store_id === "string") storeIds.add(data.store_id)
+  }
+  const activeOffers = await getActiveOffersForStores(Array.from(storeIds))
+  const result: Record<string, { price: number; discount_percentage: number }> = {}
+  for (const { id, data } of products) {
+    const { discount_percentage } = findBestDiscountShared(
+      { id, category: data.category, store_id: data.store_id },
+      activeOffers,
+    )
+    result[id] = { price: Number(data.price) || 0, discount_percentage }
+  }
+  return result
 }
 
 export async function createProduct(formData: {
@@ -342,15 +396,12 @@ export async function createProduct(formData: {
       return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
     }
 
-    // التحقق من اعتماد المتجر قبل إنشاء المنتج
+    // التحقق من اعتماد المتجر قبل إنشاء المنتج — فشل مغلق: لا منتج بدون متجر معتمد مؤكد.
+    // (سابقًا كان يتخطّى البوابة تمامًا إن لم يوجد مستند المستخدم = فشل مفتوح.)
     const userDoc = await db.collection("users").doc(formData.store_id).get()
-
-    if (userDoc.exists) {
-      const userData = userDoc.data()
-      const storeData = userData?.store
-      if (!storeData?.is_approved) {
-        return { success: false, error: PRODUCT_ERROR_CODES.STORE_NOT_APPROVED }
-      }
+    const storeData = userDoc.exists ? userDoc.data()?.store : undefined
+    if (!storeData?.is_approved) {
+      return { success: false, error: PRODUCT_ERROR_CODES.STORE_NOT_APPROVED }
     }
 
     const docRef = db.collection("products").doc()
@@ -447,8 +498,27 @@ export async function updateProduct(
 
   const docRef = db.collection("products").doc(id)
 
+  // قائمة سماح صريحة للحقول القابلة للتعديل — نمنع mass-assignment.
+  // (سابقًا كان يُنشر formData كله، فيقدر البائع يزوّر rating لمنتجه.)
+  const ALLOWED_FIELDS = [
+    "name",
+    "description",
+    "price",
+    "cost_price",
+    "category",
+    "stock",
+    "image_url",
+    "simulator_section",
+    "barcode",
+    "reservation_enabled",
+  ] as const
+  const sanitized: Record<string, unknown> = {}
+  for (const key of ALLOWED_FIELDS) {
+    if (formData[key] !== undefined) sanitized[key] = formData[key]
+  }
+
   const updateData = cleanUndefined({
-    ...formData,
+    ...sanitized,
     profit_per_unit: calculateProfitPerUnit(effectivePrice, effectiveCostPrice),
     updated_at: new Date().toISOString(),
   })
@@ -512,46 +582,22 @@ export async function getProductsByStoreId(storeId: string) {
     return { id: doc.id, ...data }
   })
 
-  // Fetch active offers for this store
+  // Fetch this store's offers WITH their doc id, and delegate to the shared findBestDiscount so the
+  // store page uses the SAME activeness rules as checkout (Cairo tz + flash-hour window + quantity cap).
+  // سابقًا كان الحساب هنا بيوم UTC بلا نافذة فلاش ولا حد كمية، فيختلف السعر المعروض عمّا يُحاسَب فعلًا.
   const offersSnapshot = await db.collection("offers").where("store_id", "==", storeId).get()
-  // مقارنة بصيغة YYYY-MM-DD فقط — تواريخ العروض مخزّنة date-only، فلا نقارنها بـ ISO datetime
-  const today = new Date().toISOString().split("T")[0]
-  const activeOffers = offersSnapshot.docs
-    .map((doc) => doc.data() as OfferRecord)
-    .filter((offer) => {
-      if (!offer.start_date || !offer.end_date) return false
-      return offer.start_date <= today && offer.end_date >= today
-    })
+  const activeOffers = offersSnapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as OfferRecord) }))
 
   const enriched = products.map((product) => {
-    // Find best offer: product-specific > category-specific > store-wide
-    let bestDiscount = 0
-    let offerTitle: string | null = null
-
-    for (const offer of activeOffers) {
-      const discount = Number(offer.discount_percentage) || 0
-      if (discount <= bestDiscount) continue
-
-      if (offer.product_id === product.id) {
-        bestDiscount = discount
-        offerTitle = offer.title || null
-      } else if (offer.category && offer.category === product.category && !offer.product_id) {
-        if (discount > bestDiscount) {
-          bestDiscount = discount
-          offerTitle = offer.title || null
-        }
-      } else if (!offer.product_id && !offer.category) {
-        if (discount > bestDiscount) {
-          bestDiscount = discount
-          offerTitle = offer.title || null
-        }
-      }
-    }
-
+    const p = product as ProductRecord & { id: string }
+    const { discount_percentage, offer_title } = findBestDiscountShared(
+      { id: p.id, category: p.category, store_id: p.store_id },
+      activeOffers,
+    )
     return {
       ...product,
-      discount_percentage: bestDiscount,
-      offer_title: offerTitle,
+      discount_percentage,
+      offer_title,
     }
   })
 
@@ -682,6 +728,37 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
   }))
 }
 
+// زيادة/نقص المخزون ذرّيًا بمقدار delta — يمنع سباق "لقطة قديمة" حين يكتب البائع قيمة مطلقة
+// محسوبة على العميل فوق خصومات طلبات متزامنة (FieldValue.increment). للمالك فقط.
+export async function incrementProductStock(id: string, delta: number) {
+  const db = getAdminDb()
+  const productSnap = await db.collection("products").doc(id).get()
+  if (!productSnap.exists) {
+    return { success: false, error: PRODUCT_ERROR_CODES.PRODUCT_NOT_FOUND }
+  }
+  const existing = productSnap.data() as ProductRecord | undefined
+  const uid = await getCurrentUid()
+  if (!uid || existing?.store_id !== uid) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
+  }
+  // أكشن إضافة كمية فقط — نرفض صفر أو سالب حتى لا يُدفع المخزون للسالب عبر delta سالب.
+  const inc = Math.trunc(Number(delta))
+  if (!Number.isFinite(inc) || inc <= 0) {
+    return { success: false, error: PRODUCT_ERROR_CODES.STOCK_MUST_BE_POSITIVE }
+  }
+  const docRef = db.collection("products").doc(id)
+  const now = new Date().toISOString()
+  try {
+    await docRef.update({ stock: FieldValue.increment(inc), updated_at: now })
+  } catch (error: unknown) {
+    return { success: false, error: PRODUCT_ERROR_CODES.UPDATE_PRODUCT_FAILED }
+  }
+  revalidatePath("/seller/products", "page")
+  revalidateTag("products", "max")
+  const fresh = await docRef.get()
+  return { success: true, data: serializeData({ id, ...(fresh.data() as ProductRecord) }) }
+}
+
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 
@@ -689,14 +766,15 @@ export async function uploadProductImage(formData: FormData) {
   try {
     const file = formData.get("file") as File
     const storeId = formData.get("storeId") as string
-    const callerId = formData.get("callerId") as string
 
     if (!file || !storeId) {
       return { success: false, error: PRODUCT_ERROR_CODES.MISSING_FILE_OR_STORE_ID }
     }
 
-    // Ownership check
-    if (callerId && callerId !== storeId) {
+    // التحقق من الهوية والملكية سيرفر-سايد — نشتق uid من الجلسة ولا نثق بـ callerId القادم من العميل.
+    // (سابقًا كان الحارس callerId && callerId !== storeId يُتخطّى بمجرد حذف callerId.)
+    const uid = await getCurrentUid()
+    if (!uid || uid !== storeId) {
       return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_IMAGE_UPLOAD }
     }
 

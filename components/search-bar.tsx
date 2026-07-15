@@ -15,10 +15,11 @@ interface SearchBarProps {
   placeholder?: string
   onSearch?: (query: string) => void
   className?: string
+  initialValue?: string
 }
 
-export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarProps) {
-  const [query, setQuery] = useState("")
+export function SearchBar({ placeholder, onSearch, className = "", initialValue = "" }: SearchBarProps) {
+  const [query, setQuery] = useState(initialValue)
   const [isListening, setIsListening] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const router = useRouter()
@@ -28,6 +29,11 @@ export function SearchBar({ placeholder, onSearch, className = "" }: SearchBarPr
 
   const isRTL = language === "ar"
   const searchPlaceholder = placeholder || t("ابحث عن منتجات، متاجر...", "Search for products, stores...")
+
+  // مزامنة قيمة الصندوق مع الاستعلام الحالي عند تغيّره من الرابط (back/forward/رابط داخلي) دون remount
+  useEffect(() => {
+    setQuery(initialValue)
+  }, [initialValue])
 
   // Cleanup debounce timer on unmount
   useEffect(() => {

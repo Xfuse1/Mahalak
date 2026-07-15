@@ -134,32 +134,11 @@ export async function saveClothingProductVariants(
   if (variants.colors.length > 0) productUpdate.available_colors = variants.colors
   await db.collection("products").doc(productId).update(productUpdate)
 
-  // Generate size x color variants
-  const sizeCount = variants.sizes.length || 1
-  const colorCount = variants.colors.length || 1
-  const variantCount = sizeCount * colorCount
-  const stockPerVariant = Math.floor(variants.totalStock / variantCount)
-  const skuBase = variants.skuPrefix || productId.substring(0, 6)
-
-  const batch = db.batch()
-  for (const size of variants.sizes.length > 0 ? variants.sizes : [""]) {
-    for (const color of variants.colors.length > 0 ? variants.colors : [""]) {
-      const variantRef = db.collection("products").doc(productId).collection("variants").doc()
-      const variantData: Record<string, any> = {
-        product_id: productId,
-        store_id: storeId,
-        size,
-        color,
-        color_hex: variants.colorHexMap?.[color] || "",
-        stock: stockPerVariant,
-        sku: `${skuBase}-${size}-${color}`.replace(/\s/g, "-"),
-        created_at: FieldValue.serverTimestamp(),
-        updated_at: FieldValue.serverTimestamp(),
-      }
-      batch.set(variantRef, variantData)
-    }
-  }
-  await batch.commit()
+  // ملاحظة: كانت تُولَّد هنا متغيّرات (مقاس×لون) وتُكتب في products/{id}/variants، لكن كاشير
+  // الملابس يقرأ/يكتب في stores/{storeId}/product_variants — فتلك البيانات كانت يتيمة (لا تُقرأ
+  // أبدًا) وبقسمة floor تفقد الباقي. أزلنا الكتابة الميتة؛ سمات المنتج (المقاسات/الألوان) محفوظة
+  // أعلاه، والكاشير يدير متغيّراته في مجموعته الخاصة.
+  const variantCount = (variants.sizes.length || 1) * (variants.colors.length || 1)
 
   return { success: true, variantCount }
 }

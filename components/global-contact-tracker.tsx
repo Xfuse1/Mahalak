@@ -15,7 +15,9 @@ export default function GlobalContactTracker() {
       try {
         const href = anchor.href
         const dataset = (anchor.dataset || {}) as Record<string, string>
-        const common: Record<string, any> = { href }
+        // لا نُرسل href الخام لأحداث tel:/wa.me — يتضمّن رقم تليفون المتجر ونص ?text (PII).
+        // نكتفي بالـ method ومعرّفات غير حسّاسة (storeId/productId).
+        const common: Record<string, any> = {}
         if (dataset.storeId) common.storeId = dataset.storeId
         if (dataset.storeName) common.storeName = dataset.storeName
         if (dataset.productId) common.productId = dataset.productId

@@ -4,6 +4,7 @@
 import { getAdminDb } from "@/lib/firebase/admin"
 
 export type OfferRecord = {
+  id?: string
   product_id?: string
   category?: string
   store_id?: string
@@ -11,38 +12,79 @@ export type OfferRecord = {
   discount_percentage?: number
   start_date?: string
   end_date?: string
+  quantity?: number
+  duration_hours?: number
+  used_quantity?: number
   [key: string]: unknown
 }
 
+// الوقت الحالي بتوقيت القاهرة (يتعامل مع التوقيت الصيفي تلقائيًا عبر Intl) بدل UTC.
+function cairoNow(): { date: string; hourFraction: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date())
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "00"
+  let hh = parseInt(get("hour"), 10)
+  if (hh === 24) hh = 0
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, hourFraction: hh + parseInt(get("minute"), 10) / 60 }
+}
+
+// هل العرض نشط الآن بتوقيت القاهرة؟ يطابق getOfferStatus في واجهة البائع:
+// عرض الفلاش (نفس اليوم + duration_hours) ينتهي بعد duration_hours من منتصف الليل.
+function isOfferActiveNow(offer: OfferRecord, cairoToday: string, hourFraction: number): boolean {
+  const startDay = String(offer.start_date || "").split("T")[0]
+  const endDay = String(offer.end_date || "").split("T")[0]
+  if (startDay && startDay > cairoToday) return false // قادم
+  if (endDay && endDay < cairoToday) return false // منتهٍ
+  const durationH = Number(offer.duration_hours)
+  if (startDay && startDay === endDay && Number.isFinite(durationH) && durationH > 0) {
+    if (cairoToday !== startDay || hourFraction > durationH) return false
+  }
+  return true
+}
+
 /**
- * يختار أعلى خصم فعّال مُطبَّق على المنتج بين العروض المطابقة (المنتج/الفئة/المتجر) —
- * الأكبر نسبةً يفوز (وليست أولوية تخصّص صارمة). المقارنة بصيغة YYYY-MM-DD (date-only)
- * لتطابق طريقة تخزين تواريخ العروض.
+ * يختار أعلى خصم فعّال مُطبَّق على المنتج بين العروض المطابقة (المنتج/الفئة/المتجر) — الأكبر
+ * نسبةً يفوز. الفعالية تُحسب بتوقيت القاهرة مع عروض الفلاش بالساعات، ويُتخطّى العرض المنتهية كميته.
+ * (المعامل today متروك للتوافق مع المستدعين لكنه لم يعد يُستخدم — الوقت يُحسب داخليًا.)
  */
 export function findBestDiscount(
   product: { id: string; category?: string; store_id?: string },
   activeOffers: OfferRecord[],
-  today: string,
-): { discount_percentage: number; offer_title: string | null } {
+  _today?: string,
+): { discount_percentage: number; offer_title: string | null; offer_id: string | null } {
+  const { date: cairoToday, hourFraction } = cairoNow()
   let bestDiscount = 0
   let offerTitle: string | null = null
+  let offerId: string | null = null
 
   for (const offer of activeOffers) {
-    if ((offer.start_date && offer.start_date > today) || (offer.end_date && offer.end_date < today)) continue
+    if (!isOfferActiveNow(offer, cairoToday, hourFraction)) continue
+    // حد الكمية المتاحة للعرض (إن وُجد) — لا يُطبَّق الخصم بعد نفادها
+    const cap = Number(offer.quantity)
+    if (Number.isFinite(cap) && cap > 0 && Number(offer.used_quantity || 0) >= cap) continue
+
     const d = Number(offer.discount_percentage ?? 0)
     if (d <= bestDiscount) continue
 
-    if (offer.product_id === product.id && offer.store_id === product.store_id) {
+    const matches =
+      (offer.product_id === product.id && offer.store_id === product.store_id) ||
+      (!offer.product_id && offer.category === product.category && offer.store_id === product.store_id) ||
+      (!offer.product_id && !offer.category && offer.store_id === product.store_id)
+    if (matches) {
       bestDiscount = d
       offerTitle = offer.title || null
-    } else if (!offer.product_id && offer.category === product.category && offer.store_id === product.store_id) {
-      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
-    } else if (!offer.product_id && !offer.category && offer.store_id === product.store_id) {
-      if (d > bestDiscount) { bestDiscount = d; offerTitle = offer.title || null }
+      offerId = (offer.id as string | undefined) || null
     }
   }
 
-  return { discount_percentage: bestDiscount, offer_title: offerTitle }
+  return { discount_percentage: bestDiscount, offer_title: offerTitle, offer_id: offerId }
 }
 
 /**
@@ -55,7 +97,9 @@ export function applyOfferDiscount(
 ): number {
   const { discount_percentage } = findBestDiscount(product, activeOffers, today)
   if (discount_percentage > 0) {
-    return Math.max(0, product.price - (product.price * discount_percentage) / 100)
+    // تقريب لأقرب قرش — يمنع تسرّب كسور المليم في مبلغ الطلب (COD) واختلافه عن product-pricing.
+    const discounted = product.price - (product.price * discount_percentage) / 100
+    return Math.max(0, Math.round(discounted * 100) / 100)
   }
   return product.price
 }
@@ -71,7 +115,8 @@ export async function getActiveOffersForStores(storeIds: string[]): Promise<Offe
   for (let i = 0; i < ids.length; i += 10) {
     const chunk = ids.slice(i, i + 10)
     const snap = await db.collection("offers").where("store_id", "in", chunk).get()
-    snap.docs.forEach((d) => offers.push(d.data() as OfferRecord))
+    // نرفق معرّف المستند — بدونه offer.id يبقى undefined فينهار تتبّع حد الكمية (used_quantity)
+    snap.docs.forEach((d) => offers.push({ id: d.id, ...(d.data() as OfferRecord) }))
   }
   return offers
 }

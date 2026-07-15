@@ -6,7 +6,7 @@ import { SellerHeader } from "../../../components/seller-header"
 import { useAuth } from "../../../lib/auth-context"
 import { Button } from "../../../components/ui/button"
 import { Card, CardContent } from "../../../components/ui/card"
-import { getProductsByStoreId, deleteProduct, updateProduct } from "../../../lib/actions/products"
+import { getProductsByStoreId, deleteProduct, updateProduct, incrementProductStock } from "../../../lib/actions/products"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { Edit, Trash2, Plus, Tag, Package } from "lucide-react"
 import Image from "next/image"
@@ -151,11 +151,8 @@ export default function SellerProductsPage() {
 
     setIsAddingStock(true)
     try {
-      const result = await updateProduct(
-        stockTargetProduct.id,
-        { stock: stockTargetProduct.stock + increment },
-        user.id,
-      )
+      // زيادة ذرّية بالفرق فقط — لا نكتب قيمة مطلقة محسوبة على العميل (تجنّب سباق فقدان التحديث)
+      const result = await incrementProductStock(stockTargetProduct.id, increment)
 
       if (!result.success || !result.data) {
         toast.error(getStockActionErrorMessage(result.error))

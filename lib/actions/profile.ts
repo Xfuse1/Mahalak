@@ -7,6 +7,7 @@ import { cleanUndefined } from "@/lib/firebase/firestore-helpers"
 import { logError } from "@/lib/logger"
 import { getEgyptPhoneLookupCandidates, normalizeEgyptPhone } from "@/lib/utils/phone"
 import { checkRateLimit } from "@/lib/utils/rate-limit"
+import { isPasswordValid } from "@/lib/utils/password"
 
 const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000
 const PENDING_REGISTRATION_TTL_MS = 15 * 60 * 1000
@@ -114,6 +115,11 @@ export async function resetUserPassword(userId: string, newPassword: string, tok
       return { success: false, error: "Reset token has expired" }
     }
 
+    // فرض سياسة كلمة المرور سيرفر-سايد (مصدر الحقيقة) — كانت مسارات الاسترجاع أضعف من التسجيل
+    if (!isPasswordValid(newPassword)) {
+      return { success: false, error: "WEAK_PASSWORD" }
+    }
+
     const auth = getAdminAuth()
     await auth.updateUser(userId, { password: newPassword })
     await tokenDoc.ref.delete()
@@ -170,9 +176,12 @@ export async function storePendingRegistration(data: PendingRegistrationInput) {
     const db = getAdminDb()
     const token = crypto.randomUUID()
     const normalizedData = normalizePendingRegistrationPhone(data)
+    // لا نُخزّن كلمة المرور نصًّا في قاعدة البيانات — يحتفظ بها العميل في sessionStorage
+    // ويمرّرها مباشرة لإنشاء حساب المصادقة بعد التحقق بالكود.
+    const { password: _password, ...safeData } = normalizedData as Record<string, unknown>
 
     await db.collection("pending_registrations").doc(token).set({
-      ...normalizedData,
+      ...safeData,
       createdAt: new Date().toISOString(),
       expiresAt: buildExpiryDate(PENDING_REGISTRATION_TTL_MS),
     })

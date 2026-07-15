@@ -2,27 +2,18 @@
   "status": "commited",
   "type": "frontend",
   "scope": "codebase",
-  "localEndpoint": "http://localhost:3000/pos/qpos",
+  "localEndpoint": "http://localhost:3000",
   "loginUser": "cveeez1@OUTLOOK.COM",
   "loginPassword": "CV20259",
   "executionArgs": {
     "projectName": "Mahalak",
-    "projectPath": "e:\\محلك\\Mahalak",
-    "testIds": [
-      "TC001",
-      "TC002",
-      "TC003",
-      "TC004",
-      "TC005",
-      "TC006",
-      "TC007"
-    ],
-    "additionalInstruction": "LOGIN: Go to /auth. Click the \"بائع\" (Seller) button. Enter email cveeez1@OUTLOOK.COM and password CV20259. Click \"تسجيل الدخول\". After redirect to /seller/dashboard, navigate to /pos/qpos. App is Arabic RTL.",
-    "serverMode": "production",
+    "projectPath": "D:\\MY PRO\\محلك\\Mahalak",
+    "testIds": [],
+    "additionalInstruction": "Mahalak is an Arabic, RTL e-commerce marketplace with Cash on Delivery (COD). Base URL http://localhost:3000. IMPORTANT AUTH: the app's REAL login is EMAIL + PASSWORD (Firebase signInWithEmailAndPassword). DO NOT attempt phone-OTP login. To log in: go to /auth (or /auth/seller/login for the seller), fill the field labeled 'البريد الإلكتروني أو رقم الهاتف' with cveeez1@OUTLOOK.COM, fill 'كلمة المرور' with CV20259, and click 'تسجيل الدخول'. Use this same account for both the shopping journeys and the seller journeys. CRITICAL — ASSERTIONS: for every assertion step you MUST generate a MEANINGFUL Playwright assertion tied to the described success condition (e.g. expect(page.get_by_text('...')).to_be_visible(), or expect a specific element/heading). NEVER fall back to a trivial assert current_url. If the described success state is NOT reached, the test MUST FAIL — do not pass on a URL-only check. If a store or product list is empty so a step cannot proceed, FAIL the test and report the empty-data finding. Seller product values: selling price (سعر البيع)=100, cost/purchase price (سعر الشراء)=60 (must be lower than selling), quantity (الكمية)=10. Arabic labels: تسجيل الدخول=Login, تسجيل الخروج=Logout, أضف للسلة=Add to cart, السلة=Cart, إتمام الشراء/الدفع=Checkout, عنوان التوصيل=Delivery address, اختيار السائق=Choose driver, تأكيد الطلب=Confirm order, الدفع عند الاستلام=Cash on delivery, حسابي=My account, طلباتي=My orders, إضافة منتج=Add product, سعر البيع=Selling price, سعر الشراء=Cost price, الكمية=Quantity, الفئة=Category. Be patient with Next.js client-side navigation; wait for content before asserting. Take a screenshot on any failure.",
+    "serverMode": "development",
     "envs": {
-      "API_KEY": "sk-user-MczBzaGBroazrlh12MwG1b-TmtiF0wk2UyNvzjR9IzhKUbz3aBDVzoeE_PB3fjXypmrshDvQSaqJQF1AOBQZzzaLwb1XRS8rCP055Gp3EnB9LovM3zDavZgHXe5m37PEJHM"
+      "API_KEY": "sk-user-5MYhUx-UqaTVG7HVx9JbvEWxEkD9dOgWNiFZ57yT5CidwfdAqhie_u1XG9DHtg1j_vvZUmszKXMYsDhrLJiiFyfsD1H7iUZiYr3jk2OKf1kXvM45w6Ec3LmkXgV6r6ltfnw"
     }
   },
-  "serverPort": 50285,
-  "proxy": "http://45023afe-21c3-43ab-bba4-c1e6b309f4e6:ucpR7p1djxaKUxv1b7RMz7Fh6cK4FOpo@tun.testsprite.com:8080"
+  "serverPort": 51565
 }

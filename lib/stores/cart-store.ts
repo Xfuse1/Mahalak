@@ -23,6 +23,7 @@ type CartState = {
   decrementItem: (id: string) => void
   removeItem: (id: string) => void
   clear: () => void
+  syncPrices: (pricing: Record<string, { price: number; discount_percentage: number }>) => void
 }
 
 export const useCartStore = create<CartState>()(
@@ -67,6 +68,15 @@ export const useCartStore = create<CartState>()(
           items: state.items.filter((entry) => entry.id !== id),
         })),
       clear: () => set({ items: [] }),
+      // مواءمة أسعار/خصومات العربة مع القيم الحالية من الخادم (لقطة العربة قد تتقادم)
+      syncPrices: (pricing) =>
+        set((state) => ({
+          items: state.items.map((item) => {
+            const fresh = pricing[item.id]
+            if (!fresh) return item
+            return { ...item, price: fresh.price, discount_percentage: fresh.discount_percentage }
+          }),
+        })),
     }),
     {
       name: "mahalak-cart",

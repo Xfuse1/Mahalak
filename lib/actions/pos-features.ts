@@ -495,14 +495,22 @@ export async function createPOSReturn(data: {
     if (!saleSnap.exists || saleSnap.data()?.store_id !== data.store_id) {
       return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
     }
-    const sale = saleSnap.data() as { items?: Array<{ product_id?: string; quantity?: number; price?: number }> }
-    const soldMap = new Map<string, { qty: number; price: number }>()
+    const sale = saleSnap.data() as { items?: Array<{ product_id?: string; quantity?: number; price?: number; unit_multiplier?: number }> }
+    // نسبة الخصم الفعلية للفاتورة: أسعار الأصناف مخزّنة قبل الخصم على مستوى الفاتورة (موسم/فاتورة/
+    // ولاء/بطاقة هدية/خصم يدوي)، فنضرب المرتجع بها حتى لا نرد أكثر مما حُصِّل فعلًا (كان يرد السعر الكامل).
+    const saleFull = saleSnap.data() as Record<string, any>
+    const saleSubtotal = Number(saleFull.subtotal) || 0
+    const saleTax = Number(saleFull.tax) || 0
+    const refundRatio = saleSubtotal > 0 ? Math.max(0, Math.min(1, ((Number(saleFull.total) || 0) - saleTax) / saleSubtotal)) : 1
+    const soldMap = new Map<string, { qty: number; price: number; unitMultiplier: number }>()
     for (const it of sale.items || []) {
       if (!it.product_id) continue
       const prev = soldMap.get(it.product_id)
       soldMap.set(it.product_id, {
         qty: (prev?.qty || 0) + (Number(it.quantity) || 0),
         price: Number(it.price) || prev?.price || 0,
+        // نحمل مضاعِف الوحدة (صيدلية: قطع/شريط/علبة) حتى نُعيد للمخزون نفس عدد القطع المخصومة
+        unitMultiplier: Number(it.unit_multiplier) || prev?.unitMultiplier || 1,
       })
     }
 
@@ -535,21 +543,24 @@ export async function createPOSReturn(data: {
       if (alreadyReturned + qty > sold.qty) {
         return { success: false, error: POS_FEATURE_ERROR.RETURN_INVALID_ITEMS }
       }
-      const lineTotal = roundMoney(sold.price * qty)
+      const effectiveUnit = roundMoney(sold.price * refundRatio)
+      const lineTotal = roundMoney(effectiveUnit * qty)
       computedRefund += lineTotal
-      verifiedItems.push({ product_id: item.product_id, name: item.name, price: sold.price, quantity: qty, total: lineTotal })
+      verifiedItems.push({ product_id: item.product_id, name: item.name, price: effectiveUnit, quantity: qty, total: lineTotal })
     }
     const refundAmount = roundMoney(computedRefund)
 
-    // 4) استعادة المخزون (بالكميات المُتحقَّقة) + إنشاء سجل المرتجع
+    // 4) استعادة المخزون (بعدد القطع الفعلي = الكمية × مضاعِف الوحدة) + إنشاء سجل المرتجع.
+    // البيع يخصم quantity×unit_multiplier قطعة، فالمرتجع لازم يُعيد نفس العدد (كان يعيد الكمية فقط).
     const batch = db.batch()
     for (const item of verifiedItems) {
       const productRef = db.collection("products").doc(item.product_id)
       const productDoc = await productRef.get()
       if (productDoc.exists) {
         const currentStock = Number(productDoc.data()?.stock) || 0
+        const unitMultiplier = soldMap.get(item.product_id)?.unitMultiplier || 1
         batch.update(productRef, {
-          stock: currentStock + item.quantity,
+          stock: currentStock + item.quantity * unitMultiplier,
           updated_at: now,
         })
       }
@@ -689,7 +700,12 @@ export async function closeShift(data: {
     salesDocs.forEach((doc) => {
       const d = doc.data()
       totalRevenue += Number(d.total) || 0
-      if (d.payment_method === "cash") {
+      // نستخدم cash_collected المخزّن (يشمل الجزء النقدي من الدفع المقسّم) بدل تصفية payment_method
+      // فقط — الأخيرة كانت تُسقِط نقدية المبيعات المقسّمة فيظهر فائض نقدي وهمي في جرد الوردية.
+      if (typeof d.cash_collected === "number") {
+        cashRevenue += Math.max(0, Number(d.cash_collected) || 0)
+      } else if (d.payment_method === "cash") {
+        // توافق مع مبيعات قديمة قبل تخزين cash_collected
         const paid = Number(d.amount_paid) || 0
         const change = Number(d.change) || 0
         cashRevenue += Math.max(0, paid - change)

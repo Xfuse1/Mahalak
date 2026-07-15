@@ -4,8 +4,9 @@ import { useEffect } from "react"
 import { ErrorState } from "@/components/ui/error-state"
 import { logError } from "@/lib/logger"
 
-// UX-03: حدّ الخطأ الجذري (Next.js error boundary) — يغطّي كل المسارات افتراضيًا.
-export default function GlobalError({
+// UX-03: حدّ خطأ على مستوى الصفحات (Next.js error boundary) — يلتقط أخطاء رندر الصفحات.
+// أعطال التخطيط الجذري/المزوّدات يلتقطها app/global-error.tsx.
+export default function RouteError({
   error,
   reset,
 }: {

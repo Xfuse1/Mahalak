@@ -42,7 +42,10 @@ export async function fetchStoreSubcategories(storeCategory: string): Promise<Su
       .filter((sub) => sub.name) // Filter out any without name
 
     // Always add "أخرى" (Other) option at the end
-    subcategories.push({ id: "other", name: "أخرى" })
+    // تفادي تكرار خيار "أخرى" لو كان موجودًا أصلًا ضمن المجموعة (قيمة/مفتاح مكرّر)
+    if (!subcategories.some((s) => s.id === "other" || s.name === "أخرى")) {
+      subcategories.push({ id: "other", name: "أخرى" })
+    }
 
     return subcategories
   } catch (err) {
@@ -82,7 +85,10 @@ export async function fetchSubcategoriesByKeywords(keywords: string[]): Promise<
       }))
       .filter((sub) => sub.name)
 
-    subcategories.push({ id: "other", name: "أخرى" })
+    // تفادي تكرار خيار "أخرى" لو كان موجودًا أصلًا ضمن المجموعة (قيمة/مفتاح مكرّر)
+    if (!subcategories.some((s) => s.id === "other" || s.name === "أخرى")) {
+      subcategories.push({ id: "other", name: "أخرى" })
+    }
     return subcategories
   } catch (err) {
     console.error("[categories] Error fetching subcategories by keywords:", err)
@@ -113,7 +119,10 @@ export async function fetchSubcategoriesByCategoryId(categoryId: string): Promis
       }))
       .filter((sub) => sub.name)
 
-    subcategories.push({ id: "other", name: "أخرى" })
+    // تفادي تكرار خيار "أخرى" لو كان موجودًا أصلًا ضمن المجموعة (قيمة/مفتاح مكرّر)
+    if (!subcategories.some((s) => s.id === "other" || s.name === "أخرى")) {
+      subcategories.push({ id: "other", name: "أخرى" })
+    }
     return subcategories
   } catch (err) {
     console.error("[categories] Error fetching subcategories by ID:", err)

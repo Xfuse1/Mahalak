@@ -2,429 +2,326 @@ version: "2"
 type: frontend
 tech_stack:
   - TypeScript
-  - Next.js 16
+  - Next.js 16 (App Router, React Server Components + Server Actions)
   - React 19
-  - Tailwind CSS
-  - shadcn/ui
-  - Firebase Auth
-  - Firestore
-  - Lucide React Icons
+  - Tailwind CSS v4
+  - Radix UI
+  - lucide-react
+  - Zustand (client state: cart)
+  - Firebase (Auth Phone OTP, Firestore) + firebase-admin
+  - i18next / react-i18next (Arabic, RTL)
+  - three.js (3D supermarket)
 routes:
   - path: /
     file: app/page.tsx
     auth_required: false
-    description: Homepage with store listings and categories
+    description: Home page — stores, products, categories, nearby-neighborhood discovery
   - path: /auth
     file: app/auth/page.tsx
     auth_required: false
-    description: Login and registration page
+    description: Auth landing (login) for customers via phone OTP
+  - path: /auth/register
+    file: app/auth/register/page.tsx
+    auth_required: false
+    description: Customer registration (name, email, password, phone)
+  - path: /auth/verify-phone
+    file: app/auth/verify-phone/page.tsx
+    auth_required: false
+    description: Phone OTP verification screen
   - path: /auth/forgot-password
     file: app/auth/forgot-password/page.tsx
     auth_required: false
-    description: Forgot password page
+    description: Forgot password
   - path: /auth/reset-password
     file: app/auth/reset-password/page.tsx
     auth_required: false
-    description: Reset password page
-  - path: /auth/verify-phone
-    file: app/auth/verify-phone/page.tsx
-    auth_required: true
-    description: Phone verification page
+    description: Reset password
+  - path: /auth/seller
+    file: app/auth/seller/page.tsx
+    auth_required: false
+    description: Seller auth landing
+  - path: /auth/seller/register
+    file: app/auth/seller/register/page.tsx
+    auth_required: false
+    description: Seller registration with store details + phone OTP
+  - path: /auth/seller/login
+    file: app/auth/seller/login/page.tsx
+    auth_required: false
+    description: Seller login
   - path: /store
     file: app/store/page.tsx
     auth_required: false
-    description: Store listing page
+    description: Stores listing
   - path: /store/[id]
     file: app/store/[id]/page.tsx
     auth_required: false
-    description: Individual store page with products
-  - path: /product/[id]
-    file: app/product/[id]/page.tsx
-    auth_required: false
-    description: Product detail page
+    description: Single store page with its products
   - path: /category/[name]
     file: app/category/[name]/page.tsx
     auth_required: false
-    description: Category products page
+    description: Products by category
+  - path: /product/[id]
+    file: app/product/[id]/page.tsx
+    auth_required: false
+    description: Product detail page with Add to cart
   - path: /search
     file: app/search/page.tsx
     auth_required: false
-    description: Search results page
-  - path: /cart
-    file: app/cart/page.tsx
-    auth_required: false
-    description: Shopping cart page
-  - path: /checkout
-    file: app/checkout/page.tsx
-    auth_required: true
-    description: Checkout page
-  - path: /checkout/delivery
-    file: app/checkout/delivery/page.tsx
-    auth_required: true
-    description: Delivery options page
-  - path: /account
-    file: app/account/page.tsx
-    auth_required: true
-    description: User account page
-  - path: /account/edit-order/[id]
-    file: app/account/edit-order/[id]/page.tsx
-    auth_required: true
-    description: Edit order page
-  - path: /account/change-driver
-    file: app/account/change-driver/page.tsx
-    auth_required: true
-    description: Change driver page
-  - path: /review/[orderId]
-    file: app/review/[orderId]/page.tsx
-    auth_required: true
-    description: Order review page
-  - path: /pos/qpos
-    file: app/pos/qpos/page.tsx
-    auth_required: true
-    description: Point of Sale cashier interface
-  - path: /pos/receipt
-    file: app/pos/receipt/page.tsx
-    auth_required: false
-    description: Receipt display page
-  - path: /seller/dashboard
-    file: app/seller/dashboard/page.tsx
-    auth_required: true
-    description: Seller dashboard with analytics
-  - path: /seller/products
-    file: app/seller/products/page.tsx
-    auth_required: true
-    description: Seller product management
-  - path: /seller/products/new
-    file: app/seller/products/new/page.tsx
-    auth_required: true
-    description: Add new product page
-  - path: /seller/products/edit/[id]
-    file: app/seller/products/edit/[id]/page.tsx
-    auth_required: true
-    description: Edit product page
-  - path: /seller/orders
-    file: app/seller/orders/page.tsx
-    auth_required: true
-    description: Seller orders management
-  - path: /seller/my-orders
-    file: app/seller/my-orders/page.tsx
-    auth_required: true
-    description: Seller personal orders
-  - path: /seller/offers
-    file: app/seller/offers/page.tsx
-    auth_required: true
-    description: Seller offers management
-  - path: /seller/settings
-    file: app/seller/settings/page.tsx
-    auth_required: true
-    description: Seller store settings
-  - path: /seller/supermarket-3d
-    file: app/seller/supermarket-3d/page.tsx
-    auth_required: true
-    description: 3D supermarket layout editor
-  - path: /driver/orders
-    file: app/driver/orders/page.tsx
-    auth_required: true
-    description: Driver orders page
-  - path: /about
-    file: app/about/page.tsx
-    auth_required: false
-    description: About page
-  - path: /faq
-    file: app/faq/page.tsx
-    auth_required: false
-    description: FAQ page
-  - path: /terms
-    file: app/terms/page.tsx
-    auth_required: false
-    description: Terms and conditions
-  - path: /privacy
-    file: app/privacy/page.tsx
-    auth_required: false
-    description: Privacy policy
+    description: Product/store search
   - path: /supermarket
     file: app/supermarket/page.tsx
     auth_required: false
-    description: Supermarket browsing page
-features:
-  - name: User Authentication
-    description: Login and registration with email/password via Firebase Auth
-    files:
-      - app/auth/page.tsx
-      - components/auth/login-form.tsx
-      - lib/auth-context.tsx
-      - lib/firebase/auth.ts
-    entry_route: /auth
-    user_interactions:
-      - Fill email input field
-      - Fill password input field
-      - Click login button to submit
-      - Toggle between login and register tabs
-      - See error message on invalid credentials
-      - Redirect to home page on successful login
-    api_calls:
-      - method: POST
-        endpoint: Firebase Auth signInWithEmailAndPassword
-      - method: POST
-        endpoint: Firebase Auth createUserWithEmailAndPassword
+    description: 2D/3D supermarket simulator
+  - path: /cart
+    file: app/cart/page.tsx
     auth_required: false
-  - name: POS Product Grid and Cart
-    description: Browse products in grid view and add them to the POS cart for checkout
+    description: Shopping cart
+  - path: /checkout
+    file: app/checkout/page.tsx
+    auth_required: true
+    description: Checkout — address entry, order review
+  - path: /checkout/delivery
+    file: app/checkout/delivery/page.tsx
+    auth_required: true
+    description: Delivery — choose driver, confirm COD order
+  - path: /account
+    file: app/account/page.tsx
+    auth_required: true
+    description: Customer account and order history
+  - path: /account/change-driver
+    file: app/account/change-driver/page.tsx
+    auth_required: true
+    description: Change assigned driver for an order
+  - path: /account/edit-order/[id]
+    file: app/account/edit-order/[id]/page.tsx
+    auth_required: true
+    description: Edit an existing order
+  - path: /review/[orderId]
+    file: app/review/[orderId]/page.tsx
+    auth_required: true
+    description: Leave a review for a delivered order
+  - path: /seller/dashboard
+    file: app/seller/dashboard/page.tsx
+    auth_required: true
+    description: Seller dashboard
+  - path: /seller/products
+    file: app/seller/products/page.tsx
+    auth_required: true
+    description: Seller product list
+  - path: /seller/products/new
+    file: app/seller/products/new/page.tsx
+    auth_required: true
+    description: Create a new product
+  - path: /seller/products/edit/[id]
+    file: app/seller/products/edit/[id]/page.tsx
+    auth_required: true
+    description: Edit a product
+  - path: /seller/orders
+    file: app/seller/orders/page.tsx
+    auth_required: true
+    description: Orders received by the seller
+  - path: /seller/my-orders
+    file: app/seller/my-orders/page.tsx
+    auth_required: true
+    description: Seller's own purchases
+  - path: /seller/offers
+    file: app/seller/offers/page.tsx
+    auth_required: true
+    description: Manage offers/discounts
+  - path: /seller/ledger
+    file: app/seller/ledger/page.tsx
+    auth_required: true
+    description: Debt ledger (UX-01)
+  - path: /seller/settings
+    file: app/seller/settings/page.tsx
+    auth_required: true
+    description: Store settings
+  - path: /seller/supermarket-3d
+    file: app/seller/supermarket-3d/page.tsx
+    auth_required: true
+    description: 3D store editor
+  - path: /driver/orders
+    file: app/driver/orders/page.tsx
+    auth_required: true
+    description: Driver order queue and proof-of-delivery
+  - path: /admin
+    file: app/admin/page.tsx
+    auth_required: true
+    description: Admin landing
+  - path: /admin/stores
+    file: app/admin/stores/page.tsx
+    auth_required: true
+    description: Admin store approvals (ADM-01)
+  - path: /admin/complaints
+    file: app/admin/complaints/page.tsx
+    auth_required: true
+    description: Admin complaints/support (ADM-02)
+  - path: /pos/qpos
+    file: app/pos/qpos/page.tsx
+    auth_required: true
+    description: In-store POS cashier
+  - path: /pos/receipt
+    file: app/pos/receipt/page.tsx
+    auth_required: true
+    description: POS receipt
+features:
+  - name: Customer Registration
+    description: Register a new customer with name, unique email, strong password and Egyptian phone number
     files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos.ts
-    entry_route: /pos/qpos
+      - app/auth/register/page.tsx
+      - lib/auth-context.tsx
+      - lib/actions/profile.ts
+      - lib/utils/phone.ts
+      - lib/utils/password.ts
+    entry_route: /auth/register
     user_interactions:
-      - View product grid with images, names, and prices
-      - Click a product card to add it to the cart
-      - Click same product again to increment quantity
-      - Use search bar to filter products by name
-      - Filter products by category tabs
-      - Use voice search button for Arabic speech recognition
-      - View cart items in right panel with quantities and totals
-      - Click plus/minus buttons to adjust quantity in cart
-      - Click trash icon to remove item from cart
-      - Click clear cart button to empty all items
+      - Fill full name input
+      - Fill unique email input
+      - Fill password input (>=6 chars, must include a letter and a number)
+      - Fill phone input with 01000000000
+      - Submit the registration form
+      - Get redirected to phone OTP verification
+    api_calls:
+      - method: POST
+        endpoint: server-action:createUserProfile (Firebase Auth + Firestore)
+    auth_required: false
+  - name: Phone OTP Verification
+    description: Verify the phone number via Firebase Phone Auth using the fixed test OTP
+    files:
+      - app/auth/verify-phone/page.tsx
+      - lib/auth-context.tsx
+    entry_route: /auth/verify-phone
+    user_interactions:
+      - Enter the 6-digit OTP 123456
+      - Submit to confirm verification
+      - See success and become authenticated
+    api_calls:
+      - method: POST
+        endpoint: firebase:signInWithPhoneNumber/confirm
+    auth_required: false
+  - name: Browse Stores and Products
+    description: Browse the home, stores, categories, and open a product detail page
+    files:
+      - app/page.tsx
+      - app/store/[id]/page.tsx
+      - app/product/[id]/page.tsx
+      - components/product-card.tsx
+    entry_route: /
+    user_interactions:
+      - Click into a store or category
+      - Open a product detail page
     api_calls:
       - method: GET
-        endpoint: Firestore stores/{storeId}/products
-    auth_required: true
-  - name: POS Barcode Scanner
-    description: Scan product barcodes using device camera to add products to cart
+        endpoint: firestore:products/stores
+    auth_required: false
+  - name: Add to Cart
+    description: Add a product to the cart from the product page
     files:
-      - app/pos/qpos/page.tsx
-      - components/barcode-scanner.tsx
-    entry_route: /pos/qpos
+      - app/product/[id]/page.tsx
+      - lib/stores/cart-store.ts
+    entry_route: /product/[id]
     user_interactions:
-      - Click barcode scanner button in header
-      - Allow camera access when prompted
-      - Point camera at product barcode
-      - Product auto-added to cart on successful scan
-      - Enter barcode manually in text input as fallback
+      - Click "أضف للسلة" (Add to cart)
+      - Open the cart (/cart) and see the item
     api_calls: []
-    auth_required: true
-  - name: POS Payment and Checkout
-    description: Complete sale with cash or card payment, generate receipt
+    auth_required: false
+  - name: Checkout with Cash on Delivery
+    description: Enter delivery address, choose a driver, and confirm a COD order
     files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos.ts
-    entry_route: /pos/qpos
+      - app/checkout/page.tsx
+      - app/checkout/delivery/page.tsx
+      - lib/actions/orders.ts
+      - lib/actions/delivery.ts
+    entry_route: /checkout
     user_interactions:
-      - Click payment button to open payment modal
-      - Select payment method - cash or card
-      - For cash - enter amount received and see change calculated
-      - For split payment - enter cash amount and card amount
-      - Click confirm sale button to process payment
-      - See success confirmation with sale details
-      - Click print receipt button
-      - Click send receipt via WhatsApp button
+      - Enter the delivery address
+      - Proceed to delivery and choose a driver
+      - Confirm the order (Cash on Delivery)
+      - See an order-success message
     api_calls:
       - method: POST
-        endpoint: Firestore stores/{storeId}/sales (create sale document)
-      - method: PUT
-        endpoint: Firestore stores/{storeId}/products (update stock quantities)
+        endpoint: server-action:createOrder (Firestore, atomic)
     auth_required: true
-  - name: POS Hold Cart
-    description: Hold current cart for later and resume held carts
+  - name: View My Orders
+    description: See the placed order in the customer account order history
     files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-features.ts
-    entry_route: /pos/qpos
+      - app/account/page.tsx
+      - lib/actions/orders.ts
+    entry_route: /account
     user_interactions:
-      - Click hold cart button (تعليق) in header
-      - Enter optional note for the held cart
-      - Confirm hold action
-      - Click held carts list button to view all held carts
-      - See list of held carts with timestamps and notes
-      - Click resume button on a held cart to restore it
-      - Click delete button to remove a held cart
+      - Open /account
+      - Confirm the new order appears in the list
+    api_calls:
+      - method: GET
+        endpoint: server-action:getUserOrders
+    auth_required: true
+  - name: Seller Registration
+    description: Register a new seller/merchant with store name, description, type/category and phone, then OTP
+    files:
+      - app/auth/seller/register/page.tsx
+      - lib/actions/stores.ts
+      - lib/auth-context.tsx
+    entry_route: /auth/seller/register
+    user_interactions:
+      - Fill store name, description, type/category
+      - Fill phone 01000000001
+      - Submit and complete OTP 123456
     api_calls:
       - method: POST
-        endpoint: Firestore stores/{storeId}/held_carts (create held cart)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/held_carts (list held carts)
-      - method: DELETE
-        endpoint: Firestore stores/{storeId}/held_carts/{id} (delete held cart)
-    auth_required: true
-  - name: POS Customer Management
-    description: Create and manage POS customers, link to sales
+        endpoint: server-action:createStore (Firebase Auth + Firestore)
+    auth_required: false
+  - name: Seller Dashboard
+    description: Seller logs in and opens the dashboard
     files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-features.ts
-    entry_route: /pos/qpos
+      - app/seller/dashboard/page.tsx
+      - app/auth/seller/login/page.tsx
+    entry_route: /seller/dashboard
     user_interactions:
-      - Click customers button (العملاء) in header
-      - Search customers by phone number
-      - Click add new customer button
-      - Fill customer name, phone, email, notes
-      - Save new customer
-      - Select existing customer to link to current sale
-      - View customer purchase history
+      - Log in as seller
+      - Open the seller dashboard
+    api_calls:
+      - method: GET
+        endpoint: firestore:store/user doc
+    auth_required: true
+  - name: Add Product
+    description: Seller creates a new product with name, selling price, cost price (< selling), quantity, category, optional image
+    files:
+      - app/seller/products/new/page.tsx
+      - lib/actions/product-form-actions.ts
+      - lib/actions/products.ts
+    entry_route: /seller/products/new
+    user_interactions:
+      - Fill product name
+      - Fill selling price
+      - Fill cost/purchase price lower than selling price
+      - Fill quantity
+      - Select category
+      - Optionally upload an image
+      - Save the product
     api_calls:
       - method: POST
-        endpoint: Firestore stores/{storeId}/pos_customers (create customer)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/pos_customers (search customers)
-      - method: PUT
-        endpoint: Firestore stores/{storeId}/pos_customers/{id} (update after sale)
+        endpoint: server-action:createProduct (Firestore)
     auth_required: true
-  - name: POS Returns and Refunds
-    description: Process returns and refunds for previous sales
+  - name: Seller Product List
+    description: Confirm the newly created product appears in the seller's product list
     files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-features.ts
-    entry_route: /pos/qpos
+      - app/seller/products/page.tsx
+      - lib/actions/products.ts
+    entry_route: /seller/products
     user_interactions:
-      - Click returns button (المرتجعات) in header
-      - Enter sale ID to search for original sale
-      - View sale items and select items to return
-      - Set return quantity for each item
-      - Select return type - refund or exchange
-      - Select refund method - cash or card
-      - Enter return reason
-      - Confirm return and see success message
+      - Open /seller/products
+      - Confirm the new product is listed
     api_calls:
       - method: GET
-        endpoint: Firestore stores/{storeId}/sales/{saleId} (get sale for return)
-      - method: POST
-        endpoint: Firestore stores/{storeId}/pos_returns (create return record)
-      - method: PUT
-        endpoint: Firestore stores/{storeId}/products (restock returned items)
-    auth_required: true
-  - name: POS Shift Management
-    description: Open and close cashier shifts with cash tracking
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-features.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - Click shift button (الوردية) in header
-      - Enter starting cash amount to open shift
-      - Click open shift button
-      - See active shift info in header (sales count, total)
-      - Click close shift button
-      - Enter ending cash amount
-      - See cash difference calculation
-      - Enter close notes for discrepancies
-      - Confirm shift close
-    api_calls:
-      - method: POST
-        endpoint: Firestore stores/{storeId}/pos_shifts (open shift)
-      - method: PUT
-        endpoint: Firestore stores/{storeId}/pos_shifts/{id} (close shift)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/pos_shifts (get current shift)
-    auth_required: true
-  - name: POS Coupons
-    description: Create and apply discount coupons at checkout
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-features.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - Click coupons button (الكوبونات) in header
-      - View list of existing coupons
-      - Click create new coupon
-      - Enter coupon code, type (percentage/fixed), value, expiry, usage limit
-      - Save new coupon
-      - Toggle coupon active/inactive
-      - In payment modal enter coupon code to apply discount
-      - See discount reflected in total
-    api_calls:
-      - method: POST
-        endpoint: Firestore stores/{storeId}/pos_coupons (create coupon)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/pos_coupons (list coupons)
-      - method: PUT
-        endpoint: Firestore stores/{storeId}/pos_coupons/{id} (toggle/use coupon)
-    auth_required: true
-  - name: Pharmacy Expiry Tracking
-    description: Track product expiry dates, block expired products from sale
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-pharmacy.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - See expiry badges on product cards (days until expiry)
-      - Click expiry alerts button (الصلاحية) in header
-      - View list of critical (red) and warning (orange) expiry alerts
-      - Expired products are blocked during checkout with error message
-      - Near-expiry products show warning confirmation before sale
-    api_calls:
-      - method: GET
-        endpoint: Firestore stores/{storeId}/products (filter by expiry fields)
-    auth_required: true
-  - name: Pharmacy Prescription Management
-    description: Record and search prescriptions linked to pharmacy sales
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-pharmacy.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - See Rx badge on prescription-required products
-      - Prescription modal auto-opens when Rx product is in cart at checkout
-      - Enter doctor name, patient name, patient phone, diagnosis
-      - Save prescription record linked to sale
-      - Click prescriptions button (روشتات) to view history
-      - Search prescriptions by patient name or phone
-      - View prescription details
-    api_calls:
-      - method: POST
-        endpoint: Firestore stores/{storeId}/prescriptions (create prescription)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/prescriptions (search prescriptions)
-    auth_required: true
-  - name: Pharmacy Insurance Claims
-    description: Manage insurance companies and create claims during pharmacy sales
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-pharmacy.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - Click insurance button (تأمين) in header
-      - View insurance companies list
-      - Add new insurance company with name and coverage percentage
-      - Toggle insurance company active/inactive
-      - In payment modal select insurance company
-      - Enter policy number
-      - See copay amount auto-calculated
-      - Insurance claim auto-created after successful sale
-      - View insurance claims with status
-    api_calls:
-      - method: POST
-        endpoint: Firestore stores/{storeId}/insurance_companies (add company)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/insurance_companies (list companies)
-      - method: POST
-        endpoint: Firestore stores/{storeId}/insurance_claims (create claim)
-      - method: GET
-        endpoint: Firestore stores/{storeId}/insurance_claims (list claims)
-    auth_required: true
-  - name: Pharmacy Drug Alternatives
-    description: Find alternative drugs by active ingredient
-    files:
-      - app/pos/qpos/page.tsx
-      - lib/actions/pos-pharmacy.ts
-    entry_route: /pos/qpos
-    user_interactions:
-      - Click alternatives button (بدائل) on a pharmacy product card
-      - See list of alternative drugs with same active ingredient
-      - View alternative name, manufacturer, price, availability
-      - Click add button to add alternative to cart
-    api_calls:
-      - method: GET
-        endpoint: Firestore stores/{storeId}/products (search by active_ingredient)
+        endpoint: server-action:getSellerProducts
     auth_required: true
 known_limitations:
-  - issue: POS page requires store owner login - test account must be a seller with products
-    location: app/pos/qpos/page.tsx
-    impact: POS features only accessible to authenticated store owners
-  - issue: Pharmacy features only visible for stores with health/pharmacy category
-    location: app/pos/qpos/page.tsx
-    impact: Pharmacy buttons and modals hidden for non-pharmacy stores
-  - issue: Barcode scanner requires camera access in browser
-    location: components/barcode-scanner.tsx
-    impact: Barcode scanning will not work in headless browser testing
-  - issue: Voice search requires microphone and Web Speech API
-    location: app/pos/qpos/page.tsx
-    impact: Voice search will not work in headless browser testing
+  - issue: Authentication uses Firebase Phone OTP; email/password test-account fields do not drive login
+    location: lib/auth-context.tsx
+    impact: Automated login must use phone 01000000000 / seller 01000000001 with fixed OTP 123456 (Firebase test numbers, reCAPTCHA and SMS bypassed)
+  - issue: Backend is implemented via Next.js Server Actions and Firebase SDK, not REST endpoints
+    location: lib/actions/*
+    impact: There is no /api/* surface; api_calls above reference server actions / Firebase SDK calls
+  - issue: Store approval gate (is_approved) is not enforced in public getStores
+    location: lib/actions/stores.ts
+    impact: New seller stores/products may be publicly visible without an approval step

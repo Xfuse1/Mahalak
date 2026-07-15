@@ -57,6 +57,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setOpen(true)
 
     return new Promise<boolean>((resolve) => {
+      // نُسوّي أي مُحلِّل معلّق سابق قبل استبداله — منع تعليق await لطلب تأكيد سابق عند استدعاء متداخل
+      resolveRef.current?.(false)
       resolveRef.current = resolve
     })
   }, [])

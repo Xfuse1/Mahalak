@@ -25,7 +25,7 @@ const AddShelfModal = dynamic(() => import("../../../components/dashboard/AddShe
 import { useProductStore } from "../../../lib/stores/product-store"
 import { getProductsByStoreId } from "../../../lib/actions/products"
 import { getSupermarketLayout } from "../../../lib/actions/layout"
-import { Placement, Product, SectionType } from "../../../lib/types/product-management"
+import { Placement, Product, SectionType, Shelf } from "../../../lib/types/product-management"
 import { logError } from "../../../lib/logger"
 
 type StoreCatalogProduct = {
@@ -96,6 +96,17 @@ export default function Supermarket3DPage() {
 
                             setProducts(mappedProducts);
 
+                            // تحميل التصميم المحفوظ أولًا — بدونه كانت اللوحة تبدأ برفوف وهمية
+                            // وتكتب فوقه عند الحفظ (فقدان بيانات دائم). نرجع للرفوف الافتراضية
+                            // فقط عند عدم وجود تصميم محفوظ (أول مرة لمتجر جديد).
+                            const savedLayout = await getSupermarketLayout(store.id);
+                            const savedShelves = savedLayout?.data?.shelves as Shelf[] | undefined;
+                            const savedPlacements = savedLayout?.data?.placements as Placement[] | undefined;
+
+                            if (Array.isArray(savedShelves) && savedShelves.length > 0) {
+                                setShelves(savedShelves);
+                                setPlacements(Array.isArray(savedPlacements) ? savedPlacements : []);
+                            } else {
                             // Use initial shelves
                             setShelves(initialShelves);
 
@@ -171,6 +182,7 @@ export default function Supermarket3DPage() {
                             });
 
                             setPlacements(autoPlacements);
+                            }
                         }
                     } else {
                         router.push("/")

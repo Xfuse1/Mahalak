@@ -31,7 +31,8 @@ export default function SellerLoginPage() {
       if (user.role === "seller") {
         router.push("/seller/dashboard")
       } else {
-        router.push("/auth/seller/login")
+        // مستخدم مسجّل لكنه ليس بائعًا — نوجّهه للرئيسية بدل إعادة توجيه لنفس الصفحة
+        router.push("/")
       }
     }
   }, [user, router, isLoggingIn])
@@ -64,7 +65,8 @@ export default function SellerLoginPage() {
       if (normalizedLoginPhone) {
         const result = await getUserByPhone(normalizedLoginPhone)
         if (!result.success || !result.data?.email) {
-          setError(t("لا يوجد حساب مرتبط برقم الهاتف هذا", "No account found with this phone number"))
+          // رسالة عامة لتقليل تعداد الحسابات (نفس رسالة كلمة المرور الخاطئة)
+          setError(t("البريد الإلكتروني أو كلمة المرور غير صحيحة", "Invalid email or password"))
           return
         }
         email = result.data.email

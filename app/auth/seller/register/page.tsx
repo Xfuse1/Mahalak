@@ -435,8 +435,8 @@ export default function SellerRegisterPage() {
         taxCardImageBackUrl: taxCardImageBackUrl || undefined,
         city,
         country,
-        latitude: undefined,
-        longitude: undefined,
+        latitude: storeLocation?.latitude,
+        longitude: storeLocation?.longitude,
       })
 
       if (!storeResult.success || !storeResult.token) {
@@ -445,6 +445,8 @@ export default function SellerRegisterPage() {
       }
 
       sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
+      // كلمة المرور تبقى في العميل فقط (لا تُخزَّن على الخادم)
+      if (!isGoogleUser && password) sessionStorage.setItem("pendingRegistrationPassword", password)
       router.push(`/auth/verify-phone?phone=${encodeURIComponent(normalizedSellerPhone)}&role=seller&returnUrl=/seller/dashboard`)
     } catch (registrationError: any) {
       if (registrationError?.message?.includes("already registered")) {

@@ -87,15 +87,15 @@ function ProductCardComponent({ product }: ProductCardProps) {
               {hasDiscount ? (
                 <div className="flex flex-col">
                   <p className="text-sm text-muted-foreground line-through">
-                    {product.price.toLocaleString()} {t("جنيه", "EGP")}
+                    {Number(product.price ?? 0).toLocaleString()} {t("جنيه", "EGP")}
                   </p>
                   <p className="text-xl font-extrabold text-primary">
-                    {discountedPrice.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
+                    {(Number(discountedPrice) || 0).toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
                   </p>
                 </div>
               ) : (
                 <p className="text-xl font-extrabold text-primary">
-                  {product.price} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
+                  {Number(product.price ?? 0).toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{t("جنيه", "EGP")}</span>
                 </p>
               )}
             </div>

@@ -12,7 +12,7 @@ import { Label } from "../../../../../components/ui/label"
 import { Textarea } from "../../../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select"
 import { Upload, Pill, Shirt, ShoppingBasket, Package } from "lucide-react"
-import { getProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
+import { getOwnedProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import { getCategoryNameForForm } from "../../../../../lib/actions/product-form-actions"
 import Image from "next/image"
@@ -143,7 +143,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       if (!id || !user?.id) return
 
       setIsLoadingProduct(true)
-      const productData = (await getProduct(id)) as EditableProduct | null
+      const productData = (await getOwnedProduct(id)) as EditableProduct | null
 
       if (!productData) {
         setError(t("المنتج غير موجود", "Product not found"))
@@ -245,7 +245,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       if (price < costPrice) {
         throw new Error(t("سعر البيع لا يمكن أن يكون أقل من سعر الشراء", "Selling price cannot be lower than cost price"))
       }
-      if (!stock || stock < 0) {
+      if (Number.isNaN(stock) || stock < 0) {
         throw new Error(t("الكمية لا يمكن أن تكون سالبة", "Quantity cannot be negative"))
       }
       // السماح بـ stock = 0 عند تفعيل الحجز المسبق
