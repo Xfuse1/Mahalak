@@ -814,6 +814,287 @@ async function safeCount(label: string, query: Query): Promise<number> {
   }
 }
 
+// ==================== إدارة الفئات (الأقسام) والأقسام الفرعية ====================
+// دمج شاشة الفئات من لوحة Flutter داخل /admin. كل الأكشن مُقيّدة بـ ensureAdmin() (الدور مُشتق سيرفر-سايد).
+//
+// حرِج جدًا — شكل الحقول الذي يقرؤه موقع العملاء (يجب عدم كسره):
+//   • مستند الفئة (collection `categories`): الموقع يقرأ حقل **name** فقط (نص) + معرّف المستند (id):
+//       - lib/firebase/categories.ts: query(where("name","==",storeCategory)) و doc.data().name.
+//       - app/auth/seller/register/page.tsx: doc.data().name (قائمة الفئات عند التسجيل).
+//       - lib/actions/stores.ts getCategoryNameById + product-form-actions getCategoryNameForForm: data.name.
+//     لذلك **name** هو الحقل الحيوي — نكتبه دائمًا ولا نغيّر شكله (نص). أي حقول إضافية أنشأها
+//     تطبيق Flutter (icon/order/name_en...) نحافظ عليها عبر update() الجزئي — لا نمسحها إطلاقًا.
+//   • مستندات المجموعة الفرعية (categories/{id}/subcategories): الموقع يقرأ حقل **name** فقط + معرّف
+//     المستند (fetchStoreSubcategories/ByKeywords/ByCategoryId في lib/firebase/categories.ts). نكتب name فقط.
+//
+// ملاحظة FK: المنتجات والمتاجر تشير للفئة/القسم الفرعي بالاسم (نص) لا بمعرّف المستند
+// (products.category == اسم القسم، store.category == اسم الفئة). لذا حذف مستند الفئة لا يتتالى
+// للمنتجات؛ ومع ذلك نمنع حذف فئة يشير إليها متجر (حارس best-effort) كي لا نُيتّم اختيار الأقسام.
+
+export type AdminSubcategory = {
+  id: string
+  name: string
+}
+
+export type AdminCategory = {
+  id: string
+  name: string
+  icon?: string
+  order?: number
+  subcategories: AdminSubcategory[]
+}
+
+// قائمة كل الفئات مع أقسامها الفرعية — مقيّدة بحدّ أعلى (مرجعية صغيرة عادةً).
+export async function getAdminCategories(): Promise<{ success: boolean; categories?: AdminCategory[]; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const snap = await db.collection("categories").limit(200).get()
+    const categories: AdminCategory[] = await Promise.all(
+      snap.docs.map(async (d) => {
+        const data = d.data() as Record<string, any>
+        // كل مجموعة فرعية صغيرة — حدّ أعلى وقائي
+        const subSnap = await d.ref.collection("subcategories").limit(300).get()
+        const subcategories: AdminSubcategory[] = subSnap.docs
+          .map((s) => ({ id: s.id, name: String((s.data() as Record<string, any>).name || "") }))
+          .filter((s) => s.name)
+          .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+        return serializeData({
+          id: d.id,
+          name: String(data.name || ""),
+          // نعرض icon/order إن وُجدا (حقول Flutter اختيارية) — للعرض/التحرير فقط، والموقع لا يقرؤهما.
+          icon: typeof data.icon === "string" && data.icon ? data.icon : undefined,
+          order: typeof data.order === "number" && Number.isFinite(data.order) ? data.order : undefined,
+          subcategories,
+        }) as AdminCategory
+      }),
+    )
+    // ترتيب: order (إن وُجد) ثم الاسم
+    categories.sort((a, b) => {
+      const ao = a.order ?? Number.MAX_SAFE_INTEGER
+      const bo = b.order ?? Number.MAX_SAFE_INTEGER
+      if (ao !== bo) return ao - bo
+      return a.name.localeCompare(b.name, "ar")
+    })
+    return { success: true, categories }
+  } catch (error) {
+    logError("[admin] getAdminCategories", error)
+    return { success: false, error: "تعذّر تحميل الفئات" }
+  }
+}
+
+// إنشاء فئة جديدة — نكتب name (حيوي) + icon/order اختياريًا. نمنع تكرار الاسم (الموقع يستعلم بالاسم).
+export async function createCategory(input: {
+  name: string
+  icon?: string
+  order?: number | null
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const name = String(input?.name || "").trim()
+  if (!name) return { success: false, error: "اسم الفئة مطلوب" }
+  if (name.length > 100) return { success: false, error: "اسم الفئة طويل جدًا" }
+  try {
+    const db = getAdminDb()
+    // منع الاسم المكرّر — الموقع يستعلم where("name","==",...)، فالتكرار يجعل الاختيار غير حتمي.
+    const dup = await db.collection("categories").where("name", "==", name).limit(1).get()
+    if (!dup.empty) return { success: false, error: "توجد فئة بنفس الاسم" }
+
+    const payload: Record<string, any> = { name }
+    if (typeof input.icon === "string" && input.icon.trim()) payload.icon = input.icon.trim()
+    if (typeof input.order === "number" && Number.isFinite(input.order)) payload.order = input.order
+
+    const ref = await db.collection("categories").add(payload)
+    revalidatePath("/admin/categories")
+    return { success: true, id: ref.id }
+  } catch (error) {
+    logError("[admin] createCategory", error)
+    return { success: false, error: "تعذّر إنشاء الفئة" }
+  }
+}
+
+// تعديل فئة — تحديث جزئي: نكتب name دائمًا، ونحدّث icon/order فقط عند تمريرهما (فراغ ⇒ حذف الحقل).
+// لا نستخدم set()-الكامل كي لا نمسح حقول Flutter الإضافية التي لا نعرضها.
+export async function updateCategory(
+  id: string,
+  input: { name: string; icon?: string; order?: number | null },
+): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const catId = String(id || "").trim()
+  if (!catId) return { success: false, error: "معرّف الفئة مطلوب" }
+  const name = String(input?.name || "").trim()
+  if (!name) return { success: false, error: "اسم الفئة مطلوب" }
+  if (name.length > 100) return { success: false, error: "اسم الفئة طويل جدًا" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("categories").doc(catId)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "الفئة غير موجودة" }
+    // منع تعارض الاسم مع فئة أخرى
+    const dup = await db.collection("categories").where("name", "==", name).limit(2).get()
+    if (dup.docs.some((d) => d.id !== catId)) return { success: false, error: "توجد فئة أخرى بنفس الاسم" }
+
+    const patch: Record<string, any> = { name }
+    if (input.icon !== undefined) {
+      const ic = String(input.icon).trim()
+      patch.icon = ic ? ic : FieldValue.delete()
+    }
+    if (input.order !== undefined) {
+      patch.order =
+        input.order === null || !Number.isFinite(Number(input.order)) ? FieldValue.delete() : Number(input.order)
+    }
+    await ref.update(patch)
+    revalidatePath("/admin/categories")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] updateCategory", error)
+    return { success: false, error: "تعذّر تحديث الفئة" }
+  }
+}
+
+// حذف فئة — حارس أمان يمنع الحذف إن كان متجر يشير للفئة بالاسم، ثم حذف المجموعة الفرعية + المستند
+// في دفعة ذرّية واحدة (batch) في الحالة الشائعة (أقسام فرعية قليلة)، مع تقسيم آمن إن تجاوزت حدّ الدفعة.
+export async function deleteCategory(id: string): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const catId = String(id || "").trim()
+  if (!catId) return { success: false, error: "معرّف الفئة مطلوب" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("categories").doc(catId)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "الفئة غير موجودة" }
+    const name = String((snap.data() as Record<string, any>).name || "")
+
+    // حارس: امنع حذف فئة يشير إليها متجر بالاسم (المتاجر/المنتجات تشير بالاسم لا بالمعرّف).
+    // best-effort: إن فشل استعلام الحقل المتداخل (فهرس مُعفى) لا نمنع على خطأ بنية تحتية.
+    if (name) {
+      try {
+        const refStore = await db.collection("users").where("store.category", "==", name).limit(1).get()
+        if (!refStore.empty) {
+          return { success: false, error: "لا يمكن حذف فئة مرتبطة بمتاجر. انقل المتاجر لفئة أخرى أولًا." }
+        }
+      } catch (e) {
+        logError("[admin] deleteCategory store-ref check", e)
+      }
+    }
+
+    // حذف المجموعة الفرعية subcategories + مستند الفئة.
+    const subSnap = await ref.collection("subcategories").get()
+    const subDocs = subSnap.docs
+    if (subDocs.length <= 499) {
+      // دفعة ذرّية واحدة (حدّ Firestore 500 عملية): كل الأقسام الفرعية + مستند الفئة معًا.
+      const batch = db.batch()
+      subDocs.forEach((s) => batch.delete(s.ref))
+      batch.delete(ref)
+      await batch.commit()
+    } else {
+      // نادر: عدد كبير من الأقسام الفرعية — نقسّم الحذف على دفعات ثم نحذف المستند الأب.
+      for (const chunk of chunkArray(subDocs, 400)) {
+        const batch = db.batch()
+        chunk.forEach((s) => batch.delete(s.ref))
+        await batch.commit()
+      }
+      await ref.delete()
+    }
+
+    revalidatePath("/admin/categories")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] deleteCategory", error)
+    return { success: false, error: "تعذّر حذف الفئة" }
+  }
+}
+
+// إنشاء قسم فرعي داخل فئة — نكتب name فقط (الحقل الوحيد الذي يقرؤه الموقع). نمنع تكرار الاسم داخل الفئة.
+export async function createSubcategory(
+  categoryId: string,
+  input: { name: string },
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const catId = String(categoryId || "").trim()
+  if (!catId) return { success: false, error: "معرّف الفئة مطلوب" }
+  const name = String(input?.name || "").trim()
+  if (!name) return { success: false, error: "اسم القسم الفرعي مطلوب" }
+  if (name.length > 100) return { success: false, error: "الاسم طويل جدًا" }
+  try {
+    const db = getAdminDb()
+    const catRef = db.collection("categories").doc(catId)
+    const catSnap = await catRef.get()
+    if (!catSnap.exists) return { success: false, error: "الفئة غير موجودة" }
+
+    const dup = await catRef.collection("subcategories").where("name", "==", name).limit(1).get()
+    if (!dup.empty) return { success: false, error: "يوجد قسم فرعي بنفس الاسم" }
+
+    const ref = await catRef.collection("subcategories").add({ name })
+    revalidatePath("/admin/categories")
+    return { success: true, id: ref.id }
+  } catch (error) {
+    logError("[admin] createSubcategory", error)
+    return { success: false, error: "تعذّر إنشاء القسم الفرعي" }
+  }
+}
+
+// تعديل قسم فرعي — نحدّث name فقط (نحافظ على أي حقول أخرى عبر update() الجزئي).
+export async function updateSubcategory(
+  categoryId: string,
+  subId: string,
+  input: { name: string },
+): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const catId = String(categoryId || "").trim()
+  const sId = String(subId || "").trim()
+  if (!catId || !sId) return { success: false, error: "معرّف غير صالح" }
+  const name = String(input?.name || "").trim()
+  if (!name) return { success: false, error: "اسم القسم الفرعي مطلوب" }
+  if (name.length > 100) return { success: false, error: "الاسم طويل جدًا" }
+  try {
+    const db = getAdminDb()
+    const catRef = db.collection("categories").doc(catId)
+    const subRef = catRef.collection("subcategories").doc(sId)
+    const subSnap = await subRef.get()
+    if (!subSnap.exists) return { success: false, error: "القسم الفرعي غير موجود" }
+
+    const dup = await catRef.collection("subcategories").where("name", "==", name).limit(2).get()
+    if (dup.docs.some((d) => d.id !== sId)) return { success: false, error: "يوجد قسم فرعي آخر بنفس الاسم" }
+
+    await subRef.update({ name })
+    revalidatePath("/admin/categories")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] updateSubcategory", error)
+    return { success: false, error: "تعذّر تحديث القسم الفرعي" }
+  }
+}
+
+// حذف قسم فرعي.
+export async function deleteSubcategory(
+  categoryId: string,
+  subId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const catId = String(categoryId || "").trim()
+  const sId = String(subId || "").trim()
+  if (!catId || !sId) return { success: false, error: "معرّف غير صالح" }
+  try {
+    const db = getAdminDb()
+    const subRef = db.collection("categories").doc(catId).collection("subcategories").doc(sId)
+    const subSnap = await subRef.get()
+    if (!subSnap.exists) return { success: false, error: "القسم الفرعي غير موجود" }
+    await subRef.delete()
+    revalidatePath("/admin/categories")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] deleteSubcategory", error)
+    return { success: false, error: "تعذّر حذف القسم الفرعي" }
+  }
+}
+
 export async function getAdminDashboardStats(): Promise<{
   success: boolean
   stats?: AdminDashboardStats
