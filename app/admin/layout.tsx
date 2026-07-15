@@ -29,6 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/accounts" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الحسابات</Link>
             <Link href="/admin/complaints" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الشكاوى</Link>
             <Link href="/admin/commission-settings" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">العمولات</Link>
+            <Link href="/admin/migrations" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">ترحيل البيانات</Link>
             {/* إدارة المسؤولين: superAdmin فقط (البوابة الحقيقية في الأفعال + الصفحة). */}
             {user.isSuperAdmin && (
               <Link href="/admin/manage-admins" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">إدارة المسؤولين</Link>

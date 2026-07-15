@@ -5,7 +5,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache"
 import { FieldValue } from "firebase-admin/firestore"
-import type { Firestore, Query } from "firebase-admin/firestore"
+import type { Firestore, Query, DocumentReference } from "firebase-admin/firestore"
 import { getAdminDb, getAdminAuth } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData, chunkArray } from "../firebase/firestore-helpers"
@@ -1895,4 +1895,191 @@ export async function demoteFromAdmin(uid: string): Promise<{ success: boolean; 
 function isSuperAdminRole(role: unknown): boolean {
   const r = String(role || "").toLowerCase()
   return r === "superadmin" || r === "super_admin"
+}
+
+// ==================== ترحيل بيانات (لمرة واحدة): تعبئة store.category_id + تجذير الاعتماد ====================
+// أداة ترحيل يُشغّلها المالك بضغطة زر (Vercel يحمل مفاتيح Admin SDK — لا يخرج أي سرّ للعميل).
+// المشكلة التي تحلّها:
+//   • store.category_id مفقود على المتاجر القديمة — بينما تعاقب إعادة تسمية الفئة (updateCategory) يعتمد
+//     على where("store.category_id","==",catId). فالمتاجر بلا category_id تسقط من التعاقب. نُعبّئه من
+//     مطابقة اسم store.category باسم مستند فئة موجود (نفس دلالة الموقع: مطابقة بالاسم الدقيق).
+//   • بوابة العرض العام تُظهر حاليًا is_approved !== false (غير المضبوط يظهر). للانتقال إلى «المعتمد فقط»
+//     لاحقًا يجب تجذير (grandfather) المتاجر القديمة غير المضبوطة إلى approved أولًا، وإلا يفرغ الموقع.
+//
+// أمان/سلامة (حرِج):
+//   • كل الأفعال مُقيّدة بـ ensureAdmin() (الدور مُشتق من قاعدة البيانات سيرفر-سايد).
+//   • لا نمسّ إلا مستندات البائعين (role=="seller")، وعبر مسارين منقّطين فقط: "store.category_id"
+//     و "store.is_approved" — لا نكتب فوق أي حقل متجر آخر إطلاقًا (لا updated_at ولا غيره).
+//   • المعاينة قراءة فقط. الكتابة idempotent (نضبط category_id فقط حين يكون فارغًا، ونمنح الاعتماد فقط
+//     حين يكون غير مضبوط) — إعادة التشغيل بعد اكتمالها لا تُغيّر شيئًا.
+
+export type StoreBackfillPreview = {
+  totalSellers: number
+  missingCategoryId: number // category_id فارغ/غائب
+  categoryIdResolvable: number // من الناقصة: عددها الذي يطابق اسم store.category اسم فئة موجودة (قابل للتعبئة)
+  categoryIdUnresolvable: number // ناقص category_id وبلا اسم فئة مطابق (لا يمكن تعبئته تلقائيًا)
+  approvedTrue: number
+  approvedFalse: number
+  approvedUnset: number
+}
+
+export type StoreBackfillResult = {
+  categoryIdSet: number // عدد المتاجر التي كُتب لها store.category_id فعلًا
+  approvalGranted: number // عدد المتاجر التي مُنحت store.is_approved=true فعلًا
+  skippedUnresolvable: number // ناقص category_id لكن تعذّر حلّه (تُرك كما هو)
+}
+
+// هل store.category_id مضبوط فعلًا (نص غير فارغ)؟
+function hasCategoryId(store: Record<string, any>): boolean {
+  const v = store?.category_id
+  return typeof v === "string" && v.trim() !== ""
+}
+
+// تصنيف حالة الاعتماد: true / false صريح / غير مضبوط (undefined/null/غائب/أي شيء آخر).
+function approvalState(store: Record<string, any>): "true" | "false" | "unset" {
+  const v = store?.is_approved
+  if (v === true) return "true"
+  if (v === false) return "false"
+  return "unset"
+}
+
+// خريطة اسم الفئة → معرّف المستند (مطابقة دقيقة بالاسم، مطابقة لما يفعله الموقع: where("name","==",...)).
+// عند تكرار الاسم يفوز آخر مستند — مقبول لأداة ترحيل (المطلوب فقط قابلية الحلّ + معرّف صالح).
+async function loadCategoryNameToIdMap(db: Firestore): Promise<Map<string, string>> {
+  const snap = await db.collection("categories").get()
+  const map = new Map<string, string>()
+  snap.docs.forEach((d) => {
+    const name = String((d.data() as Record<string, any>)?.name || "")
+    if (name) map.set(name, d.id)
+  })
+  return map
+}
+
+// (1) معاينة (قراءة فقط): يمسح كل البائعين ويُرجع الأعداد التي يراجعها المالك قبل التشغيل.
+export async function previewStoreBackfill(): Promise<{
+  success: boolean
+  preview?: StoreBackfillPreview
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    // نحمّل خريطة أسماء الفئات مرة واحدة لحساب قابلية الحلّ.
+    const [sellersSnap, catMap] = await Promise.all([
+      db.collection("users").where("role", "==", "seller").get(),
+      loadCategoryNameToIdMap(db),
+    ])
+
+    let missingCategoryId = 0
+    let categoryIdResolvable = 0
+    let categoryIdUnresolvable = 0
+    let approvedTrue = 0
+    let approvedFalse = 0
+    let approvedUnset = 0
+
+    sellersSnap.docs.forEach((d) => {
+      const store = ((d.data() as Record<string, any>)?.store || {}) as Record<string, any>
+
+      if (!hasCategoryId(store)) {
+        missingCategoryId++
+        const name = typeof store.category === "string" ? store.category : ""
+        if (name && catMap.has(name)) categoryIdResolvable++
+        else categoryIdUnresolvable++
+      }
+
+      const st = approvalState(store)
+      if (st === "true") approvedTrue++
+      else if (st === "false") approvedFalse++
+      else approvedUnset++
+    })
+
+    return {
+      success: true,
+      preview: serializeData({
+        totalSellers: sellersSnap.size,
+        missingCategoryId,
+        categoryIdResolvable,
+        categoryIdUnresolvable,
+        approvedTrue,
+        approvedFalse,
+        approvedUnset,
+      }) as StoreBackfillPreview,
+    }
+  } catch (error) {
+    logError("[admin] previewStoreBackfill", error)
+    return { success: false, error: "تعذّر حساب المعاينة" }
+  }
+}
+
+// (2) تشغيل الترحيل (كتابة idempotent، مُقسّمة على دفعات ≤400): لا يلمس إلا المسارين المنقّطين
+// "store.category_id" و "store.is_approved" على مستندات البائعين فقط.
+export async function runStoreBackfill(opts: {
+  backfillCategoryId?: boolean
+  grandfatherApproval?: boolean
+}): Promise<{ success: boolean; result?: StoreBackfillResult; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const doCategoryId = opts?.backfillCategoryId === true
+  const doApproval = opts?.grandfatherApproval === true
+  // لا خيار مفعّل ⇒ لا شيء لفعله (لا كتابة، لا إبطال كاش).
+  if (!doCategoryId && !doApproval) {
+    return { success: true, result: { categoryIdSet: 0, approvalGranted: 0, skippedUnresolvable: 0 } }
+  }
+
+  try {
+    const db = getAdminDb()
+    const [sellersSnap, catMap] = await Promise.all([
+      db.collection("users").where("role", "==", "seller").get(),
+      doCategoryId ? loadCategoryNameToIdMap(db) : Promise.resolve(new Map<string, string>()),
+    ])
+
+    let categoryIdSet = 0
+    let approvalGranted = 0
+    let skippedUnresolvable = 0
+
+    // نجمع لكل مستند تحتاج تغييرًا مرجعَه + كائن التحديث المنقّط (المسارين فقط)، ثم نُقسّم على دفعات.
+    const updates: { ref: DocumentReference; data: Record<string, any> }[] = []
+
+    sellersSnap.docs.forEach((d) => {
+      const store = ((d.data() as Record<string, any>)?.store || {}) as Record<string, any>
+      const patch: Record<string, any> = {}
+
+      if (doCategoryId && !hasCategoryId(store)) {
+        const name = typeof store.category === "string" ? store.category : ""
+        const id = name ? catMap.get(name) : undefined
+        if (id) patch["store.category_id"] = id
+        else skippedUnresolvable++ // ناقص وغير قابل للحلّ — يُترك كما هو
+      }
+
+      if (doApproval && approvalState(store) === "unset") {
+        patch["store.is_approved"] = true
+      }
+
+      if (Object.keys(patch).length > 0) {
+        if ("store.category_id" in patch) categoryIdSet++
+        if ("store.is_approved" in patch) approvalGranted++
+        updates.push({ ref: d.ref, data: patch })
+      }
+    })
+
+    // كتابة مُقسّمة (حدّ Firestore 500 عملية/دفعة — نبقى عند 400 بأمان).
+    for (const chunk of chunkArray(updates, 400)) {
+      const batch = db.batch()
+      chunk.forEach((u) => batch.update(u.ref, u.data))
+      await batch.commit()
+    }
+
+    // إبطال كاش المتاجر بعد الكتابة كي ينعكس منح الاعتماد فورًا على الواجهة العامة (getStores/getStore).
+    if (updates.length > 0) {
+      revalidateTag("stores", "max")
+    }
+    revalidatePath("/admin/migrations")
+
+    return { success: true, result: { categoryIdSet, approvalGranted, skippedUnresolvable } }
+  } catch (error) {
+    logError("[admin] runStoreBackfill", error)
+    return { success: false, error: "تعذّر تنفيذ الترحيل" }
+  }
 }
