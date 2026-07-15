@@ -5,7 +5,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache"
 import { FieldValue } from "firebase-admin/firestore"
-import type { Firestore } from "firebase-admin/firestore"
+import type { Firestore, Query } from "firebase-admin/firestore"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData, chunkArray } from "../firebase/firestore-helpers"
@@ -716,5 +716,162 @@ export async function setCommissionSettings(input: {
   } catch (error) {
     logError("[admin] setCommissionSettings", error)
     return { success: false, error: "تعذّر حفظ الإعدادات" }
+  }
+}
+
+// ==================== الصفحة الرئيسية للإدارة (KPIs) ====================
+// getAdminDashboardStats: إحصاءات at-a-glance للوحة الإدارة (الطلبات/المتاجر/السائقون/العملاء + أحدث النشاط).
+//
+// أداء (حرِج): نستخدم COUNT AGGREGATIONS الرخيصة (query.count().get()) لكل الأعداد — لا نقرأ أي مجموعة
+// كاملة أبدًا. الاستثناء الوحيد قراءةٌ صغيرة مقيّدة بحدّ (limit) لقائمة «أحدث الطلبات» — وليست قراءة مجموعة.
+//
+// متانة: كل عدّاد في try/catch مستقل (عبر safeCount) — فشل عدّاد واحد يُرجع 0 ولا يكسر الصفحة.
+//
+// خصوصية: قائمة أحدث الطلبات لا تتضمن أبدًا delivery_code (كود إثبات التسليم) — لا نقرؤه ولا نُرجعه.
+
+export type AdminRecentOrder = {
+  id: string
+  status: string
+  total: number
+  customer_name: string
+  created_at: string
+}
+
+export type AdminDashboardStats = {
+  orders: {
+    total: number
+    pending: number
+    confirmed: number
+    on_the_way: number
+    delivered: number
+    cancelled: number
+  }
+  stores: {
+    total: number
+    pending: number
+    // false إذا فشل عدّ المعتمدين (فهرس حقل متداخل قد يكون معفى) فتعذّر اشتقاق قيد-المراجعة بدقّة.
+    pendingSupported: boolean
+  }
+  drivers: {
+    total: number
+    pending: number
+  }
+  customers: {
+    total: number
+  }
+  recentOrders: AdminRecentOrder[]
+}
+
+// عدّاد آمن: count aggregation رخيص (لا يقرأ الوثائق) مع try/catch مستقل — فشله يُرجع 0.
+async function safeCount(label: string, query: Query): Promise<number> {
+  try {
+    const snap = await query.count().get()
+    return Number(snap.data().count) || 0
+  } catch (e) {
+    logError(`[admin] dashboard count: ${label}`, e)
+    return 0
+  }
+}
+
+export async function getAdminDashboardStats(): Promise<{
+  success: boolean
+  stats?: AdminDashboardStats
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const orders = db.collection("orders")
+    const users = db.collection("users")
+    const driversCol = db.collection("drivers")
+
+    // كل هذه أعداد count aggregation رخيصة تُنفَّذ بالتوازي — لا قراءة مجموعة كاملة في أيٍّ منها.
+    const [
+      ordersAll,
+      ordersInquiry,
+      ordersPending,
+      ordersConfirmed,
+      ordersOnTheWay,
+      ordersDelivered,
+      ordersCancelled,
+      sellersTotal,
+      driversTotal,
+      driversApproved,
+      customersTotal,
+    ] = await Promise.all([
+      safeCount("orders.all", orders),
+      // طلبات الاستفسار (order_type=="inquiry") — نطرحها من الإجمالي كي لا تُحتسب كطلبات حقيقية.
+      safeCount("orders.inquiry", orders.where("order_type", "==", "inquiry")),
+      safeCount("orders.pending", orders.where("status", "==", "pending")),
+      safeCount("orders.confirmed", orders.where("status", "==", "confirmed")),
+      safeCount("orders.on_the_way", orders.where("status", "==", "on_the_way")),
+      safeCount("orders.delivered", orders.where("status", "==", "delivered")),
+      safeCount("orders.cancelled", orders.where("status", "==", "cancelled")),
+      safeCount("sellers.total", users.where("role", "==", "seller")),
+      safeCount("drivers.total", driversCol),
+      // المعتمدون: الموقع العام يفلتر على isApproved (delivery.ts) — نعتمد نفس الحقل الأساسي.
+      safeCount("drivers.approved", driversCol.where("isApproved", "==", true)),
+      safeCount("customers.total", users.where("role", "==", "customer")),
+    ])
+
+    // المتاجر قيد المراجعة = إجمالي البائعين − المعتمدين (store.is_approved==true).
+    // الطرح يعالج البائعين الذين ينقص حقلهم/قيمته false ويتجنّب مزلق != مع الحقول الغائبة.
+    // عدّ حقل متداخل قد يحتاج فهرسًا مُعفى؛ لذا نلفّه في try ونتراجع بأمان مع رفع علم.
+    let storesPending = 0
+    let storesPendingSupported = true
+    try {
+      const approvedSnap = await users.where("store.is_approved", "==", true).count().get()
+      const storesApproved = Number(approvedSnap.data().count) || 0
+      storesPending = Math.max(0, sellersTotal - storesApproved)
+    } catch (e) {
+      logError("[admin] dashboard count: stores.pending (nested-field index?)", e)
+      storesPendingSupported = false
+    }
+
+    // أحدث الطلبات: قراءة صغيرة مقيّدة بحدّ (limit) — ليست قراءة مجموعة كاملة.
+    // نجلب هامشًا إضافيًا (12) ثم نستبعد طلبات الاستفسار ونقتطع إلى 8. لا نقرأ delivery_code إطلاقًا.
+    let recentOrders: AdminRecentOrder[] = []
+    try {
+      const snap = await orders.orderBy("created_at", "desc").limit(12).get()
+      const rows: Record<string, any>[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+      recentOrders = rows
+        .filter((o) => !isInquiryOrderLike(o))
+        .slice(0, 8)
+        .map((o) => ({
+          id: o.id,
+          status: String(o.status || ""),
+          total: Number(o.total) || 0,
+          customer_name: String(o.customer_name || ""),
+          created_at: toIso(o.created_at),
+          // أمان: delivery_code غير مُدرَج إطلاقًا (لا نقرؤه ولا نُسنده).
+        }))
+    } catch (e) {
+      logError("[admin] dashboard recentOrders", e)
+    }
+
+    // الإجمالي الحقيقي = كل الطلبات − طلبات الاستفسار (pseudo-orders).
+    const ordersTotal = Math.max(0, ordersAll - ordersInquiry)
+
+    return {
+      success: true,
+      stats: {
+        orders: {
+          total: ordersTotal,
+          pending: ordersPending,
+          confirmed: ordersConfirmed,
+          on_the_way: ordersOnTheWay,
+          delivered: ordersDelivered,
+          cancelled: ordersCancelled,
+        },
+        stores: { total: sellersTotal, pending: storesPending, pendingSupported: storesPendingSupported },
+        drivers: { total: driversTotal, pending: Math.max(0, driversTotal - driversApproved) },
+        customers: { total: customersTotal },
+        recentOrders,
+      },
+    }
+  } catch (error) {
+    logError("[admin] getAdminDashboardStats", error)
+    return { success: false, error: "تعذّر تحميل الإحصاءات" }
   }
 }
