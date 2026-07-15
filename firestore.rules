@@ -23,7 +23,9 @@ service cloud.firestore {
     // خفض Flutter المباشر إلى 'customer' يبقى مسموحًا (ليس دورًا إداريًا)، والكتابات التي لا تغيّر الدور
     // مسموحة. على الإنشاء (resource == null) نمنع أي إنشاء عميل بدور إداري.
     function isSettingPrivilegedRole() {
-      return 'role' in request.resource.data
+      // على الحذف يكون request.resource == null (لا مستند ناتج) — نحرس ضده أولًا كي لا نمنع الحذف.
+      return request.resource != null
+        && 'role' in request.resource.data
         && request.resource.data.role in ['admin', 'superAdmin', 'super_admin', 'superadmin']
         && (resource == null || request.resource.data.role != resource.data.role);
     }
