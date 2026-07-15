@@ -17,6 +17,17 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    // منع رفع الصلاحية عبر العميل: هل تحاول هذه الكتابة ضبط role إلى دور إداري (admin/superAdmin)؟
+    // ترقية الأدمن الحقيقية تتم عبر Admin SDK (Next.js server actions أو Cloud Function createAdmin)
+    // الذي يتجاوز هذه القواعد؛ أما كتابة العميل المباشرة (Web/Flutter) فلا يجوز أن ترفع الدور.
+    // خفض Flutter المباشر إلى 'customer' يبقى مسموحًا (ليس دورًا إداريًا)، والكتابات التي لا تغيّر الدور
+    // مسموحة. على الإنشاء (resource == null) نمنع أي إنشاء عميل بدور إداري.
+    function isSettingPrivilegedRole() {
+      return 'role' in request.resource.data
+        && request.resource.data.role in ['admin', 'superAdmin', 'super_admin', 'superadmin']
+        && (resource == null || request.resource.data.role != resource.data.role);
+    }
+
     // مرجعية الفئات (تُقرأ قبل تسجيل الدخول في صفحة تسجيل البائع) — قراءة عامة؛ الكتابة للأدمن فقط
     match /categories/{categoryId} {
       allow read: if true;
@@ -27,15 +38,21 @@ service cloud.firestore {
       }
     }
 
-    // ملف المستخدم: يقرأ صاحبه ملفّه فقط؛ الأدمن يقرأ/يكتب الكل (لوحة الإدارة).
+    // ملف المستخدم: يقرأ صاحبه ملفّه فقط؛ الأدمن يقرأ/يكتب الكل (لوحة الإدارة) — لكن لا يجوز لأي عميل
+    // (حتى الأدمن عبر Web/Flutter) رفع الدور إلى مستوى إداري: يسدّ رفع الصلاحية الذاتي admin → superAdmin
+    // وإنشاء أدمن مباشرةً. الترقية الشرعية تمرّ عبر Admin SDK الذي يتجاوز القواعد.
     match /users/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow write: if isAdmin() && !isSettingPrivilegedRole();
     }
 
     // باقي المجموعات: أدمن اللوحة فقط (Web SDK). السيرفر يستخدم Admin SDK الذي يتجاوز القواعد.
+    // حرِج: قواعد Firestore تُجمَع بـOR — هذا الـwildcard يطابق /users أيضًا، فبدون تكرار حظر رفع
+    // الصلاحية هنا يمنح كتابةَ /users ويُبطِل قيد مطابقة /users أعلاه. المجموعات الأخرى لا تملك حقل
+    // role بقيمة إدارية فلا يؤثّر الحظر عليها إطلاقًا.
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if isAdmin() && !isSettingPrivilegedRole();
     }
   }
 }

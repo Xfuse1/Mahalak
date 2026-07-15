@@ -59,8 +59,25 @@ export async function requireOwner(ownerId: string): Promise<boolean> {
 
 export type CurrentUser = {
   uid: string
-  role: "customer" | "seller" | "driver" | "admin"
+  // نُبقي "superAdmin" ضمن الاتحاد لأن حسابات المالك مخزَّنة بهذا الدور (camelCase).
+  // القيمة الخام تبقى كما هي في قاعدة البيانات؛ الاشتقاق أدناه غير حسّاس لحالة الأحرف.
+  role: "customer" | "seller" | "driver" | "admin" | "superAdmin"
   email?: string
+  // مشتق (غير حسّاس لحالة الأحرف): هل الدور superAdmin/super_admin؟ — يستخدَم لبوابة إدارة المسؤولين.
+  isSuperAdmin: boolean
+}
+
+// هل الدور يمنح صلاحية الوصول للوحة الإدارة (admin أو superAdmin)؟ — غير حسّاس لحالة الأحرف.
+// superAdmin مجموعة فائقة من admin: أي مكان يقبل admin يجب أن يقبل superAdmin.
+export function hasAdminAccess(role: unknown): boolean {
+  const r = String(role || "").toLowerCase()
+  return r === "admin" || r === "superadmin" || r === "super_admin"
+}
+
+// هل الدور superAdmin تحديدًا؟ — غير حسّاس لحالة الأحرف (superAdmin / super_admin).
+export function hasSuperAdminAccess(role: unknown): boolean {
+  const r = String(role || "").toLowerCase()
+  return r === "superadmin" || r === "super_admin"
 }
 
 /**
@@ -78,16 +95,16 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     // تمامًا كجلسة منتهية — لكن لا نُبرِّك حسابًا إداريًا أبدًا: setAccountDisabled يرفض تعطيل الأدمن،
     // فلو ظهر العلم على مستند أدمن خارج اللوحة (تعديل يدوي/ترقية دور لاحقة) نتجاهله كي يبقى الاسترداد
     // ممكنًا داخل اللوحة. غير ذلك: يُحجب المستخدم فورًا في كل المسارات المعتمِدة على الدور.
-    const roleStr = String(data?.role || "").toLowerCase()
-    const isPrivileged = roleStr === "admin" || roleStr === "superadmin" || roleStr === "super_admin"
+    const isPrivileged = hasAdminAccess(data?.role)
     if (!isPrivileged && data?.disabled === true) return null
     return {
       uid,
       role,
       email: data?.email,
+      isSuperAdmin: hasSuperAdminAccess(data?.role),
     }
   } catch {
-    return { uid, role: "customer" }
+    return { uid, role: "customer", isSuperAdmin: false }
   }
 }
 
@@ -97,7 +114,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
  */
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await getCurrentUser()
-  if (!user || user.role !== "admin") {
+  // يقبل admin و superAdmin (superAdmin مجموعة فائقة من admin) — غير حسّاس لحالة الأحرف.
+  if (!user || !hasAdminAccess(user.role)) {
     throw new Error("FORBIDDEN")
   }
   return user

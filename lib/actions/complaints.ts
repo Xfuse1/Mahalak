@@ -3,7 +3,7 @@
 // ADM-02: نظام الشكاوى/الدعم — يقدّم المستخدم شكوى، ويراجعها/يحلّها الأدمن.
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
-import { getCurrentUid, getCurrentUser } from "../auth/session"
+import { getCurrentUid, getCurrentUser, hasAdminAccess } from "../auth/session"
 import { cleanUndefined } from "../firebase/firestore-helpers"
 import { createNotification } from "../notifications-internal"
 import { logError } from "../logger"
@@ -29,7 +29,8 @@ function err(e: unknown, fb: string) {
 
 async function ensureAdmin() {
   const user = await getCurrentUser()
-  return user && user.role === "admin" ? user : null
+  // يقبل admin و superAdmin (superAdmin مجموعة فائقة من admin) — غير حسّاس لحالة الأحرف.
+  return user && hasAdminAccess(user.role) ? user : null
 }
 
 export async function submitComplaint(input: {

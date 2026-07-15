@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore"
 import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { logServerError } from "../server-error-log"
-import { getCurrentUid, getCurrentUser, requireOwner } from "../auth/session"
+import { getCurrentUid, getCurrentUser, hasAdminAccess, requireOwner } from "../auth/session"
 import { getCurrentDriverId } from "../auth/driver-session"
 import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
@@ -489,7 +489,8 @@ export async function updateOrderStatus(
     const caller = await getCurrentUser()
     if (caller) {
       const isStoreOwner = currentData.store_id === caller.uid
-      if (caller.role !== "admin" && !isStoreOwner) {
+      // admin أو superAdmin يتجاوز فحص ملكية المتجر (superAdmin مجموعة فائقة من admin).
+      if (!hasAdminAccess(caller.role) && !isStoreOwner) {
         return { success: false, error: "Unauthorized: not your store order" }
       }
     } else {
@@ -522,7 +523,7 @@ export async function updateOrderStatus(
     // منع الخروج من حالة نهائية (مُسلّم/ملغى) لغير الأدمن — يمنع إعادة التسليم وإحياء الطلبات الملغاة
     const TERMINAL_STATUSES = ["delivered", "cancelled"]
     if (
-      caller?.role !== "admin" &&
+      !hasAdminAccess(caller?.role) &&
       TERMINAL_STATUSES.includes(String(currentData.status)) &&
       currentData.status !== status
     ) {

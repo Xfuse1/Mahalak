@@ -1,13 +1,14 @@
 import type React from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { getCurrentUser } from "@/lib/auth/session"
+import { getCurrentUser, hasAdminAccess } from "@/lib/auth/session"
 import { Logo } from "@/components/logo"
 
-// ADM-01: حارس مساحة الإدارة — يتحقق من دور admin سيرفر-سايد قبل تسليم أي صفحة.
+// ADM-01: حارس مساحة الإدارة — يتحقق سيرفر-سايد من دور إداري (admin أو superAdmin) قبل تسليم أي صفحة.
+// حرِج: قبلًا كان يقبل "admin" فقط، فيُقفَل حسابات superAdmin (المالك) خارج اللوحة — أُصلح هنا.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
-  if (!user || user.role !== "admin") {
+  if (!user || !hasAdminAccess(user.role)) {
     redirect("/")
   }
 
@@ -28,6 +29,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/accounts" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الحسابات</Link>
             <Link href="/admin/complaints" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الشكاوى</Link>
             <Link href="/admin/commission-settings" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">العمولات</Link>
+            {/* إدارة المسؤولين: superAdmin فقط (البوابة الحقيقية في الأفعال + الصفحة). */}
+            {user.isSuperAdmin && (
+              <Link href="/admin/manage-admins" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">إدارة المسؤولين</Link>
+            )}
             <Link href="/" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الموقع</Link>
           </nav>
         </div>

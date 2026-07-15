@@ -50,10 +50,21 @@ export type AdminDriver = {
   created_at?: string
 }
 
+// حارس لوحة الإدارة: يقبل admin و superAdmin (superAdmin مجموعة فائقة من admin) — غير حسّاس
+// لحالة الأحرف. isAdminRole مُعرَّفة أدناه (function declaration مرفوعة hoisted).
 async function ensureAdmin() {
   const user = await getCurrentUser()
-  if (!user || user.role !== "admin") return null
+  if (!user || !isAdminRole(user.role)) return null
   return user
+}
+
+// حارس أفعال إدارة المسؤولين: يتطلّب superAdmin تحديدًا (لا يكفي admin). superAdmin يُدار خارج
+// اللوحة (bootstrap عبر custom claims) ولا يُنشأ/يُسحب من هذه الواجهة إطلاقًا.
+async function ensureSuperAdmin() {
+  const user = await getCurrentUser()
+  if (!user) return null
+  const r = String(user.role || "").toLowerCase()
+  return r === "superadmin" || r === "super_admin" ? user : null
 }
 
 // قائمة كل المتاجر (وثائق البائعين) لمراجعة الأدمن — تشمل KYC للتحقق. قيد المراجعة أولًا.
@@ -1602,4 +1613,286 @@ export async function getAdminDashboardStats(): Promise<{
     logError("[admin] getAdminDashboardStats", error)
     return { success: false, error: "تعذّر تحميل الإحصاءات" }
   }
+}
+
+// ==================== إدارة المسؤولين (ترقية/سحب صلاحية admin) — superAdmin فقط ====================
+// سطح رفع صلاحيات (privilege escalation) حسّاس. كل فعل هنا مُقيّد بـ ensureSuperAdmin() (يُشتق الدور
+// سيرفر-سايد من قاعدة البيانات، لا من العميل). النموذج الأمني:
+//   • superAdmin فقط يدير دور "admin". دور superAdmin نفسه لا يُنشأ ولا يُسحب من هذه الواجهة إطلاقًا
+//     (يُدار خارج اللوحة عبر bootstrap + custom claims).
+//   • حالة الصلاحية مزدوجة ويجب أن تبقى متسقة:
+//       (أ) users/{uid}.role — يقرؤه تطبيق Next.js (getCurrentUser) لكل وصول للوحة/الأفعال (يسري فورًا).
+//       (ب) custom claim token.admin — تقرؤه قواعد Firestore/Storage للوصول المباشر عبر Web SDK
+//           (يسري بعد تحديث توكن المستخدم — حتى ~ساعة، أو فورًا عند إبطال جلسة التحديث).
+//   • ترتيب الكتابة + تراجع (rollback) لضمان "الكل أو لا شيء": لا نترك حسابًا في حالة منقسمة
+//     (دور بلا claim أو claim بلا دور). التفاصيل عند كل فعل.
+//   • لا نُرجع أي أسرار (لا كلمات مرور ولا هاشات) — إسقاط آمن فقط.
+
+// مسؤول كما تعرضه شاشة إدارة المسؤولين — إسقاط آمن بلا أسرار.
+export type ManagedAdmin = {
+  uid: string
+  name: string
+  email?: string
+  role: "admin" | "superAdmin"
+  isSuperAdmin: boolean
+}
+
+// نتيجة البحث عن مستخدم لترقيته — إسقاط آمن بلا أسرار.
+export type AdminLookupResult = {
+  uid: string
+  name: string
+  email?: string
+  role: string // الدور الخام للعرض
+  isPrivileged: boolean // admin أو superAdmin بالفعل (لا يمكن ترقيته)
+  isSuperAdmin: boolean
+}
+
+// قائمة الحسابات الإدارية (role ∈ {admin, superAdmin}) — superAdmin فقط. مقيّدة بحدّ أعلى (عددهم صغير).
+export async function getManagedAdmins(): Promise<{ success: boolean; admins?: ManagedAdmin[]; error?: string }> {
+  const caller = await ensureSuperAdmin()
+  if (!caller) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    // القيم المخزَّنة فعلًا: "admin" و "superAdmin" (camelCase). نُدرج صيغًا احتياطية (in exact-match).
+    const snap = await db
+      .collection("users")
+      .where("role", "in", ["admin", "superAdmin", "super_admin", "superadmin"])
+      .limit(200)
+      .get()
+    const admins: ManagedAdmin[] = snap.docs.map((d) => {
+      const data = d.data() as Record<string, any>
+      const store = (data?.store || {}) as Record<string, any>
+      const isSuper = isSuperAdminRole(data?.role)
+      return serializeData({
+        uid: d.id,
+        name: data?.full_name || data?.name || store?.name || "",
+        email: data?.email || "",
+        role: isSuper ? "superAdmin" : "admin",
+        isSuperAdmin: isSuper,
+      }) as ManagedAdmin
+    })
+    // superAdmins أولًا، ثم بالاسم
+    admins.sort(
+      (a, b) => Number(b.isSuperAdmin) - Number(a.isSuperAdmin) || (a.name || "").localeCompare(b.name || "", "ar"),
+    )
+    return { success: true, admins }
+  } catch (error) {
+    logError("[admin] getManagedAdmins", error)
+    return { success: false, error: "تعذّر تحميل المسؤولين" }
+  }
+}
+
+// البحث عن مستخدم بالبريد أو المعرّف لترقيته إلى admin — superAdmin فقط. إسقاط آمن بلا أسرار.
+// يحلّ البريد عبر Firebase Auth (getUserByEmail) والمعرّف عبر مستند users. يُرجع علم isPrivileged
+// كي تمنع الواجهة ترقية حساب إداري بالفعل (والحارس النهائي في promoteToAdmin على أي حال).
+export async function lookupUserForAdmin(
+  query: string,
+): Promise<{ success: boolean; user?: AdminLookupResult; error?: string }> {
+  const caller = await ensureSuperAdmin()
+  if (!caller) return { success: false, error: "ليس لديك صلاحية" }
+  const q = String(query || "").trim()
+  if (!q) return { success: false, error: "أدخل بريدًا إلكترونيًا أو معرّفًا" }
+  try {
+    const db = getAdminDb()
+    const auth = getAdminAuth()
+    let uid = ""
+    let authEmail = ""
+    if (q.includes("@")) {
+      try {
+        const rec = await auth.getUserByEmail(q.toLowerCase())
+        uid = rec.uid
+        authEmail = rec.email || ""
+      } catch (e) {
+        if ((e as { code?: string })?.code === "auth/user-not-found") {
+          return { success: false, error: "لا يوجد مستخدم بهذا البريد" }
+        }
+        throw e
+      }
+    } else {
+      uid = q
+    }
+    const snap = await db.collection("users").doc(uid).get()
+    if (!snap.exists) return { success: false, error: "لا يوجد مستخدم بهذا المعرّف" }
+    const data = snap.data() as Record<string, any>
+    const store = (data?.store || {}) as Record<string, any>
+    return {
+      success: true,
+      user: serializeData({
+        uid,
+        name: data?.full_name || data?.name || store?.name || "",
+        email: authEmail || data?.email || "",
+        role: String(data?.role || "customer"),
+        isPrivileged: isAdminRole(data?.role),
+        isSuperAdmin: isSuperAdminRole(data?.role),
+      }) as AdminLookupResult,
+    }
+  } catch (error) {
+    logError("[admin] lookupUserForAdmin", error)
+    return { success: false, error: "تعذّر البحث عن المستخدم" }
+  }
+}
+
+// ترقية مستخدم عادي (موجود، غير إداري) إلى دور "admin".
+// الحراس: superAdmin فقط · المستخدم موجود · ليس النفس · ليس admin/superAdmin بالفعل · له سجل Auth.
+// ترتيب الكتابة (fail-safe): (1) users/{uid}.role="admin" أولًا (منح مرئي وقابل للسحب عبر demote)،
+//   (2) custom claim admin:true آخِرًا (منح الوصول المباشر الأخطر — أقصر نافذة). لو فشلت كتابة الـclaim
+//   نتراجع عن الدور فورًا (rollback) كي لا يبقى حساب منقسم. نقرأ الـclaims الحالية وندمج (نحافظ على أي claim آخر).
+export async function promoteToAdmin(uid: string): Promise<{ success: boolean; error?: string }> {
+  const caller = await ensureSuperAdmin()
+  if (!caller) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(uid || "").trim()
+  if (!id) return { success: false, error: "معرّف غير صالح" }
+  // حارس: لا يُعدّل المستدعي صلاحيات حسابه هو (يمنع أي تلاعب ذاتي)
+  if (id === caller.uid) return { success: false, error: "لا يمكنك تعديل صلاحيات حسابك" }
+  try {
+    const db = getAdminDb()
+    const auth = getAdminAuth()
+    const ref = db.collection("users").doc(id)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "المستخدم غير موجود" }
+    const data = snap.data() as Record<string, any>
+    const currentRole = String(data?.role || "customer")
+    // حارس: لا نُدير مديرًا عامًا (superAdmin) من هنا إطلاقًا.
+    if (isSuperAdminRole(currentRole)) return { success: false, error: "لا يمكن إدارة مدير عام من هنا" }
+    // ترقية جديدة فقط إن لم يكن admin بالفعل. لو كان admin مسبقًا نتابع لإعادة ضبط الـclaim فقط
+    // (إصلاح حالة منقسمة: دور admin بلا claim نتيجة فشل مزدوج سابق) — idempotent وقابل لإعادة التشغيل.
+    const isFreshPromote = currentRole.toLowerCase() !== "admin"
+
+    // نقرأ الـclaims الحالية للدمج (نحافظ على أي شيء مضبوط). غياب سجل Auth ⇒ لا يمكن ضبط الـclaim
+    // فنرفض قبل لمس Firestore (كي لا ننشئ admin بدور فقط لا يجتاز قواعد Firestore).
+    let existingClaims: Record<string, any> = {}
+    try {
+      const rec = await auth.getUser(id)
+      existingClaims = rec.customClaims || {}
+    } catch (e) {
+      if ((e as { code?: string })?.code === "auth/user-not-found") {
+        return { success: false, error: "الحساب لا يملك سجل مصادقة صالح" }
+      }
+      throw e
+    }
+    // admin بالفعل ومعه claim admin:true ⇒ لا شيء لفعله. (لو الدور admin بلا claim نتابع لإصلاح الانقسام.)
+    if (!isFreshPromote && existingClaims.admin === true) {
+      return { success: false, error: "الحساب مسؤول بالفعل" }
+    }
+
+    const now = new Date().toISOString()
+    // (1) الدور أولًا (للترقية الجديدة فقط) — نحفظ الدور السابق (previous_role) لاستعادته عند السحب
+    //     بدل التحويل الأعمى إلى customer (يمنع تجريد بائع/سائق من دوره الأصلي).
+    if (isFreshPromote) {
+      await ref.update({ role: "admin", previous_role: currentRole, updated_at: now })
+    }
+    // (2) الـclaim آخِرًا (منح جديد أو إصلاح انقسام) — مع تراجع عن الدور إذا فشل (للترقية الجديدة فقط).
+    try {
+      await auth.setCustomUserClaims(id, { ...existingClaims, admin: true })
+    } catch (e) {
+      if (isFreshPromote) {
+        try {
+          await ref.update({ role: currentRole, previous_role: FieldValue.delete(), updated_at: new Date().toISOString() })
+        } catch (re) {
+          logError("[admin] promoteToAdmin rollback role", re)
+        }
+      }
+      logError("[admin] promoteToAdmin setCustomUserClaims", e)
+      return { success: false, error: "تعذّر منح الصلاحية" }
+    }
+
+    revalidatePath("/admin/manage-admins")
+    revalidatePath("/admin/accounts")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] promoteToAdmin", error)
+    return { success: false, error: "تعذّر منح الصلاحية" }
+  }
+}
+
+// سحب صلاحية مستخدم دوره "admin" وإعادته إلى "customer".
+// الحراس: superAdmin فقط · المستخدم موجود · ليس النفس · دوره admin تحديدًا (نرفض superAdmin ونرفض
+//   غير-المسؤول). ملاحظة: سحب الأخير غير ممكن لأن هذا الفعل لا يمسّ superAdmins (المستدعي superAdmin
+//   يبقى دائمًا حسابًا مميّزًا) فلا نحتاج حارس "آخر مسؤول".
+// ترتيب الكتابة (fail-safe): (1) سحب الـclaim (admin:false) أولًا لقطع الوصول المباشر الأخطر فورًا،
+//   (2) users/{uid}.role="customer" آخِرًا؛ لو فشلت كتابة الدور نُعيد الـclaim إلى admin:true (rollback)
+//   كي يبقى الحساب متسقًا (مسؤولًا كاملًا). ثم نُبطل جلسات التحديث (best-effort) كي يسري سحب الـclaim فورًا.
+export async function demoteFromAdmin(uid: string): Promise<{ success: boolean; error?: string }> {
+  const caller = await ensureSuperAdmin()
+  if (!caller) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(uid || "").trim()
+  if (!id) return { success: false, error: "معرّف غير صالح" }
+  if (id === caller.uid) return { success: false, error: "لا يمكنك تعديل صلاحيات حسابك" }
+  try {
+    const db = getAdminDb()
+    const auth = getAdminAuth()
+    const ref = db.collection("users").doc(id)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "المستخدم غير موجود" }
+    const data = snap.data() as Record<string, any>
+    const currentRole = String(data?.role || "")
+    // حارس: لا نسحب superAdmin من هذه الواجهة إطلاقًا
+    if (isSuperAdminRole(currentRole)) return { success: false, error: "لا يمكن سحب صلاحية مدير عام من هنا" }
+    // حارس: الهدف يجب أن يكون admin تحديدًا
+    if (currentRole.toLowerCase() !== "admin") return { success: false, error: "الحساب ليس مسؤولًا" }
+    // نستعيد الدور السابق (previous_role) المحفوظ عند الترقية بدل التحويل الأعمى إلى customer — كي لا
+    // يفقد بائع/سائق رُقّي ثم سُحب دوره الأصلي. الافتراضي customer لو لم يُحفَظ (ترقية قديمة/يدوية).
+    const restoreRole = String(data?.previous_role || "customer")
+
+    // نقرأ الـclaims الحالية للدمج. قد لا يوجد سجل Auth (بيانات مصدّرة) — عندئذٍ لا claim نسحبه.
+    let existingClaims: Record<string, any> = {}
+    let hasAuthRecord = true
+    try {
+      const rec = await auth.getUser(id)
+      existingClaims = rec.customClaims || {}
+    } catch (e) {
+      if ((e as { code?: string })?.code === "auth/user-not-found") hasAuthRecord = false
+      else throw e
+    }
+
+    const now = new Date().toISOString()
+    // (1) سحب الـclaim أولًا (قطع الوصول المباشر)
+    if (hasAuthRecord) {
+      try {
+        await auth.setCustomUserClaims(id, { ...existingClaims, admin: false })
+      } catch (e) {
+        logError("[admin] demoteFromAdmin setCustomUserClaims", e)
+        return { success: false, error: "تعذّر سحب الصلاحية" }
+      }
+    }
+    // (2) الدور آخِرًا (نستعيد previous_role) — مع تراجع عن الـclaim إذا فشل
+    try {
+      await ref.update({ role: restoreRole, previous_role: FieldValue.delete(), updated_at: now })
+    } catch (e) {
+      if (hasAuthRecord) {
+        try {
+          await auth.setCustomUserClaims(id, { ...existingClaims, admin: true })
+        } catch (re) {
+          logError("[admin] demoteFromAdmin rollback claim", re)
+        }
+      }
+      logError("[admin] demoteFromAdmin role write", e)
+      return { success: false, error: "تعذّر سحب الصلاحية" }
+    }
+
+    // إبطال جلسات التحديث (best-effort): يقطع مسار جلسة Next.js فورًا (getCurrentUid بـ checkRevoked=true
+    // يرفض كوكي الجلسة) فيُفقَد وصول اللوحة فورًا. ملاحظة دقيقة: وصول Firestore/Storage المباشر عبر Web
+    // SDK يظل ممكنًا بتوكن ID موقّع صالح حتى انتهائه (~ساعة) — القواعد لا تفحص الإبطال — فيُقطع خلال ~ساعة
+    // لا فورًا. الإغلاق الجذري = منع كتابة حقل role/الأدوار الإدارية في firestore.rules (بند موثّق للمالك).
+    if (hasAuthRecord) {
+      try {
+        await auth.revokeRefreshTokens(id)
+      } catch (re) {
+        logError("[admin] demoteFromAdmin revokeRefreshTokens", re)
+      }
+    }
+
+    revalidatePath("/admin/manage-admins")
+    revalidatePath("/admin/accounts")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] demoteFromAdmin", error)
+    return { success: false, error: "تعذّر سحب الصلاحية" }
+  }
+}
+
+// مساعد: هل الدور superAdmin؟ (function declaration مرفوعة hoisted — تُستعمَل أعلاه).
+function isSuperAdminRole(role: unknown): boolean {
+  const r = String(role || "").toLowerCase()
+  return r === "superadmin" || r === "super_admin"
 }
