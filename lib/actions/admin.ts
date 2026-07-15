@@ -902,8 +902,12 @@ export async function createCategory(input: {
     if (!dup.empty) return { success: false, error: "توجد فئة بنفس الاسم" }
 
     const payload: Record<string, any> = { name }
-    if (typeof input.icon === "string" && input.icon.trim()) payload.icon = input.icon.trim()
-    if (typeof input.order === "number" && Number.isFinite(input.order)) payload.order = input.order
+    // حدود سيرفر-سايد (العميل يحدّها فقط، والأكشن عام قابل للتجاوز): icon ≤ 16 محرفًا، order رقم منتهٍ أو لا شيء.
+    if (typeof input.icon === "string" && input.icon.trim()) payload.icon = input.icon.trim().slice(0, 16)
+    if (input.order !== null && input.order !== undefined) {
+      const orderNum = Number(input.order)
+      if (Number.isFinite(orderNum)) payload.order = orderNum
+    }
 
     const ref = await db.collection("categories").add(payload)
     revalidatePath("/admin/categories")
@@ -932,13 +936,15 @@ export async function updateCategory(
     const ref = db.collection("categories").doc(catId)
     const snap = await ref.get()
     if (!snap.exists) return { success: false, error: "الفئة غير موجودة" }
+    const oldName = String((snap.data() as Record<string, any>).name || "")
     // منع تعارض الاسم مع فئة أخرى
     const dup = await db.collection("categories").where("name", "==", name).limit(2).get()
     if (dup.docs.some((d) => d.id !== catId)) return { success: false, error: "توجد فئة أخرى بنفس الاسم" }
 
     const patch: Record<string, any> = { name }
     if (input.icon !== undefined) {
-      const ic = String(input.icon).trim()
+      // حدّ سيرفر-سايد: icon ≤ 16 محرفًا (فراغ ⇒ حذف الحقل)
+      const ic = String(input.icon).trim().slice(0, 16)
       patch.icon = ic ? ic : FieldValue.delete()
     }
     if (input.order !== undefined) {
@@ -946,6 +952,20 @@ export async function updateCategory(
         input.order === null || !Number.isFinite(Number(input.order)) ? FieldValue.delete() : Number(input.order)
     }
     await ref.update(patch)
+
+    // FIX 1 — تعاقب إعادة التسمية: الموقع يفلتر المتاجر بالاسم (store.category === name) ويحلّ الأقسام
+    // الفرعية بالاسم أيضًا، فإعادة تسمية الفئة دون تحديث المتاجر تُسقطها من فلتر الموقع + منتقي أقسامها.
+    // نحدّث كل متجر ينتمي للفئة بالمعرّف الثابت store.category_id (لا يتغيّر بإعادة التسمية) إلى الاسم الجديد.
+    if (name !== oldName) {
+      const nowIso = new Date().toISOString()
+      const storesSnap = await db.collection("users").where("store.category_id", "==", catId).get()
+      for (const chunk of chunkArray(storesSnap.docs, 400)) {
+        const batch = db.batch()
+        chunk.forEach((d) => batch.update(d.ref, { "store.category": name, "store.updated_at": nowIso }))
+        await batch.commit()
+      }
+    }
+
     revalidatePath("/admin/categories")
     return { success: true }
   } catch (error) {
@@ -966,19 +986,18 @@ export async function deleteCategory(id: string): Promise<{ success: boolean; er
     const ref = db.collection("categories").doc(catId)
     const snap = await ref.get()
     if (!snap.exists) return { success: false, error: "الفئة غير موجودة" }
-    const name = String((snap.data() as Record<string, any>).name || "")
 
-    // حارس: امنع حذف فئة يشير إليها متجر بالاسم (المتاجر/المنتجات تشير بالاسم لا بالمعرّف).
-    // best-effort: إن فشل استعلام الحقل المتداخل (فهرس مُعفى) لا نمنع على خطأ بنية تحتية.
-    if (name) {
-      try {
-        const refStore = await db.collection("users").where("store.category", "==", name).limit(1).get()
-        if (!refStore.empty) {
-          return { success: false, error: "لا يمكن حذف فئة مرتبطة بمتاجر. انقل المتاجر لفئة أخرى أولًا." }
-        }
-      } catch (e) {
-        logError("[admin] deleteCategory store-ref check", e)
+    // FIX 2 — حارس: امنع حذف فئة يشير إليها متجر بالمعرّف الثابت store.category_id
+    // (المعرّف لا يتغيّر بإعادة التسمية، بعكس الاسم). fail-closed: إن فشل الاستعلام (فهرس/بنية
+    // تحتية) نمنع الحذف بدل السماح به على خطأ، حتى لا نُيتّم متاجر مرتبطة.
+    try {
+      const refStore = await db.collection("users").where("store.category_id", "==", catId).limit(1).get()
+      if (!refStore.empty) {
+        return { success: false, error: "لا يمكن حذف فئة مرتبطة بمتاجر. انقل المتاجر لفئة أخرى أولًا." }
       }
+    } catch (e) {
+      logError("[admin] deleteCategory store-ref check", e)
+      return { success: false, error: "تعذّر التحقق من ارتباط المتاجر، حاول لاحقًا" }
     }
 
     // حذف المجموعة الفرعية subcategories + مستند الفئة.
