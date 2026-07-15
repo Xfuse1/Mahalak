@@ -22,6 +22,9 @@ export type AdminStore = {
   category?: string
   image_url?: string | null
   is_approved: boolean
+  // التوثيق والتمييز (شارة زرقاء + مميّز). المتجر مضمَّن snake_case، لكن نقرأ كل الصيغ احتياطًا.
+  is_verified: boolean
+  is_featured: boolean
   owner_id_number?: string
   id_card_image_url?: string | null
   id_card_image_back_url?: string | null
@@ -72,6 +75,9 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
           category: s.category || "",
           image_url: s.image_url ?? null,
           is_approved: s.is_approved === true,
+          // نقرأ التوثيق/التمييز بكل الصيغ (snake/bare/camel) لأن مصدر الكتابة قد يختلف (Flutter/الموقع)
+          is_verified: s.is_verified === true || s.verified === true || s.isVerified === true,
+          is_featured: s.is_featured === true || s.featured === true || s.isFeatured === true,
           owner_id_number: s.owner_id_number || "",
           id_card_image_url: s.id_card_image_url ?? null,
           id_card_image_back_url: s.id_card_image_back_url ?? null,
@@ -139,6 +145,159 @@ export async function setStoreApproval(storeId: string, approved: boolean) {
   } catch (error) {
     logError("[admin] setStoreApproval", error)
     return { success: false, error: "تعذّر تحديث الحالة" }
+  }
+}
+
+// ==================== توثيق/تمييز المتاجر + عمليات جماعية + إحصاءات ====================
+// دمج أفعال إدارة المتاجر من لوحة Flutter التي كانت مفقودة في Next.js.
+// كل الأفعال مُقيّدة بـ ensureAdmin() (الدور يُشتق من قاعدة البيانات سيرفر-سايد) وتستخدم Admin SDK.
+
+// توثيق متجر (الشارة الزرقاء). حرِج: واجهة العملاء لا تقرأ حقل التوثيق حاليًا (لا شارة في بطاقة/صفحة
+// المتجر — راجع components/store-card.tsx و app/store/[id]) — فالشارة الزرقاء في اللقطة من لوحة Flutter.
+// المتجر مضمَّن في users/{uid}.store بأسلوب snake_case (is_approved…)، لذا الأرجح أن Flutter يقرأ is_verified.
+// للمتانة نكتب الصيغ الثلاث (snake + bare + camel) بنفس القيمة تمامًا كما فعل إصلاح اعتماد السائق
+// (كتب isApproved + is_approved معًا) — فأيًّا كان ما يقرؤه أي عميل يُضبط بنفس القيمة.
+export async function setStoreVerified(storeId: string, verified: boolean) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const userRef = db.collection("users").doc(storeId)
+    const snap = await userRef.get()
+    if (!snap.exists || (snap.data() as Record<string, any>)?.role !== "seller") {
+      return { success: false, error: "المتجر غير موجود" }
+    }
+    await userRef.update({
+      "store.is_verified": verified,
+      "store.verified": verified,
+      "store.isVerified": verified,
+      "store.updated_at": new Date().toISOString(),
+    })
+    revalidatePath("/admin/stores")
+    // إبطال كاش المتاجر حتى ينعكس التوثيق فور توصيل الواجهة العامة لقراءته مستقبلًا
+    revalidateTag("stores", "max")
+    revalidateTag(`store-${storeId}`, "max")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] setStoreVerified", error)
+    return { success: false, error: "تعذّر تحديث حالة التوثيق" }
+  }
+}
+
+// تمييز متجر (featured). تنبيه: واجهة العملاء لا تستهلك علم "مميّز" بعد — قسم «متاجر مميزة» في الصفحة
+// الرئيسية (app/page.tsx) يعرض أول 4 متاجر فقط (allStores.slice(0,4)) دون قراءة أي حقل. نكتب العلم
+// (استخدمته Flutter) بالصيغ الثلاث، لكنه لن يظهر في المتجر حتى تُوصَل الواجهة لقراءته لاحقًا.
+export async function setStoreFeatured(storeId: string, featured: boolean) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const userRef = db.collection("users").doc(storeId)
+    const snap = await userRef.get()
+    if (!snap.exists || (snap.data() as Record<string, any>)?.role !== "seller") {
+      return { success: false, error: "المتجر غير موجود" }
+    }
+    await userRef.update({
+      "store.is_featured": featured,
+      "store.featured": featured,
+      "store.isFeatured": featured,
+      "store.updated_at": new Date().toISOString(),
+    })
+    revalidatePath("/admin/stores")
+    revalidateTag("stores", "max")
+    revalidateTag(`store-${storeId}`, "max")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] setStoreFeatured", error)
+    return { success: false, error: "تعذّر تحديث حالة التمييز" }
+  }
+}
+
+// اعتماد/رفض جماعي لعدة متاجر — دفعات ذرّية مُقسّمة عند 400 عملية (حدّ Firestore 500).
+// أمان/متانة: نقرأ مستندات كل دفعة عبر getAll ونحدّث فقط الموجودة ودورها seller
+//   (batch.update على مستند غير موجود يُفشل الدفعة كاملةً). لا نُخطر البائعين هنا (قد يكونون كثرًا).
+export async function bulkSetStoreApproval(storeIds: string[], approved: boolean) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, updated: 0, failed: 0, error: "ليس لديك صلاحية" }
+  const ids = Array.from(
+    new Set((Array.isArray(storeIds) ? storeIds : []).map((s) => String(s || "").trim()).filter(Boolean)),
+  )
+  if (ids.length === 0) return { success: false, updated: 0, failed: 0, error: "لم يتم تحديد أي متجر" }
+  if (ids.length > 2000) return { success: false, updated: 0, failed: 0, error: "عدد المتاجر المحدَّدة كبير جدًا" }
+  const db = getAdminDb()
+  const now = new Date().toISOString()
+  let updated = 0
+  let failed = 0
+  // كل دفعة معزولة في try/catch خاص بها: فشل دفعة (مثلًا مستند حُذف في نافذة السباق بين getAll
+  // والـcommit، أو خطأ عابر) لا يُسقط بقية الدفعات ولا يُخفي ما نجح فعلًا. نجمع updated/failed.
+  for (const chunk of chunkArray(ids, 400)) {
+    try {
+      const refs = chunk.map((id) => db.collection("users").doc(id))
+      const docs = await db.getAll(...refs)
+      const batch = db.batch()
+      let inBatch = 0
+      docs.forEach((doc) => {
+        if (doc.exists && (doc.data() as Record<string, any>)?.role === "seller") {
+          batch.update(doc.ref, { "store.is_approved": approved, "store.updated_at": now })
+          inBatch++
+        }
+      })
+      if (inBatch > 0) {
+        await batch.commit()
+        updated += inBatch
+      }
+    } catch (error) {
+      logError("[admin] bulkSetStoreApproval chunk", error)
+      failed += chunk.length
+    }
+  }
+  // نُبطل كاش المتاجر طالما تغيّر شيء فعلًا حتى لا تبقى الواجهة العامة تعرض حالة اعتماد قديمة
+  // (تاج "stores" يغطّي getStores و getStore معًا).
+  if (updated > 0) {
+    revalidatePath("/admin/stores")
+    revalidateTag("stores", "max")
+  }
+  // فشل كلي (لم يُحدَّث شيء) = خطأ؛ وإلا ننجح ونُبلّغ بالعدد الفعلي (قد يكون جزئيًا).
+  if (updated === 0 && failed > 0) {
+    return { success: false, updated, failed, error: "تعذّر تنفيذ العملية الجماعية" }
+  }
+  return { success: true, updated, failed }
+}
+
+// إحصاءات سريعة لكل متجر عبر تجميعات count() رخيصة (لا تقرأ أي وثيقة، ولا تحتاج فهرسًا مركّبًا):
+//   • productCount = count(products where store_id == id)
+//   • orderCount   = طلبات أحادية المتجر (store_id == id) + طلبات متعددة المتاجر (store_ids array-contains id)
+//     — الطلب المتعدد لا يحمل store_id علويًّا بل مصفوفة store_ids، فنعدّه بالاستعلامين (مجموعتان منفصلتان).
+// ملاحظة: أزلنا مجموع الإيراد عمدًا — sum(total) المفلتَر بـstore_id يتطلّب فهرسًا مركّبًا غير منشور
+//   (فيرجع صفرًا صامتًا)، ويطوي الحالات الملغاة/المرفوضة/الاستفسار، ولا يطال إيراد الطلب المتعدد
+//   (مبلغه متداخل في pickup_stops) — فرقم مضلِّل. إيراد المتجر يحتاج تقريرًا تحليليًّا مستقلًّا (بند مؤجّل).
+// لا نُرجع أي حقول حسّاسة (أرقام فقط).
+export type AdminStoreStats = {
+  productCount: number
+  orderCount: number
+}
+
+export async function getStoreStats(
+  storeId: string,
+): Promise<{ success: boolean; stats?: AdminStoreStats; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(storeId || "").trim()
+  if (!id) return { success: false, error: "معرّف غير صالح" }
+  try {
+    const db = getAdminDb()
+    const products = db.collection("products").where("store_id", "==", id)
+    const singleOrders = db.collection("orders").where("store_id", "==", id)
+    const multiOrders = db.collection("orders").where("store_ids", "array-contains", id)
+    const [productCount, singleCount, multiCount] = await Promise.all([
+      safeCount("store.products", products),
+      safeCount("store.orders.single", singleOrders),
+      safeCount("store.orders.multi", multiOrders),
+    ])
+    return { success: true, stats: { productCount, orderCount: singleCount + multiCount } }
+  } catch (error) {
+    logError("[admin] getStoreStats", error)
+    return { success: false, error: "تعذّر تحميل إحصاءات المتجر" }
   }
 }
 
