@@ -28,6 +28,22 @@ export type AdminStore = {
   created_at?: string
 }
 
+// ADM-03: سائق كما يراه الأدمن — حقول عامة فقط (لا نُرجع أبدًا pin/pin_hash/pin_salt).
+export type AdminDriver = {
+  id: string
+  name: string
+  phone?: string
+  vehicle_type?: string
+  rating: number
+  total_deliveries: number
+  is_available: boolean
+  is_online: boolean
+  is_approved: boolean
+  price: number
+  areas?: string[]
+  created_at?: string
+}
+
 async function ensureAdmin() {
   const user = await getCurrentUser()
   if (!user || user.role !== "admin") return null
@@ -119,6 +135,100 @@ export async function setStoreApproval(storeId: string, approved: boolean) {
     return { success: true }
   } catch (error) {
     logError("[admin] setStoreApproval", error)
+    return { success: false, error: "تعذّر تحديث الحالة" }
+  }
+}
+
+// ==================== ADM-03: إدارة السائقين ====================
+// كل الأكشن مُقيّدة بـ ensureAdmin() (يُشتق الدور من قاعدة البيانات، لا من العميل).
+
+// قائمة كل السائقين لمراجعة الأدمن — قيد المراجعة أولًا ثم الأحدث.
+// أمان: نعيّن الحقول العامة فقط — لا نُرجع أبدًا pin/pin_hash/pin_salt.
+export async function getAdminDrivers(): Promise<{ success: boolean; drivers?: AdminDriver[]; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    // حد أعلى معقول للقراءة (أسطول السائقين صغير عادةً)
+    const snap = await db.collection("drivers").limit(500).get()
+    const drivers: AdminDriver[] = snap.docs.map((d) => {
+      const data = d.data() as Record<string, any>
+      // نطبّع camelCase-أو-snake تمامًا مثل getDrivers حتى يبقى موقع العميل متسقًا.
+      return serializeData({
+        id: d.id,
+        name: data.name || "",
+        phone: data.phone || "",
+        vehicle_type: data.vehicleType || data.vehicle_type || "",
+        rating: data.rating || 0,
+        total_deliveries: data.totalDeliveries || data.total_deliveries || 0,
+        is_available: data.isActive ?? data.is_available ?? true,
+        is_online: data.isOnline ?? data.is_online ?? false,
+        is_approved: (data.isApproved ?? data.is_approved) === true,
+        price: data.price || 0,
+        areas: Array.isArray(data.areas) ? data.areas : [],
+        created_at: data.createdAt?.toDate?.()?.toISOString?.() || data.created_at || "",
+      }) as AdminDriver
+    })
+
+    // قيد المراجعة (غير معتمد) أولًا، ثم الأحدث أولًا
+    drivers.sort((a, b) => {
+      if (a.is_approved !== b.is_approved) return Number(a.is_approved) - Number(b.is_approved)
+      return (b.created_at || "").localeCompare(a.created_at || "")
+    })
+    return { success: true, drivers }
+  } catch (error) {
+    logError("[admin] getAdminDrivers", error)
+    return { success: false, error: "تعذّر تحميل السائقين" }
+  }
+}
+
+// اعتماد/رفض سائق.
+// حرِج: نكتب الحقلين isApproved و is_approved بنفس القيمة حتى يبقى استعلام getDrivers متسقًا
+// (getDrivers يفلتر على isApproved أولًا ثم is_approved كبديل). كذلك نضبط updated_at.
+export async function setDriverApproval(driverId: string, approved: boolean) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("drivers").doc(driverId)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "السائق غير موجود" }
+
+    await ref.update({
+      isApproved: approved,
+      is_approved: approved,
+      updated_at: new Date().toISOString(),
+    })
+
+    revalidatePath("/admin/drivers")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] setDriverApproval", error)
+    return { success: false, error: "تعذّر تحديث الحالة" }
+  }
+}
+
+// تفعيل/إيقاف توفّر السائق — نكتب الحقلين isActive و is_available معًا
+// (getDrivers يقرأ is_available من isActive أولًا ثم is_available كبديل).
+export async function setDriverAvailability(driverId: string, available: boolean) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("drivers").doc(driverId)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "السائق غير موجود" }
+
+    await ref.update({
+      isActive: available,
+      is_available: available,
+      updated_at: new Date().toISOString(),
+    })
+
+    revalidatePath("/admin/drivers")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] setDriverAvailability", error)
     return { success: false, error: "تعذّر تحديث الحالة" }
   }
 }
