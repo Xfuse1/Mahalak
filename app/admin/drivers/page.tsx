@@ -10,8 +10,15 @@ import { ErrorState } from "@/components/ui/error-state"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { logError } from "@/lib/logger"
-import { getAdminDrivers, setDriverApproval, setDriverAvailability, type AdminDriver } from "@/lib/actions/admin"
-import { Bike, Star, Package, MapPin, Phone, CheckCircle2, XCircle, Clock, BadgeCheck, Loader2, Power } from "lucide-react"
+import {
+  getAdminDrivers,
+  setDriverApproval,
+  setDriverAvailability,
+  getDriverStats,
+  type AdminDriver,
+  type AdminDriverStats,
+} from "@/lib/actions/admin"
+import { Bike, Star, Package, MapPin, Phone, CheckCircle2, XCircle, Clock, BadgeCheck, Loader2, Power, BarChart3, ShoppingBag } from "lucide-react"
 
 type Filter = "pending" | "approved" | "all"
 
@@ -23,6 +30,10 @@ export default function AdminDriversPage() {
   const [error, setError] = useState(false)
   const [filter, setFilter] = useState<Filter>("pending")
   const [busyId, setBusyId] = useState<string | null>(null)
+  // إحصاءات لكل سائق (توسّع تحت البطاقة) — نُخزّن النجاح فقط (لا نُخزّن الفشل حتى تُعيد فتحةٌ لاحقة الجلب)
+  const [statsFor, setStatsFor] = useState<string | null>(null)
+  const [statsMap, setStatsMap] = useState<Record<string, AdminDriverStats>>({})
+  const [statsLoading, setStatsLoading] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -87,6 +98,42 @@ export default function AdminDriversPage() {
       toast.error("تعذّر التحديث")
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const toggleStats = async (d: AdminDriver) => {
+    if (statsFor === d.id) {
+      setStatsFor(null)
+      return
+    }
+    setStatsFor(d.id)
+    if (statsMap[d.id] !== undefined) return // نجاح مخزّن مسبقًا (لا نُخزّن الفشل)
+    setStatsLoading(d.id)
+    try {
+      const res = await getDriverStats(d.id)
+      if (res.success && res.stats) {
+        const stats = res.stats
+        setStatsMap((prev) => ({ ...prev, [d.id]: stats }))
+      } else {
+        // لا نُخزّن الفشل: نحذف المفتاح حتى تُعيد فتحةٌ لاحقة الجلب بدل التعليق على خطأ دائم
+        setStatsMap((prev) => {
+          const n = { ...prev }
+          delete n[d.id]
+          return n
+        })
+        toast.error(res.error || "تعذّر تحميل الإحصاءات")
+      }
+    } catch (e) {
+      logError("[admin/drivers] getDriverStats", e)
+      setStatsMap((prev) => {
+        const n = { ...prev }
+        delete n[d.id]
+        return n
+      })
+      toast.error("تعذّر تحميل الإحصاءات")
+    } finally {
+      // نُصفّر علم التحميل فقط إن كان ما زال يخصّ هذا الطلب (فتحتان متزامنتان لا تُطفئ إحداهما الأخرى)
+      setStatsLoading((cur) => (cur === d.id ? null : cur))
     }
   }
 
@@ -234,7 +281,46 @@ export default function AdminDriversPage() {
                       </Button>
                     </>
                   )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => toggleStats(d)}
+                    className="rounded-xl gap-1"
+                  >
+                    <BarChart3 className="h-4 w-4" /> إحصاءات
+                  </Button>
                 </div>
+
+                {/* توسّع الإحصاءات */}
+                {statsFor === d.id && (
+                  <div className="rounded-xl bg-secondary/40 p-3">
+                    {statsLoading === d.id ? (
+                      <div className="flex items-center justify-center py-3">
+                        <Spinner size="sm" label="جاري حساب الإحصاءات..." />
+                      </div>
+                    ) : statsMap[d.id] ? (
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-lg bg-background p-2">
+                          <ShoppingBag className="h-4 w-4 mx-auto text-muted-foreground" />
+                          <div className="text-lg font-extrabold text-foreground">{statsMap[d.id]!.assignedOrders}</div>
+                          <div className="text-[11px] text-muted-foreground">طلبات مُسندة</div>
+                        </div>
+                        <div className="rounded-lg bg-background p-2">
+                          <Package className="h-4 w-4 mx-auto text-muted-foreground" />
+                          <div className="text-lg font-extrabold text-foreground">{statsMap[d.id]!.completedDeliveries}</div>
+                          <div className="text-[11px] text-muted-foreground">توصيلات مكتملة</div>
+                        </div>
+                        <div className="rounded-lg bg-background p-2">
+                          <Star className="h-4 w-4 mx-auto text-muted-foreground" />
+                          <div className="text-lg font-extrabold text-foreground">{statsMap[d.id]!.ratingCount}</div>
+                          <div className="text-[11px] text-muted-foreground">عدد التقييمات</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-center text-xs text-muted-foreground py-2">تعذّر تحميل الإحصاءات</p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

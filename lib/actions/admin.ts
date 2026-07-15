@@ -395,6 +395,48 @@ export async function setDriverAvailability(driverId: string, available: boolean
   }
 }
 
+// إحصاءات سريعة لكل سائق — أرقام فقط، بلا أي حقول حسّاسة (لا نقرأ/نُرجع أبدًا pin/pin_hash/pin_salt).
+//   • assignedOrders = count(orders where driver_id == id) — استعلام مساواة بحقل واحد يخدمه الفهرس
+//     التلقائي أحادي-الحقل (بلا فهرس مركّب). يغطّي الطلب الأحادي والمتعدد معًا لأن كليهما يحمل
+//     driver_id علويًّا عند الإسناد (createOrder + createMultiStoreOrder + changeOrderDriver في orders.ts).
+//   • completedDeliveries + ratingCount = قيم مُزالة-التطبيع نقرؤها من مستند السائق مباشرةً (قراءة
+//     واحدة، بلا استعلام ولا حساب). rating_count يُعاد حسابه من order_reviews في reviews.ts؛
+//     total_deliveries حقل مُزال-التطبيع تعرضه بطاقة السائق أصلًا.
+// حرِج: تعمّدنا عدم حساب عدّاد "مُسلَّم" مفلتَر بالحالة (driver_id== AND status==) لأنه يتطلّب فهرسًا
+//   مركّبًا غير منشور (غائب من firestore.indexes.json) فيرجع صفرًا صامتًا عبر safeCount — نعرض بدلًا
+//   منه عدّاد التوصيلات المُزال-التطبيع.
+export type AdminDriverStats = {
+  assignedOrders: number
+  completedDeliveries: number
+  ratingCount: number
+}
+
+export async function getDriverStats(
+  driverId: string,
+): Promise<{ success: boolean; stats?: AdminDriverStats; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(driverId || "").trim()
+  if (!id) return { success: false, error: "معرّف غير صالح" }
+  try {
+    const db = getAdminDb()
+    // قراءة واحدة لمستند السائق (للقيم المُزالة-التطبيع) + عدّاد مساواة بحقل واحد للطلبات المُسندة.
+    const [driverDoc, assignedOrders] = await Promise.all([
+      db.collection("drivers").doc(id).get(),
+      safeCount("driver.orders.assigned", db.collection("orders").where("driver_id", "==", id)),
+    ])
+    if (!driverDoc.exists) return { success: false, error: "السائق غير موجود" }
+    const data = driverDoc.data() as Record<string, any>
+    // نقرأ الحقول المُزالة-التطبيع بكل الصيغ (camel/snake) دون حساب — لا نمسّ أي حقل حسّاس.
+    const completedDeliveries = Number(data.totalDeliveries ?? data.total_deliveries ?? 0) || 0
+    const ratingCount = Number(data.rating_count ?? data.ratingCount ?? 0) || 0
+    return { success: true, stats: { assignedOrders, completedDeliveries, ratingCount } }
+  } catch (error) {
+    logError("[admin] getDriverStats", error)
+    return { success: false, error: "تعذّر تحميل إحصاءات السائق" }
+  }
+}
+
 // ==================== ADM-04: إدارة الحسابات (تفعيل/تعطيل الحسابات) ====================
 // أداة حوكمة: عرض العملاء/البائعين/السائقين وتفعيل/تعطيل (حظر) الحساب. التعطيل مُنفَّذ إجباريًا
 // سيرفر-سايد (ليس تجميليًا):
