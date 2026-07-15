@@ -7,7 +7,7 @@ import { revalidatePath, revalidateTag } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
-import { createNotification } from "./notifications"
+import { createNotification } from "../notifications-internal"
 import { signKycFields } from "./stores"
 import { logError } from "../logger"
 

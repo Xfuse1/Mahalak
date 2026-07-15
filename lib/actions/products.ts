@@ -196,17 +196,23 @@ async function _getProductsImpl(category?: string) {
     const activeOffers = offersSnapshot.docs.map((doc) => doc.data() as OfferRecord)
     const today = new Date().toISOString().split('T')[0]
 
-    return products.map((product) => {
-      const store = product.store_id ? storeMap.get(product.store_id) : undefined
-      const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
-
-      return publicProductPayload({
-        ...product,
-        stores: store ? { name: store.name } : null,
-        discount_percentage,
-        offer_title
+    return products
+      // إخفاء منتجات المتاجر المحظورة صراحةً فقط (is_approved === false) — mirror getStores !== false
+      .filter((product) => {
+        const store = product.store_id ? storeMap.get(product.store_id) : undefined
+        return !(store && store.is_approved === false)
       })
-    })
+      .map((product) => {
+        const store = product.store_id ? storeMap.get(product.store_id) : undefined
+        const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
+
+        return publicProductPayload({
+          ...product,
+          stores: store ? { name: store.name } : null,
+          discount_percentage,
+          offer_title
+        })
+      })
   }
 
   // Subcategory or no category — original logic
@@ -231,17 +237,23 @@ async function _getProductsImpl(category?: string) {
   )
   const storeMap = await getStoreMap(db, storeIds)
 
-  return products.map((product) => {
-    const store = product.store_id ? storeMap.get(product.store_id) : undefined
-    const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
-
-    return publicProductPayload({
-      ...product,
-      stores: store ? { name: store.name } : null,
-      discount_percentage,
-      offer_title
+  return products
+    // إخفاء منتجات المتاجر المحظورة صراحةً فقط (is_approved === false) — mirror getStores !== false
+    .filter((product) => {
+      const store = product.store_id ? storeMap.get(product.store_id) : undefined
+      return !(store && store.is_approved === false)
     })
-  })
+    .map((product) => {
+      const store = product.store_id ? storeMap.get(product.store_id) : undefined
+      const { discount_percentage, offer_title } = findBestDiscount(product, activeOffers, today)
+
+      return publicProductPayload({
+        ...product,
+        stores: store ? { name: store.name } : null,
+        discount_percentage,
+        offer_title
+      })
+    })
 }
 
 // Cached version of getProducts (revalidates every 60 seconds)
@@ -266,6 +278,13 @@ async function _getProductImpl(id: string) {
   if (!product) return null
 
   const storeMap = await getStoreMap(db, product.store_id ? [product.store_id] : [])
+
+  // إخفاء منتج المتجر المحظور صراحةً (is_approved === false) من العرض العام — mirror getStores
+  if (product.store_id) {
+    const ownerStore = storeMap.get(product.store_id)
+    if (ownerStore && ownerStore.is_approved === false) return null
+  }
+
   const productWithStore = attachStore(product, storeMap)
 
   if (!product.store_id) {
@@ -341,9 +360,21 @@ export async function getCartPricing(
     products.push({ id: snap.id, data })
     if (typeof data.store_id === "string") storeIds.add(data.store_id)
   }
-  const activeOffers = await getActiveOffersForStores(Array.from(storeIds))
+  const storeIdList = Array.from(storeIds)
+  // المتاجر المحظورة صراحةً (is_approved === false): منتجاتها غير متاحة — نتركها خارج النتيجة
+  // فتعاملها العربة كغير متوفرة (mirror getStores). المتاجر بلا الحقل تبقى متاحة.
+  const bannedStores = new Set<string>()
+  if (storeIdList.length) {
+    const storeSnaps = await db.getAll(...storeIdList.map((sid) => db.collection("users").doc(sid)))
+    storeSnaps.forEach((s) => {
+      const st = (s.data() as { store?: { is_approved?: boolean } } | undefined)?.store
+      if (st?.is_approved === false) bannedStores.add(s.id)
+    })
+  }
+  const activeOffers = await getActiveOffersForStores(storeIdList)
   const result: Record<string, { price: number; discount_percentage: number }> = {}
   for (const { id, data } of products) {
+    if (typeof data.store_id === "string" && bannedStores.has(data.store_id)) continue
     const { discount_percentage } = findBestDiscountShared(
       { id, category: data.category, store_id: data.store_id },
       activeOffers,
@@ -572,6 +603,16 @@ export async function getProductsByStoreId(storeId: string) {
   const db = getAdminDb()
   // هل المستدعي هو مالك المتجر؟ غير المالك لا يجب أن يرى تكلفة/ربح المنتج.
   const isOwner = await requireOwner(storeId)
+
+  // متجر محظور صراحةً (is_approved === false): نخفي منتجاته عن العامة (mirror getStores) لكن المالك
+  // يظل يرى/يدير منتجاته. المتاجر بلا الحقل (قيد المراجعة/قديمة) تبقى ظاهرة.
+  if (!isOwner) {
+    const storeUserSnap = await db.collection("users").doc(storeId).get()
+    if ((storeUserSnap.data() as { store?: { is_approved?: boolean } } | undefined)?.store?.is_approved === false) {
+      return serializeData([])
+    }
+  }
+
   const snapshot = await db.collection("products").where("store_id", "==", storeId).get()
   const products = snapshot.docs.map((doc: DocumentSnapshot) => {
     const data = doc.data() as ProductRecord
@@ -652,7 +693,13 @@ export async function getRelatedProducts(productId: string, category: string, li
     filtered.map((product: ProductRecord) => product.store_id).filter((id): id is string => typeof id === "string" && id.length > 0),
   )
 
-  return serializeData(filtered.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
+  // إسقاط منتجات المتاجر المحظورة صراحةً (is_approved === false) — mirror getStores !== false
+  const visible = filtered.filter((product: ProductRecord & { id: string }) => {
+    const store = product.store_id ? storeMap.get(product.store_id) : undefined
+    return !(store && store.is_approved === false)
+  })
+
+  return serializeData(visible.map((product: ProductRecord & { id: string }) => attachStore(product, storeMap)))
 }
 
 // Get products from the same store (excluding current product)
@@ -678,14 +725,20 @@ export async function getProductsFromSameStore(productId: string, storeId: strin
     offer.start_date <= today && offer.end_date >= today
   )
 
-  return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
-    const productWithStore = attachStore(product, storeMap)
-    const { discount_percentage } = findBestDiscount(product, activeOffers, today)
-    return {
-      ...productWithStore,
-      discount_percentage
-    }
-  }))
+  return serializeData(filtered
+    // إسقاط منتجات المتاجر المحظورة صراحةً (is_approved === false) — mirror getStores !== false
+    .filter((product: ProductRecord & { id: string }) => {
+      const store = product.store_id ? storeMap.get(product.store_id) : undefined
+      return !(store && store.is_approved === false)
+    })
+    .map((product: ProductRecord & { id: string }) => {
+      const productWithStore = attachStore(product, storeMap)
+      const { discount_percentage } = findBestDiscount(product, activeOffers, today)
+      return {
+        ...productWithStore,
+        discount_percentage
+      }
+    }))
 }
 
 // Get products from other stores (excluding current product and current store)
@@ -718,14 +771,20 @@ export async function getProductsFromOtherStores(productId: string, storeId: str
     offer.start_date <= today && offer.end_date >= today
   )
 
-  return serializeData(filtered.map((product: ProductRecord & { id: string }) => {
-    const productWithStore = attachStore(product, storeMap)
-    const { discount_percentage } = findBestDiscount(product, activeOffers, today)
-    return {
-      ...productWithStore,
-      discount_percentage
-    }
-  }))
+  return serializeData(filtered
+    // إسقاط منتجات المتاجر المحظورة صراحةً (is_approved === false) — mirror getStores !== false
+    .filter((product: ProductRecord & { id: string }) => {
+      const store = product.store_id ? storeMap.get(product.store_id) : undefined
+      return !(store && store.is_approved === false)
+    })
+    .map((product: ProductRecord & { id: string }) => {
+      const productWithStore = attachStore(product, storeMap)
+      const { discount_percentage } = findBestDiscount(product, activeOffers, today)
+      return {
+        ...productWithStore,
+        discount_percentage
+      }
+    }))
 }
 
 // زيادة/نقص المخزون ذرّيًا بمقدار delta — يمنع سباق "لقطة قديمة" حين يكتب البائع قيمة مطلقة

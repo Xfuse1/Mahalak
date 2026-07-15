@@ -4,6 +4,7 @@ import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid } from "../auth/session"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
+import { FieldValue } from "firebase-admin/firestore"
 
 // ==================== Types ====================
 
@@ -392,6 +393,9 @@ export async function updateCustomerAfterSale(
   saleTotal: number,
   loyaltyPoints?: number,
 ) {
+  // مصادقة المالك سيرفر-سايد (كانت مفقودة هنا وحدها بين أشقّائها) — لا نثق بـ storeId من العميل
+  const uid = await getCurrentUid()
+  if (!uid || uid !== storeId) return { success: false }
   if (!customerPhone) return
 
   try {
@@ -409,10 +413,13 @@ export async function updateCustomerAfterSale(
     const data = doc.data()
     const now = new Date().toISOString()
 
+    // نُثبّت الإجمالي (رقم منتهٍ غير سالب) ونشتق نقاط الولاء سيرفر-سايد — لا نثق بقيم العميل
+    const safeTotal = Number.isFinite(saleTotal) && saleTotal >= 0 ? saleTotal : 0
+
     await db.collection("pos_customers").doc(doc.id).update({
       total_purchases: (Number(data.total_purchases) || 0) + 1,
-      total_spent: roundMoney((Number(data.total_spent) || 0) + saleTotal),
-      loyalty_points: (Number(data.loyalty_points) || 0) + (loyaltyPoints || Math.floor(saleTotal / 10)),
+      total_spent: roundMoney((Number(data.total_spent) || 0) + safeTotal),
+      loyalty_points: (Number(data.loyalty_points) || 0) + Math.floor(safeTotal / 10),
       updated_at: now,
     })
   } catch (error) {
@@ -552,18 +559,16 @@ export async function createPOSReturn(data: {
 
     // 4) استعادة المخزون (بعدد القطع الفعلي = الكمية × مضاعِف الوحدة) + إنشاء سجل المرتجع.
     // البيع يخصم quantity×unit_multiplier قطعة، فالمرتجع لازم يُعيد نفس العدد (كان يعيد الكمية فقط).
+    // استعادة ذرّية عبر FieldValue.increment — بدون قراءة مسبقة/قيمة مطلقة حتى لا يضيع تحديث
+    // متزامن (مرتجعان/بيع بالتوازي كانا يدهسان قيمة الآخر مع الكتابة المطلقة من لقطة قديمة).
     const batch = db.batch()
     for (const item of verifiedItems) {
       const productRef = db.collection("products").doc(item.product_id)
-      const productDoc = await productRef.get()
-      if (productDoc.exists) {
-        const currentStock = Number(productDoc.data()?.stock) || 0
-        const unitMultiplier = soldMap.get(item.product_id)?.unitMultiplier || 1
-        batch.update(productRef, {
-          stock: currentStock + item.quantity * unitMultiplier,
-          updated_at: now,
-        })
-      }
+      const unitMultiplier = soldMap.get(item.product_id)?.unitMultiplier || 1
+      batch.update(productRef, {
+        stock: FieldValue.increment(item.quantity * unitMultiplier),
+        updated_at: now,
+      })
     }
 
     const returnRef = db.collection("pos_returns").doc()

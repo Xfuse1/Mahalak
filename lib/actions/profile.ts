@@ -73,9 +73,14 @@ export async function generatePasswordResetToken(idToken: string) {
     if (!candidates.length) {
       return { success: false, error: "phone_not_found" }
     }
-    const snapshot = await db.collection("users").where("phone", "in", candidates.slice(0, 10)).limit(1).get()
+    // بلا limit(1): مع أرقام مكرّرة كان يختار حسابًا عشوائيًا (إعادة تعيين كلمة مرور لحساب خاطئ).
+    // نجلب كل المطابقات؛ لو أكثر من واحد نرفض بلبس بدل التخمين.
+    const snapshot = await db.collection("users").where("phone", "in", candidates.slice(0, 10)).get()
     if (snapshot.empty) {
       return { success: false, error: "phone_not_found" }
+    }
+    if (snapshot.size > 1) {
+      return { success: false, error: "تعذّر تحديد الحساب" }
     }
     const userId = snapshot.docs[0].id
 
@@ -233,10 +238,15 @@ export async function getUserByPhone(phone: string) {
       return { success: false, error: "phone_not_found" }
     }
 
-    const snapshot = await db.collection("users").where("phone", "in", candidates.slice(0, 10)).limit(1).get()
+    // بلا limit(1): مع أرقام مكرّرة كان يختار حسابًا عشوائيًا. نجلب كل المطابقات ونرفض بلبس لو تعدّدت.
+    const snapshot = await db.collection("users").where("phone", "in", candidates.slice(0, 10)).get()
 
     if (snapshot.empty) {
       return { success: false, error: "phone_not_found" }
+    }
+
+    if (snapshot.size > 1) {
+      return { success: false, error: "تعذّر تحديد الحساب" }
     }
 
     const userDoc = snapshot.docs[0]

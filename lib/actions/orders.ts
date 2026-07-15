@@ -9,7 +9,7 @@ import { getCurrentUid, getCurrentUser, requireOwner } from "../auth/session"
 import { getCurrentDriverId } from "../auth/driver-session"
 import { chunkArray } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
-import { createNotification, sendReviewRequestNotification } from "./notifications"
+import { createNotification, sendReviewRequestNotification } from "../notifications-internal"
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 import { sendPushToOwner } from "../server-push"
 
@@ -499,6 +499,11 @@ export async function updateOrderStatus(
       if (!sessionDriverId || currentData.driver_id !== sessionDriverId) {
         return { success: false, error: "Unauthorized" }
       }
+      // الطلبات متعددة المتاجر تُدار حصراً عبر آلة حالة الاستلام (confirmStorePickup/markStorePickedUp/
+      // markOrderDeliveredByDriver). بدون هذا القيد كان السائق يقدر يضبط أي حالة غير نهائية فيتخطّى تدفق الاستلام.
+      if (currentData.order_type === "multi_store") {
+        return { success: false, error: "طلبات المتاجر المتعددة تُدار عبر تدفق الاستلام" }
+      }
       // السائق لا يُنهي الطلب عبر هذا المسار: التسليم يتم حصراً عبر markOrderDeliveredByDriver
       // (بكود تأكيد UX-05)، والإلغاء ليس من صلاحيته. بدون هذا القيد كان يقدر يعلّم "مُسلّم" بلا كود.
       if (status === "delivered" || status === "cancelled") {
@@ -552,8 +557,26 @@ export async function updateOrderStatus(
       // UX-05: إثبات التسليم — البائع يُنهي الطلب أحادي المتجر عبر القائمة بكود التأكيد الذي يعرضه العميل.
       // لو الطلب يحمل كودًا (كل الطلبات الجديدة تحمله) نطابقه بصرامة؛ الطلبات القديمة بلا كود تُسمح (تسامح).
       const expectedCode = String(currentData.delivery_code || "").trim()
-      if (expectedCode && String(deliveryCode || "").trim() !== expectedCode) {
-        return { success: false, error: "كود التأكيد غير صحيح" }
+      if (expectedCode) {
+        // قفل ضد التخمين العنيف: بعد 5 محاولات خاطئة نُجمّد المطابقة 15 دقيقة (كود من 4 أرقام).
+        const attempts = Number(currentData.delivery_code_attempts) || 0
+        const lockedUntil = Number(currentData.delivery_code_locked_until) || 0
+        if (lockedUntil > Date.now()) {
+          return { success: false, error: "محاولات كثيرة، حاول لاحقًا" }
+        }
+        if (String(deliveryCode || "").trim() !== expectedCode) {
+          const nextAttempts = attempts + 1
+          await docRef.update({
+            delivery_code_attempts: nextAttempts,
+            ...(nextAttempts >= 5
+              ? { delivery_code_locked_until: Date.now() + 15 * 60 * 1000, delivery_code_attempts: 0 }
+              : {}),
+          })
+          return { success: false, error: "كود التأكيد غير صحيح" }
+        }
+        // نجاح المطابقة: صفّر العدّاد وأزل القفل
+        updatePayload.delivery_code_attempts = 0
+        updatePayload.delivery_code_locked_until = FieldValue.delete()
       }
       updatePayload.delivered_at = now
     }
@@ -703,6 +726,12 @@ export async function createOrder(orderData: {
         if (idemDoc.exists) {
           return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, storeId: orderData.store_id, deduped: true }
         }
+      }
+      // FIX 7: رفض الطلبات للمتاجر المحظورة (is_approved === false) — نقرأ مستند المتجر داخل المعاملة.
+      // المتاجر القديمة/قيد المراجعة (بلا الحقل) تبقى مسموحة (mirror getStores !== false).
+      const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
+      if ((storeUserSnap.data() as { store?: { is_approved?: boolean } } | undefined)?.store?.is_approved === false) {
+        throw new Error("Store not available")
       }
       // Step 1: Read and verify stock + prices atomically
       // تجميع الكميات حسب product_id قبل الفحص — يمنع تجاوز المخزون لو تكرّر نفس المنتج في عدة أسطر
@@ -1111,6 +1140,16 @@ export async function createMultiStoreOrder(orderData: {
         const idemDoc = await transaction.get(idemRef)
         if (idemDoc.exists) {
           return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, stops: [] as PickupStop[], deduped: true }
+        }
+      }
+      // FIX 7: رفض الطلب لو أي متجر محطة محظور (is_approved === false) — نقرأ مستندات المتاجر داخل المعاملة
+      const uniqueStoreIds = Array.from(
+        new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean)),
+      ) as string[]
+      for (const sid of uniqueStoreIds) {
+        const storeUserSnap = await transaction.get(db.collection("users").doc(sid))
+        if ((storeUserSnap.data() as { store?: { is_approved?: boolean } } | undefined)?.store?.is_approved === false) {
+          throw new Error("Store not available")
         }
       }
       // Step 1: Read and verify stock + prices atomically.
@@ -1750,8 +1789,23 @@ export async function markOrderDeliveredByDriver(orderId: string, code: string) 
       // إثبات التسليم: لو الطلب يحمل كودًا (وكل الطلبات الجديدة تحمله) نطابقه بصرامة. الطلبات القديمة
       // (قبل UX-05) بلا كود تُسمح بالإتمام حتى لا تعلق دون تسليم؛ السائق لا يقدر يحذف كود طلب جديد.
       const expected = String(o.delivery_code || "").trim()
-      if (expected && String(code).trim() !== expected) {
-        return { ok: false as const, error: "كود التأكيد غير صحيح" }
+      if (expected) {
+        // قفل ضد التخمين العنيف: بعد 5 محاولات خاطئة نُجمّد المطابقة 15 دقيقة (كود من 4 أرقام).
+        const attempts = Number(o.delivery_code_attempts) || 0
+        const lockedUntil = Number(o.delivery_code_locked_until) || 0
+        if (lockedUntil > Date.now()) {
+          return { ok: false as const, error: "محاولات كثيرة، حاول لاحقًا" }
+        }
+        if (String(code).trim() !== expected) {
+          const nextAttempts = attempts + 1
+          tx.update(docRef, {
+            delivery_code_attempts: nextAttempts,
+            ...(nextAttempts >= 5
+              ? { delivery_code_locked_until: Date.now() + 15 * 60 * 1000, delivery_code_attempts: 0 }
+              : {}),
+          })
+          return { ok: false as const, error: "كود التأكيد غير صحيح" }
+        }
       }
       const timeline = [
         ...(o.timeline || []),
@@ -1764,6 +1818,8 @@ export async function markOrderDeliveredByDriver(orderId: string, code: string) 
           delivered_at: now,
           cash_collected: Number(o.total || 0),
           delivery_verified: true,
+          delivery_code_attempts: 0,
+          delivery_code_locked_until: FieldValue.delete(),
           timeline,
           updated_at: now,
         },

@@ -10,9 +10,13 @@ export async function checkRateLimit(
 ): Promise<boolean> {
   try {
     const h = await headers()
-    const forwarded = h.get("x-forwarded-for") || ""
-    const ip = forwarded.split(",")[0].trim() || h.get("x-real-ip") || "unknown"
-    const key = `${action}:${ip}`
+    // نُفضّل مصادر IP الموثوقة (يضبطها البروكسي/Vercel) قبل x-forwarded-for القابل للانتحال،
+    // ثم نُعقّم الناتج قبل استخدامه في معرّف مستند Firestore (وجود "/" كان يرمي → fail-open).
+    const ip = (h.get("x-real-ip") || h.get("x-vercel-forwarded-for") || h.get("x-forwarded-for") || "unknown")
+      .split(",")[0]
+      .trim()
+    const safeIp = ip.replace(/[^a-zA-Z0-9._:-]/g, "_").slice(0, 100) || "unknown"
+    const key = `${action}:${safeIp}`
     const db = getAdminDb()
     const ref = db.collection("rate_limits").doc(key)
     const now = Date.now()

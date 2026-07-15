@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid, getCurrentUser } from "../auth/session"
 import { cleanUndefined } from "../firebase/firestore-helpers"
-import { createNotification } from "./notifications"
+import { createNotification } from "../notifications-internal"
 import { logError } from "../logger"
 
 export type Complaint = {

@@ -53,7 +53,21 @@ export async function saveFcmToken(token: string): Promise<{ success: boolean }>
 export async function removeFcmToken(token: string): Promise<{ success: boolean }> {
   try {
     if (!token || typeof token !== "string") return { success: false }
-    await getAdminDb().collection("fcm_tokens").doc(token).delete()
+
+    // تحقّق من الملكية قبل الحذف — وإلا أمكن لأي مستخدم حذف رمز جهاز غيره (تعطيل إشعاراته)
+    const ref = getAdminDb().collection("fcm_tokens").doc(token)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: true }
+    const data = snap.data() || {}
+
+    const uid = await getCurrentUid()
+    const drv = uid ? null : await getCurrentDriverId()
+    const isOwner =
+      (data.owner_type === "user" && data.owner_id === uid) ||
+      (data.owner_type === "driver" && data.owner_id === drv)
+    if (!isOwner) return { success: false }
+
+    await ref.delete()
     return { success: true }
   } catch (error) {
     await logServerError("removeFcmToken", error)

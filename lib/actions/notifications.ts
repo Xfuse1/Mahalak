@@ -19,33 +19,9 @@ export type Notification = {
   created_at?: string
 }
 
-// Create a notification
-export async function createNotification(data: {
-  user_id: string
-  title: string
-  title_en?: string
-  message: string
-  message_en?: string
-  type: Notification["type"]
-  link?: string
-  data?: Record<string, any>
-}) {
-  try {
-    const db = getAdminDb()
-    const now = new Date().toISOString()
-
-    const notificationRef = await db.collection("notifications").add({
-      ...data,
-      is_read: false,
-      created_at: now,
-    })
-
-    return { success: true, id: notificationRef.id }
-  } catch (error: any) {
-    logError("[v0] Error creating notification:", error)
-    return { success: false, error: error?.message || "Failed to create notification" }
-  }
-}
+// ملاحظة: createNotification و sendReviewRequestNotification نُقِلتا إلى lib/notifications-internal.ts
+// (وحدة خادوم داخلية بلا "use server") كي لا تُكشفا كنقطتَي RPC عامتين قابلتين للتلفيق/الإغراق.
+// هذا الملف يبقى "use server" ويكشف فقط دوال القراءة/التعليم الموجّهة للعميل (مع مصادقة الجلسة).
 
 // Get user's notifications
 export async function getUserNotifications(userId: string, limit: number = 20): Promise<Notification[]> {
@@ -169,26 +145,3 @@ export async function markAllNotificationsAsRead(userId: string) {
     return { success: false, error: error?.message || "Failed to mark all notifications as read" }
   }
 }
-
-// Send review request notification when order is delivered
-export async function sendReviewRequestNotification(data: {
-  user_id: string
-  order_id: string
-  driver_name?: string
-}) {
-  return createNotification({
-    user_id: data.user_id,
-    title: "تم توصيل طلبك بنجاح! 🎉",
-    title_en: "Your order has been delivered! 🎉",
-    message: `شكراً لك! يرجى تقييم تجربتك مع ${data.driver_name || "السائق"} والمنتجات`,
-    message_en: `Thank you! Please rate your experience with ${data.driver_name || "the driver"} and products`,
-    type: "review_request",
-    link: `/review/${data.order_id}`,
-    data: {
-      order_id: data.order_id,
-      driver_name: data.driver_name,
-    },
-  })
-}
-
-

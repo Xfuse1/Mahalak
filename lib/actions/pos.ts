@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { logError } from "../logger"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
+import { FieldValue } from "firebase-admin/firestore"
 
 // ==================== POS Products ====================
 
@@ -549,31 +550,45 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
 
   try {
     const result = await db.runTransaction(async (transaction) => {
-      // 1. Read all products inside the transaction (atomic stock check + server-side pricing)
-      const productDocs: { ref: FirebaseFirestore.DocumentReference; doc: FirebaseFirestore.DocumentSnapshot; item: POSSaleItem }[] = []
-      let calculatedSubtotal = 0
-      let calculatedItemsProfit = 0
-      const verifiedItems: POSSaleItem[] = []
-
+      // 1. تجميع القطع المطلوبة لكل منتج عبر كل الأسطر (مع مضاعِف الوحدة) قبل الفحص/الخصم — يمنع
+      // البيع الزائد حين يتكرّر نفس المنتج في سطرين (كل سطر كان يُفحص/يُخصم على حدة بقيمة مطلقة من
+      // لقطة قديمة → آخر كتابة تفوز فيُباع بالسالب). نقرأ كل منتج مرة واحدة ونتحقق من المجموع.
+      const piecesByProduct = new Map<string, number>()
       for (const item of saleData.items) {
-        const productRef = db.collection("products").doc(item.product_id)
+        const pieces = item.quantity * (item.unit_multiplier || 1)
+        piecesByProduct.set(item.product_id, (piecesByProduct.get(item.product_id) || 0) + pieces)
+      }
+
+      // كل القراءات قبل أي كتابة (شرط معاملات Firestore) — قراءة كل منتج مرة والتحقق من المجموع
+      const productDataMap = new Map<string, { ref: FirebaseFirestore.DocumentReference; data: FirebaseFirestore.DocumentData }>()
+      for (const [productId, totalPieces] of piecesByProduct) {
+        const productRef = db.collection("products").doc(productId)
         const productDoc = await transaction.get(productRef)
         if (!productDoc.exists) {
           throw new Error(POS_ERROR.PRODUCT_NOT_FOUND)
         }
         const productData = productDoc.data()!
         const stock = Number(productData.stock) || 0
-        const piecesNeeded = item.quantity * (item.unit_multiplier || 1)
-        if (piecesNeeded > stock) {
+        if (totalPieces > stock) {
           throw new Error(POS_ERROR.INSUFFICIENT_STOCK)
         }
+        productDataMap.set(productId, { ref: productRef, data: productData })
+      }
+
+      // 2. تسعير كل سطر من مستند المنتج (سعر السيرفر لا سعر العميل)
+      let calculatedSubtotal = 0
+      let calculatedItemsProfit = 0
+      const verifiedItems: POSSaleItem[] = []
+
+      for (const item of saleData.items) {
+        const productData = productDataMap.get(item.product_id)!.data
         // Use server-side price, not client-sent price
         // Derive piece price based on price_unit (what the stored price represents)
         const storedPrice = Number(productData.price) || 0
         const priceUnit = productData.price_unit || "piece" // default: price = piece price
         const pps = Number(productData.piece_per_strip) || 1
         const spb = Number(productData.strip_per_box) || 1
-        
+
         let serverPiecePrice: number
         if (priceUnit === "box") {
           serverPiecePrice = storedPrice / (pps * spb)
@@ -582,11 +597,11 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
         } else {
           serverPiecePrice = storedPrice
         }
-        
+
         const serverPrice = item.unit_multiplier && item.unit_multiplier > 1
           ? serverPiecePrice * item.unit_multiplier
           : serverPiecePrice
-          
+
         // Same logic for cost price
         const storedCostPrice = Number(productData.cost_price)
         const hasCostPrice = Number.isFinite(storedCostPrice)
@@ -618,7 +633,6 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
           profit_total: roundMoney(itemProfit),
           total: roundMoney(itemTotal),
         })
-        productDocs.push({ ref: productRef, doc: productDoc, item })
       }
 
       // 2. Calculate discount amount on server
@@ -695,12 +709,10 @@ export async function createPOSSale(saleData: POSSaleData, callerId?: string) {
       }
       transaction.set(saleRef, salePayload)
 
-      // 6. Deduct stock (atomic with the check above)
-      for (const { ref, doc, item } of productDocs) {
-        const currentStock = Number(doc.data()?.stock) || 0
-        const piecesToDeduct = item.quantity * (item.unit_multiplier || 1)
-        transaction.update(ref, {
-          stock: Math.max(0, currentStock - piecesToDeduct),
+      // 6. خصم المخزون ذرّيًا مرة واحدة لكل منتج (FieldValue.increment بدل قيمة مطلقة من لقطة قديمة)
+      for (const [productId, totalPieces] of piecesByProduct) {
+        transaction.update(productDataMap.get(productId)!.ref, {
+          stock: FieldValue.increment(-totalPieces),
           updated_at: now,
         })
       }

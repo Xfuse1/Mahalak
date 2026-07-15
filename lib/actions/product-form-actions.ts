@@ -154,8 +154,13 @@ export async function saveExtraProductFields(
   if (!ownership.ok) return { success: false, error: ownership.error }
 
   const db = getAdminDb()
-  // منع العميل من إعادة كتابة حقول الملكية/الهوية عبر هذا المسار العام
-  const PROTECTED_KEYS = new Set(["store_id", "id", "seller_id", "owner", "owner_id", "role"])
+  // منع العميل من إعادة كتابة حقول الملكية/الهوية والحقول النظامية الحسّاسة عبر هذا المسار العام
+  const PROTECTED_KEYS = new Set([
+    "store_id", "id", "seller_id", "owner", "owner_id", "role",
+    // حقول نظامية حسّاسة: التسعير/الربح/المخزون/التقييم/الاعتماد/الطوابع — تُشتق سيرفر-سايد فقط
+    "rating", "rating_count", "price", "cost_price", "profit_per_unit", "stock",
+    "discount_percentage", "is_approved", "is_active", "created_at", "updated_at",
+  ])
   const safeFields: Record<string, any> = {}
   for (const [key, value] of Object.entries(fields)) {
     if (!PROTECTED_KEYS.has(key)) safeFields[key] = value
