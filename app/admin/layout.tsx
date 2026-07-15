@@ -24,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/stores" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">المتاجر</Link>
             <Link href="/admin/drivers" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">السائقون</Link>
             <Link href="/admin/complaints" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الشكاوى</Link>
+            <Link href="/admin/commission-settings" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">العمولات</Link>
             <Link href="/" className="px-3 py-1.5 rounded-lg hover:bg-white/15 transition-colors">الموقع</Link>
           </nav>
         </div>

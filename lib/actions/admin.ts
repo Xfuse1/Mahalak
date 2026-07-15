@@ -586,3 +586,135 @@ export async function adminCancelOrder(orderId: string, reason: string) {
     return { success: false, error: "تعذّر إلغاء الطلب" }
   }
 }
+
+// ==================== إعدادات العمولة ورسوم التوصيل ====================
+// إدارة settings/driverCommission و settings/delivery (دمج لوحة Flutter داخل /admin).
+//
+// حرِج جدًا: lib/actions/delivery.ts getDriverCommission() يقرأ data.rate بالضبط من
+// settings/driverCommission، وموقع العملاء يعتمد عليه. لذلك نكتب rate دائمًا كي لا ينكسر الموقع.
+//
+// وحدة rate = مبلغ ثابت بالجنيه (وليست نسبة ولا كسرًا). الدليل من الاستخدام في الموقع:
+//   • app/account/change-driver/page.tsx: `driverData.price + driverCommission` ويُعرَض
+//     «سيتم إضافة {price + commission} جنيه للطلب» — الجمع مع سعر السائق (جنيه) ⇒ العمولة بالجنيه.
+//   • lib/actions/dashboard.ts: `orderTotal - delivery - commission` — تُطرَح كمبلغ مالي.
+//   • app/checkout/delivery/page.tsx: تُمرَّر كحقل driver_commission (حصّة المنصّة المالية).
+// لذلك النموذج يعرضها/يكتبها كعدد جنيهات.
+
+// مفاتيح محتملة لسعر التوصيل الأساسي في settings/delivery (خزّنه تطبيق Flutter؛ الموقع لا يقرؤه بعد).
+// نكتشف المفتاح الموجود فعلًا ونكتب فوقه (round-trip آمن يطابق ما خزّنه Flutter)،
+// وإلا نفترض base_price لمستند جديد.
+const DELIVERY_BASE_PRICE_KEYS = ["base_price", "basePrice", "price", "base", "deliveryBasePrice", "amount", "value"]
+
+function detectDeliveryBasePriceKey(data: Record<string, any> | null | undefined): { key: string; value: number } {
+  const d = data || {}
+  for (const k of DELIVERY_BASE_PRICE_KEYS) {
+    const v = d[k]
+    if (typeof v === "number" && Number.isFinite(v)) return { key: k, value: v }
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return { key: k, value: Number(v) }
+  }
+  return { key: DELIVERY_BASE_PRICE_KEYS[0], value: 0 }
+}
+
+export type CommissionSettings = {
+  rate: number // عمولة المنصّة الثابتة بالجنيه (settings/driverCommission.rate) — يقرؤها الموقع
+  deliveryBasePrice: number // سعر التوصيل الأساسي (settings/delivery)
+  deliveryBasePriceKey: string // اسم المفتاح المُكتشَف في settings/delivery (لحفظ آمن على نفس المفتاح)
+  // حقول رقمية إضافية محفوظة على settings/driverCommission (شرائح Flutter مثلًا) — للعرض فقط،
+  // لا نلمسها عند الحفظ (merge:true يُبقيها كما هي).
+  extraCommissionFields: { key: string; value: number }[]
+  updated_at: string | null
+}
+
+// قراءة إعدادات العمولة ورسوم التوصيل. قيم افتراضية آمنة عند غياب المستندات.
+export async function getCommissionSettings(): Promise<{
+  success: boolean
+  settings?: CommissionSettings
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    const db = getAdminDb()
+    const [commissionSnap, deliverySnap] = await Promise.all([
+      db.collection("settings").doc("driverCommission").get(),
+      db.collection("settings").doc("delivery").get(),
+    ])
+    const commission = (commissionSnap.exists ? commissionSnap.data() : {}) as Record<string, any>
+    const delivery = (deliverySnap.exists ? deliverySnap.data() : {}) as Record<string, any>
+
+    const rate = Number.isFinite(Number(commission.rate)) ? Number(commission.rate) : 0
+    const { key: deliveryBasePriceKey, value: deliveryBasePrice } = detectDeliveryBasePriceKey(delivery)
+
+    // شرائح/حقول رقمية إضافية على driverCommission (عدا rate/updated_at) — نعرضها كما هي دون المساس بها.
+    const extraCommissionFields = Object.entries(commission)
+      .filter(([k, v]) => k !== "rate" && k !== "updated_at" && typeof v === "number" && Number.isFinite(v))
+      .map(([key, value]) => ({ key, value: Number(value) }))
+
+    const updated_at: string | null =
+      (typeof commission.updated_at === "string" && commission.updated_at) ||
+      (typeof delivery.updated_at === "string" && delivery.updated_at) ||
+      null
+
+    return {
+      success: true,
+      settings: serializeData({
+        rate,
+        deliveryBasePrice,
+        deliveryBasePriceKey,
+        extraCommissionFields,
+        updated_at,
+      }) as CommissionSettings,
+    }
+  } catch (error) {
+    logError("[admin] getCommissionSettings", error)
+    return { success: false, error: "تعذّر تحميل الإعدادات" }
+  }
+}
+
+// كتابة الإعدادات مع merge:true.
+// حرِج: نكتب rate دائمًا على settings/driverCommission كي يبقى getDriverCommission يعمل،
+// ولا نلمس أي حقول أخرى (الشرائح تبقى بفضل merge:true). سعر التوصيل يُكتب على المفتاح الموجود فعلًا.
+export async function setCommissionSettings(input: {
+  rate: number
+  deliveryBasePrice?: number
+}): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const rate = Number(input?.rate)
+  if (!Number.isFinite(rate) || rate < 0 || rate > 1_000_000) {
+    return { success: false, error: "قيمة العمولة غير صالحة" }
+  }
+
+  let deliveryBasePrice: number | null = null
+  if (input?.deliveryBasePrice != null && String(input.deliveryBasePrice) !== "") {
+    const dp = Number(input.deliveryBasePrice)
+    if (!Number.isFinite(dp) || dp < 0 || dp > 1_000_000) {
+      return { success: false, error: "قيمة رسوم التوصيل غير صالحة" }
+    }
+    deliveryBasePrice = dp
+  }
+
+  try {
+    const db = getAdminDb()
+    const now = new Date().toISOString()
+
+    // settings/driverCommission — نكتب rate دائمًا (الحقل الذي يقرؤه الموقع) + updated_at، بدمج.
+    await db.collection("settings").doc("driverCommission").set({ rate, updated_at: now }, { merge: true })
+
+    // settings/delivery — نكتب سعر التوصيل الأساسي على نفس المفتاح الموجود (اكتشاف من الخادم، بلا اسم من العميل).
+    if (deliveryBasePrice != null) {
+      const deliverySnap = await db.collection("settings").doc("delivery").get()
+      const { key } = detectDeliveryBasePriceKey(
+        deliverySnap.exists ? (deliverySnap.data() as Record<string, any>) : null,
+      )
+      await db.collection("settings").doc("delivery").set({ [key]: deliveryBasePrice, updated_at: now }, { merge: true })
+    }
+
+    revalidatePath("/admin/commission-settings")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] setCommissionSettings", error)
+    return { success: false, error: "تعذّر حفظ الإعدادات" }
+  }
+}
