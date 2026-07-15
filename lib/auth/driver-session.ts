@@ -38,13 +38,30 @@ export async function getCurrentDriverId(): Promise<string | null> {
     const cookieStore = await cookies()
     const token = cookieStore.get(DRIVER_SESSION_COOKIE)?.value
     if (!token) return null
-    const snap = await getAdminDb().collection("driver_sessions").doc(token).get()
+    const db = getAdminDb()
+    const snap = await db.collection("driver_sessions").doc(token).get()
     if (!snap.exists) return null
     const data = snap.data() as { driverId?: string; expiresAt?: string }
     if (!data.expiresAt || new Date(data.expiresAt) < new Date()) {
       return null
     }
-    return data.driverId || null
+    const driverId = data.driverId || null
+    if (!driverId) return null
+    // إنفاذ التعطيل للسائق: السائقون لا يملكون حساب Firebase Auth، فلا ينطبق عليهم فحص
+    // verifySessionCookie/updateUser(disabled). لذا هذا هو مكان الإنفاذ الوحيد الموثوق: نقرأ مستند
+    // السائق ونُعيد null فورًا إذا كان معطَّلًا (drivers/{id}.disabled === true) — فتُعامَل جلسته
+    // كغير موثّقة في الطلب التالي مباشرةً (تعطيل فوري، لا ينتظر انتهاء الجلسة).
+    // fail-open على خطأ عابر: القراءة الإضافية (للتعطيل) يجب ألا تُخرج سائقًا صالحًا من جلسته المُتحقَّقة
+    // بالفعل عند خطأ شبكة/Firestore عابر. نحجب فقط عند نجاح القراءة وتأكّد disabled === true.
+    try {
+      const driverSnap = await db.collection("drivers").doc(driverId).get()
+      if (driverSnap.exists && (driverSnap.data() as { disabled?: boolean } | undefined)?.disabled === true) {
+        return null
+      }
+    } catch {
+      // خطأ عابر في قراءة التعطيل — نتابع (السائق سيُحجب فورًا عند أول قراءة ناجحة لو كان معطَّلًا).
+    }
+    return driverId
   } catch {
     return null
   }

@@ -233,7 +233,12 @@ async function _getStoresImpl(category?: string) {
   // المراجعة (بدون الحقل) ظاهرة حتى لا يفرغ الموقع. للانتقال لـ"المعتمد فقط" لاحقًا:
   // نعتمد المتاجر الحالية ثم نبدّل الشرط إلى === true.
   let stores: Store[] = snapshot.docs
-    .filter((doc) => (doc.data() as { store?: { is_approved?: boolean } })?.store?.is_approved !== false)
+    .filter((doc) => {
+      // إخفاء المتجر المرفوض صراحةً (store.is_approved === false) أو المالك المحظور (disabled === true
+      // على جذر مستند المستخدم). القيم الأخرى (undefined/false للحظر) تظهر كالمعتاد.
+      const data = doc.data() as { store?: { is_approved?: boolean }; disabled?: boolean }
+      return data?.store?.is_approved !== false && data?.disabled !== true
+    })
     .map((doc) => extractStore(doc))
     .filter((store): store is Store => store !== null)
 
@@ -310,8 +315,10 @@ async function _getStoreImpl(id: string) {
     return null
   }
 
-  // إخفاء المتجر المرفوض صراحةً من العرض العام (المالك يرى متجره عبر getStoreByUserId)
-  if ((docSnap.data() as { store?: { is_approved?: boolean } })?.store?.is_approved === false) {
+  // إخفاء المتجر المرفوض صراحةً أو المالك المحظور (disabled === true على جذر مستند المستخدم)
+  // من العرض العام (المالك يرى متجره عبر getStoreByUserId)
+  const rootData = docSnap.data() as { store?: { is_approved?: boolean }; disabled?: boolean }
+  if (rootData?.store?.is_approved === false || rootData?.disabled === true) {
     return null
   }
 

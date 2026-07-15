@@ -43,7 +43,10 @@ export async function getDrivers(): Promise<Driver[]> {
         .get()
     }
 
-    const drivers: Driver[] = snapshot.docs.map((doc): Driver => {
+    const drivers: Driver[] = snapshot.docs
+      // استبعاد السائق المحظور (disabled === true) من منتقي العميل — بقية القيم (undefined/false) تظهر كالمعتاد
+      .filter((doc) => doc.data().disabled !== true)
+      .map((doc): Driver => {
       const data = doc.data()
       return {
         id: doc.id,
@@ -94,6 +97,10 @@ export async function getDriverById(id: string): Promise<Driver | null> {
     // لا ننشر doc.data() كاملًا — كان يسرّب حقل pin السرّي (استيلاء على حساب سائق).
     // نُرجع الحقول العامة فقط بنفس تعيين getDrivers.
     const data = doc.data() || {}
+    // حساب محظور: يُعامَل كغير موجود (نفس شكل عدم الوجود) حتى لا تُعرض لوحة السائق المحظور
+    if (data.disabled === true) {
+      return null
+    }
     return {
       id: doc.id,
       name: data.name || "",
@@ -138,7 +145,7 @@ async function verifyDriverPinHash(pin: string, hash: string, salt: string): Pro
 export async function verifyDriverLogin(
   driverId: string,
   pin: string,
-): Promise<{ success: boolean; locked?: boolean; retryAfterMinutes?: number }> {
+): Promise<{ success: boolean; locked?: boolean; retryAfterMinutes?: number; error?: string }> {
   try {
     // كبح بالـIP فوق القفل بالحساب: أرقام السائقين مكشوفة عبر getDrivers، فبدون كبح بالـIP
     // يقدر مهاجم من عنوان واحد يقفل حسابات كثيرة بالتتابع (حجب خدمة على الأسطول). 30 محاولة/15د.
@@ -153,6 +160,11 @@ export async function verifyDriverLogin(
       const doc = await tx.get(driverRef)
       if (!doc.exists) return { result: "fail" as const }
       const data = doc.data() || {}
+
+      // 0) حساب محظور: نرفض الدخول قبل فحص القفل/الـPIN — لا نُسرّب صحة الـPIN ولا نزيد عدّاد المحاولات
+      if (data.disabled === true) {
+        return { result: "disabled" as const }
+      }
 
       // 1) هل الحساب مقفول حاليًا بسبب محاولات فاشلة متتالية؟
       const lockedUntil = Number(data.pin_locked_until || 0)
@@ -211,6 +223,10 @@ export async function verifyDriverLogin(
       // إصدار جلسة سائق موثّقة سيرفر-سايد (كوكي) — تُستخدم لتأمين دوال السائق
       await createDriverSession(driverId)
       return { success: true }
+    }
+    if (outcome.result === "disabled") {
+      // نفس شكل فشل الـPIN (success: false) — العميل يعرض رسالة عامة فلا يختلف عن كلمة سر خاطئة
+      return { success: false, error: "تم تعطيل هذا الحساب. تواصل مع الإدارة" }
     }
     if (outcome.result === "locked") {
       return { success: false, locked: true, retryAfterMinutes: outcome.retryAfterMinutes }

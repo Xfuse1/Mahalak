@@ -24,7 +24,11 @@ export async function getCurrentUid(): Promise<string | null> {
     const cookieStore = await cookies()
     const session = cookieStore.get(SESSION_COOKIE_NAME)?.value
     if (!session) return null
-    // checkRevoked = true لاكتشاف الجلسات المُبطلة (تسجيل خروج/تعطيل الحساب)
+    // checkRevoked = true يجعل Firebase Admin يرفض الجلسة إذا كان الحساب معطَّلًا في Firebase Auth
+    // (admin.auth().updateUser(uid,{disabled:true})) أو مُبطَّلة الجلسة — يرمي auth/user-disabled أو
+    // auth/session-cookie-revoked. لذلك تعطيل حساب عميل/بائع عبر Firebase Auth يُنفَّذ إجباريًا هنا فورًا
+    // في الطلب التالي (بلا قراءة Firestore إضافية على هذا المسار الساخن). طبقة دفاع ثانية (علم
+    // users/{uid}.disabled) مُطبَّقة في getCurrentUser للحالات التي لا يوجد فيها سجل Firebase Auth.
     const decoded = await getAdminAuth().verifySessionCookie(session, true)
     return decoded.uid
   } catch {
@@ -69,9 +73,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
     const snap = await getAdminDb().collection("users").doc(uid).get()
     const data = snap.data()
+    const role = (data?.role as CurrentUser["role"]) || "customer"
+    // إنفاذ التعطيل (طبقة دفاع ثانية): حساب معطَّل (users/{uid}.disabled === true) يُعامَل كغير موثّق
+    // تمامًا كجلسة منتهية — لكن لا نُبرِّك حسابًا إداريًا أبدًا: setAccountDisabled يرفض تعطيل الأدمن،
+    // فلو ظهر العلم على مستند أدمن خارج اللوحة (تعديل يدوي/ترقية دور لاحقة) نتجاهله كي يبقى الاسترداد
+    // ممكنًا داخل اللوحة. غير ذلك: يُحجب المستخدم فورًا في كل المسارات المعتمِدة على الدور.
+    const roleStr = String(data?.role || "").toLowerCase()
+    const isPrivileged = roleStr === "admin" || roleStr === "superadmin" || roleStr === "super_admin"
+    if (!isPrivileged && data?.disabled === true) return null
     return {
       uid,
-      role: (data?.role as CurrentUser["role"]) || "customer",
+      role,
       email: data?.email,
     }
   } catch {

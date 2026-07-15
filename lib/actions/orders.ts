@@ -706,6 +706,10 @@ export async function createOrder(orderData: {
   if (orderData.driver_id) {
     const driverSnap = await db.collection("drivers").doc(orderData.driver_id).get()
     if (driverSnap.exists) {
+      // رفض الطلب لو السائق المختار محظور (disabled === true) — نفس شكل الفشل (success:false + error)
+      if (driverSnap.data()?.disabled === true) {
+        return { success: false, error: "السائق غير متاح" }
+      }
       serverDeliveryPrice = sanitizeMoney(Number(driverSnap.data()?.price ?? 0))
     }
   }
@@ -1009,6 +1013,10 @@ export async function changeOrderDriver(
     if (!driverApproved) {
       return { success: false, error: "Driver is not approved" }
     }
+    // رفض السائق المحظور (disabled === true) — نفس شكل فشل السائق غير المعتمد
+    if (driverData?.disabled === true) {
+      return { success: false, error: "السائق غير متاح" }
+    }
     const verifiedDriverName = (driverData?.name as string) || newDriverName
     // سعر التوصيل يُشتق من مستند السائق سيرفر-سايد — لا نثق بقيمة العميل (كانت تسمح بجعله 0).
     const safeDeliveryPrice = sanitizeMoney(Number(driverData?.price ?? 0))
@@ -1122,6 +1130,10 @@ export async function createMultiStoreOrder(orderData: {
   if (orderData.driver_id) {
     const driverSnap = await db.collection("drivers").doc(orderData.driver_id).get()
     if (driverSnap.exists) {
+      // رفض الطلب لو السائق المختار محظور (disabled === true) — نفس شكل الفشل (success:false + error)
+      if (driverSnap.data()?.disabled === true) {
+        return { success: false, error: "السائق غير متاح" }
+      }
       serverDeliveryPrice = sanitizeMoney(Number(driverSnap.data()?.price ?? 0))
     }
   }

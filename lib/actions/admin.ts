@@ -6,7 +6,7 @@
 import { revalidatePath, revalidateTag } from "next/cache"
 import { FieldValue } from "firebase-admin/firestore"
 import type { Firestore, Query } from "firebase-admin/firestore"
-import { getAdminDb } from "../firebase/admin"
+import { getAdminDb, getAdminAuth } from "../firebase/admin"
 import { getCurrentUser } from "../auth/session"
 import { serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { createNotification } from "../notifications-internal"
@@ -392,6 +392,192 @@ export async function setDriverAvailability(driverId: string, available: boolean
   } catch (error) {
     logError("[admin] setDriverAvailability", error)
     return { success: false, error: "تعذّر تحديث الحالة" }
+  }
+}
+
+// ==================== ADM-04: إدارة الحسابات (تفعيل/تعطيل الحسابات) ====================
+// أداة حوكمة: عرض العملاء/البائعين/السائقين وتفعيل/تعطيل (حظر) الحساب. التعطيل مُنفَّذ إجباريًا
+// سيرفر-سايد (ليس تجميليًا):
+//   • العميل/البائع (حساب Firebase Auth): admin.auth().updateUser(uid,{disabled}) يجعل Firebase نفسه
+//     يرفض إصدار توكنات جديدة، و getCurrentUid() (verifySessionCookie بـ checkRevoked=true) يرفض
+//     الجلسة الحالية فورًا. + علم users/{uid}.disabled (عرض + طبقة دفاع تُفحص في getCurrentUser).
+//   • السائق (جلسة PIN مخصّصة، بلا Firebase Auth): علم drivers/{id}.disabled يفحصه getCurrentDriverId
+//     على كل طلب فيُعامَل السائق كغير موثّق فورًا.
+// حرِج (أمان): لا نُرجع أبدًا أي أسرار (pin/pin_hash/pin_salt) ولا نسمح بتعطيل حساب إداري
+//   (admin/superAdmin) ولا بأن يُعطّل الأدمن حسابه هو.
+
+// فحص دور إداري على القيمة الخام (قد تكون superAdmin من لوحة Flutter) — للحارس، غير حسّاس لحالة الأحرف.
+function isAdminRole(role: unknown): boolean {
+  const r = String(role || "").toLowerCase()
+  return r === "admin" || r === "superadmin" || r === "super_admin"
+}
+
+// حساب كما يراه الأدمن — إسقاط آمن بلا أي أسرار.
+export type AdminAccount = {
+  uid: string
+  name: string
+  phone?: string
+  email?: string
+  role: "customer" | "seller" | "driver"
+  disabled: boolean
+  // أعلام اختيارية حسب الدور (اعتماد المتجر/السائق + توثيق الهاتف) — للعرض فقط.
+  is_approved?: boolean
+  phone_verified?: boolean
+  created_at?: string
+}
+
+export type AccountRoleFilter = "customer" | "seller" | "driver" | "all"
+
+// إسقاط مستند users → AdminAccount (عميل/بائع). نستبعد الأدمن (غير قابل للإدارة هنا) بإرجاع null.
+function mapUserAccount(id: string, data: Record<string, any>): AdminAccount | null {
+  const role = String(data?.role || "customer")
+  if (isAdminRole(role)) return null
+  const isSeller = role === "seller"
+  const store = (data?.store || {}) as Record<string, any>
+  return serializeData({
+    uid: id,
+    name: (isSeller ? store.name : "") || data?.full_name || data?.name || "",
+    phone: store.phone || data?.phone || "",
+    email: data?.email || "",
+    role: isSeller ? "seller" : "customer",
+    disabled: data?.disabled === true,
+    is_approved: isSeller ? store.is_approved === true : undefined,
+    phone_verified: data?.phone_verified === true,
+    created_at: data?.created_at || "",
+  }) as AdminAccount
+}
+
+// إسقاط مستند drivers → AdminAccount. لا نقرأ/نُرجع أبدًا pin/pin_hash/pin_salt.
+function mapDriverAccount(id: string, data: Record<string, any>): AdminAccount {
+  return serializeData({
+    uid: id,
+    name: data?.name || "",
+    phone: data?.phone || "",
+    role: "driver",
+    disabled: data?.disabled === true,
+    is_approved: (data?.isApproved ?? data?.is_approved) === true,
+    created_at: data?.createdAt?.toDate?.()?.toISOString?.() || data?.created_at || "",
+  }) as AdminAccount
+}
+
+// قائمة الحسابات حسب الدور — إسقاط آمن بلا أسرار. مقيّدة بحدّ أعلى (البحث/الفلترة يتمّان في الواجهة).
+export async function getAdminAccounts(
+  roleFilter: AccountRoleFilter = "all",
+): Promise<{ success: boolean; accounts?: AdminAccount[]; truncated?: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const USERS_CAP = 1000
+  const DRIVERS_CAP = 500
+  try {
+    const db = getAdminDb()
+    const accounts: AdminAccount[] = []
+    let truncated = false // بلغنا السقف — بعض الحسابات قد لا تظهر (نُنبّه الأدمن)
+
+    const wantUsers = roleFilter === "customer" || roleFilter === "seller" || roleFilter === "all"
+    const wantDrivers = roleFilter === "driver" || roleFilter === "all"
+
+    if (wantUsers) {
+      let q: Query = db.collection("users")
+      if (roleFilter === "customer") q = q.where("role", "==", "customer")
+      else if (roleFilter === "seller") q = q.where("role", "==", "seller")
+      // حدّ أعلى وقائي (قاعدة العملاء قد تكبر) — لا نقرأ المجموعة كاملةً دون سقف.
+      const snap = await q.limit(USERS_CAP).get()
+      if (snap.size >= USERS_CAP) truncated = true
+      snap.docs.forEach((d) => {
+        const acc = mapUserAccount(d.id, d.data() as Record<string, any>)
+        if (acc) accounts.push(acc)
+      })
+    }
+
+    if (wantDrivers) {
+      const snap = await db.collection("drivers").limit(DRIVERS_CAP).get()
+      if (snap.size >= DRIVERS_CAP) truncated = true
+      snap.docs.forEach((d) => accounts.push(mapDriverAccount(d.id, d.data() as Record<string, any>)))
+    }
+
+    if (truncated) logError("[admin] getAdminAccounts truncated at cap", { roleFilter })
+
+    // المعطَّلون أولًا (لجذب انتباه الأدمن)، ثم الأحدث أولًا.
+    accounts.sort((a, b) => {
+      if (a.disabled !== b.disabled) return Number(b.disabled) - Number(a.disabled)
+      return (b.created_at || "").localeCompare(a.created_at || "")
+    })
+    return { success: true, accounts, truncated }
+  } catch (error) {
+    logError("[admin] getAdminAccounts", error)
+    return { success: false, error: "تعذّر تحميل الحسابات" }
+  }
+}
+
+// تفعيل/تعطيل (حظر) حساب. الإنفاذ إجباري سيرفر-سايد (انظر رأس القسم).
+// حراس: (1) لا يُعطّل الأدمن حسابه هو، (2) لا يُعطَّل حساب إداري (admin/superAdmin).
+export async function setAccountDisabled(
+  uid: string,
+  disabled: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(uid || "").trim()
+  if (!id) return { success: false, error: "معرّف غير صالح" }
+  // حارس: لا يُعطّل الأدمن نفسه (يمنع قفله لنفسه خارج اللوحة)
+  if (id === admin.uid) return { success: false, error: "لا يمكنك تعطيل حسابك" }
+
+  const now = new Date().toISOString()
+  try {
+    const db = getAdminDb()
+
+    // نحلّ نوع الحساب سيرفر-سايد: مستخدم (عميل/بائع) في users أولًا، وإلا سائق في drivers.
+    const userRef = db.collection("users").doc(id)
+    const userSnap = await userRef.get()
+
+    if (userSnap.exists) {
+      const data = userSnap.data() as Record<string, any>
+      // حارس: لا نُعطّل حسابًا إداريًا (الحوكمة للعملاء/البائعين/السائقين فقط)
+      if (isAdminRole(data?.role)) {
+        return { success: false, error: "لا يمكن تعطيل حساب إداري" }
+      }
+      // إنفاذ عبر Firebase Auth: updateUser(disabled) يرفض التوكنات الجديدة + يُبطل الجلسة الحالية
+      // (checkRevoked=true في getCurrentUid). إن لم يوجد سجل Auth (بيانات مصدّرة/بذور) نتابع بعلم
+      // Firestore وحده — يُنفَّذ عبر getCurrentUser. أي خطأ Auth آخر يُرمى ليُعالَج في الـcatch الخارجي.
+      const setAuthDisabled = async () => {
+        try {
+          await getAdminAuth().updateUser(id, { disabled })
+        } catch (e) {
+          if ((e as { code?: string })?.code !== "auth/user-not-found") throw e
+        }
+      }
+      const setFirestoreDisabled = () =>
+        userRef.update({ disabled, disabled_at: disabled ? now : null, updated_at: now })
+      // ترتيب الكتابتين حسب الاتجاه ليكون الفشل الجزئي دائمًا في الجانب الآمن (يبقى مقفولًا):
+      //   • تعطيل: Auth أولًا (لو فشلت Firestore بعده يبقى الحساب مقفولًا فعلًا عبر checkRevoked).
+      //   • تفعيل: Firestore أولًا (لو فشل Auth بعده يبقى مقفولًا بعلم Firestore حتى إعادة المحاولة —
+      //     نتفادى فتح Auth وترك علم Firestore عالقًا فيُحجب المستخدم الشرعي في getCurrentUser).
+      if (disabled) {
+        await setAuthDisabled()
+        await setFirestoreDisabled()
+      } else {
+        await setFirestoreDisabled()
+        await setAuthDisabled()
+      }
+      revalidatePath("/admin/accounts")
+      // حظر بائع يجب أن يُخفي متجره من الواجهة العامة فورًا (قراءات المتاجر تستبعد disabled) — نُبطل الكاش.
+      if (data?.role === "seller") revalidateTag("stores", "max")
+      return { success: true }
+    }
+
+    // سائق؟ (بلا Firebase Auth — الإنفاذ عبر علم drivers/{id}.disabled الذي يفحصه getCurrentDriverId)
+    const driverRef = db.collection("drivers").doc(id)
+    const driverSnap = await driverRef.get()
+    if (driverSnap.exists) {
+      await driverRef.update({ disabled, disabled_at: disabled ? now : null, updated_at: now })
+      revalidatePath("/admin/accounts")
+      return { success: true }
+    }
+
+    return { success: false, error: "الحساب غير موجود" }
+  } catch (error) {
+    logError("[admin] setAccountDisabled", error)
+    return { success: false, error: "تعذّر تحديث حالة الحساب" }
   }
 }
 
