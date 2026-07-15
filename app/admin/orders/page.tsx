@@ -2,7 +2,7 @@
 
 // إدارة الطلبات (أدمن): قائمة + تفاصيل + إلغاء مع استعادة المخزون.
 // النطاق الحالي: عرض/تفاصيل/إلغاء فقط (لا تعديل حالة ولا تعيين سائق — زيادة مستقبلية).
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,15 +87,20 @@ const isCancellable = (status: string) => status !== "cancelled" && status !== "
 export default function AdminOrdersPage() {
   const toast = useToast()
   const [orders, setOrders] = useState<AdminOrderSummary[]>([])
+  // لقطة عدّادات الألسنة تُؤخذ من عرض "الكل" بلا بحث (كسر تبعيّة العدّاد بالنافذة المعروضة)
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [filter, setFilter] = useState<Filter>("all")
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState("") // نص حقل البحث
+  const [activeQuery, setActiveQuery] = useState("") // البحث المُرسَل فعليًا للخادم
 
   // تفاصيل الطلب (Modal)
   const [detail, setDetail] = useState<AdminOrderDetail | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
 
   // إلغاء الطلب (Modal بسبب)
   const [cancelId, setCancelId] = useState<string | null>(null)
@@ -103,36 +108,63 @@ export default function AdminOrdersPage() {
   const [cancelReason, setCancelReason] = useState("")
   const [cancelBusy, setCancelBusy] = useState(false)
 
+  // الجلب يُقاد من الخادم: الحالة عبر status، والبحث عبر query (لا يقتصر على أحدث نافذة).
   const load = useCallback(async () => {
     setLoading(true)
     setError(false)
     try {
-      const res = await getAdminOrders()
-      if (res.success && res.orders) setOrders(res.orders)
-      else setError(true)
+      const statusArg = filter !== "all" ? filter : undefined
+      const queryArg = activeQuery || undefined
+      const res = await getAdminOrders({ status: statusArg, query: queryArg })
+      if (res.success && res.orders) {
+        setOrders(res.orders)
+        // نُحدّث لقطة العدّادات فقط من عرض "الكل" بلا بحث (الحالات الأخرى قد لا تكتمل)
+        if (!statusArg && !queryArg) {
+          const c: Record<string, number> = { all: res.orders.length }
+          for (const o of res.orders) c[o.status] = (c[o.status] || 0) + 1
+          setCounts(c)
+        }
+      } else {
+        setError(true)
+      }
     } catch (e) {
       logError("[admin/orders] load", e)
       setError(true)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filter, activeQuery])
 
   useEffect(() => {
     load()
   }, [load])
 
+  // تبديل لسان الحالة: يمسح البحث ويُعيد الجلب سيرفر-سايد لهذه الحالة
+  const selectTab = (k: Filter) => {
+    setSearch("")
+    setActiveQuery("")
+    setFilter(k)
+  }
+
+  // إرسال البحث (Enter أو زر): يبحث عبر كل الحالات فنُعيد اللسان إلى "الكل" لاتساق العرض
+  const submitSearch = () => {
+    setFilter("all")
+    setActiveQuery(search.trim())
+  }
+
   const openDetail = async (id: string) => {
     setDetail(null)
+    setDetailError(null)
+    setDetailId(id)
     setDetailOpen(true)
     setDetailLoading(true)
     try {
       const res = await getAdminOrderDetail(id)
       if (res.success && res.order) setDetail(res.order)
-      else toast.error(res.error || "تعذّر تحميل التفاصيل")
+      else setDetailError(res.error || "تعذّر تحميل التفاصيل")
     } catch (e) {
       logError("[admin/orders] detail", e)
-      toast.error("تعذّر تحميل التفاصيل")
+      setDetailError("تعذّر تحميل التفاصيل")
     } finally {
       setDetailLoading(false)
     }
@@ -171,21 +203,6 @@ export default function AdminOrdersPage() {
     }
   }
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: orders.length }
-    for (const o of orders) c[o.status] = (c[o.status] || 0) + 1
-    return c
-  }, [orders])
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return orders.filter((o) => {
-      if (filter !== "all" && o.status !== filter) return false
-      if (!q) return true
-      return o.id.toLowerCase().includes(q) || (o.customer_phone || "").toLowerCase().includes(q)
-    })
-  }, [orders, filter, search])
-
   const TABS: [Filter, string][] = [
     ["all", `الكل (${counts.all || 0})`],
     ["pending", `قيد المراجعة (${counts.pending || 0})`],
@@ -209,24 +226,37 @@ export default function AdminOrdersPage() {
           {TABS.map(([k, label]) => (
             <button
               key={k}
-              onClick={() => setFilter(k)}
+              onClick={() => selectTab(k)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                filter === k ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                filter === k && !activeQuery
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="relative md:ms-auto md:w-72">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم الهاتف أو رقم الطلب"
-            className="h-10 rounded-xl pr-9"
-          />
-        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            submitSearch()
+          }}
+          className="flex items-center gap-2 md:ms-auto md:w-80"
+        >
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث برقم الهاتف أو رقم الطلب"
+              className="h-10 rounded-xl pr-9"
+            />
+          </div>
+          <Button type="submit" variant="outline" className="h-10 rounded-xl gap-1">
+            <Search className="h-4 w-4" /> بحث
+          </Button>
+        </form>
       </div>
 
       {loading ? (
@@ -235,11 +265,15 @@ export default function AdminOrdersPage() {
         </div>
       ) : error ? (
         <ErrorState description="تعذّر تحميل الطلبات. حاول مرة أخرى." onRetry={load} />
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="لا توجد طلبات مطابقة" />
+      ) : orders.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title={activeQuery ? "لا توجد نتائج مطابقة" : "لا توجد طلبات"}
+          description={activeQuery ? "جرّب رقم هاتف أو رقم طلب آخر." : undefined}
+        />
       ) : (
         <div className="space-y-4">
-          {filtered.map((o) => (
+          {orders.map((o) => (
             <Card key={o.id} className="border border-border">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start gap-3 flex-wrap">
@@ -323,7 +357,24 @@ export default function AdminOrdersPage() {
             <DialogDescription>عرض للقراءة فقط — لا يُعرض كود تأكيد التسليم.</DialogDescription>
           </DialogHeader>
 
-          {detailLoading || !detail ? (
+          {detailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="lg" label="جاري التحميل..." className="flex-col" />
+            </div>
+          ) : detailError ? (
+            <div>
+              <ErrorState
+                description={detailError}
+                onRetry={() => detailId && openDetail(detailId)}
+                className="py-8"
+              />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                  إغلاق
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : !detail ? (
             <div className="flex items-center justify-center py-12">
               <Spinner size="lg" label="جاري التحميل..." className="flex-col" />
             </div>
@@ -434,7 +485,7 @@ export default function AdminOrdersPage() {
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {stop.items.length} منتج — {money(stop.subtotal)}
+                        {(stop.items?.length ?? 0)} منتج — {money(stop.subtotal)}
                       </p>
                     </div>
                   ))}

@@ -341,24 +341,50 @@ async function getItemsCountMap(db: Firestore, orderIds: string[]): Promise<Map<
 }
 
 // قائمة الطلبات (أحادية + متعددة المتاجر) الأحدث أولًا، مقيّدة بحدّ أعلى.
-// نجلب الأحدث عبر فهرس الحقل الواحد created_at (متوفّر تلقائيًا) ثم نُرشّح الحالة/الاستفسار في الذاكرة.
-// لا نُدرج delivery_code في الملخّص إطلاقًا.
+// فلترة سيرفر-سايد (لا تقتصر على أحدث نافذة فيتعذّر إيجاد/إلغاء الطلبات الأقدم):
+//   • status حقيقي (غير "all") ⇒ .where("status","==",status) — استعلام مساواة بفهرس حقل واحد تلقائي
+//     (لا نضمّه إلى orderBy(created_at) لأن ذلك يتطلّب فهرسًا مركّبًا غير موجود؛ نرتّب في الذاكرة).
+//   • query ⇒ نحلّه سيرفر-سايد: إن طابق معرّف طلب فبحث مباشر بالمستند، وإلا نعامله كرقم هاتف
+//     عبر .where("customer_phone","==",query) (بعد trim).
+// لا نُدرج delivery_code في الملخّص إطلاقًا (يُبنى من حقول محدّدة فلا يتسرّب الكود).
 export async function getAdminOrders(
-  opts?: { status?: string; limit?: number },
+  opts?: { status?: string; query?: string; limit?: number },
 ): Promise<{ success: boolean; orders?: AdminOrderSummary[]; error?: string }> {
   const admin = await ensureAdmin()
   if (!admin) return { success: false, error: "ليس لديك صلاحية" }
   try {
     const db = getAdminDb()
     const cap = Math.min(Math.max(Number(opts?.limit) || 100, 1), 300)
-    const snap = await db.collection("orders").orderBy("created_at", "desc").limit(cap).get()
+    const statusFilter = opts?.status && opts.status !== "all" ? String(opts.status) : null
+    const rawQuery = String(opts?.query || "").trim()
 
-    let rows: Record<string, any>[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+    let rows: Record<string, any>[] = []
+
+    if (rawQuery) {
+      // بحث: نجرّب معرّف طلب أولًا (قراءة مستند مباشرة)، وإلا نعامله كرقم هاتف.
+      const byId = await db.collection("orders").doc(rawQuery).get()
+      if (byId.exists) {
+        rows = [{ id: byId.id, ...(byId.data() as Record<string, any>) }]
+      } else {
+        const snap = await db.collection("orders").where("customer_phone", "==", rawQuery).limit(cap).get()
+        rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+      }
+      // عند البحث نطبّق فلتر الحالة (إن وُجد) في الذاكرة كي تبقى النتائج متسقة مع اللسان النشط
+      if (statusFilter) rows = rows.filter((o) => String(o.status || "") === statusFilter)
+    } else if (statusFilter) {
+      // فلتر حالة سيرفر-سايد (مساواة بفهرس حقل واحد) — نرتّب الأحدث أولًا في الذاكرة
+      const snap = await db.collection("orders").where("status", "==", statusFilter).limit(cap).get()
+      rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+    } else {
+      // "الكل": أحدث نافذة عبر فهرس created_at الحقل-الواحد (متوفّر تلقائيًا)
+      const snap = await db.collection("orders").orderBy("created_at", "desc").limit(cap).get()
+      rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+    }
+
     // استبعاد طلبات الاستفسار (pseudo-orders)
     rows = rows.filter((o) => !isInquiryOrderLike(o))
-    // فلترة الحالة (اختياري) — في الذاكرة لتجنّب الحاجة لفهرس مركّب
-    const statusFilter = opts?.status && opts.status !== "all" ? opts.status : null
-    if (statusFilter) rows = rows.filter((o) => String(o.status || "") === statusFilter)
+    // ترتيب الأحدث أولًا في الذاكرة (مسارات where/البحث لا تحمل orderBy)
+    rows.sort((a, b) => toIso(b.created_at).localeCompare(toIso(a.created_at)))
 
     const storeIds = rows
       .filter((o) => o.order_type !== "multi_store")
@@ -466,8 +492,14 @@ export async function getAdminOrderDetail(
       driver_name: String(data.driver_name || driver?.name || ""),
       driver_phone: driver?.phone ? String(driver.phone) : undefined,
       items,
-      // pickup_stops لا تحتوي كود التسليم (هو حقل top-level) — آمن إدراجها للطلب متعدد المتاجر
-      pickup_stops: isMulti ? (serializeData(data.pickup_stops || []) as PickupStop[]) : undefined,
+      // pickup_stops لا تحتوي كود التسليم (هو حقل top-level) — آمن إدراجها للطلب متعدد المتاجر.
+      // نطبّع كل محطة كي تكون items دائمًا مصفوفة (محطات قديمة/تالفة قد تفتقدها → تعطّل الواجهة).
+      pickup_stops: isMulti
+        ? (serializeData(data.pickup_stops || []) as PickupStop[]).map((s) => ({
+            ...s,
+            items: Array.isArray(s?.items) ? s.items : [],
+          }))
+        : undefined,
     }
 
     return { success: true, order }
@@ -510,12 +542,17 @@ export async function adminCancelOrder(orderId: string, reason: string) {
 
       const alreadyRestored = data.stock_restored === true
 
+      // دفاع في العمق: عند إلغاء طلب متعدد المتاجر نُرمّن (نُنهي) محطاته المُستعادة أيضًا بضبط
+      // حالتها إلى "cancelled" في المصفوفة المكتوبة، فتعكس المحطات إلغاء الطلب ولا تبقى
+      // pending/confirmed بجانب طلب ملغى (جنبًا إلى جنب مع حارس الحالة في آلة المحطات).
+      let terminalizedStops: any[] | null = null
+
       if (!alreadyRestored) {
         if (data.order_type === "multi_store") {
           const stops: any[] = Array.isArray(data.pickup_stops) ? data.pickup_stops : []
-          for (const stop of stops) {
-            // المرفوضة استُعيدت عبر rejectStorePickup؛ المُستَلَمة خرجت بضاعتها فعليًا
-            if (stop?.status === "rejected" || stop?.status === "picked_up") continue
+          terminalizedStops = stops.map((stop) => {
+            // المرفوضة استُعيدت عبر rejectStorePickup؛ المُستَلَمة خرجت بضاعتها فعليًا — نتركها كما هي
+            if (stop?.status === "rejected" || stop?.status === "picked_up") return stop
             for (const it of stop?.items || []) {
               const qty = Number(it?.quantity) || 0
               if (it?.product_id && qty > 0) {
@@ -524,7 +561,9 @@ export async function adminCancelOrder(orderId: string, reason: string) {
                 })
               }
             }
-          }
+            // المحطة المُستعادة (pending/confirmed) تُصبح "cancelled" لتعكس إلغاء الطلب
+            return { ...stop, status: "cancelled" }
+          })
         } else {
           for (const itemDoc of itemsSnap.docs) {
             const it = itemDoc.data() as Record<string, any>
@@ -548,6 +587,8 @@ export async function adminCancelOrder(orderId: string, reason: string) {
         stock_restored: true,
         updated_at: now,
         timeline,
+        // نكتب المحطات المُرمَّنة فقط للطلب متعدد المتاجر عند الاستعادة الفعلية
+        ...(terminalizedStops ? { pickup_stops: terminalizedStops } : {}),
       })
 
       return {

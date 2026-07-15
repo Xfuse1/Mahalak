@@ -1404,6 +1404,11 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
       if (orderData?.order_type !== "multi_store") {
         return { ok: false as const, error: "This is not a multi-store order" }
       }
+      // حارس الحالة النهائية للطلب (mirror markOrderDeliveredByDriver): آلة حالة المحطات كانت
+      // تفحص stop.status فقط، فأمكن تأكيد محطة في طلب ملغى/مُسلَّم فيُحيا الطلب المُنهى.
+      if (orderData?.status === "cancelled" || orderData?.status === "delivered") {
+        return { ok: false as const, error: "الطلب مُنهى ولا يمكن تعديله" }
+      }
 
       const stops: PickupStop[] = orderData.pickup_stops || []
       const stopIndex = stops.findIndex((s) => s.store_id === storeId)
@@ -1526,6 +1531,11 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
       const orderData = orderDoc.data() as Record<string, any>
       if (orderData?.order_type !== "multi_store") {
         return { ok: false as const, error: "This is not a multi-store order" }
+      }
+      // حارس الحالة النهائية للطلب (mirror markOrderDeliveredByDriver): بدونه أمكن رفض محطة في
+      // طلب ملغى/مُسلَّم — يستعيد المخزون مجددًا (تكرار) أو يُعيد كتابة حالة طلب مُنهى.
+      if (orderData?.status === "cancelled" || orderData?.status === "delivered") {
+        return { ok: false as const, error: "الطلب مُنهى ولا يمكن تعديله" }
       }
 
       const stops: PickupStop[] = orderData.pickup_stops || []
@@ -1683,6 +1693,11 @@ export async function markStorePickedUp(orderId: string, _driverId: string, stor
       const orderData = orderDoc.data() as Record<string, any>
       if (orderData?.driver_id !== sessionDriverId) {
         return { ok: false as const, error: "You are not allowed to update this order" }
+      }
+      // حارس الحالة النهائية للطلب (mirror markOrderDeliveredByDriver): بدونه أمكن استلام محطة في
+      // طلب ملغى/مُسلَّم — يعيد الطلب المُنهى إلى picking_up/on_the_way.
+      if (orderData?.status === "cancelled" || orderData?.status === "delivered") {
+        return { ok: false as const, error: "الطلب مُنهى ولا يمكن تعديله" }
       }
 
       const stops: PickupStop[] = orderData.pickup_stops || []
