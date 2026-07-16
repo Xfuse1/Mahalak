@@ -28,6 +28,7 @@ import { AlertTriangle, Clock, Truck } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { Spinner } from "@/components/ui/spinner"
 import { EmptyState } from "@/components/ui/empty-state"
+import { imgSrc } from "@/lib/storage/public-url"
 
 type OrderItem = {
   id: string
@@ -451,7 +452,7 @@ export default function SellerOrdersPage() {
                             <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
                               {item.image_url && (
                                 <div className="relative w-6 h-6 rounded overflow-hidden">
-                                  <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                  <Image src={imgSrc(item.image_url)} alt={item.name} fill className="object-cover" />
                                 </div>
                               )}
                               <span className="font-medium">{item.name}</span>
@@ -596,7 +597,7 @@ export default function SellerOrdersPage() {
                             <div className="col-span-2 flex items-center gap-3">
                               <div className="relative w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-gray-100">
                                 <Image
-                                  src={item.products.image_url || "/placeholder.svg"}
+                                  src={imgSrc(item.products.image_url)}
                                   alt={item.products.name}
                                   fill
                                   className="object-cover"
@@ -726,7 +727,7 @@ export default function SellerOrdersPage() {
                               <div className="col-span-2 flex items-center gap-3">
                                 {item.image_url && (
                                   <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                                    <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                    <Image src={imgSrc(item.image_url)} alt={item.name} fill className="object-cover" />
                                   </div>
                                 )}
                                 <p className="font-medium line-clamp-1">{item.name}</p>

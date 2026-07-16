@@ -21,6 +21,7 @@ import { useLanguage } from "../../lib/language-context"
 import Image from "next/image"
 import { searchProducts, getProducts } from "../../lib/actions/products"
 import { searchStores, getStores } from "../../lib/actions/stores"
+import { imgSrc } from "@/lib/storage/public-url"
 import type { ProductListItem } from "../../lib/types/product"
 import type { StoreListItem } from "../../lib/types/store"
 
@@ -224,7 +225,7 @@ function SearchResults() {
                         <Card className="hover:shadow-lg transition-all duration-300 h-full overflow-hidden border border-border bg-card shadow-sm rounded-2xl hover:-translate-y-1 group">
                           <div className="relative h-48 bg-muted overflow-hidden">
                             <Image
-                              src={store.image_url || "/placeholder.svg"}
+                              src={imgSrc(store.image_url)}
                               alt={store.name}
                               fill
                               loading="lazy"

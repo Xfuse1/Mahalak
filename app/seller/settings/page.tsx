@@ -20,6 +20,7 @@ import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
+import { imgSrc } from "@/lib/storage/public-url"
 
 function PhoneVerificationLoading() {
   const { t } = useLanguage()
@@ -320,7 +321,7 @@ export default function SettingsPage() {
                     {imagePreview && (
                       <div className="relative w-28 h-28 rounded-2xl overflow-hidden border-2 border-primary/20 shadow-md">
                         <Image
-                          src={imagePreview || "/placeholder.svg"}
+                          src={imgSrc(imagePreview)}
                           alt={t("معاينة شعار المتجر", "Store logo preview")}
                           fill
                           className="object-cover"

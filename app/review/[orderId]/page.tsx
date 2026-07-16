@@ -14,6 +14,7 @@ import { Star, Truck, Package, CheckCircle, Loader2 } from "lucide-react"
 import { getOrderById } from "@/lib/actions/orders"
 import { createOrderReview, hasOrderBeenReviewed } from "@/lib/actions/reviews"
 import { markNotificationAsRead } from "@/lib/actions/notifications"
+import { imgSrc } from "@/lib/storage/public-url"
 import { useToast } from "@/components/ui/toast"
 
 type OrderItem = {
@@ -338,7 +339,7 @@ export default function ReviewPage({ params }: { params: Promise<{ orderId: stri
                     <div className="flex items-center gap-4 mb-4">
                       <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-md">
                         <Image
-                          src={item.image_url || "/placeholder.svg"}
+                          src={imgSrc(item.image_url)}
                           alt={item.name || "Product"}
                           fill
                           className="object-cover"

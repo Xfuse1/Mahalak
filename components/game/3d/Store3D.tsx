@@ -12,6 +12,7 @@ import { getStoreByUserId } from '../../../lib/actions/stores';
 import { useAuth } from '../../../lib/auth-context';
 import { useLanguage } from '../../../lib/language-context';
 import { logError } from '../../../lib/logger';
+import { imgSrc, storageUrl } from '../../../lib/storage/public-url';
 import { LayoutGrid } from 'lucide-react';
 
 type SimProduct = {
@@ -748,17 +749,18 @@ export default function SupermarketSimulator() {
         }
 
         function loadProductTexture(url: string, material: THREE.Material, fallback: THREE.Texture) {
-            if (!url) return;
-            const cached = textureCache.get(url);
+            const src = storageUrl(url);
+            if (!src) return;
+            const cached = textureCache.get(src);
             if (cached) {
                 applyTexture(material, cached);
                 return;
             }
             textureLoader.load(
-                url,
+                src,
                 (tex) => {
                     tex.anisotropy = 4;
-                    textureCache.set(url, tex);
+                    textureCache.set(src, tex);
                     applyTexture(material, tex);
                 },
                 undefined,
@@ -2611,7 +2613,7 @@ export default function SupermarketSimulator() {
                             border: '1px solid rgba(255,255,255,0.08)'
                         }}>
                             <Image
-                                src={hoveredProduct.image_url || '/placeholder.svg'}
+                                src={imgSrc(hoveredProduct.image_url)}
                                 alt={hoveredProduct.name}
                                 width={64}
                                 height={64}

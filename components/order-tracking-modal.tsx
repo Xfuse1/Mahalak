@@ -11,6 +11,7 @@ import {
 } from "./ui/dialog"
 import { OrderTrackingTimeline, type TimelineEntry } from "./order-tracking-timeline"
 import { useLanguage } from "../lib/language-context"
+import { imgSrc } from "../lib/storage/public-url"
 import { Button } from "./ui/button"
 
 type OrderItem = {
@@ -152,7 +153,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                         <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden relative border border-gray-200">
                                             {item.products?.image_url ? (
                                                 <Image
-                                                    src={item.products.image_url}
+                                                    src={imgSrc(item.products.image_url)}
                                                     alt={item.products.name}
                                                     width={48}
                                                     height={48}

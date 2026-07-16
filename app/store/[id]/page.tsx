@@ -25,6 +25,7 @@ import { getProductsByStoreId } from "../../../lib/actions/products"
 import { trackMetaEvent } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
+import { imgSrc } from "../../../lib/storage/public-url"
 import { EmptyState } from "../../../components/ui/empty-state"
 import { Spinner } from "../../../components/ui/spinner"
 import { useToast } from "@/components/ui/toast"
@@ -285,7 +286,7 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-6">
               <div className="relative h-48 sm:h-64 lg:h-full rounded-lg overflow-hidden bg-gray-100">
                 <Image
-                  src={store.image_url || "/placeholder.svg"}
+                  src={imgSrc(store.image_url)}
                   alt={store.name}
                   fill
                   priority

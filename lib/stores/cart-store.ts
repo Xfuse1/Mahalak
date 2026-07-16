@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
+import { legacyUrlToKey } from "@/lib/storage/legacy-url"
 
 export type CartItem = {
   id: string
@@ -81,6 +82,22 @@ export const useCartStore = create<CartState>()(
     {
       name: "mahalak-cart",
       storage: createJSONStorage(() => localStorage),
+      // السلال المحفوظة تعيش في متصفح المستخدم — لا يصلها أي backfill سيرفر‑سايد. السلال
+      // القديمة تحمل روابط Supabase مطلقة تتوقف يوم يختفي ذلك المشروع (وهو خارج سيطرتنا).
+      // نحوّلها هنا إلى مسارات لتُقدَّم من التخزين الحالي. غير المطابق يُترك كما هو —
+      // storageUrl يمرّره، فأسوأ حالة هي السلوك الحالي بالضبط، لا سلة مكسورة.
+      version: 1,
+      migrate: (persisted, fromVersion) => {
+        const state = persisted as CartState | undefined
+        if (fromVersion >= 1 || !state?.items) return state as CartState
+        return {
+          ...state,
+          items: state.items.map((item) => {
+            const key = legacyUrlToKey(item.image_url)
+            return key ? { ...item, image_url: key } : item
+          }),
+        }
+      },
     },
   ),
 )

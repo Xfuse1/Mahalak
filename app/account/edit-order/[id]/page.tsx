@@ -14,6 +14,7 @@ import { getMultiStoreOrderForEdit, addStopsToMultiStoreOrder } from "@/lib/acti
 import type { PickupStop } from "@/lib/actions/orders"
 import { searchProducts } from "@/lib/actions/products"
 import { logError } from "@/lib/logger"
+import { imgSrc } from "@/lib/storage/public-url"
 import Image from "next/image"
 import { Store, Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, XCircle, Clock, Loader2, AlertTriangle, Package } from "lucide-react"
 
@@ -349,7 +350,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                             {stop.items.map((item, iIdx) => (
                               <div key={iIdx} className="flex items-center gap-2 text-sm text-gray-600">
                                 <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                  <Image src={item.image_url || "/placeholder.svg"} alt={item.name} width={32} height={32} className="object-cover w-full h-full" />
+                                  <Image src={imgSrc(item.image_url)} alt={item.name} width={32} height={32} className="object-cover w-full h-full" />
                                 </div>
                                 <span className="flex-1">{item.name}</span>
                                 <span className="text-gray-400">×{item.quantity}</span>
@@ -452,7 +453,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     return (
                       <div key={product.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 hover:border-primary/50 hover:shadow-md transition-all">
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
-                          <Image src={product.image_url || "/placeholder.svg"} alt={product.name} width={64} height={64} className="object-cover w-full h-full" />
+                          <Image src={imgSrc(product.image_url)} alt={product.name} width={64} height={64} className="object-cover w-full h-full" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm text-gray-800 truncate">{product.name}</p>
@@ -516,7 +517,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       {stop.items.map((item) => (
                         <div key={item.product_id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3">
                           <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                            <Image src={item.image_url || "/placeholder.svg"} alt={item.name} width={48} height={48} className="object-cover w-full h-full" />
+                            <Image src={imgSrc(item.image_url)} alt={item.name} width={48} height={48} className="object-cover w-full h-full" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm text-gray-800 truncate">{item.name}</p>

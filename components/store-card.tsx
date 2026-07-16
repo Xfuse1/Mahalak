@@ -9,6 +9,7 @@ import { Badge } from "./ui/badge"
 import { useLanguage } from "../lib/language-context"
 import { useUserLocation } from "../lib/location/user-location"
 import { storeDistanceKm, formatDistanceAr } from "../lib/utils/geo"
+import { imgSrc } from "@/lib/storage/public-url"
 import type { StoreListItem } from "@/lib/types/store"
 
 interface StoreCardProps {
@@ -48,7 +49,7 @@ const StoreCardComponent = ({ store }: StoreCardProps) => {
               </div>
             )}
             <Image
-              src={store.image_url || store.logo || "/placeholder.svg"}
+              src={imgSrc(store.image_url || store.logo)}
               alt={store.name}
               fill
               className="object-cover transition-transform duration-500 group-hover:scale-110"

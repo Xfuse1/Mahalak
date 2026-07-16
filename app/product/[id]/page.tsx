@@ -17,6 +17,7 @@ import { getUserReview, upsertReview } from "@/lib/actions/reviews"
 import { trackMetaEvent } from "@/lib/utils"
 import { createContactInquiry } from "@/lib/actions/orders"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { imgSrc } from "@/lib/storage/public-url"
 import { Tag } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { Spinner } from "@/components/ui/spinner"
@@ -273,7 +274,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* Product Image */}
             <div className="aspect-square relative bg-gray-100 rounded-3xl overflow-hidden shadow-xl group">
-              <Image src={product.image_url || "/placeholder.svg"} alt={product.name} fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+              <Image src={imgSrc(product.image_url)} alt={product.name} fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
 
@@ -475,7 +476,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     <div className="bg-white rounded-2xl shadow-lg border-0 hover:shadow-xl transition-all duration-300 overflow-hidden hover:-translate-y-2">
                       <div className="aspect-square relative bg-gray-100 overflow-hidden">
                         <Image
-                          src={storeProduct.image_url || "/placeholder.svg"}
+                          src={imgSrc(storeProduct.image_url)}
                           alt={storeProduct.name}
                           fill
                           loading="lazy"
@@ -520,7 +521,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     <div className="bg-white rounded-2xl shadow-lg border-0 hover:shadow-xl transition-all duration-300 overflow-hidden hover:-translate-y-2">
                       <div className="aspect-square relative bg-gray-100 overflow-hidden">
                         <Image
-                          src={otherProduct.image_url || "/placeholder.svg"}
+                          src={imgSrc(otherProduct.image_url)}
                           alt={otherProduct.name}
                           fill
                           loading="lazy"

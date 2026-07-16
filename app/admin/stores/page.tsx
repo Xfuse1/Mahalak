@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { useToast } from "@/components/ui/toast"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { logError } from "@/lib/logger"
+import { imgSrc } from "@/lib/storage/public-url"
 import {
   getAdminStores,
   setStoreApproval,
@@ -363,7 +364,7 @@ export default function AdminStoresPage() {
                     </button>
                     <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-muted flex-shrink-0">
                       {s.image_url ? (
-                        <Image src={s.image_url} alt={s.name} fill className="object-cover" sizes="56px" />
+                        <Image src={imgSrc(s.image_url)} alt={s.name} fill className="object-cover" sizes="56px" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <StoreIcon className="h-6 w-6 text-muted-foreground" />
@@ -421,7 +422,10 @@ export default function AdminStoresPage() {
                           title={d.label}
                           className="relative w-16 h-16 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
                         >
-                          <Image src={d.url} alt={d.label} fill className="object-cover" sizes="64px" />
+                          {/* unoptimized إلزامي: d.url رابط موقّع عمره 300ث، ومُحسِّن الصور
+                              (minimumCacheTTL = 30 يومًا) يكاش المستند المفكوك ويقدّمه من
+                              /_next/image — نقطة عامة بلا مصادقة — بعد انتهاء التوقيع بوقت طويل. */}
+                          <Image src={d.url} alt={d.label} fill className="object-cover" sizes="64px" unoptimized />
                           <span className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[9px] text-center py-0.5">{d.label}</span>
                         </a>
                       ))}

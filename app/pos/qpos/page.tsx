@@ -78,6 +78,7 @@ import {
   type DrugLabel,
   type ProductUnit,
 } from "@/lib/actions/pos-pharmacy"
+import { imgSrc } from "@/lib/storage/public-url"
 
 // Local synchronous helper (not a server action) for calculating product units
 function calculateProductUnitsLocal(
@@ -3096,7 +3097,7 @@ export default function QPOSPage() {
           <div className="flex items-center gap-2 sm:gap-3">
             {store.logo_url ? (
               <Image
-                src={store.logo_url}
+                src={imgSrc(store.logo_url)}
                 alt={store.name}
                 width={40}
                 height={40}
@@ -3429,7 +3430,7 @@ export default function QPOSPage() {
                   {/* Product image */}
                   {item.image_url ? (
                     <Image
-                      src={item.image_url}
+                      src={imgSrc(item.image_url)}
                       alt={item.name}
                       width={40}
                       height={40}
@@ -3730,7 +3731,7 @@ export default function QPOSPage() {
                       <div className="aspect-square rounded-lg overflow-hidden bg-gray-700 mb-2">
                         {product.image_url ? (
                           <Image
-                            src={product.image_url}
+                            src={imgSrc(product.image_url)}
                             alt={product.name}
                             width={200}
                             height={200}

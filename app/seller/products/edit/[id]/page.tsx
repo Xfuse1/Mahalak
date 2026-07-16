@@ -19,6 +19,7 @@ import Image from "next/image"
 import { fetchStoreSubcategories, type SubcategoryItem } from "../../../../../lib/firebase/categories"
 import { useToast } from "@/components/ui/toast"
 import { useLanguage } from "../../../../../lib/language-context"
+import { imgSrc } from "@/lib/storage/public-url"
 
 type StoreType = "pharmacy" | "clothing" | "grocery" | "electronics" | "general"
 
@@ -610,7 +611,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     <div className="mt-3 mb-4">
                       <div className="relative w-48 h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-200">
                         <Image
-                          src={imagePreview || "/placeholder.svg"}
+                          src={imgSrc(imagePreview)}
                           alt={t("معاينة الصورة", "Image preview")}
                           width={200}
                           height={200}

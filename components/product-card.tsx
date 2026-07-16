@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Star, ShoppingBag, Tag } from "lucide-react"
 import { Card, CardContent } from "./ui/card"
 import { useLanguage } from "../lib/language-context"
+import { imgSrc } from "@/lib/storage/public-url"
 import { memo } from "react"
 
 interface ProductCardProduct {
@@ -39,7 +40,7 @@ function ProductCardComponent({ product }: ProductCardProps) {
         <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full border border-border bg-card shadow-sm group-hover:shadow-primary/10">
           <div className="aspect-square relative bg-muted overflow-hidden">
             <Image
-              src={product.image_url || product.image || "/placeholder.svg"}
+              src={imgSrc(product.image_url || product.image)}
               alt={product.name}
               fill
               className="object-cover transition-transform duration-500 group-hover:scale-110"

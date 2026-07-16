@@ -11,6 +11,7 @@ import { BackButton } from "@/components/back-button"
 import { useLanguage } from "@/lib/language-context"
 import { useAuth } from "@/lib/auth-context"
 import { useCartStore } from "@/lib/stores/cart-store"
+import { imgSrc } from "@/lib/storage/public-url"
 import { getCartPricing } from "@/lib/actions/products"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState, useRef } from "react"
@@ -285,7 +286,7 @@ export default function CheckoutPage() {
                 return (
                   <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
                     <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100 shadow-sm">
-                      <Image src={item.image_url || "/placeholder.svg"} alt={item.name} fill loading="lazy" sizes="64px" className="object-cover" />
+                      <Image src={imgSrc(item.image_url)} alt={item.name} fill loading="lazy" sizes="64px" className="object-cover" />
                       {hasDiscount && (
                         <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                           -{item.discount_percentage}%

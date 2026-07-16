@@ -14,6 +14,7 @@ import { useToast } from "../ui/toast"
 import { useUserLocation } from "../../lib/location/user-location"
 import { storeDistanceKm, formatDistanceAr } from "../../lib/utils/geo"
 import { NearbyControl } from "../nearby-control"
+import { imgSrc } from "@/lib/storage/public-url"
 
 type Store = {
   id: string
@@ -39,7 +40,7 @@ function StoreCardItem({ store, index }: { store: Store; index: number }) {
       >
         <div className="relative h-52 bg-muted overflow-hidden">
           <Image
-            src={store.image_url || "/placeholder.svg"}
+            src={imgSrc(store.image_url)}
             alt={store.name}
             fill
             loading="lazy"

@@ -17,6 +17,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog"
 import { logError } from "../../../lib/logger"
 import { EmptyState } from "../../../components/ui/empty-state"
 import { Spinner } from "../../../components/ui/spinner"
+import { imgSrc } from "@/lib/storage/public-url"
 
 type SellerProduct = {
   id: string
@@ -231,7 +232,7 @@ export default function SellerProductsPage() {
                   <CardContent className="p-0">
                     <div className="aspect-square relative bg-gray-100 overflow-hidden">
                       <Image
-                        src={product.image_url || "/placeholder.svg"}
+                        src={imgSrc(product.image_url)}
                         alt={product.name}
                         fill
                         className="object-cover group-hover:scale-110 transition-transform duration-500"

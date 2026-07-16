@@ -16,6 +16,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { useLanguage } from '../../lib/language-context';
 import { Product, Shelf, Placement } from '../../lib/types/product-management';
 import { saveSupermarketLayout } from '../../lib/actions/layout';
+import { imgSrc } from '../../lib/storage/public-url';
 
 export default function ProductModal() {
     const {
@@ -68,7 +69,7 @@ export default function ProductModal() {
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
                                                         {product?.textureURL ? (
-                                                            <Image src={product.textureURL} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
+                                                            <Image src={imgSrc(product.textureURL)} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
                                                         ) : (
                                                             <Package className="w-5 h-5 text-gray-400" />
                                                         )}
@@ -116,7 +117,7 @@ export default function ProductModal() {
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden group-hover:bg-primary/10 transition-colors">
                                                     {product.textureURL ? (
-                                                        <Image src={product.textureURL} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
+                                                        <Image src={imgSrc(product.textureURL)} alt="" width={40} height={40} unoptimized className="w-full h-full object-cover" />
                                                     ) : (
                                                         <Package className="w-5 h-5 text-gray-400 group-hover:text-primary" />
                                                     )}
