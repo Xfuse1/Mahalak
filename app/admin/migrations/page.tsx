@@ -16,7 +16,13 @@ import {
   type StoreBackfillPreview,
   type StoreBackfillResult,
 } from "@/lib/actions/admin"
-import { Database, RefreshCw, Play, Tag, ShieldCheck, Loader2, Info, CheckCircle2 } from "lucide-react"
+import {
+  previewStorageBackfill,
+  runStorageBackfill,
+  type StorageBackfillPreview,
+  type StorageBackfillResult,
+} from "@/lib/actions/storage-migration"
+import { Database, RefreshCw, Play, Tag, ShieldCheck, Loader2, Info, CheckCircle2, ImageIcon, FlaskConical, AlertTriangle } from "lucide-react"
 
 export default function AdminMigrationsPage() {
   const toast = useToast()
@@ -241,7 +247,219 @@ export default function AdminMigrationsPage() {
           </CardContent>
         </Card>
       )}
+
+      <div className="mt-10 pt-8 border-t-2 border-border">
+        <StorageBackfillSection />
+      </div>
     </div>
+  )
+}
+
+// ترحيل التخزين: يحوّل روابط Supabase المطلقة المحفورة في المستندات إلى مسارات، فتُركَّب
+// الروابط وقت العرض من قاعدة واحدة. بوّابتان قبل الكتابة: معاينة ثم تشغيل جافّ إلزامي.
+function StorageBackfillSection() {
+  const toast = useToast()
+  const confirm = useConfirm()
+
+  const [preview, setPreview] = useState<StorageBackfillPreview | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [dryRun, setDryRun] = useState<StorageBackfillResult | null>(null)
+  const [applied, setApplied] = useState<StorageBackfillResult | null>(null)
+
+  const loadPreview = useCallback(async () => {
+    setPreviewing(true)
+    try {
+      const res = await previewStorageBackfill()
+      if (res.success && res.preview) setPreview(res.preview)
+      else toast.error(res.error || "تعذّر حساب المعاينة")
+    } catch (e) {
+      logError("[admin/migrations] storage preview", e)
+      toast.error("تعذّر حساب المعاينة")
+    } finally {
+      setPreviewing(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    loadPreview()
+  }, [loadPreview])
+
+  const handle = async (apply: boolean) => {
+    if (apply) {
+      const ok = await confirm({
+        title: "تنفيذ ترحيل التخزين",
+        message:
+          `سيُعاد كتابة ${dryRun?.valuesRewritten ?? 0} رابطًا في ${dryRun?.docsChanged ?? 0} مستندًا.\n\n` +
+          "الروابط القديمة تتحوّل إلى مسارات، وتُركَّب وقت العرض. ما لا يطابق شكل رابط Supabase " +
+          "بالضبط يُترك كما هو. العملية قابلة لإعادة التشغيل بأمان (لا تفعل شيئًا في المرة الثانية).",
+        confirmText: "تنفيذ",
+        cancelText: "تراجع",
+        variant: "default",
+      })
+      if (!ok) return
+    }
+
+    setBusy(true)
+    if (apply) setApplied(null)
+    else setDryRun(null)
+    try {
+      const res = await runStorageBackfill({ apply })
+      if (res.success && res.result) {
+        if (apply) {
+          setApplied(res.result)
+          toast.success(`تم — ${res.result.valuesRewritten} رابطًا`)
+          setDryRun(null)
+          await loadPreview()
+        } else {
+          setDryRun(res.result)
+          toast.success(`التشغيل الجافّ اكتمل — ${res.result.valuesRewritten} رابطًا سيتغيّر`)
+        }
+      } else {
+        toast.error(res.error || "تعذّر التنفيذ")
+      }
+    } catch (e) {
+      logError("[admin/migrations] storage run", e)
+      toast.error("تعذّر التنفيذ")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const nothingToDo = preview != null && preview.totalValues === 0
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-foreground flex items-center gap-2">
+            <ImageIcon className="h-6 w-6 text-primary" /> ترحيل روابط التخزين
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            يحوّل روابط Supabase المطلقة المحفورة في قاعدة البيانات إلى مسارات.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadPreview} disabled={previewing || busy} className="rounded-xl gap-1">
+          {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} معاينة
+        </Button>
+      </div>
+
+      <div className="mb-5 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent-foreground">
+        <p className="flex items-start gap-2">
+          <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>
+            اليوم يخزّن كل مستند <strong>رابطًا كاملًا</strong> لمزوّد التخزين — أي نقلة تخزين تعني إعادة كتابة كل
+            صف. بعد هذا الترحيل يخزّن المستند <strong>المسار فقط</strong>، ويُركَّب الرابط وقت العرض من إعداد واحد،
+            فالنقلة التالية تصير تغيير إعداد. <strong>شغّل التشغيل الجافّ أولًا</strong> — يحسب كل كتابة دون تنفيذ
+            أيٍّ منها. ما لا يطابق شكل رابط Supabase بالضبط يُترك كما هو.
+          </span>
+        </p>
+      </div>
+
+      <Card className="mb-5">
+        <CardContent className="p-0">
+          <div className="px-5 pt-5 pb-3 flex items-center gap-2 border-b border-border">
+            <h2 className="font-bold text-foreground">ما سيتغيّر (قراءة فقط)</h2>
+            {previewing && <Spinner size="sm" />}
+          </div>
+          {preview ? (
+            preview.rows.length ? (
+              <div className="text-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-secondary/40 text-xs font-bold text-secondary-foreground">
+                        <th className="text-right px-5 py-2">المجموعة</th>
+                        <th className="text-right px-3 py-2">الحقل</th>
+                        <th className="text-left px-3 py-2">روابط</th>
+                        <th className="text-left px-5 py-2">مستندات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {preview.rows.map((r) => (
+                        <tr key={`${r.collection}.${r.field}`}>
+                          <td className="px-5 py-2.5 font-medium text-foreground">{r.collection}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground"><code className="text-xs">{r.field}</code></td>
+                          <td className="px-3 py-2.5 text-left font-bold tabular-nums text-primary">{r.values}</td>
+                          <td className="px-5 py-2.5 text-left tabular-nums text-muted-foreground">{r.docs}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="divide-y divide-border border-t border-border">
+                  <Row label="إجمالي الروابط التي ستتغيّر" value={preview.totalValues} strong />
+                  <Row label="مستندات ستُكتب" value={preview.totalDocs} />
+                  <Row label="مستندات فُحصت" value={preview.scannedDocs} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-primary">
+                <CheckCircle2 className="h-5 w-5" /> لا توجد روابط قديمة — الترحيل مكتمل.
+              </div>
+            )
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              {previewing ? <Spinner size="lg" label="جاري الفحص..." className="flex-col" /> : (
+                <p className="text-sm text-muted-foreground">اضغط «معاينة».</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!nothingToDo && (
+        <Card className="mb-5">
+          <CardContent className="p-5">
+            <h2 className="font-bold text-foreground mb-3">التشغيل</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button variant="outline" onClick={() => handle(false)} disabled={busy || previewing} className="rounded-xl gap-1">
+                {busy && !applied ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+                ١. تشغيل جافّ (بلا كتابة)
+              </Button>
+              <Button onClick={() => handle(true)} disabled={busy || previewing || !dryRun} className="rounded-xl gap-1">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                ٢. تنفيذ
+              </Button>
+            </div>
+            {!dryRun && (
+              <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" /> «تنفيذ» مقفول حتى يمرّ تشغيل جافّ.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {dryRun && (
+        <Card className="mb-5 border-accent/50 bg-accent/5">
+          <CardContent className="p-5">
+            <h2 className="font-bold text-foreground mb-3 flex items-center gap-2">
+              <FlaskConical className="h-5 w-5" /> نتيجة التشغيل الجافّ — <span className="text-muted-foreground font-normal text-sm">لم يُكتب أي شيء</span>
+            </h2>
+            <div className="divide-y divide-border text-sm">
+              <Row label="روابط ستُعاد كتابتها" value={dryRun.valuesRewritten} strong />
+              <Row label="مستندات ستُكتب" value={dryRun.docsChanged} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {applied && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="p-5">
+            <h2 className="font-bold text-foreground mb-3 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" /> تم التنفيذ
+            </h2>
+            <div className="divide-y divide-border text-sm">
+              <Row label="روابط أُعيدت كتابتها" value={applied.valuesRewritten} strong tone="good" />
+              <Row label="مستندات كُتبت" value={applied.docsChanged} tone="good" />
+              <Row label="مستندات فشلت" value={applied.docsFailed} tone={applied.docsFailed ? "warn" : undefined} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
   )
 }
 
