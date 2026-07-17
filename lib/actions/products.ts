@@ -6,7 +6,7 @@ import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid, requireOwner } from "../auth/session"
-import { createAdminClient } from "../supabase/server"
+import { putObject, PUBLIC_BUCKET } from "../storage/r2"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
@@ -847,8 +847,6 @@ export async function uploadProductImage(formData: FormData) {
       return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_TOO_LARGE }
     }
 
-    const supabase = await createAdminClient()
-
     const fileExt = file.name.split(".").pop()
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `products/${storeId}/${fileName}`
@@ -857,24 +855,11 @@ export async function uploadProductImage(formData: FormData) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    const { data, error } = await supabase.storage
-      .from("product-images")
-      .upload(filePath, buffer, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type,
-      })
+    const key = await putObject(PUBLIC_BUCKET, filePath, buffer, file.type)
 
-    if (error) {
-      console.error("Supabase storage upload error:", error.message, error)
-      return { success: false, error: PRODUCT_ERROR_CODES.IMAGE_UPLOAD_FAILED, detail: error.message }
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("product-images").getPublicUrl(data.path)
-
-    return { success: true, url: publicUrl }
+    // نُعيد **المسار** لا رابطًا مطلقًا: الرابط يُركَّب وقت العرض عبر storageUrl من قاعدة
+    // واحدة، فلا يُحفَر اسم مزوّد التخزين داخل البيانات ولا يحتاج تغييره ترحيلًا لاحقًا.
+    return { success: true, url: key }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error("Image upload internal error:", msg)

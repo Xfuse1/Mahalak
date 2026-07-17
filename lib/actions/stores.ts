@@ -5,7 +5,7 @@ import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid } from "../auth/session"
-import { createAdminClient } from "../supabase/server"
+import { putObject, presignGet, PUBLIC_BUCKET, PRIVATE_BUCKET } from "../storage/r2"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { checkRateLimit } from "../utils/rate-limit"
@@ -118,13 +118,19 @@ const KYC_FIELDS = [
 ] as const
 
 export async function signKycFields<T extends Record<string, unknown>>(store: T): Promise<T> {
-  let supabase: Awaited<ReturnType<typeof createAdminClient>> | null = null
   for (const f of KYC_FIELDS) {
     const v = store[f]
+    // الشرط يفرز بالشكل (مسار مقابل رابط قديم)، لا بالـbucket. اختيار الـbucket يتم باسم
+    // الحقل — KYC_FIELDS خاصة دائمًا — لأن `registrations/<id>/logo/x.jpg` (عام) و
+    // `registrations/<id>/id-card-front/x.jpg` (خاص) لا يمكن تمييزهما كنصّين.
     if (v && typeof v === "string" && !v.startsWith("http")) {
-      if (!supabase) supabase = await createAdminClient()
-      const { data } = await supabase.storage.from("kyc-documents").createSignedUrl(v, 300)
-      ;(store as Record<string, unknown>)[f] = data?.signedUrl || null
+      try {
+        ;(store as Record<string, unknown>)[f] = await presignGet(PRIVATE_BUCKET, v, 300)
+      } catch (error) {
+        // الفشل هنا كان يمسح الحقل بصمت (data?.signedUrl || null)، فيختفي المستند من واجهة
+        // المراجعة كأنه غير مرفوع أصلًا. نُبقي القيمة ونُسجّل: صورة لا تُحمَّل أوضح من لا شيء.
+        logError(`[stores] signKycFields presign failed for ${f}`, error)
+      }
     }
   }
   return store
@@ -516,29 +522,13 @@ export async function uploadStoreImage(formData: FormData) {
   }
 
   try {
-    const supabase = await createAdminClient()
     const fileExt = file.name.split(".").pop()
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
     const filePath = `stores/${storeId}/${fileName}`
 
-    const { data, error } = await supabase.storage
-      .from("product-images")
-      .upload(filePath, Buffer.from(await file.arrayBuffer()), {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type,
-      })
+    const key = await putObject(PUBLIC_BUCKET, filePath, Buffer.from(await file.arrayBuffer()), file.type)
 
-    if (error) {
-      logError("[v0] Storage upload error details:", error)
-      return { success: false, error: error.message }
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("product-images").getPublicUrl(data.path)
-
-    return { success: true, url: publicUrl }
+    return { success: true, url: key }
   } catch (error: unknown) {
     logError("[v0] Server upload error:", error)
     return { success: false, error: getErrorMessage(error, "Internal server error during upload") }
@@ -555,7 +545,9 @@ const ALLOWED_DOC_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
  */
 export async function uploadStoreDocument(formData: FormData) {
   const file = formData.get("file") as File | null
-  const kind = String(formData.get("kind") || "logo")
+  // لا افتراضي: kind هو القرار الوحيد الذي يفصل عام عن خاص هنا، وافتراضه "logo" كان يعني
+  // أن غيابه يختار الـbucket العام دون أن تراه القائمة البيضاء أدناه. الفراغ يسقط في الرفض.
+  const kind = String(formData.get("kind") || "")
   const regId = String(formData.get("regId") || "")
   const prefix = String(formData.get("prefix") || "doc")
 
@@ -567,25 +559,22 @@ export async function uploadStoreDocument(formData: FormData) {
   }
 
   try {
-    const supabase = await createAdminClient()
     const ext = file.name.split(".").pop() || "jpg"
     const path = `registrations/${regId}/${prefix}/${Math.random().toString(36).slice(2)}-${Date.now()}.${ext}`
     const buffer = Buffer.from(await file.arrayBuffer())
 
-    if (kind === "kyc") {
-      // bucket خاص (deny public read) — يُنشأ تلقائيًا إن لم يكن موجودًا
-      await supabase.storage.createBucket("kyc-documents", { public: false }).catch(() => {})
-      const { error } = await supabase.storage.from("kyc-documents").upload(path, buffer, { contentType: file.type })
-      if (error) return { success: false, error: error.message }
-      return { success: true, value: path } // مسار خاص (لا رابط عام)
+    // قائمة سماح صريحة: kind يأتي من العميل وهو ما يقرّر عام مقابل خاص. بلا هذه القائمة كان
+    // "أي شيء ليس kyc" يعني عامًا، فقيمة مشوَّهة أو غائبة تنشر مستندًا كان يُفترض أن يبقى خاصًا.
+    if (kind !== "kyc" && kind !== "logo") {
+      return { success: false, error: "نوع المستند غير مدعوم" }
     }
 
-    const { data, error } = await supabase.storage.from("product-images").upload(path, buffer, { contentType: file.type })
-    if (error) return { success: false, error: error.message }
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("product-images").getPublicUrl(data.path)
-    return { success: true, value: publicUrl }
+    const bucket = kind === "kyc" ? PRIVATE_BUCKET : PUBLIC_BUCKET
+    const key = await putObject(bucket, path, buffer, file.type)
+
+    // الفرعان يُعيدان مسارًا الآن. الشعار العام يُركَّب رابطه وقت العرض، ومستند KYC يُقدَّم
+    // عبر رابط موقّع قصير العمر. لا رابط مطلق يُكتب في قاعدة البيانات من أيّ مسار.
+    return { success: true, value: key }
   } catch (error: unknown) {
     logError("[stores] uploadStoreDocument error:", error)
     return { success: false, error: getErrorMessage(error, "Upload failed") }

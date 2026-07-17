@@ -10,6 +10,10 @@ const nextConfig = {
     // مقيّد على مضيفات التخزين الفعلية (Supabase / Firebase Storage / صور حسابات Google)
     // بدل '**' الذي كان يحوّل مُحسِّن الصور إلى بروكسي صور مفتوح (SSRF/استهلاك موارد).
     remotePatterns: [
+      // التخزين الحالي (R2 عبر نطاق مخصص). '*' يطابق تسمية واحدة فقط، فالنطاق الفرعي يحتاج سطرًا صريحًا.
+      { protocol: 'https', hostname: 'cdn.m7lk.com' },
+      // مطلوب حتى بعد الترحيل: الروابط المطلقة القديمة تعيش في أماكن لا يصلها backfill
+      // (سلال localStorage في متصفحات المستخدمين). إزالته تكسرها.
       { protocol: 'https', hostname: '*.supabase.co' },
       { protocol: 'https', hostname: '*.firebasestorage.app' },
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
