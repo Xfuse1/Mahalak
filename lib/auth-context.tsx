@@ -26,7 +26,10 @@ interface User {
   id: string
   email: string
   name: string
-  role: "customer" | "seller"
+  // يعكس ما تحمله users/{uid}.role فعلًا. كان الاتحاد "customer" | "seller" فقط بينما
+  // حسابات الإدارة تحمل "admin"/"superAdmin"، فيُسنَد الدور الحقيقي وقت التشغيل ويظنّه
+  // النوع مستحيلًا — أي فحص `role === "seller" ? A : B` كان يعامل الأدمن كعميل صامتًا.
+  role: "customer" | "seller" | "driver" | "admin" | "superAdmin"
   phone?: string
   // optional address fields (some rows use different column names)
   address?: string

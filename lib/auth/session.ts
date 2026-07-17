@@ -67,18 +67,11 @@ export type CurrentUser = {
   isSuperAdmin: boolean
 }
 
-// هل الدور يمنح صلاحية الوصول للوحة الإدارة (admin أو superAdmin)؟ — غير حسّاس لحالة الأحرف.
-// superAdmin مجموعة فائقة من admin: أي مكان يقبل admin يجب أن يقبل superAdmin.
-export function hasAdminAccess(role: unknown): boolean {
-  const r = String(role || "").toLowerCase()
-  return r === "admin" || r === "superadmin" || r === "super_admin"
-}
-
-// هل الدور superAdmin تحديدًا؟ — غير حسّاس لحالة الأحرف (superAdmin / super_admin).
-export function hasSuperAdminAccess(role: unknown): boolean {
-  const r = String(role || "").toLowerCase()
-  return r === "superadmin" || r === "super_admin"
-}
+// تعريف الأدوار يعيش في ./roles (نقي، بلا استيراد سيرفري) كي تشاركه مكوّنات العميل —
+// الواجهة تُخفي زرًّا والسيرفر يمنع الوصول، وكلاهما يجب أن يجيب نفس السؤال بنفس الإجابة.
+// يُعاد تصديره هنا حفاظًا على المستوردين الحاليين من هذا المسار.
+import { hasAdminAccess, hasSuperAdminAccess } from "./roles"
+export { hasAdminAccess, hasSuperAdminAccess }
 
 /**
  * يُرجع المستخدم الموثّق مع دوره (من مجموعة users) أو null إن لم يكن مسجّلًا.

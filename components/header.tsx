@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { User, LogOut, ShoppingCart, Bell, X } from "lucide-react"
+import { User, LogOut, ShoppingCart, Bell, X, Shield } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
+import { hasAdminAccess } from "../lib/auth/roles"
 import { useRouter } from "next/navigation"
 import { Logo } from "./logo"
 import { useLanguage } from "../lib/language-context"
@@ -263,6 +264,19 @@ export function Header() {
                     </>
                   )}
                 </div>
+
+                {hasAdminAccess(user.role) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title={t("لوحة الإدارة", "Admin panel")}
+                    aria-label={t("لوحة الإدارة", "Admin panel")}
+                    className="text-white hover:bg-white/20 transition-all duration-300 h-10 w-10 rounded-xl hover:scale-105"
+                    onClick={() => router.push("/admin")}
+                  >
+                    <Shield className="h-4 w-4 md:h-5 md:w-5" />
+                  </Button>
+                )}
 
                 <Button
                   variant="ghost"
