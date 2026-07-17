@@ -12,6 +12,8 @@ import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "../notifications-internal"
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 import { sendPushToOwner } from "../server-push"
+import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings } from "../delivery/fee"
+import { haversineKm } from "../utils/geo"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
 // خصم المخزون إلى زيادة) أو الكسرية أو NaN القادمة من العميل.
@@ -909,6 +911,233 @@ export async function createOrder(orderData: {
   } catch (error: unknown) {
     await logServerError("createOrder", error, { customer_id: orderData.customer_id, store_id: orderData.store_id })
     return { success: false, error: getErrorMessage(error) || "Failed to create order" }
+  }
+}
+
+// المرحلة 1 — إنشاء طلب توزيع (أحادي المتجر). لا سائق؛ الرسوم بالعدّاد (فتح العداد + سعر كم × مسافة).
+// يبدأ status="pending" (بانتظار تأكيد التاجر) ثم ينتقل offering عند التأكيد. حارس الـflag يمنع
+// إنشاء أي طلب توزيع والنظام مطفّي (دفاع فوق حجب الـUI). يضبط delivery_code دائمًا (يعتمد عليه fail-closed).
+export async function createDispatchOrder(orderData: {
+  customer_id: string
+  store_id: string
+  delivery_address: string
+  customer_name?: string
+  customer_phone?: string
+  delivery_city?: string
+  delivery_state?: string
+  delivery_latitude?: number
+  delivery_longitude?: number
+  delivery_notes?: string
+  landmark?: string
+  idempotency_key?: string
+  items: { product_id: string; quantity: number; price: number }[]
+}) {
+  if (!(await requireOwner(orderData.customer_id))) {
+    return { success: false, error: "Unauthorized" }
+  }
+  const settings = await readDispatchSettings()
+  // حارس الـflag: لا تُنشأ طلبات توزيع والنظام مطفّي (belt & suspenders فوق حجب الـUI في الـcheckout).
+  if (!settings.enabled) {
+    return { success: false, error: "dispatch_disabled" }
+  }
+  const db = getAdminDb()
+  const now = new Date().toISOString()
+  const activeOffers = await getActiveOffersForStores([orderData.store_id])
+  const today = now.split("T")[0]
+  const appliedOffers = new Map<string, number>()
+
+  try {
+    const result = await db.runTransaction(async (transaction) => {
+      appliedOffers.clear()
+      const idemRef = orderData.idempotency_key
+        ? db.collection("order_idempotency").doc(`${orderData.customer_id}:${orderData.idempotency_key}`)
+        : null
+      if (idemRef) {
+        const idemDoc = await transaction.get(idemRef)
+        if (idemDoc.exists) {
+          return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, storeId: orderData.store_id, deduped: true }
+        }
+      }
+      const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
+      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; latitude?: number; longitude?: number } } | undefined)?.store
+      if (storeInfo?.is_approved === false) {
+        throw new Error("Store not available")
+      }
+
+      // تجميع الكميات + التحقق من المخزون والسعر ذرّيًا (نفس منطق createOrder المُتحقَّق).
+      const qtyByProduct = new Map<string, number>()
+      for (const item of orderData.items) {
+        const q = validateQuantity(item.quantity)
+        qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + q)
+      }
+      const verifiedItems: { product_id: string; quantity: number; price: number; productRef: FirebaseFirestore.DocumentReference }[] = []
+      for (const [productId, quantity] of qtyByProduct) {
+        const productRef = db.collection("products").doc(productId)
+        const productDoc = await transaction.get(productRef)
+        if (!productDoc.exists) throw new Error("Product not found")
+        const productData = productDoc.data()
+        const availableStock = productData?.stock ?? 0
+        if (quantity > availableStock) {
+          throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
+        }
+        const basePrice = Number(productData?.price)
+        if (!Number.isFinite(basePrice) || basePrice <= 0) {
+          throw new Error(`Invalid price for "${productData?.name || 'product'}"`)
+        }
+        const finalPrice = applyOfferDiscount(
+          { id: productId, category: productData?.category as string | undefined, store_id: (productData?.store_id as string | undefined) ?? orderData.store_id, price: basePrice },
+          activeOffers, today,
+        )
+        const appliedOffer = findBestDiscount(
+          { id: productId, category: productData?.category as string | undefined, store_id: (productData?.store_id as string | undefined) ?? orderData.store_id },
+          activeOffers,
+        )
+        if (appliedOffer.offer_id && appliedOffer.discount_percentage > 0) {
+          appliedOffers.set(appliedOffer.offer_id, (appliedOffers.get(appliedOffer.offer_id) || 0) + quantity)
+        }
+        verifiedItems.push({ product_id: productId, quantity, price: finalPrice, productRef })
+      }
+
+      const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      // رسوم العدّاد من إحداثيات المتجر والعميل؛ نقص أي إحداثي → فتح العداد فقط (رسم أساسي) بدل رقم مضلِّل.
+      const custLat = orderData.delivery_latitude
+      const custLng = orderData.delivery_longitude
+      const deliveryFee =
+        computeDeliveryFeeFromCoords(
+          { lat: storeInfo?.latitude, lng: storeInfo?.longitude },
+          { lat: custLat, lng: custLng },
+          settings,
+        ) ?? computeDeliveryFee(0, settings)
+      const distanceKm =
+        typeof storeInfo?.latitude === "number" && typeof storeInfo?.longitude === "number" &&
+        typeof custLat === "number" && typeof custLng === "number"
+          ? haversineKm(storeInfo.latitude, storeInfo.longitude, custLat, custLng)
+          : null
+      const verifiedTotal = verifiedSubtotal + deliveryFee
+
+      const orderRef = db.collection("orders").doc()
+      const orderPayload: Record<string, unknown> = {
+        is_dispatch: true,
+        customer_id: orderData.customer_id,
+        store_id: orderData.store_id,
+        total: Number(verifiedTotal),
+        delivery_address: orderData.delivery_address,
+        delivery_price: deliveryFee,
+        status: "pending",
+        created_at: now,
+        updated_at: now,
+        delivery_code: String(Math.floor(1000 + Math.random() * 9000)), // دائمًا — fail-closed يعتمد عليه
+        timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],
+      }
+      if (distanceKm != null) orderPayload.distance_km = Number(distanceKm.toFixed(2))
+      if (orderData.customer_name) orderPayload.customer_name = orderData.customer_name
+      if (orderData.customer_phone) orderPayload.customer_phone = orderData.customer_phone
+      if (orderData.delivery_city) orderPayload.delivery_city = orderData.delivery_city
+      if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
+      if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
+      if (orderData.landmark) orderPayload.landmark = orderData.landmark
+      if (custLat !== undefined && custLng !== undefined) {
+        orderPayload.delivery_latitude = Number(custLat)
+        orderPayload.delivery_longitude = Number(custLng)
+      }
+
+      transaction.set(orderRef, orderPayload)
+      verifiedItems.forEach((item) => {
+        const itemRef = db.collection("order_items").doc()
+        transaction.set(itemRef, { order_id: orderRef.id, product_id: item.product_id, quantity: Number(item.quantity), price: Number(item.price), created_at: now })
+      })
+      for (const item of verifiedItems) {
+        transaction.update(item.productRef, { stock: FieldValue.increment(-item.quantity), updated_at: now })
+      }
+      if (idemRef) {
+        transaction.set(idemRef, { order_id: orderRef.id, customer_id: orderData.customer_id, created_at: now })
+      }
+      return { orderId: orderRef.id, orderPayload: orderPayload as Record<string, unknown> | null, storeId: orderData.store_id, deduped: false }
+    })
+
+    if (result.deduped) {
+      return { success: true, data: { id: result.orderId } }
+    }
+    try {
+      for (const [offerId, qty] of appliedOffers) {
+        await db.collection("offers").doc(offerId).update({ used_quantity: FieldValue.increment(qty) })
+      }
+    } catch { /* non-critical */ }
+    try {
+      await createNotification({
+        user_id: result.storeId,
+        title: "طلب توصيل جديد",
+        title_en: "New delivery order",
+        message: `لديك طلب جديد برقم ${result.orderId} — أكّده ليُعرض على السائقين`,
+        message_en: `New order ${result.orderId} — confirm it to offer to drivers`,
+        type: "new_order",
+        link: "/seller/orders",
+        data: { order_id: result.orderId, store_id: result.storeId },
+      })
+    } catch (notifyErr) {
+      await logServerError("createDispatchOrder.notify", notifyErr, { order_id: result.orderId, store_id: result.storeId })
+    }
+    await sendPushToOwner("user", result.storeId, { title: "طلب جديد", body: "لديك طلب جديد", link: "/seller/orders" })
+    revalidatePath("/account")
+    return { success: true, data: { id: result.orderId, ...result.orderPayload } }
+  } catch (error: unknown) {
+    await logServerError("createDispatchOrder", error, { customer_id: orderData.customer_id, store_id: orderData.store_id })
+    return { success: false, error: getErrorMessage(error) || "Failed to create order" }
+  }
+}
+
+// المرحلة 1 — تأكيد التاجر لطلب توزيع: pending → offering + ضبط مهلة العرض (نقطة بدء البثّ للسائقين).
+// ذرّية، مقيّدة بصاحب المتجر، وتتحقق أنه طلب توزيع في حالة pending. تُعيد ضبط rejected_by لعرض نظيف.
+export async function confirmDispatchOrder(orderId: string, storeId: string) {
+  if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }
+  const settings = await readDispatchSettings()
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "Order not found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true) return { ok: false as const, error: "ليس طلب توزيع" }
+      if (o.store_id !== storeId) return { ok: false as const, error: "ليس طلب متجرك" }
+      if (o.status !== "pending") return { ok: false as const, error: "لا يمكن تأكيد الطلب في حالته الحالية" }
+      tx.update(ref, {
+        status: "offering",
+        offer_expires_at_ms: Date.now() + settings.offer_timeout_sec * 1000,
+        rejected_by: [], // عرض جديد نظيف
+        timeline: [
+          ...(Array.isArray(o.timeline) ? o.timeline : []),
+          { status: "offering", timestamp: now, note: "التاجر أكّد — عرض على السائقين" } as TimelineEntry,
+        ],
+        updated_at: now,
+      })
+      return { ok: true as const, customerId: o.customer_id as string | undefined }
+    })
+    if (!out.ok) return { success: false, error: out.error }
+    try {
+      if (out.customerId) {
+        await createNotification({
+          user_id: out.customerId,
+          title: "🛒 المتجر أكّد طلبك",
+          title_en: "🛒 Store confirmed your order",
+          message: "جاري البحث عن سائق لتوصيل طلبك.",
+          message_en: "Finding a driver to deliver your order.",
+          type: "order_status",
+          link: "/account",
+          data: { order_id: orderId, status: "offering" },
+        })
+      }
+    } catch (e) {
+      logError("[confirmDispatchOrder] notify", e)
+    }
+    // TODO(المرحلة 1): بثّ FCM للسائقين المتاحين هنا (شريحة الإشعارات).
+    revalidatePath("/seller/orders")
+    revalidatePath("/account")
+    return { success: true }
+  } catch (error: unknown) {
+    logError("[confirmDispatchOrder]", error)
+    return { success: false, error: getErrorMessage(error) || "Failed to confirm order" }
   }
 }
 
