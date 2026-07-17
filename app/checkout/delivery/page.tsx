@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, Truck, CheckCircle, MapPin, Loader2, User, Phone, Car } from "lucide-react"
-import { createOrder, createMultiStoreOrder } from "@/lib/actions/orders"
+import { createOrder, createMultiStoreOrder, createDispatchOrder, getDeliveryQuote } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 import type { CheckoutItem } from "@/lib/types/checkout"
@@ -52,12 +52,23 @@ export default function DeliveryPage() {
     return sum + discountedPrice * item.quantity
   }, 0)
 
+  // المرحلة 1 — تدفق التوزيع خلف flag: أحادي المتجر فقط. نحسب المتاجر مبكرًا لاستخدامها في جلب التسعيرة.
+  const cartStoreIds = Array.from(new Set(items.map((i) => i.store_id || "default")))
+  const isSingleStore = cartStoreIds.length === 1
+  const quoteStoreId = isSingleStore ? cartStoreIds[0] : ""
+
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null)
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [loadingDrivers, setLoadingDrivers] = useState(true)
   const [driverCommission, setDriverCommission] = useState<number>(0)
+  // المرحلة 1 — تسعيرة التوزيع (خلف flag). null = لم تُجلب بعد؛ enabled=false = التوزيع مطفّي.
+  const [dispatchQuote, setDispatchQuote] = useState<
+    | { enabled: true; fee: number; distance_km: number | null; base_fare: number; per_km_rate: number }
+    | { enabled: false }
+    | null
+  >(null)
 
   // Fetch drivers and commission from database
   useEffect(() => {
@@ -129,10 +140,27 @@ export default function DeliveryPage() {
     }
   }, [user, authLoading, router])
 
+  // المرحلة 1 — اجلب تسعيرة التوزيع بالعدّاد (خلف flag). أحادي المتجر فقط؛ المطفّي يرجّع enabled=false.
+  useEffect(() => {
+    if (!checkoutData || !quoteStoreId) {
+      setDispatchQuote(null)
+      return
+    }
+    let cancelled = false
+    const lat = checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined
+    const lng = checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined
+    getDeliveryQuote({ store_id: quoteStoreId, customer_lat: lat, customer_lng: lng })
+      .then((q) => { if (!cancelled) setDispatchQuote(q) })
+      .catch(() => { if (!cancelled) setDispatchQuote({ enabled: false }) })
+    return () => { cancelled = true }
+  }, [checkoutData, quoteStoreId])
+
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
-  // رسوم التوصيل = سعر السائق المختار المعروض في بطاقته (وليس عمولة المنصّة الثابتة).
-  // driver_commission تبقى حصّة المنصّة المنفصلة. الخادم يعيد اشتقاق السعر من مستند السائق.
-  const deliveryPrice = selectedDriverData?.price ?? 0
+  // المرحلة 1 — وضع التوزيع (خلف flag): أحادي المتجر + التوزيع مفعّل. وقتها لا اختيار سائق ولا سعر سائق.
+  const isDispatch = isSingleStore && dispatchQuote?.enabled === true
+  const meterFee = dispatchQuote && dispatchQuote.enabled ? dispatchQuote.fee : 0
+  // رسوم التوصيل: في التوزيع = رسوم العدّاد؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
+  const deliveryPrice = isDispatch ? meterFee : (selectedDriverData?.price ?? 0)
   const grandTotal = total + deliveryPrice
 
   // مفتاح idempotency ثابت طوال جلسة الدفع — يمنع طلبًا مكررًا عند الضغط المزدوج/إعادة المحاولة
@@ -143,15 +171,18 @@ export default function DeliveryPage() {
   )
 
   const handleConfirmOrder = async () => {
-    if (!selectedDriver || !checkoutData || !user) {
-      toast.error(t("يرجى اختيار سائق التوصيل", "Please select a delivery driver"))
-      return
-    }
-
-    if (!selectedDriverData) {
-      toast.error(t("السائق المختار لم يعد متاحاً", "Selected driver is no longer available"))
-      setSelectedDriver(null)
-      return
+    if (!checkoutData || !user) return
+    // في وضع التوزيع لا نطلب اختيار سائق (يُعيَّن تلقائيًا)؛ غير ذلك نطلب سائقًا صالحًا.
+    if (!isDispatch) {
+      if (!selectedDriver) {
+        toast.error(t("يرجى اختيار سائق التوصيل", "Please select a delivery driver"))
+        return
+      }
+      if (!selectedDriverData) {
+        toast.error(t("السائق المختار لم يعد متاحاً", "Selected driver is no longer available"))
+        setSelectedDriver(null)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -180,7 +211,29 @@ export default function DeliveryPage() {
         .filter(Boolean)
         .join(" — ")
 
-      if (storeIds.length > 1) {
+      // المرحلة 1 — طلب توزيع (أحادي المتجر، بلا سائق، رسوم عدّاد). الخادم يعيد اشتقاق الرسوم والمخزون.
+      if (isDispatch) {
+        const dispStoreId = quoteStoreId
+        const dispItems = items.filter((i) => (i.store_id || "default") === dispStoreId)
+        const result = await createDispatchOrder({
+          customer_id: user.id,
+          store_id: dispStoreId,
+          delivery_address: fullAddress,
+          customer_name: checkoutData.fullName,
+          customer_phone: checkoutData.phone,
+          delivery_city: checkoutData.city,
+          delivery_state: checkoutData.state,
+          delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
+          delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
+          delivery_notes: checkoutData.notes,
+          landmark: checkoutData.landmark,
+          idempotency_key: idempotencyKey,
+          items: dispItems.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price })),
+        })
+        if (!result.success) {
+          throw new Error(result.error || "Failed to create order")
+        }
+      } else if (storeIds.length > 1) {
         // Multi-store order: create one order with pickup stops
         const pickupStops: PickupStop[] = storeIds.map((storeId) => {
           const storeGroup = itemsByStore[storeId]
@@ -227,8 +280,8 @@ export default function DeliveryPage() {
           delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
           delivery_notes: checkoutData.notes,
           landmark: checkoutData.landmark,
-          driver_id: selectedDriverData.id,
-          driver_name: selectedDriverData.name,
+          driver_id: selectedDriverData?.id ?? "",
+          driver_name: selectedDriverData?.name ?? "",
           delivery_price: deliveryPrice,
           driver_commission: driverCommission,
           pickup_stops: pickupStops,
@@ -337,14 +390,17 @@ export default function DeliveryPage() {
               <Truck className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">
-              {t("اختر سائق التوصيل", "Select Delivery Driver")}
+              {isDispatch ? t("تأكيد التوصيل", "Confirm Delivery") : t("اختر سائق التوصيل", "Select Delivery Driver")}
             </h1>
             <p className="text-gray-600 mt-2">
-              {t("اختر السائق المناسب لتوصيل طلبك", "Choose a driver to deliver your order")}
+              {isDispatch
+                ? t("سيتم تعيين سائق متاح تلقائيًا لتوصيل طلبك", "An available driver will be assigned automatically")
+                : t("اختر السائق المناسب لتوصيل طلبك", "Choose a driver to deliver your order")}
             </p>
           </div>
 
-          {/* Drivers List */}
+          {/* Drivers List (وضع اختيار السائق فقط — يُخفى في وضع التوزيع) */}
+          {!isDispatch && (
           <div className="space-y-4 mb-8">
             {loadingDrivers ? (
               <div className="text-center py-12 bg-white rounded-2xl shadow-md">
@@ -474,6 +530,35 @@ export default function DeliveryPage() {
             )
             }
           </div >
+          )}
+
+          {/* المرحلة 1 — بطاقة التوصيل بالعدّاد (وضع التوزيع) */}
+          {isDispatch && (
+            <Card className="mb-8 border-0 shadow-lg rounded-2xl overflow-hidden bg-primary/5 ring-1 ring-primary/20">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <Truck className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-800">{t("توصيل تلقائي", "Automatic delivery")}</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {t("سنعيّن لك سائقًا متاحًا تلقائيًا. رسوم التوصيل بالعدّاد:", "We'll auto-assign an available driver. Metered fee:")}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-primary">{meterFee}</p>
+                    <p className="text-xs text-gray-500">{t("جنيه", "EGP")}</p>
+                  </div>
+                </div>
+                {dispatchQuote && dispatchQuote.enabled && dispatchQuote.distance_km != null && (
+                  <p className="text-xs text-gray-500 mt-3 text-center">
+                    {t("فتح العداد", "Base")} {dispatchQuote.base_fare} + {dispatchQuote.per_km_rate}/{t("كم", "km")} × {dispatchQuote.distance_km} {t("كم", "km")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Order Summary */}
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
@@ -546,7 +631,7 @@ export default function DeliveryPage() {
             onClick={handleConfirmOrder}
             className="w-full bg-primary hover:bg-primary/90 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
             size="lg"
-            disabled={!selectedDriver || isSubmitting}
+            disabled={isSubmitting || (!isDispatch && !selectedDriver)}
           >
             {isSubmitting
               ? t("جاري تأكيد الطلب...", "Confirming order...")

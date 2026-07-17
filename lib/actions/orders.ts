@@ -1141,6 +1141,49 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
   }
 }
 
+// المرحلة 1 — تسعيرة توصيل بالعدّاد للـcheckout. عامّة (لا مصادقة — مجرد سعر، لا تُنشئ شيئًا).
+// ترجّع enabled=false إن كان التوزيع مطفّيًا (فيبقى الـcheckout على تدفق اختيار السائق كما هو).
+export async function getDeliveryQuote(input: {
+  store_id: string
+  customer_lat?: number
+  customer_lng?: number
+}): Promise<
+  | { enabled: false }
+  | { enabled: true; fee: number; distance_km: number | null; base_fare: number; per_km_rate: number }
+> {
+  const settings = await readDispatchSettings()
+  if (!settings.enabled) return { enabled: false }
+  try {
+    const db = getAdminDb()
+    const snap = await db.collection("users").doc(input.store_id).get()
+    const store = (snap.data() as { store?: { latitude?: number; longitude?: number } } | undefined)?.store
+    const hasCoords =
+      typeof store?.latitude === "number" &&
+      typeof store?.longitude === "number" &&
+      typeof input.customer_lat === "number" &&
+      typeof input.customer_lng === "number"
+    const fee =
+      computeDeliveryFeeFromCoords(
+        { lat: store?.latitude, lng: store?.longitude },
+        { lat: input.customer_lat, lng: input.customer_lng },
+        settings,
+      ) ?? computeDeliveryFee(0, settings)
+    const distance_km = hasCoords
+      ? Number(haversineKm(store!.latitude!, store!.longitude!, input.customer_lat!, input.customer_lng!).toFixed(2))
+      : null
+    return { enabled: true, fee, distance_km, base_fare: settings.base_fare, per_km_rate: settings.per_km_rate }
+  } catch {
+    // fail-safe: لا نعطّل الـcheckout بسبب حساب المسافة — نرجّع فتح العداد فقط
+    return {
+      enabled: true,
+      fee: computeDeliveryFee(0, settings),
+      distance_km: null,
+      base_fare: settings.base_fare,
+      per_km_rate: settings.per_km_rate,
+    }
+  }
+}
+
 export async function createContactInquiry(inquiryData: {
   customer_id: string
   product_id: string
