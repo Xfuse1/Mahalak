@@ -44,6 +44,32 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined
 }
 
+// إعادة بناء محطات الاستلام بقائمة سماح صريحة (نفس ضمان الطلب الأحادي) — لا نمرّر أي حقل غير مُدرَج
+// من مستند Firestore (دفاع عمق ضد تسريب حقول مستقبلية قد تُكتب داخل pickup_stops).
+function mapPickupStops(raw: unknown): PickupStop[] {
+  if (!Array.isArray(raw)) return []
+  const STATUSES = ["pending", "confirmed", "rejected", "picked_up"]
+  return raw.map((s: Record<string, any>) => ({
+    store_id: str(s?.store_id) || "",
+    store_name: str(s?.store_name) || "",
+    items: Array.isArray(s?.items)
+      ? s.items.map((it: Record<string, any>) => ({
+          product_id: str(it?.product_id) || "",
+          name: str(it?.name) || "",
+          quantity: num(it?.quantity),
+          price: num(it?.price),
+          image_url: typeof it?.image_url === "string" ? it.image_url : null,
+        }))
+      : [],
+    subtotal: num(s?.subtotal),
+    status: (STATUSES.includes(s?.status) ? s.status : "pending") as PickupStop["status"],
+    confirmed_at: str(s?.confirmed_at) ?? null,
+    picked_up_at: str(s?.picked_up_at) ?? null,
+    rejected_at: str(s?.rejected_at) ?? null,
+    rejection_reason: str(s?.rejection_reason) ?? null,
+  }))
+}
+
 export async function getDriverOrders(driverId: string): Promise<DriverOrder[]> {
   const db = getAdminDb()
   // مساواة بحقل واحد (driver_id) — يخدمها الفهرس المفرد التلقائي؛ نرتّب في JS لتفادي فهرس مركّب.
@@ -123,7 +149,7 @@ export async function getDriverOrders(driverId: string): Promise<DriverOrder[]> 
       delivery_latitude: o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
       delivery_longitude: o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
       ...(isMulti
-        ? { pickup_stops: Array.isArray(o.pickup_stops) ? (o.pickup_stops as PickupStop[]) : [] }
+        ? { pickup_stops: mapPickupStops(o.pickup_stops) }
         : { items: itemsByOrder.get(o.id) || [] }),
     }
   })

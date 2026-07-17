@@ -500,19 +500,19 @@ export async function updateDispatchSettings(input: {
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   // نضيف الحقل فقط إن كان رقمًا صالحًا ≥ الحد الأدنى؛ أول قيمة غير صالحة تُرجِع اسم الحقل (فشل بلا كتابة).
-  const putNum = (key: string, v: unknown, min: number): string | null => {
+  const putNum = (key: string, v: unknown, min: number, max: number): string | null => {
     if (v === undefined) return null
     const n = Number(v)
-    if (!Number.isFinite(n) || n < min) return key
+    if (!Number.isFinite(n) || n < min || n > max) return key // حدّ أدنى وأعلى (يحمي من الخطأ الكتابي)
     patch[key] = n
     return null
   }
   if (input.enabled !== undefined) patch.enabled = input.enabled === true
   const bad =
-    putNum("base_fare", input.base_fare, 0) ||
-    putNum("per_km_rate", input.per_km_rate, 0) ||
-    putNum("offer_timeout_sec", input.offer_timeout_sec, 10) || // مهلة دنيا 10ث
-    putNum("bid_cap_pct", input.bid_cap_pct, 0)
+    putNum("base_fare", input.base_fare, 0, 100000) ||
+    putNum("per_km_rate", input.per_km_rate, 0, 100000) ||
+    putNum("offer_timeout_sec", input.offer_timeout_sec, 10, 600) || // مهلة بين 10ث و10 دقائق
+    putNum("bid_cap_pct", input.bid_cap_pct, 0, 100) // المزايدة لا تتجاوز 100%
   if (bad) return { success: false, error: "قيمة غير صحيحة" }
 
   try {

@@ -173,16 +173,18 @@ export async function driverDeliver(driverId: string, orderId: string, code: str
       // وإلا أمكن تعليمه "مُسلَّم" + تحصيل نقدي + delivery_verified كاذبة بلا كود من العميل.
       const expected = String(o.delivery_code || "").trim()
       if (!/^\d{4}$/.test(expected)) return { ok: false as const, error: "no_delivery_code" }
-      // قفل تراكمي مدى-الحياة (لا يُصفَّر مع نافذة الـ15 دقيقة) — يسدّ التخمين البطيء عبر النوافذ المتعاقبة.
-      if ((Number(o.delivery_code_total_failures) || 0) >= 20) return { ok: false as const, error: "delivery_locked" }
       const lockedUntil = Number(o.delivery_code_locked_until) || 0
       if (lockedUntil > Date.now()) return { ok: false as const, error: "too_many_attempts" }
       if (String(code || "").trim() !== expected) {
+        const totalFailures = (Number(o.delivery_code_total_failures) || 0) + 1
         const next = (Number(o.delivery_code_attempts) || 0) + 1
+        // تصعيد بلا تبريك دائم: النافذة العادية 15د/5 محاولات؛ بعد 20 فشلًا تراكميًا تصير النافذة 24 ساعة
+        // (5 محاولات/يوم) — يجعل تخمين الكود غير عمليّ عمليًا مع بقاء استرداد ذاتي (بلا تدخل يدوي).
+        const lockMs = totalFailures >= 20 ? 24 * 60 * 60 * 1000 : 15 * 60 * 1000
         tx.update(ref, {
           delivery_code_attempts: next,
-          delivery_code_total_failures: FieldValue.increment(1), // عدّاد تراكمي لا يُصفَّر بالقفل
-          ...(next >= 5 ? { delivery_code_locked_until: Date.now() + 15 * 60 * 1000, delivery_code_attempts: 0 } : {}),
+          delivery_code_total_failures: FieldValue.increment(1), // عدّاد تراكمي لا يُصفَّر بالقفل (للتصعيد)
+          ...(next >= 5 ? { delivery_code_locked_until: Date.now() + lockMs, delivery_code_attempts: 0 } : {}),
         })
         return { ok: false as const, error: "invalid_code" }
       }
@@ -226,7 +228,6 @@ export function dispatchErrorStatus(error?: string): number {
     case "driver_not_approved":
       return 403
     case "too_many_attempts":
-    case "delivery_locked":
       return 429
     case "driver_not_found":
     case "server_error":

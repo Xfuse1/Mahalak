@@ -1811,6 +1811,9 @@ export async function markOrderDeliveredByDriver(orderId: string, code: string) 
       if (!orderDoc.exists) return { ok: false as const, error: "Order not found" }
       const o = orderDoc.data() as Record<string, any>
       if (o.driver_id !== sessionDriverId) return { ok: false as const, error: "غير مصرح لك بهذا الطلب" }
+      // طلبات التوزيع تُسلَّم حصراً عبر تدفق التوزيع (lib/delivery/dispatch.driverDeliver) — يمنع تجاوز
+      // سقف/قفل كود التوزيع عبر هذا المسار القديم (متعدد المتاجر). التوزيع أحادي المتجر أصلًا.
+      if (o.is_dispatch === true) return { ok: false as const, error: "طلب توزيع — استخدم تدفق التوزيع" }
       if (o.status === "delivered") return { ok: false as const, error: "تم تسليم الطلب بالفعل" }
       if (o.status === "cancelled") return { ok: false as const, error: "الطلب ملغى" }
       if (o.status !== "on_the_way") return { ok: false as const, error: "أكمل استلام كل المتاجر أولًا" }
