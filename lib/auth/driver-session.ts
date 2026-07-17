@@ -20,6 +20,18 @@ const DRIVER_COOKIE_OPTIONS = {
  */
 export async function createDriverSession(driverId: string): Promise<void> {
   const db = getAdminDb()
+  // إبطال جلسات السائق السابقة: إعادة الدخول تُلغي أي كوكي/توكن قديم (يسدّ بقاء كوكي مسروق طوال مدة الجلسة)
+  // وتمنع تراكم مستندات الجلسات. عمل محدود (لسائق واحد بضع جلسات).
+  try {
+    const prior = await db.collection("driver_sessions").where("driverId", "==", driverId).get()
+    if (!prior.empty) {
+      const batch = db.batch()
+      prior.docs.forEach((d) => batch.delete(d.ref))
+      await batch.commit()
+    }
+  } catch {
+    // غير حرج — نُكمل إصدار الجلسة الجديدة حتى لو فشل تنظيف القديمة
+  }
   const token = crypto.randomUUID()
   await db.collection("driver_sessions").doc(token).set({
     driverId,
@@ -55,8 +67,12 @@ export async function getCurrentDriverId(): Promise<string | null> {
     // بالفعل عند خطأ شبكة/Firestore عابر. نحجب فقط عند نجاح القراءة وتأكّد disabled === true.
     try {
       const driverSnap = await db.collection("drivers").doc(driverId).get()
-      if (driverSnap.exists && (driverSnap.data() as { disabled?: boolean } | undefined)?.disabled === true) {
-        return null
+      if (driverSnap.exists) {
+        const dd = driverSnap.data() as { disabled?: boolean; isApproved?: boolean; is_approved?: boolean } | undefined
+        // تعطيل أو رفض صريح (=== false) يُبطل الجلسة فورًا في الطلب التالي (دفاع عمق: إلغاء اعتماد الأدمن
+        // يقتل الجلسات النشطة). سياسة لطيفة: الحقل الغائب/undefined لا يحجب.
+        if (dd?.disabled === true) return null
+        if (dd?.isApproved === false || dd?.is_approved === false) return null
       }
     } catch {
       // خطأ عابر في قراءة التعطيل — نتابع (السائق سيُحجب فورًا عند أول قراءة ناجحة لو كان معطَّلًا).

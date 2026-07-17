@@ -8,23 +8,11 @@ import { logError } from "../logger"
 import { createDriverSession, clearDriverSession } from "../auth/driver-session"
 import { checkRateLimit } from "../utils/rate-limit"
 import { logServerError } from "../server-error-log"
+import { getDriverPublicProfile, type DriverProfile } from "../drivers/driver-repo"
 
-export type Driver = {
-  id: string
-  name: string
-  phone?: string
-  photo_url?: string
-  vehicle_type?: string // سيارة، موتوسيكل، إلخ
-  rating: number
-  total_deliveries: number
-  is_available: boolean
-  is_online?: boolean
-  is_approved: boolean // تم التأكيد من الأدمن
-  price: number
-  areas?: string[] // المناطق التي يغطيها
-  created_at?: string
-  updated_at?: string
-}
+// نوع السائق العام يعيش الآن في طبقة مشتركة محايدة (مصدر حقيقة واحد) تستدعيها كلٌّ من
+// server actions هنا و route handlers الخاصة بـ/api/driver/*. نُبقي الاسم Driver للتوافق.
+export type Driver = DriverProfile
 
 // Get all approved drivers sorted by rating (available first, then by rating)
 export async function getDrivers(): Promise<Driver[]> {
@@ -84,42 +72,9 @@ export async function getDrivers(): Promise<Driver[]> {
   }
 }
 
-// Get a single driver by ID
+// Get a single driver by ID — يفوّض للطبقة المشتركة (نفس التعيين وحجب المحظور) لتفادي التكرار.
 export async function getDriverById(id: string): Promise<Driver | null> {
-  try {
-    const db = getAdminDb()
-    const doc = await db.collection("drivers").doc(id).get()
-    
-    if (!doc.exists) {
-      return null
-    }
-
-    // لا ننشر doc.data() كاملًا — كان يسرّب حقل pin السرّي (استيلاء على حساب سائق).
-    // نُرجع الحقول العامة فقط بنفس تعيين getDrivers.
-    const data = doc.data() || {}
-    // حساب محظور: يُعامَل كغير موجود (نفس شكل عدم الوجود) حتى لا تُعرض لوحة السائق المحظور
-    if (data.disabled === true) {
-      return null
-    }
-    return {
-      id: doc.id,
-      name: data.name || "",
-      phone: data.phone,
-      photo_url: data.photoUrl || data.photo_url,
-      vehicle_type: data.vehicleType || data.vehicle_type,
-      rating: data.rating || 0,
-      total_deliveries: data.totalDeliveries || data.total_deliveries || 0,
-      is_available: data.isActive ?? data.is_available ?? true,
-      is_online: data.isOnline ?? data.is_online ?? false,
-      is_approved: data.isApproved ?? data.is_approved ?? false,
-      price: data.price || 0,
-      areas: data.areas,
-      created_at: data.createdAt?.toDate?.()?.toISOString?.() || data.created_at,
-      updated_at: data.updatedAt?.toDate?.()?.toISOString?.() || data.updated_at,
-    }
-  } catch (error) {
-    return null
-  }
+  return getDriverPublicProfile(id)
 }
 
 // ==================== تحصين PIN السائق ====================
