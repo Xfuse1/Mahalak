@@ -14,6 +14,7 @@ import { signKycFields } from "./stores"
 import type { PickupStop } from "./orders"
 import { logError } from "../logger"
 import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
+import { readDispatchSettings } from "../delivery/fee"
 
 export type AdminStore = {
   id: string
@@ -470,6 +471,57 @@ export async function createDriver(input: {
   } catch (error) {
     logError("[admin] createDriver", error)
     return { success: false, error: "تعذّر إنشاء السائق" }
+  }
+}
+
+// ==================== المرحلة 1: إعدادات التوزيع (العدّاد) ====================
+// كل النظام خلف علم enabled (افتراضيًا false) — لا تأثير على الموقع الحي حتى يفعّله الأدمن.
+
+export async function getDispatchSettings() {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false as const, error: "ليس لديك صلاحية" }
+  try {
+    return { success: true as const, settings: await readDispatchSettings() }
+  } catch (error) {
+    logError("[admin] getDispatchSettings", error)
+    return { success: false as const, error: "تعذّر تحميل إعدادات التوزيع" }
+  }
+}
+
+export async function updateDispatchSettings(input: {
+  enabled?: boolean
+  base_fare?: number
+  per_km_rate?: number
+  offer_timeout_sec?: number
+  bid_cap_pct?: number
+}): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  // نضيف الحقل فقط إن كان رقمًا صالحًا ≥ الحد الأدنى؛ أول قيمة غير صالحة تُرجِع اسم الحقل (فشل بلا كتابة).
+  const putNum = (key: string, v: unknown, min: number): string | null => {
+    if (v === undefined) return null
+    const n = Number(v)
+    if (!Number.isFinite(n) || n < min) return key
+    patch[key] = n
+    return null
+  }
+  if (input.enabled !== undefined) patch.enabled = input.enabled === true
+  const bad =
+    putNum("base_fare", input.base_fare, 0) ||
+    putNum("per_km_rate", input.per_km_rate, 0) ||
+    putNum("offer_timeout_sec", input.offer_timeout_sec, 10) || // مهلة دنيا 10ث
+    putNum("bid_cap_pct", input.bid_cap_pct, 0)
+  if (bad) return { success: false, error: "قيمة غير صحيحة" }
+
+  try {
+    await getAdminDb().collection("settings").doc("dispatch").set(patch, { merge: true })
+    revalidatePath("/admin/commission-settings")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] updateDispatchSettings", error)
+    return { success: false, error: "تعذّر حفظ إعدادات التوزيع" }
   }
 }
 
