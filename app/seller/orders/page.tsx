@@ -9,7 +9,7 @@ import { Button } from "../../../components/ui/button"
 import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, ShoppingBag, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup } from "../../../lib/actions/orders"
+import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup, confirmDispatchOrder } from "../../../lib/actions/orders"
 import type { PickupStop } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
@@ -24,7 +24,7 @@ import {
 import Image from "next/image"
 import { Textarea } from "../../../components/ui/textarea"
 import { Label } from "../../../components/ui/label"
-import { AlertTriangle, Clock, Truck } from "lucide-react"
+import { AlertTriangle, Clock, Truck, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { Spinner } from "@/components/ui/spinner"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -47,6 +47,7 @@ type Order = {
   store_id: string
   total: number
   status: string
+  is_dispatch?: boolean
   delivery_address: string
   created_at: string
   updated_at: string
@@ -233,6 +234,25 @@ export default function SellerOrdersPage() {
     setActionLoading(null)
   }
 
+  // المرحلة 1 — تأكيد التاجر لطلب توزيع: pending → offering (يبدأ عرضه على السائقين).
+  const handleConfirmDispatch = async (orderId: string) => {
+    if (!user?.id) return
+    setActionLoading(orderId)
+    try {
+      const result = await confirmDispatchOrder(orderId, user.id)
+      if (result.success) {
+        toast.success(t("تم تأكيد الطلب وعرضه على السائقين", "Order confirmed and offered to drivers"))
+        await loadOrders()
+      } else {
+        toast.error(result.error || t("حدث خطأ", "An error occurred"))
+      }
+    } catch (error) {
+      logError("Error confirming dispatch:", error)
+      toast.error(t("حدث خطأ", "An error occurred"))
+    }
+    setActionLoading(null)
+  }
+
   const openRejectDialog = (orderId: string) => {
     setRejectOrderId(orderId)
     setRejectReason("")
@@ -390,7 +410,26 @@ export default function SellerOrdersPage() {
                           <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
                           <div className="flex items-center gap-4">
                             <p className="text-xl font-extrabold text-primary">{Number(order.total).toLocaleString()} <span className="text-sm text-gray-500">{t("جنيه", "EGP")}</span></p>
-                            <OrderStatusSelector orderId={order.id} currentStatus={order.status} callerId={storeId || ""} callerRole="seller" onUpdated={loadOrders} />
+                            {order.is_dispatch ? (
+                              order.status === "pending" ? (
+                                <Button
+                                  size="sm"
+                                  disabled={actionLoading === order.id}
+                                  onClick={() => handleConfirmDispatch(order.id)}
+                                  className="rounded-xl gap-1"
+                                >
+                                  {actionLoading === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
+                                  {t("تأكيد وعرض على السائقين", "Confirm & offer to drivers")}
+                                </Button>
+                              ) : (
+                                // طلب توزيع بعد التأكيد: الحالة تُدار عبر تدفق التوزيع (عرض/قبول/تسليم) لا يدويًا.
+                                <span className={`px-3 py-1.5 rounded-xl text-xs font-bold ${getStatusColor(order.status)}`}>
+                                  {getStatusText(order.status)}
+                                </span>
+                              )
+                            ) : (
+                              <OrderStatusSelector orderId={order.id} currentStatus={order.status} callerId={storeId || ""} callerRole="seller" onUpdated={loadOrders} />
+                            )}
                           </div>
                         </div>
                       </div>
