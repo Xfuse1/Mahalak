@@ -6,6 +6,7 @@ import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid } from "../auth/session"
 import { putObject, presignGet, PUBLIC_BUCKET, PRIVATE_BUCKET } from "../storage/r2"
+import { isKycKey } from "../storage/kyc-key"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { checkRateLimit } from "../utils/rate-limit"
@@ -120,17 +121,23 @@ const KYC_FIELDS = [
 export async function signKycFields<T extends Record<string, unknown>>(store: T): Promise<T> {
   for (const f of KYC_FIELDS) {
     const v = store[f]
-    // الشرط يفرز بالشكل (مسار مقابل رابط قديم)، لا بالـbucket. اختيار الـbucket يتم باسم
-    // الحقل — KYC_FIELDS خاصة دائمًا — لأن `registrations/<id>/logo/x.jpg` (عام) و
-    // `registrations/<id>/id-card-front/x.jpg` (خاص) لا يمكن تمييزهما كنصّين.
-    if (v && typeof v === "string" && !v.startsWith("http")) {
-      try {
-        ;(store as Record<string, unknown>)[f] = await presignGet(PRIVATE_BUCKET, v, 300)
-      } catch (error) {
-        // الفشل هنا كان يمسح الحقل بصمت (data?.signedUrl || null)، فيختفي المستند من واجهة
-        // المراجعة كأنه غير مرفوع أصلًا. نُبقي القيمة ونُسجّل: صورة لا تُحمَّل أوضح من لا شيء.
-        logError(`[stores] signKycFields presign failed for ${f}`, error)
-      }
+    if (typeof v !== "string" || !v) continue
+    // القيم القديمة (روابط http عامة) تُمرَّر كما هي دون توقيع.
+    if (v.startsWith("http")) continue
+    // لا نوقّع إلا ما يشبه مفتاح مستند KYC صحيح الشكل. قبل هذا كان يُوقَّع أي مسار غير-http،
+    // فتتحوّل الدالة إلى أوراكل توقيع لأي كائن في الـbucket الخاص. isKycKey يقصرها على
+    // مستندات KYC (شكلًا)، ويمنع الاجتياز وتوجيه الحقل إلى كائن آخر. مفتاح غير مطابق
+    // يُترك كما هو ولا يُوقَّع — العميل لا يستطيع جلبه من bucket خاص، فلا تسريب.
+    if (!isKycKey(v)) {
+      logError(`[stores] signKycFields refused a non-KYC-shaped key in ${f}`, new Error(String(v).slice(0, 120)))
+      continue
+    }
+    try {
+      ;(store as Record<string, unknown>)[f] = await presignGet(PRIVATE_BUCKET, v, 300)
+    } catch (error) {
+      // الفشل هنا كان يمسح الحقل بصمت (data?.signedUrl || null)، فيختفي المستند من واجهة
+      // المراجعة كأنه غير مرفوع أصلًا. نُبقي القيمة ونُسجّل: صورة لا تُحمَّل أوضح من لا شيء.
+      logError(`[stores] signKycFields presign failed for ${f}`, error)
     }
   }
   return store
@@ -360,6 +367,18 @@ export async function createStore(storeData: StoreCreateInput) {
   if (!uid || uid !== storeData.seller_id) {
     return { success: false, error: "Unauthorized" }
   }
+
+  // حقول KYC تأتي حرفيًا من العميل. نرفض أي قيمة ليست مفتاح KYC صحيح الشكل (ولا رابطًا قديمًا):
+  // يمنع توجيه حقل KYC إلى صورة منتج أو مسار اجتياز، ويمنع كتابة قيمة يرفض signKycFields توقيعها
+  // لاحقًا فتظهر للمراجع كحقل معطوب. (لا يُثبت الملكية — مفتاح بائع آخر صحيح الشكل يمرّ؛ إغلاق
+  // ذلك يحتاج حصر المفاتيح بـuid المالك، وهو إعادة تصميم منفصلة.)
+  for (const f of KYC_FIELDS) {
+    const v = (storeData as Record<string, unknown>)[f]
+    if (v == null || v === "") continue
+    if (typeof v === "string" && (v.startsWith("http") || isKycKey(v))) continue
+    return { success: false, error: "قيمة مستند التحقق غير صالحة" }
+  }
+
   const db = getAdminDb()
   const now = new Date().toISOString()
 
