@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
@@ -15,10 +16,11 @@ import {
   setDriverApproval,
   setDriverAvailability,
   getDriverStats,
+  createDriver,
   type AdminDriver,
   type AdminDriverStats,
 } from "@/lib/actions/admin"
-import { Bike, Star, Package, MapPin, Phone, CheckCircle2, XCircle, Clock, BadgeCheck, Loader2, Power, BarChart3, ShoppingBag } from "lucide-react"
+import { Bike, Star, Package, MapPin, Phone, CheckCircle2, XCircle, Clock, BadgeCheck, Loader2, Power, BarChart3, ShoppingBag, UserPlus } from "lucide-react"
 
 type Filter = "pending" | "approved" | "all"
 
@@ -34,6 +36,10 @@ export default function AdminDriversPage() {
   const [statsFor, setStatsFor] = useState<string | null>(null)
   const [statsMap, setStatsMap] = useState<Record<string, AdminDriverStats>>({})
   const [statsLoading, setStatsLoading] = useState<string | null>(null)
+  // إضافة سائق جديد (تسجيل من الأدمن — الدخول لاحقًا بالهاتف + OTP)
+  const [showAdd, setShowAdd] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ name: "", phone: "", price: "", vehicle_type: "", areas: "" })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -98,6 +104,37 @@ export default function AdminDriversPage() {
       toast.error("تعذّر التحديث")
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!form.name.trim() || !form.phone.trim()) {
+      toast.error("الاسم والهاتف مطلوبان")
+      return
+    }
+    setAdding(true)
+    try {
+      const res = await createDriver({
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        price: form.price ? Number(form.price) : undefined,
+        vehicle_type: form.vehicle_type.trim() || undefined,
+        areas: form.areas ? form.areas.split(/[,،]/).map((a) => a.trim()).filter(Boolean) : undefined,
+      })
+      if (res.success) {
+        toast.success("تم تسجيل السائق — يقدر يدخل بالهاتف + كود OTP")
+        setForm({ name: "", phone: "", price: "", vehicle_type: "", areas: "" })
+        setShowAdd(false)
+        setFilter("all")
+        await load()
+      } else {
+        toast.error(res.error || "تعذّر إنشاء السائق")
+      }
+    } catch (e) {
+      logError("[admin/drivers] create", e)
+      toast.error("تعذّر إنشاء السائق")
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -168,6 +205,54 @@ export default function AdminDriversPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* إضافة سائق جديد (تسجيل من الأدمن) */}
+      <div className="mb-6">
+        <Button
+          onClick={() => setShowAdd((s) => !s)}
+          variant={showAdd ? "outline" : "default"}
+          className="rounded-xl gap-1"
+        >
+          <UserPlus className="h-4 w-4" /> {showAdd ? "إغلاق" : "إضافة سائق"}
+        </Button>
+        {showAdd && (
+          <Card className="mt-3 border border-border">
+            <CardContent className="p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">الاسم *</label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم السائق" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">الهاتف *</label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="01xxxxxxxxx" dir="ltr" inputMode="tel" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">سعر التوصيل (اختياري)</label>
+                  <Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^\d.]/g, "") })} placeholder="0" inputMode="numeric" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">نوع المركبة (اختياري)</label>
+                  <Input value={form.vehicle_type} onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })} placeholder="موتوسيكل / سيارة" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground">المناطق (اختياري، افصل بفاصلة)</label>
+                  <Input value={form.areas} onChange={(e) => setForm({ ...form, areas: e.target.value })} placeholder="جرجا، سوهاج" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleCreate} disabled={adding || !form.name.trim() || !form.phone.trim()} className="rounded-xl gap-1">
+                  {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} حفظ السائق
+                </Button>
+                <Button variant="ghost" onClick={() => setShowAdd(false)} className="rounded-xl">إلغاء</Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                السائق يدخل التطبيق بهذا الهاتف + كود OTP يُرسَل له. الهاتف لازم يكون فريدًا.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {loading ? (

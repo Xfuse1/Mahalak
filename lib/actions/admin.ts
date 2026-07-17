@@ -13,6 +13,7 @@ import { createNotification } from "../notifications-internal"
 import { signKycFields } from "./stores"
 import type { PickupStop } from "./orders"
 import { logError } from "../logger"
+import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
 
 export type AdminStore = {
   id: string
@@ -403,6 +404,72 @@ export async function setDriverAvailability(driverId: string, available: boolean
   } catch (error) {
     logError("[admin] setDriverAvailability", error)
     return { success: false, error: "تعذّر تحديث الحالة" }
+  }
+}
+
+// إنشاء/تسجيل سائق جديد من لوحة الأدمن. الدخول يتم بالهاتف + OTP، فالهاتف لازم يكون صالحًا وفريدًا.
+// نكتب الحقلين (isApproved/is_approved و isActive/is_available) معًا للتوافق مع getDrivers والطبقة المشتركة.
+export async function createDriver(input: {
+  name: string
+  phone: string
+  price?: number
+  vehicle_type?: string
+  areas?: string[]
+  approved?: boolean
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const name = String(input.name || "").trim()
+  if (!name) return { success: false, error: "اسم السائق مطلوب" }
+
+  // الهاتف صالح ومصري — نخزّنه بصيغة محلية 01xxxxxxxxx (مطابقة لبيانات السائقين الحالية والعرض).
+  const normalized = normalizeEgyptPhone(input.phone)
+  if (!normalized) return { success: false, error: "رقم هاتف مصري غير صالح" }
+  const localPhone = `0${normalized.slice(3)}`
+
+  const priceNum = Number(input.price)
+  const price = Number.isFinite(priceNum) && priceNum >= 0 ? priceNum : 0
+  const areas = Array.isArray(input.areas)
+    ? input.areas.map((a) => String(a).trim()).filter(Boolean).slice(0, 50)
+    : []
+  const vehicleType = String(input.vehicle_type || "").trim()
+  const approved = input.approved !== false // افتراضيًا معتمَد (الأدمن هو المُنشئ)
+
+  try {
+    const db = getAdminDb()
+    // تفرّد الهاتف (حرِج): الدخول بالهاتف — رقمان متطابقان يجعلان findDriverIdByPhone ملتبسًا.
+    // نرفض أي تطابق بأي صيغة من صيغ الهاتف.
+    const candidates = getEgyptPhoneLookupCandidates(input.phone)
+    for (const cand of candidates) {
+      const dup = await db.collection("drivers").where("phone", "==", cand).limit(1).get()
+      if (!dup.empty) return { success: false, error: "رقم الهاتف مستخدم بالفعل لسائق آخر" }
+    }
+
+    const now = new Date().toISOString()
+    const ref = db.collection("drivers").doc()
+    await ref.set({
+      name,
+      phone: localPhone,
+      isApproved: approved,
+      is_approved: approved,
+      isActive: true,
+      is_available: true,
+      isOnline: false,
+      rating: 0,
+      totalDeliveries: 0,
+      price,
+      ...(vehicleType ? { vehicleType, vehicle_type: vehicleType } : {}),
+      ...(areas.length ? { areas } : {}),
+      created_at: now,
+      updated_at: now,
+    })
+
+    revalidatePath("/admin/drivers")
+    return { success: true, id: ref.id }
+  } catch (error) {
+    logError("[admin] createDriver", error)
+    return { success: false, error: "تعذّر إنشاء السائق" }
   }
 }
 
