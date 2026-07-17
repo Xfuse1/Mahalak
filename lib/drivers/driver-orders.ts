@@ -30,11 +30,13 @@ export type DriverOrder = {
   landmark?: string
   delivery_latitude?: number
   delivery_longitude?: number
+  offer_expires_at_ms?: number // للعروض المتاحة: وقت انتهاء العرض (عدّاد تنازلي في التطبيق)
   items?: DriverOrderItem[] // الطلب الأحادي
   pickup_stops?: PickupStop[] // المتعدد (كود التسليم ليس داخل المحطات — هو على مستوى الطلب فنُسقطه)
 }
 
 const DRIVER_ORDERS_LIMIT = 100
+const OFFERS_LIMIT = 100
 
 function num(v: unknown): number {
   const n = Number(v)
@@ -81,8 +83,33 @@ export async function getDriverOrders(driverId: string): Promise<DriverOrder[]> 
     .filter((o) => o.order_type !== "inquiry" && o.status !== "inquiry")
 
   raw.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
-  const orders = raw.slice(0, DRIVER_ORDERS_LIMIT)
+  return hydrateDriverOrders(db, raw.slice(0, DRIVER_ORDERS_LIMIT))
+}
 
+// (2) العروض المتاحة — طلبات التوزيع المعروضة (offering) غير المُسندة بعد، ليقبلها أول سائق (أول-يفوز).
+// يستبعد: غير التوزيع، المُسندة (driver_id)، المنتهية (offer_expires_at_ms)، والتي رفضها هذا السائق.
+// يُرتّب الأقدم أولًا (عدالة FIFO). نفس DTO قائمة السماح — لا كود تسليم.
+export async function getAvailableOffers(driverId: string): Promise<DriverOrder[]> {
+  const db = getAdminDb()
+  const now = Date.now()
+  // مساواة بحقل واحد (status) — فهرس مفرد تلقائي؛ "offering" حالة توزيع حصريًّا. نرشّح الباقي في JS.
+  const snap = await db.collection("orders").where("status", "==", "offering").limit(OFFERS_LIMIT).get()
+  const raw = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Record<string, any>))
+    .filter((o) => o.is_dispatch === true)
+    .filter((o) => !o.driver_id)
+    .filter((o) => {
+      const exp = Number(o.offer_expires_at_ms || 0)
+      return !exp || exp > now
+    })
+    .filter((o) => !(Array.isArray(o.rejected_by) && o.rejected_by.includes(driverId)))
+
+  raw.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
+  return hydrateDriverOrders(db, raw.slice(0, OFFERS_LIMIT))
+}
+
+// ترطيب مشترك: يجلب عناصر الطلبات الأحادية + منتجاتها ويبني DTO قائمة السماح لكلا التغذيتين.
+async function hydrateDriverOrders(db: ReturnType<typeof getAdminDb>, orders: Record<string, any>[]): Promise<DriverOrder[]> {
   // عناصر الطلبات الأحادية + أسماء/صور منتجاتها (المتعدد يحمل عناصره داخل pickup_stops أصلًا)
   const singleIds = orders.filter((o) => o.order_type !== "multi_store").map((o) => o.id)
   const itemsByOrder = new Map<string, DriverOrderItem[]>()
@@ -148,6 +175,7 @@ export async function getDriverOrders(driverId: string): Promise<DriverOrder[]> 
       landmark: str(o.landmark),
       delivery_latitude: o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
       delivery_longitude: o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
+      offer_expires_at_ms: o.offer_expires_at_ms != null ? num(o.offer_expires_at_ms) : undefined,
       ...(isMulti
         ? { pickup_stops: mapPickupStops(o.pickup_stops) }
         : { items: itemsByOrder.get(o.id) || [] }),
