@@ -78,7 +78,8 @@ export async function acceptOrderOffer(driverId: string, orderId: string): Promi
 
 // (2) رفض عرض — بسبب إجباري. يبقى offering ويُضاف السائق لـrejected_by (يُستبعد من العروض التالية).
 export async function rejectOrderOffer(driverId: string, orderId: string, reason: string): Promise<DispatchResult> {
-  const r = String(reason || "").trim()
+  // حدّ طول السبب: يمنع تضخيم مستند الطلب عبر note المتحكَّم فيه من العميل (مسار DoS).
+  const r = String(reason || "").trim().slice(0, 280)
   if (!r) return { success: false, error: "reason_required" }
   const db = getAdminDb()
   const ref = db.collection("orders").doc(orderId)
@@ -90,6 +91,18 @@ export async function rejectOrderOffer(driverId: string, orderId: string, reason
       const o = snap.data() as Record<string, any>
       if (o.is_dispatch !== true) return { ok: false as const, error: "not_dispatch_order" }
       if (o.status !== "offering") return { ok: false as const, error: "not_available" }
+      // إيدمبوتنت: السائق يرفض الطلب مرة واحدة فقط — يمنع تكرار إضافة سطور الخط الزمني (تبريك المستند
+      // حتى حدّ 1MB فيتعطّل الطلب نهائيًا) ويحدّ نموّ timeline بسطر واحد لكل سائق.
+      if (Array.isArray(o.rejected_by) && o.rejected_by.includes(driverId)) {
+        return { ok: false as const, error: "already_rejected" }
+      }
+      // تحقق صلاحية السائق (توازيًا مع accept): موجود، غير معطَّل، معتمَد — يسدّ حالة السائق غير-المعتمَد
+      // (الحقل غائب) الذي يمرّ من getCurrentDriverId اللطيف.
+      const dSnap = await tx.get(db.collection("drivers").doc(driverId))
+      const d = dSnap.exists ? (dSnap.data() as Record<string, any>) : null
+      if (!d) return { ok: false as const, error: "driver_not_found" }
+      if (d.disabled === true) return { ok: false as const, error: "driver_disabled" }
+      if ((d.isApproved ?? d.is_approved ?? false) !== true) return { ok: false as const, error: "driver_not_approved" }
       tx.update(ref, {
         rejected_by: FieldValue.arrayUnion(driverId),
         timeline: tl(o.timeline, { status: "driver_rejected_offer", timestamp: now, note: r }),
@@ -156,18 +169,22 @@ export async function driverDeliver(driverId: string, orderId: string, code: str
       if (o.driver_id !== driverId) return { ok: false as const, error: "not_your_order" }
       if (o.status === "delivered") return { ok: false as const, error: "already_delivered" }
       if (o.status !== "on_the_way") return { ok: false as const, error: "invalid_state" }
+      // إثبات التسليم يفشل مغلقًا (fail-closed): طلب توزيع بلا كود صالح (4 أرقام) لا يُسلَّم إطلاقًا —
+      // وإلا أمكن تعليمه "مُسلَّم" + تحصيل نقدي + delivery_verified كاذبة بلا كود من العميل.
       const expected = String(o.delivery_code || "").trim()
-      if (expected) {
-        const lockedUntil = Number(o.delivery_code_locked_until) || 0
-        if (lockedUntil > Date.now()) return { ok: false as const, error: "too_many_attempts" }
-        if (String(code || "").trim() !== expected) {
-          const next = (Number(o.delivery_code_attempts) || 0) + 1
-          tx.update(ref, {
-            delivery_code_attempts: next,
-            ...(next >= 5 ? { delivery_code_locked_until: Date.now() + 15 * 60 * 1000, delivery_code_attempts: 0 } : {}),
-          })
-          return { ok: false as const, error: "invalid_code" }
-        }
+      if (!/^\d{4}$/.test(expected)) return { ok: false as const, error: "no_delivery_code" }
+      // قفل تراكمي مدى-الحياة (لا يُصفَّر مع نافذة الـ15 دقيقة) — يسدّ التخمين البطيء عبر النوافذ المتعاقبة.
+      if ((Number(o.delivery_code_total_failures) || 0) >= 20) return { ok: false as const, error: "delivery_locked" }
+      const lockedUntil = Number(o.delivery_code_locked_until) || 0
+      if (lockedUntil > Date.now()) return { ok: false as const, error: "too_many_attempts" }
+      if (String(code || "").trim() !== expected) {
+        const next = (Number(o.delivery_code_attempts) || 0) + 1
+        tx.update(ref, {
+          delivery_code_attempts: next,
+          delivery_code_total_failures: FieldValue.increment(1), // عدّاد تراكمي لا يُصفَّر بالقفل
+          ...(next >= 5 ? { delivery_code_locked_until: Date.now() + 15 * 60 * 1000, delivery_code_attempts: 0 } : {}),
+        })
+        return { ok: false as const, error: "invalid_code" }
       }
       tx.update(ref, {
         status: "delivered",
@@ -176,6 +193,7 @@ export async function driverDeliver(driverId: string, orderId: string, code: str
         delivery_verified: true,
         delivery_code_attempts: 0,
         delivery_code_locked_until: FieldValue.delete(),
+        delivery_code_total_failures: FieldValue.delete(),
         timeline: tl(o.timeline, { status: "delivered", timestamp: now, note: "تسليم بكود التأكيد" }),
         updated_at: now,
       })
@@ -208,6 +226,7 @@ export function dispatchErrorStatus(error?: string): number {
     case "driver_not_approved":
       return 403
     case "too_many_attempts":
+    case "delivery_locked":
       return 429
     case "driver_not_found":
     case "server_error":
@@ -218,6 +237,7 @@ export function dispatchErrorStatus(error?: string): number {
     case "offer_expired":
     case "invalid_state":
     case "already_delivered":
+    case "no_delivery_code":
       return 409 // تعارض حالة
     default:
       return 400 // reason_required / invalid_code / غير معروف
