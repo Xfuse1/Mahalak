@@ -25,14 +25,24 @@ type OrderItem = {
     }
 }
 
+type OrderBid = {
+    driver_id: string
+    driver_name?: string
+    price: number
+    reason?: string
+    status?: string
+}
+
 type Order = {
     id: string
     created_at: string
     total: number
     status: string
     delivery_address: string
+    delivery_price?: number
     timeline?: TimelineEntry[]
     order_items: OrderItem[]
+    bids?: OrderBid[]
     stores: {
         id: string
         name: string
@@ -47,6 +57,31 @@ interface OrderTrackingModalProps {
 
 export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModalProps) {
     const { t } = useLanguage()
+    // عروض أسعار السائقين المعلّقة — يوافق العميل أو يرفض، والتغيير يتم سيرفر-سايد.
+    const [bidBusy, setBidBusy] = useState<string | null>(null)
+    const [bidError, setBidError] = useState<string | null>(null)
+    const [handled, setHandled] = useState<string[]>([])
+    const pendingBids = (order.bids || []).filter(
+        (b) => b?.status === "pending" && !handled.includes(b.driver_id),
+    )
+
+    const onBid = async (driverId: string, accept: boolean) => {
+        setBidBusy(driverId)
+        setBidError(null)
+        try {
+            const { respondToBid } = await import("../lib/actions/bids")
+            const res = await respondToBid(order.id, driverId, accept)
+            if (res?.success) {
+                setHandled((prev) => [...prev, driverId])
+            } else {
+                setBidError(t("تعذّر تنفيذ الطلب، حدّث الصفحة وحاول مجددًا", "Could not complete, refresh and try again"))
+            }
+        } catch {
+            setBidError(t("تعذّر الاتصال بالخادم", "Could not reach the server"))
+        } finally {
+            setBidBusy(null)
+        }
+    }
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)
@@ -119,6 +154,58 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                             </div>
                         )}
                     </div>
+
+                    {/* عروض أسعار السائقين — تحتاج موافقة العميل */}
+                    {pendingBids.length > 0 && (
+                        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
+                            <h4 className="font-bold text-base mb-1 text-gray-900">
+                                {t("عروض أسعار للتوصيل", "Delivery price offers")}
+                            </h4>
+                            <p className="text-xs text-gray-600 mb-3">
+                                {t(
+                                    `سعر التوصيل الحالي ${order.delivery_price ?? "-"} ج. وافق على عرض ليُسنَد الطلب للسائق.`,
+                                    `Current delivery fee ${order.delivery_price ?? "-"} EGP. Approving assigns the order to that driver.`,
+                                )}
+                            </p>
+                            <div className="space-y-2">
+                                {pendingBids.map((b) => (
+                                    <div
+                                        key={b.driver_id}
+                                        className="flex items-center justify-between gap-3 bg-white border border-amber-100 rounded-lg p-3"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-semibold text-sm text-gray-900 truncate">
+                                                {b.driver_name || t("سائق", "Driver")} — {b.price} {t("ج", "EGP")}
+                                            </p>
+                                            {b.reason && <p className="text-xs text-gray-500 truncate">{b.reason}</p>}
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button
+                                                size="sm"
+                                                disabled={bidBusy === b.driver_id}
+                                                onClick={() => onBid(b.driver_id, true)}
+                                            >
+                                                {bidBusy === b.driver_id ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    t("موافقة", "Approve")
+                                                )}
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={bidBusy === b.driver_id}
+                                                onClick={() => onBid(b.driver_id, false)}
+                                            >
+                                                {t("رفض", "Decline")}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {bidError && <p className="text-xs text-red-600 mt-2">{bidError}</p>}
+                        </div>
+                    )}
 
                     {/* Timeline */}
                     <div className="bg-white rounded-xl">

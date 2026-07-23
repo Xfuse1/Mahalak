@@ -5,6 +5,8 @@ import { getCurrentUid } from "@/lib/auth/session"
 import { getDriverPublicProfile } from "@/lib/drivers/driver-repo"
 import { logError } from "@/lib/logger"
 
+export type TrackingBid = { driver_id: string; driver_name: string; price: number; reason?: string; created_at?: string }
+
 export type OrderTracking = {
   found: boolean
   status?: string
@@ -12,6 +14,8 @@ export type OrderTracking = {
   driver?: { id: string; name: string; phone?: string } | null
   driver_location?: { lat: number; lng: number; heading?: number; at?: string } | null
   dropoff?: { lat: number; lng: number } | null
+  delivery_price?: number
+  pending_bids?: TrackingBid[] // عروض أسعار من سائقين تنتظر ردّ العميل
   updated_at?: string
 }
 
@@ -60,6 +64,19 @@ export async function getOrderTracking(orderId: string): Promise<OrderTracking> 
         Number.isFinite(o.delivery_latitude) && Number.isFinite(o.delivery_longitude)
           ? { lat: Number(o.delivery_latitude), lng: Number(o.delivery_longitude) }
           : null,
+      delivery_price: Number.isFinite(o.delivery_price) ? Number(o.delivery_price) : undefined,
+      // قائمة سماح صريحة لكل عرض (لا ننشر مستند العرض كما هو) — العميل مالك الطلب فقط يراها.
+      pending_bids: isCustomer && Array.isArray(o.bids)
+        ? o.bids
+          .filter((b: Record<string, unknown>) => b?.status === "pending")
+          .map((b: Record<string, unknown>) => ({
+            driver_id: String(b.driver_id ?? ""),
+            driver_name: String(b.driver_name ?? ""),
+            price: Number(b.price ?? 0),
+            reason: typeof b.reason === "string" ? b.reason : undefined,
+            created_at: typeof b.created_at === "string" ? b.created_at : undefined,
+          }))
+        : undefined,
       updated_at:
         o.updated_at?.toDate?.()?.toISOString?.() ||
         (typeof o.updated_at === "string" ? o.updated_at : undefined),
