@@ -18,6 +18,8 @@ export type DriverOrder = {
   id: string
   order_type: "single" | "multi_store"
   status: string
+  is_dispatch: boolean // طلب توزيع؟ التطبيق يُظهر أفعال التوزيع للطلبات هذه فقط
+  distance_km?: number // مسافة المتجر→العميل (تقدير للسائق قبل القبول)
   total: number
   delivery_price: number
   created_at?: string
@@ -36,7 +38,8 @@ export type DriverOrder = {
 }
 
 const DRIVER_ORDERS_LIMIT = 100
-const OFFERS_LIMIT = 100
+const OFFERS_LIMIT = 100 // أقصى عدد عروض تُعاد للتطبيق
+const OFFERS_SCAN_CAP = 300 // سقف المسح قبل الترشيح (انظر التعليق في getAvailableOffers)
 
 function num(v: unknown): number {
   const n = Number(v)
@@ -93,7 +96,11 @@ export async function getAvailableOffers(driverId: string): Promise<DriverOrder[
   const db = getAdminDb()
   const now = Date.now()
   // مساواة بحقل واحد (status) — فهرس مفرد تلقائي؛ "offering" حالة توزيع حصريًّا. نرشّح الباقي في JS.
-  const snap = await db.collection("orders").where("status", "==", "offering").limit(OFFERS_LIMIT).get()
+  // حدّ السعة: Firestore يُرجع الصفحة بترتيب المعرّف لا الأحدث، فلو تجاوزت الطلبات المعروضة
+  // SCAN_CAP دفعةً واحدة فقد يختفي عرض جديد خلف عروض قديمة/منتهية. عند هذا الحجم يلزم فهرس
+  // مركّب (status + created_at) مع orderBy — نتركه لأنه يتطلب نشر فهرس، وسقف اليوم أكبر بكثير
+  // من حجم التجربة (متجر واحد). راقب هذا الحدّ قبل التوسّع.
+  const snap = await db.collection("orders").where("status", "==", "offering").limit(OFFERS_SCAN_CAP).get()
   const raw = snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as Record<string, any>))
     .filter((o) => o.is_dispatch === true)
@@ -105,11 +112,16 @@ export async function getAvailableOffers(driverId: string): Promise<DriverOrder[
     .filter((o) => !(Array.isArray(o.rejected_by) && o.rejected_by.includes(driverId)))
 
   raw.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")))
-  return hydrateDriverOrders(db, raw.slice(0, OFFERS_LIMIT))
+  return hydrateDriverOrders(db, raw.slice(0, OFFERS_LIMIT), "offer")
 }
 
 // ترطيب مشترك: يجلب عناصر الطلبات الأحادية + منتجاتها ويبني DTO قائمة السماح لكلا التغذيتين.
-async function hydrateDriverOrders(db: ReturnType<typeof getAdminDb>, orders: Record<string, any>[]): Promise<DriverOrder[]> {
+// scope يحدّد اتساع الكشف: "assigned" (طلباتي، بعد الإسناد) كامل، و"offer" (عرض متاح) مُصغَّر.
+async function hydrateDriverOrders(
+  db: ReturnType<typeof getAdminDb>,
+  orders: Record<string, any>[],
+  scope: "assigned" | "offer" = "assigned",
+): Promise<DriverOrder[]> {
   // عناصر الطلبات الأحادية + أسماء/صور منتجاتها (المتعدد يحمل عناصره داخل pickup_stops أصلًا)
   const singleIds = orders.filter((o) => o.order_type !== "multi_store").map((o) => o.id)
   const itemsByOrder = new Map<string, DriverOrderItem[]>()
@@ -159,22 +171,28 @@ async function hydrateDriverOrders(db: ReturnType<typeof getAdminDb>, orders: Re
 
   return orders.map((o): DriverOrder => {
     const isMulti = o.order_type === "multi_store"
+    // في تغذية العروض (قبل القبول) لا نكشف بيانات تواصل العميل ولا موقعه الدقيق: أي سائق مسجَّل
+    // يتصفّح العروض كان سيقرأ اسم العميل وهاتفه وعنوانه بلا أي التزام بالطلب. نكتفي بالمدينة
+    // والمعالم التقريبية ليقدّر المسافة، وتُكشف التفاصيل كاملةً بعد الإسناد (تغذية "طلباتي").
+    const full = scope === "assigned"
     return {
       id: o.id,
       order_type: isMulti ? "multi_store" : "single",
       status: str(o.status) || "pending",
+      is_dispatch: o.is_dispatch === true,
       total: num(o.total),
       delivery_price: num(o.delivery_price),
       created_at: str(o.created_at?.toDate?.()?.toISOString?.() || o.created_at),
       updated_at: str(o.updated_at?.toDate?.()?.toISOString?.() || o.updated_at),
-      customer_name: str(o.customer_name),
-      customer_phone: str(o.customer_phone),
-      delivery_address: str(o.delivery_address),
+      customer_name: full ? str(o.customer_name) : undefined,
+      customer_phone: full ? str(o.customer_phone) : undefined,
+      delivery_address: full ? str(o.delivery_address) : undefined,
       delivery_city: str(o.delivery_city),
-      delivery_notes: str(o.delivery_notes),
-      landmark: str(o.landmark),
-      delivery_latitude: o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
-      delivery_longitude: o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
+      delivery_notes: full ? str(o.delivery_notes) : undefined,
+      landmark: full ? str(o.landmark) : undefined,
+      delivery_latitude: full && o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
+      delivery_longitude: full && o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
+      distance_km: o.distance_km != null ? num(o.distance_km) : undefined,
       offer_expires_at_ms: o.offer_expires_at_ms != null ? num(o.offer_expires_at_ms) : undefined,
       ...(isMulti
         ? { pickup_stops: mapPickupStops(o.pickup_stops) }

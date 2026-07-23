@@ -514,6 +514,14 @@ export async function updateOrderStatus(
       }
     }
 
+    // طلبات التوزيع تُدار حصراً عبر آلة الحالة الذرّية (lib/delivery/dispatch.ts + confirmDispatchOrder).
+    // هذا المسار القديم قراءة-تعديل-كتابة غير ذرّية بـset(merge) — لو مسّ طلب توزيع لأمكنه تخطّي شروط
+    // الانتقال (مثل on_the_way بلا استلام) أو طمس خط زمني كتبته معاملة توزيع متزامنة. نستثني الأدمن
+    // فقط كي تبقى استعادة طلب عالق ممكنة من اللوحة. (نظير القيد الموجود في markOrderDeliveredByDriver.)
+    if (currentData.is_dispatch === true && !hasAdminAccess(caller?.role)) {
+      return { success: false, error: "طلب توزيع — يُدار عبر تدفق التوزيع" }
+    }
+
     // قصر دائرة لو لم تتغيّر الحالة — يمنع تكرار الإشعارات/الخط الزمني وإعادة تشغيل آثار الإلغاء
     if (currentData.status === status) {
       const snap = await docRef.get()
