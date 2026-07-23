@@ -670,15 +670,19 @@ export default function SellerOrdersPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-2">
-                    <OrderStatusSelector
-                      orderId={selectedOrder.id}
-                      currentStatus={selectedOrder.status}
-                      callerId={storeId || ""}
-                      callerRole="seller"
-                      onUpdated={loadOrders}
-                    />
-                  </div>
+                  {/* طلبات التوزيع تُدار عبر تدفق التوزيع — نُخفي محدّد الحالة هنا كما في بطاقة الطلب،
+                      وإلا وصل إليه البائع بنقرتين وأخرج الطلب من حالة "offering" فمات بلا سائق. */}
+                  {!selectedOrder.is_dispatch && (
+                    <div className="flex justify-end pt-2">
+                      <OrderStatusSelector
+                        orderId={selectedOrder.id}
+                        currentStatus={selectedOrder.status}
+                        callerId={storeId || ""}
+                        callerRole="seller"
+                        onUpdated={loadOrders}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </DialogContent>

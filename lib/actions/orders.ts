@@ -540,6 +540,17 @@ export async function updateOrderStatus(
       return { success: false, error: "لا يمكن تغيير حالة طلب منتهٍ (مُسلّم/ملغى)" }
     }
 
+    // قائمة سماح للحالات: هذه الدالة "use server" أي نقطة POST عامة، وكانت تكتب النص القادم من
+    // المستدعي حرفيًّا — أي قيمة عشوائية تُخزَّن كحالة فتسقط من كل الاستعلامات والواجهات.
+    const ALLOWED_STATUSES = [
+      "pending", "ordered", "reviewing", "confirmed", "processing", "shipped",
+      "picking_up", "picked_up", "on_the_way", "driver_changed", "driver_rejected",
+      "delivered", "cancelled",
+    ]
+    if (!ALLOWED_STATUSES.includes(status)) {
+      return { success: false, error: "حالة غير صالحة" }
+    }
+
     // Build update payload
     const updatePayload: Record<string, unknown> = {
       status,
@@ -1110,6 +1121,9 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
       if (o.is_dispatch !== true) return { ok: false as const, error: "ليس طلب توزيع" }
       if (o.store_id !== storeId) return { ok: false as const, error: "ليس طلب متجرك" }
       if (o.status !== "pending") return { ok: false as const, error: "لا يمكن تأكيد الطلب في حالته الحالية" }
+      // حزام أمان: لا نعرض طلبًا يحمل سائقًا مسبقًا — عرضٌ مُسنَد يسقط من تغذية العروض ويرفضه
+      // القبول بـalready_taken، فيصير طلبًا ميتًا. أي مسار قديم يكتب driver_id يُوقَف هنا.
+      if (o.driver_id) return { ok: false as const, error: "الطلب مُسنَد بالفعل لسائق" }
       tx.update(ref, {
         status: "offering",
         offer_expires_at_ms: Date.now() + settings.offer_timeout_sec * 1000,
@@ -1275,6 +1289,13 @@ export async function changeOrderDriver(
     // Verify the customer owns this order
     if (orderData?.customer_id !== customerId) {
       return { success: false, error: "You are not allowed to modify this order" }
+    }
+
+    // طلبات التوزيع: السائق يُختار بالعرض/القبول لا باختيار العميل. بدون هذا القيد كان العميل يقدر
+    // يُسند سائقًا لطلب توزيع وهو "pending"، ثم يؤكّده البائع فيصير "offering" ومعه driver_id —
+    // فيسقط من تغذية العروض (تشترط عدم الإسناد) ويرفضه القبول بـalready_taken ⇒ طلب ميت بلا سائق.
+    if (orderData?.is_dispatch === true) {
+      return { success: false, error: "طلب توزيع — يُدار عبر تدفق التوزيع" }
     }
 
     // Only allow driver change if status is driver_rejected or pending
