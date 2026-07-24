@@ -20,6 +20,12 @@ export function DispatchMonitorMap({ orders }: { orders: MonitorMarker[] }) {
   const mapInstance = useRef<LeafletMap | null>(null)
   const layer = useRef<LayerGroup | null>(null)
   const LRef = useRef<any>(null)
+  // نُبقي أحدث الطلبات في ref يُقرأ داخل draw() — كي لا يرسم إكمالُ تحميل Leaflet (غير المتزامن) لقطةً
+  // قديمة فارغة من إغلاق أول رندر فتبقى الخريطة فاضية حتى الاستطلاع التالي.
+  const ordersRef = useRef<MonitorMarker[]>(orders)
+  ordersRef.current = orders
+  // بصمة مجموعة الطلبات المعروضة آخر مرة أُعيد تأطير الخريطة عندها.
+  const lastFitKey = useRef<string>("")
 
   useEffect(() => {
     let cancelled = false
@@ -55,24 +61,34 @@ export function DispatchMonitorMap({ orders }: { orders: MonitorMarker[] }) {
   const draw = () => {
     const L = LRef.current
     if (!L || !mapInstance.current || !layer.current) return
+    const ords = ordersRef.current
     layer.current.clearLayers()
     const pts: [number, number][] = []
+    const ids: string[] = []
     const carIcon = L.divIcon({ html: '<div style="font-size:24px;line-height:1">🚗</div>', className: "", iconSize: [24, 24], iconAnchor: [12, 12] })
     const homeIcon = L.divIcon({ html: '<div style="font-size:20px;line-height:1">📍</div>', className: "", iconSize: [20, 20], iconAnchor: [10, 20] })
-    for (const o of orders) {
+    for (const o of ords) {
+      let has = false
       if (Number.isFinite(o.driver_lat) && Number.isFinite(o.driver_lng)) {
         const ll: [number, number] = [o.driver_lat as number, o.driver_lng as number]
         L.marker(ll, { icon: carIcon }).bindTooltip(`${o.driver_name || "سائق"} — ${o.status}`).addTo(layer.current)
-        pts.push(ll)
+        pts.push(ll); has = true
       }
       if (Number.isFinite(o.dropoff_lat) && Number.isFinite(o.dropoff_lng)) {
         const ll: [number, number] = [o.dropoff_lat as number, o.dropoff_lng as number]
         L.marker(ll, { icon: homeIcon }).bindTooltip("تسليم").addTo(layer.current)
-        pts.push(ll)
+        pts.push(ll); has = true
       }
+      if (has) ids.push(o.id)
     }
-    if (pts.length === 1) mapInstance.current.setView(pts[0], 14)
-    else if (pts.length > 1) mapInstance.current.fitBounds(L.latLngBounds(pts).pad(0.3))
+    // نُعيد تأطير الخريطة فقط عند تغيّر مجموعة الطلبات المعروضة (ظهور/اختفاء طلب) — لا عند كل استطلاع
+    // 15ث ولا عند مجرّد تحرّك السائق، حتى لا يُلغى تكبير/تحريك المشغّل اليدوي كل دورة.
+    const key = ids.sort().join("|")
+    if (key !== lastFitKey.current) {
+      lastFitKey.current = key
+      if (pts.length === 1) mapInstance.current.setView(pts[0], 14)
+      else if (pts.length > 1) mapInstance.current.fitBounds(L.latLngBounds(pts).pad(0.3))
+    }
   }
 
   // إعادة الرسم عند تغيّر الطلبات (عدد/مواقع).

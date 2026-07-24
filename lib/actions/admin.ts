@@ -516,11 +516,15 @@ export async function getDispatchMonitor(): Promise<{
   try {
     const db = getAdminDb()
     const ACTIVE = ["offering", "accepted", "on_the_way"]
-    // مساواة بحقل واحد (is_dispatch) — فهرس مفرد تلقائي؛ نرشّح الحالة في JS.
-    const snap = await db.collection("orders").where("is_dispatch", "==", true).limit(400).get()
+    // نرشّح بالحالة النشطة على مستوى القاعدة (فهرس مفرد تلقائي على status) ثم is_dispatch في JS.
+    // سابقًا كان الاستعلام is_dispatch==true بحدّ 400 بلا ترتيب: وبما أن is_dispatch لا يُعاد أبدًا إلى
+    // false عند التسليم/الإلغاء، تتراكم الطلبات المنتهية بلا حدّ وتُزيح الطلبات النشطة خارج نافذة الـ400
+    // (معرّفات المستندات عشوائية بلا orderBy)، فتختفي طلبات حيّة صامتةً من اللوحة بمجرد تجاوز 400 طلب
+    // توزيع تراكمي. الاستعلام بالحالة النشطة (عددها محدود بطبيعته) يزيل هذا الانقطاع الصامت.
+    const snap = await db.collection("orders").where("status", "in", ACTIVE).limit(400).get()
     const raw = snap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) } as Record<string, any>))
-      .filter((o) => ACTIVE.includes(String(o.status)))
+      .filter((o) => o.is_dispatch === true)
     // أسماء المتاجر: نجمع كل store_id/store_ids ونجلبها دفعةً.
     const storeIds = new Set<string>()
     for (const o of raw) {
@@ -548,7 +552,8 @@ export async function getDispatchMonitor(): Promise<{
       let stops_summary: string | undefined
       if (o.order_type === "multi_store" && Array.isArray(o.pickup_stops)) {
         const total = o.pickup_stops.length
-        if (o.status === "accepted") {
+        if (o.status === "accepted" || o.status === "on_the_way") {
+          // on_the_way = كل المتاجر استُلمت (dispatch.ts يشترط ذلك للانتقال) فالوصف الصحيح "استُلم".
           const picked = o.pickup_stops.filter((s: any) => s?.status === "picked_up").length
           stops_summary = `${picked}/${total} استُلم`
         } else {
@@ -580,7 +585,9 @@ export async function getDispatchMonitor(): Promise<{
     })
     orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
 
-    const dsnap = await db.collection("drivers").get()
+    // حدّ 500 اتساقًا مع باقي قراءات الأدمن للسائقين (getAdminDrivers/getAdminAccounts) — تُستدعى كل 15ث
+    // لكل لوحة مفتوحة، فقراءة غير محدودة تكبر خطّيًّا مع الأسطول.
+    const dsnap = await db.collection("drivers").limit(500).get()
     const drivers: DispatchMonitorDriver[] = dsnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) } as Record<string, any>))
       .filter((d) => (d.isApproved ?? d.is_approved ?? false) === true && d.disabled !== true)
@@ -588,7 +595,9 @@ export async function getDispatchMonitor(): Promise<{
         id: d.id,
         name: d.name || "سائق",
         phone: typeof d.phone === "string" ? d.phone : undefined,
-        is_online: (d.isOnline ?? d.is_online) !== false,
+        // الحقل الغائب = غير متاح (?? false)، اتساقًا مع getAdminDrivers — وإلا ظهر سائق لم يفعّل حالته
+        // "متاح" هنا و"غير متاح" في /admin/drivers على نفس البيانات.
+        is_online: (d.isOnline ?? d.is_online ?? false) === true,
         active_orders: activeByDriver.get(d.id) || 0,
       }))
       .sort((a, b) => Number(b.is_online) - Number(a.is_online))
