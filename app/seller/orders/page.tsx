@@ -9,7 +9,7 @@ import { Button } from "../../../components/ui/button"
 import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, ShoppingBag, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup, confirmDispatchOrder } from "../../../lib/actions/orders"
+import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup, confirmDispatchOrder, confirmDispatchStop } from "../../../lib/actions/orders"
 import type { PickupStop } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
@@ -66,6 +66,7 @@ type MultiStoreOrder = {
   id: string
   status: string
   total: number
+  is_dispatch?: boolean
   created_at?: string
   customer_name?: string
   customer_phone?: string
@@ -218,12 +219,22 @@ export default function SellerOrdersPage() {
     return t("منتج", "products")
   }
 
-  const handleConfirmMultiOrder = async (orderId: string) => {
+  const handleConfirmMultiOrder = async (orderId: string, isDispatch?: boolean) => {
     if (!user?.id) return
     setActionLoading(orderId)
     try {
-      const result = await confirmStorePickup(orderId, user.id)
+      // طلب توزيع متعدد المتاجر يمرّ بآلة حالة التوزيع (confirmDispatchStop): عند تأكيد كل المتاجر
+      // يُعرض على السائقين. الطلب القديم (غير التوزيع) يبقى على confirmStorePickup.
+      const result = isDispatch
+        ? await confirmDispatchStop(orderId, user.id)
+        : await confirmStorePickup(orderId, user.id)
       if (result.success) {
+        if (isDispatch) {
+          const offered = (result as { all_confirmed?: boolean }).all_confirmed
+          toast.success(offered
+            ? t("تم تأكيد كل المتاجر وعُرض الطلب على السائقين", "All stores confirmed — order offered to drivers")
+            : t("تم تأكيد متجرك — بانتظار باقي المتاجر", "Your store confirmed — waiting for the other stores"))
+        }
         await loadOrders()
       } else {
         toast.error(result.error || t("حدث خطأ", "An error occurred"))
@@ -517,7 +528,7 @@ export default function SellerOrdersPage() {
                           {myStop.status === "pending" && (
                             <>
                               <Button
-                                onClick={() => handleConfirmMultiOrder(order.id)}
+                                onClick={() => handleConfirmMultiOrder(order.id, order.is_dispatch)}
                                 disabled={actionLoading === order.id}
                                 className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-xl"
                               >
