@@ -1967,6 +1967,61 @@ export async function confirmDispatchStop(orderId: string, storeId: string) {
   }
 }
 
+// رفض متجر لحصّته في طلب توزيع متعدد المتاجر. لا يمكن تنفيذ عرض توزيع جزئيًّا (يُعرض ككلٍّ على
+// سائق واحد)، فرفض أي متجر يُلغي الطلب كله ويعيد مخزون كل المحطات ويُخطر العميل. قبل الإسناد فقط
+// (pending) — بعد offering/accepted يكون سائق قد دخل. علم stock_restored يمنع الاستعادة المزدوجة.
+export async function rejectDispatchStop(orderId: string, storeId: string, reason?: string) {
+  if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  const r = String(reason || "").trim().slice(0, 280)
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "Order not found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true || o.order_type !== "multi_store") return { ok: false as const, error: "ليس طلب توزيع متعدد" }
+      if (o.status !== "pending") return { ok: false as const, error: "لا يمكن رفض الطلب في حالته الحالية" }
+      const stops: PickupStop[] = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+      const idx = stops.findIndex((s) => s.store_id === storeId)
+      if (idx < 0) return { ok: false as const, error: "ليس متجرًا في هذا الطلب" }
+      const next = stops.map((s, i) => (i === idx ? { ...s, status: "rejected" as const, rejected_at: now, rejection_reason: r || null } : s))
+      const alreadyRestored = o.stock_restored === true
+      tx.update(ref, {
+        pickup_stops: next,
+        status: "cancelled",
+        stock_restored: true,
+        timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "cancelled", timestamp: now, note: `رفض ${storeId}${r ? ": " + r : ""}` } as TimelineEntry],
+        updated_at: now,
+      })
+      return { ok: true as const, customerId: o.customer_id as string | undefined, stops, restore: !alreadyRestored }
+    })
+    if (!out.ok) return { success: false, error: out.error }
+    // إعادة كل المخزون (الطلب أُلغي) — مرة واحدة فقط.
+    if (out.restore) {
+      try {
+        const batch = db.batch()
+        for (const stop of out.stops) {
+          for (const it of stop.items || []) {
+            const q = Number(it.quantity) || 0
+            if (it.product_id && q > 0) batch.update(db.collection("products").doc(it.product_id), { stock: FieldValue.increment(q), updated_at: now })
+          }
+        }
+        await batch.commit()
+      } catch (e) { logError("[rejectDispatchStop] restore stock", e) }
+    }
+    try {
+      if (out.customerId) await createNotification({ user_id: out.customerId, type: "order_status", title: "⚠️ تعذّر تنفيذ طلبك", title_en: "⚠️ Your order could not be fulfilled", message: "رفض أحد المتاجر الطلب فأُلغي. يمكنك إعادة الطلب.", message_en: "A store declined the order, so it was cancelled. You can reorder.", link: "/account", data: { order_id: orderId, status: "cancelled" } })
+    } catch (e) { logError("[rejectDispatchStop] notify", e) }
+    revalidatePath("/seller/orders")
+    return { success: true }
+  } catch (e) {
+    logError("[rejectDispatchStop]", e)
+    return { success: false, error: "server_error" }
+  }
+}
+
 // Store confirms its part of a multi-store order
 export async function confirmStorePickup(orderId: string, storeId: string) {
   if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }

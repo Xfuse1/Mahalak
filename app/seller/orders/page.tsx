@@ -9,7 +9,7 @@ import { Button } from "../../../components/ui/button"
 import { Filter, Eye, User, MapPin, Package, Phone as PhoneIcon, Mail, ShoppingCart, ShoppingBag, CheckCircle, XCircle, Store, RefreshCw } from "lucide-react"
 import { OrderStatusSelector } from "../../../components/order-status-selector"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup, confirmDispatchOrder, confirmDispatchStop } from "../../../lib/actions/orders"
+import { getStoreOrders, getMultiStoreOrdersForStore, confirmStorePickup, rejectStorePickup, confirmDispatchOrder, confirmDispatchStop, rejectDispatchStop } from "../../../lib/actions/orders"
 import type { PickupStop } from "../../../lib/actions/orders"
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
@@ -92,6 +92,7 @@ export default function SellerOrdersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null)
+  const [rejectIsDispatch, setRejectIsDispatch] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [storeId, setStoreId] = useState<string | null>(null)
 
@@ -264,8 +265,9 @@ export default function SellerOrdersPage() {
     setActionLoading(null)
   }
 
-  const openRejectDialog = (orderId: string) => {
+  const openRejectDialog = (orderId: string, isDispatch?: boolean) => {
     setRejectOrderId(orderId)
+    setRejectIsDispatch(!!isDispatch)
     setRejectReason("")
     setIsRejectDialogOpen(true)
   }
@@ -275,7 +277,10 @@ export default function SellerOrdersPage() {
     setActionLoading(rejectOrderId)
     setIsRejectDialogOpen(false)
     try {
-      const result = await rejectStorePickup(rejectOrderId, user.id, rejectReason || undefined)
+      // طلب توزيع: رفض أي متجر يُلغي الطلب كله ويعيد المخزون (لا تنفيذ جزئي). القديم يبقى كما هو.
+      const result = rejectIsDispatch
+        ? await rejectDispatchStop(rejectOrderId, user.id, rejectReason || undefined)
+        : await rejectStorePickup(rejectOrderId, user.id, rejectReason || undefined)
       if (result.success) {
         await loadOrders()
       } else {
@@ -287,6 +292,7 @@ export default function SellerOrdersPage() {
     setActionLoading(null)
     setRejectOrderId(null)
     setRejectReason("")
+    setRejectIsDispatch(false)
   }
 
   const formatDate = (dateString: string) => {
@@ -536,7 +542,7 @@ export default function SellerOrdersPage() {
                                 {actionLoading === order.id ? t("جاري...", "Processing...") : t("تأكيد الطلب", "Confirm Order")}
                               </Button>
                               <Button
-                                onClick={() => openRejectDialog(order.id)}
+                                onClick={() => openRejectDialog(order.id, order.is_dispatch)}
                                 disabled={actionLoading === order.id}
                                 variant="outline"
                                 className="flex-1 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
