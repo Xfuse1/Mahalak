@@ -128,6 +128,8 @@ export async function driverPickup(driverId: string, orderId: string): Promise<D
       if (!snap.exists) return { ok: false as const, error: "order_not_found" }
       const o = snap.data() as Record<string, any>
       if (o.is_dispatch !== true) return { ok: false as const, error: "not_dispatch_order" }
+      // الطلبات متعددة المتاجر تُستلم لكل متجر عبر driverPickupStore (وإلا تخطّينا محطات).
+      if (o.order_type === "multi_store") return { ok: false as const, error: "use_per_store_pickup" }
       if (o.driver_id !== driverId) return { ok: false as const, error: "not_your_order" }
       if (o.status !== "accepted") return { ok: false as const, error: "invalid_state" }
       tx.update(ref, {
@@ -150,6 +152,57 @@ export async function driverPickup(driverId: string, orderId: string): Promise<D
     return { success: true, status: "on_the_way" }
   } catch (e) {
     logError("[dispatch] driverPickup", e)
+    return { success: false, error: "server_error" }
+  }
+}
+
+// (3-م) استلام متجر في طلب توزيع متعدد المتاجر. يعلّم محطة المتجر picked_up؛ عند استلام كل
+// المحطات يتحوّل الطلب إلى on_the_way (ويُخطَر العميل). لصاحب الطلب فقط، والطلب في حالة accepted.
+export async function driverPickupStore(driverId: string, orderId: string, storeId: string): Promise<DispatchResult> {
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "order_not_found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true) return { ok: false as const, error: "not_dispatch_order" }
+      if (o.order_type !== "multi_store") return { ok: false as const, error: "not_multi_store" }
+      if (o.driver_id !== driverId) return { ok: false as const, error: "not_your_order" }
+      if (o.status !== "accepted") return { ok: false as const, error: "invalid_state" }
+      const stops: Array<Record<string, any>> = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+      const idx = stops.findIndex((s) => s.store_id === storeId)
+      if (idx < 0) return { ok: false as const, error: "store_not_in_order" }
+      if (stops[idx].status === "picked_up") return { ok: false as const, error: "already_picked_up" }
+      const next = stops.map((s, i) => (i === idx ? { ...s, status: "picked_up", picked_up_at: now } : s))
+      const allPicked = next.every((s) => s.status === "picked_up")
+      const update: Record<string, unknown> = {
+        pickup_stops: next,
+        timeline: tl(o.timeline, { status: "store_picked_up", timestamp: now, note: storeId }),
+        updated_at: now,
+      }
+      if (allPicked) {
+        update.status = "on_the_way"
+        update.picked_up_at = now
+      }
+      tx.update(ref, update)
+      return { ok: true as const, allPicked, customerId: o.customer_id as string | undefined }
+    })
+    if (!out.ok) return { success: false, error: out.error }
+    if (out.allPicked) {
+      await notifyCustomer(out.customerId, {
+        title: "📦 السائق استلم طلبك",
+        title_en: "📦 Driver picked up your order",
+        message: "استلم السائق من كل المتاجر وهو في الطريق إليك.",
+        message_en: "The driver collected from all stores and is on the way.",
+        link: "/account",
+        data: { order_id: orderId, status: "on_the_way" },
+      })
+    }
+    return { success: true, status: out.allPicked ? "on_the_way" : "accepted" }
+  } catch (e) {
+    logError("[dispatch] driverPickupStore", e)
     return { success: false, error: "server_error" }
   }
 }
@@ -239,6 +292,10 @@ export function dispatchErrorStatus(error?: string): number {
     case "invalid_state":
     case "already_delivered":
     case "no_delivery_code":
+    case "use_per_store_pickup":
+    case "not_multi_store":
+    case "already_picked_up":
+    case "store_not_in_order":
       return 409 // تعارض حالة
     default:
       return 400 // reason_required / invalid_code / غير معروف

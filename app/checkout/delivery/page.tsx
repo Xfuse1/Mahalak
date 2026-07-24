@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { Star, Truck, CheckCircle, MapPin, Loader2, User, Phone, Car } from "lucide-react"
-import { createOrder, createMultiStoreOrder, createDispatchOrder, getDeliveryQuote } from "@/lib/actions/orders"
+import { createOrder, createMultiStoreOrder, createDispatchOrder, createMultiStoreDispatchOrder, getDeliveryQuote, getMultiStoreDeliveryQuote } from "@/lib/actions/orders"
 import type { PickupStop } from "@/lib/actions/orders"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 import type { CheckoutItem } from "@/lib/types/checkout"
@@ -140,24 +140,29 @@ export default function DeliveryPage() {
     }
   }, [user, authLoading, router])
 
-  // المرحلة 1 — اجلب تسعيرة التوزيع بالعدّاد (خلف flag). أحادي المتجر فقط؛ المطفّي يرجّع enabled=false.
+  // اجلب تسعيرة التوزيع بالعدّاد (خلف flag): أحادي المتجر عبر getDeliveryQuote، ومتعدد عبر
+  // getMultiStoreDeliveryQuote (مجموع مسافات المتاجر). المطفّي يرجّع enabled=false.
+  const storeIdsKey = cartStoreIds.join(",")
   useEffect(() => {
-    if (!checkoutData || !quoteStoreId) {
+    if (!checkoutData) {
       setDispatchQuote(null)
       return
     }
     let cancelled = false
     const lat = checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined
     const lng = checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined
-    getDeliveryQuote({ store_id: quoteStoreId, customer_lat: lat, customer_lng: lng })
-      .then((q) => { if (!cancelled) setDispatchQuote(q) })
+    const ids = storeIdsKey.split(",").filter(Boolean)
+    const p = ids.length === 1
+      ? getDeliveryQuote({ store_id: ids[0], customer_lat: lat, customer_lng: lng })
+      : getMultiStoreDeliveryQuote({ store_ids: ids, customer_lat: lat, customer_lng: lng })
+    p.then((q) => { if (!cancelled) setDispatchQuote(q) })
       .catch(() => { if (!cancelled) setDispatchQuote({ enabled: false }) })
     return () => { cancelled = true }
-  }, [checkoutData, quoteStoreId])
+  }, [checkoutData, storeIdsKey])
 
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
-  // المرحلة 1 — وضع التوزيع (خلف flag): أحادي المتجر + التوزيع مفعّل. وقتها لا اختيار سائق ولا سعر سائق.
-  const isDispatch = isSingleStore && dispatchQuote?.enabled === true
+  // وضع التوزيع (خلف flag): التوزيع مفعّل (أحادي أو متعدد). وقتها لا اختيار سائق ولا سعر سائق.
+  const isDispatch = dispatchQuote?.enabled === true
   const meterFee = dispatchQuote && dispatchQuote.enabled ? dispatchQuote.fee : 0
   // رسوم التوصيل: في التوزيع = رسوم العدّاد؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
   const deliveryPrice = isDispatch ? meterFee : (selectedDriverData?.price ?? 0)
@@ -211,8 +216,8 @@ export default function DeliveryPage() {
         .filter(Boolean)
         .join(" — ")
 
-      // المرحلة 1 — طلب توزيع (أحادي المتجر، بلا سائق، رسوم عدّاد). الخادم يعيد اشتقاق الرسوم والمخزون.
-      if (isDispatch) {
+      // طلب توزيع أحادي المتجر (بلا سائق، رسوم عدّاد). الخادم يعيد اشتقاق الرسوم والمخزون.
+      if (isDispatch && isSingleStore) {
         const dispStoreId = quoteStoreId
         const dispItems = items.filter((i) => (i.store_id || "default") === dispStoreId)
         const result = await createDispatchOrder({
@@ -229,6 +234,51 @@ export default function DeliveryPage() {
           landmark: checkoutData.landmark,
           idempotency_key: idempotencyKey,
           items: dispItems.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price })),
+        })
+        if (!result.success) {
+          throw new Error(result.error || "Failed to create order")
+        }
+      } else if (isDispatch) {
+        // طلب توزيع متعدد المتاجر (بلا سائق، رسوم عدّاد = مجموع مسافات المتاجر). محطة لكل متجر.
+        const dispatchStops: PickupStop[] = storeIds.map((storeId) => {
+          const storeGroup = itemsByStore[storeId]
+          const subtotal = storeGroup.items.reduce((sum, item) => {
+            const dp = item.discount_percentage && item.discount_percentage > 0
+              ? item.price - (item.price * item.discount_percentage / 100)
+              : item.price
+            return sum + dp * item.quantity
+          }, 0)
+          return {
+            store_id: storeId,
+            store_name: storeGroup.store_name,
+            items: storeGroup.items.map((item) => ({
+              product_id: item.id,
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              image_url: item.image_url,
+            })),
+            subtotal,
+            status: "pending" as const,
+            confirmed_at: null,
+            picked_up_at: null,
+            rejected_at: null,
+            rejection_reason: null,
+          }
+        })
+        const result = await createMultiStoreDispatchOrder({
+          customer_id: user.id,
+          customer_name: checkoutData.fullName,
+          customer_phone: checkoutData.phone,
+          delivery_address: fullAddress,
+          delivery_city: checkoutData.city,
+          delivery_state: checkoutData.state,
+          delivery_latitude: checkoutData.latitude ? parseFloat(checkoutData.latitude) : undefined,
+          delivery_longitude: checkoutData.longitude ? parseFloat(checkoutData.longitude) : undefined,
+          delivery_notes: checkoutData.notes,
+          landmark: checkoutData.landmark,
+          pickup_stops: dispatchStops,
+          idempotency_key: idempotencyKey,
         })
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")

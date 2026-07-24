@@ -1223,6 +1223,44 @@ export async function getDeliveryQuote(input: {
   }
 }
 
+// عرض سعر توصيل متعدد المتاجر: فتح العداد + سعر الكيلومتر × مجموع مسافات (كل متجر → العميل).
+// نفس صيغة createMultiStoreDispatchOrder كي يطابق ما يُحتسَب عند الطلب. عامّة (للـcheckout).
+export async function getMultiStoreDeliveryQuote(input: {
+  store_ids: string[]
+  customer_lat?: number
+  customer_lng?: number
+}): Promise<
+  | { enabled: false }
+  | { enabled: true; fee: number; distance_km: number | null; base_fare: number; per_km_rate: number }
+> {
+  const settings = await readDispatchSettings()
+  if (!settings.enabled) return { enabled: false }
+  try {
+    const ids = Array.from(new Set((input.store_ids || []).filter(Boolean)))
+    const hasCust = typeof input.customer_lat === "number" && typeof input.customer_lng === "number"
+    let totalKm = 0
+    if (hasCust && ids.length) {
+      const db = getAdminDb()
+      const snaps = await Promise.all(ids.map((id) => db.collection("users").doc(id).get()))
+      for (const snap of snaps) {
+        const store = (snap.data() as { store?: { latitude?: number; longitude?: number } } | undefined)?.store
+        if (typeof store?.latitude === "number" && typeof store?.longitude === "number") {
+          totalKm += haversineKm(store.latitude, store.longitude, input.customer_lat!, input.customer_lng!)
+        }
+      }
+    }
+    return {
+      enabled: true,
+      fee: computeDeliveryFee(totalKm, settings),
+      distance_km: totalKm > 0 ? Number(totalKm.toFixed(2)) : null,
+      base_fare: settings.base_fare,
+      per_km_rate: settings.per_km_rate,
+    }
+  } catch {
+    return { enabled: true, fee: computeDeliveryFee(0, settings), distance_km: null, base_fare: settings.base_fare, per_km_rate: settings.per_km_rate }
+  }
+}
+
 export async function createContactInquiry(inquiryData: {
   customer_id: string
   product_id: string
@@ -1712,6 +1750,220 @@ export async function createMultiStoreOrder(orderData: {
   } catch (error: unknown) {
     await logServerError("createMultiStoreOrder", error, { customer_id: orderData.customer_id })
     return { success: false, error: getErrorMessage(error) || "Failed to create order" }
+  }
+}
+
+// إنشاء طلب توزيع متعدد المتاجر (بلا اختيار سائق). يعكس createMultiStoreOrder المُتحقَّق (مخزون/عروض/
+// idempotency ذرّي) لكن: بلا سائق، رسوم عدّاد مُحتسَبة من إحداثيات المتاجر والعميل (فتح العداد + سعر
+// الكيلومتر × مجموع مسافات المتاجر→العميل)، is_dispatch:true، وكل المحطات pending. خلف علم dispatch.
+export async function createMultiStoreDispatchOrder(orderData: {
+  customer_id: string
+  customer_name: string
+  customer_phone: string
+  delivery_address: string
+  delivery_city?: string
+  delivery_state?: string
+  delivery_latitude?: number
+  delivery_longitude?: number
+  delivery_notes?: string
+  landmark?: string
+  pickup_stops: PickupStop[]
+  idempotency_key?: string
+}) {
+  if (!(await requireOwner(orderData.customer_id))) return { success: false, error: "Unauthorized" }
+  const settings = await readDispatchSettings()
+  if (!settings.enabled) return { success: false, error: "dispatch_disabled" }
+  const db = getAdminDb()
+  const now = new Date().toISOString()
+  const storeIdsForOffers = Array.from(new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean))) as string[]
+  const activeOffers = await getActiveOffersForStores(storeIdsForOffers)
+  const today = now.split("T")[0]
+  const appliedOffers = new Map<string, number>()
+  const custLat = orderData.delivery_latitude
+  const custLng = orderData.delivery_longitude
+
+  try {
+    const result = await db.runTransaction(async (transaction) => {
+      appliedOffers.clear()
+      const idemRef = orderData.idempotency_key
+        ? db.collection("order_idempotency").doc(`${orderData.customer_id}:${orderData.idempotency_key}`)
+        : null
+      if (idemRef) {
+        const idemDoc = await transaction.get(idemRef)
+        if (idemDoc.exists) {
+          return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, stops: [] as PickupStop[], deduped: true }
+        }
+      }
+      // نقرأ مستندات المتاجر: نرفض المحظور، ونلتقط إحداثياتها لحساب رسم العدّاد.
+      const uniqueStoreIds = Array.from(new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean))) as string[]
+      const storeCoords = new Map<string, { lat?: number; lng?: number }>()
+      for (const sid of uniqueStoreIds) {
+        const storeUserSnap = await transaction.get(db.collection("users").doc(sid))
+        const store = (storeUserSnap.data() as { store?: { is_approved?: boolean; latitude?: number; longitude?: number } } | undefined)?.store
+        if (store?.is_approved === false) throw new Error("Store not available")
+        storeCoords.set(sid, { lat: store?.latitude, lng: store?.longitude })
+      }
+
+      // تجميع الكميات + فحص المخزون والسعر ذرّيًا (نفس منطق createMultiStoreOrder).
+      const qtyByProduct = new Map<string, number>()
+      for (const stop of orderData.pickup_stops) for (const item of stop.items) {
+        qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + validateQuantity(item.quantity))
+      }
+      const priceByProduct = new Map<string, number>()
+      const productRefs: { ref: FirebaseFirestore.DocumentReference; quantity: number }[] = []
+      for (const [productId, totalQty] of qtyByProduct) {
+        const productRef = db.collection("products").doc(productId)
+        const productDoc = await transaction.get(productRef)
+        if (!productDoc.exists) throw new Error("Product not found")
+        const productData = productDoc.data()
+        const availableStock = productData?.stock ?? 0
+        if (totalQty > availableStock) throw new Error(`Requested quantity for "${productData?.name || "product"}" (${totalQty}) exceeds available stock (${availableStock})`)
+        const basePrice = Number(productData?.price)
+        if (!Number.isFinite(basePrice) || basePrice <= 0) throw new Error(`Invalid price for "${productData?.name || "product"}"`)
+        const finalPrice = applyOfferDiscount({ id: productId, category: productData?.category as string | undefined, store_id: productData?.store_id as string | undefined, price: basePrice }, activeOffers, today)
+        priceByProduct.set(productId, finalPrice)
+        productRefs.push({ ref: productRef, quantity: totalQty })
+        const appliedOffer = findBestDiscount({ id: productId, category: productData?.category as string | undefined, store_id: productData?.store_id as string | undefined }, activeOffers)
+        if (appliedOffer.offer_id && appliedOffer.discount_percentage > 0) {
+          appliedOffers.set(appliedOffer.offer_id, (appliedOffers.get(appliedOffer.offer_id) || 0) + totalQty)
+        }
+      }
+
+      const verifiedStops: PickupStop[] = orderData.pickup_stops.map((stop) => {
+        const verifiedItems = stop.items.map((item) => ({ ...item, quantity: validateQuantity(item.quantity), price: priceByProduct.get(item.product_id) ?? 0 }))
+        return { ...stop, items: verifiedItems, subtotal: verifiedItems.reduce((s, it) => s + it.price * it.quantity, 0), status: "pending" as const, confirmed_at: null, picked_up_at: null, rejected_at: null, rejection_reason: null }
+      })
+      const subtotal = verifiedStops.reduce((s, stop) => s + stop.subtotal, 0)
+
+      // رسم العدّاد: فتح العداد + سعر الكيلومتر × مجموع مسافات (كل متجر → العميل). نقص أي إحداثي ⇒
+      // نتجاهل مسافة ذلك المتجر (فتح العداد وحده يغطّيه). السائق يقدر يزايد لو المسار أطول.
+      let totalKm = 0
+      if (typeof custLat === "number" && typeof custLng === "number") {
+        for (const sid of uniqueStoreIds) {
+          const c = storeCoords.get(sid)
+          if (typeof c?.lat === "number" && typeof c?.lng === "number") {
+            totalKm += haversineKm(c.lat, c.lng, custLat, custLng)
+          }
+        }
+      }
+      const deliveryFee = computeDeliveryFee(totalKm, settings)
+      const total = subtotal + deliveryFee
+      const storeIds = Array.from(new Set(verifiedStops.map((s) => s.store_id).filter(Boolean)))
+
+      const orderRef = db.collection("orders").doc()
+      const orderPayload: Record<string, unknown> = {
+        order_type: "multi_store",
+        is_dispatch: true,
+        customer_id: orderData.customer_id,
+        customer_name: orderData.customer_name,
+        customer_phone: orderData.customer_phone,
+        delivery_address: orderData.delivery_address,
+        delivery_city: orderData.delivery_city || "",
+        delivery_state: orderData.delivery_state || "",
+        delivery_notes: orderData.delivery_notes || "",
+        landmark: orderData.landmark || "",
+        delivery_price: deliveryFee,
+        store_ids: storeIds,
+        pickup_stops: verifiedStops,
+        subtotal: Number(subtotal),
+        total: Number(total),
+        status: "pending",
+        payment_status: "cod",
+        delivery_code: String(Math.floor(1000 + Math.random() * 9000)), // إثبات تسليم — دائمًا
+        timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],
+        created_at: now,
+        updated_at: now,
+      }
+      if (totalKm > 0) orderPayload.distance_km = Number(totalKm.toFixed(2))
+      if (custLat !== undefined && custLng !== undefined) {
+        orderPayload.delivery_latitude = Number(custLat)
+        orderPayload.delivery_longitude = Number(custLng)
+      }
+
+      transaction.set(orderRef, orderPayload)
+      for (let i = 0; i < verifiedStops.length; i++) {
+        for (const item of verifiedStops[i].items) {
+          const itemRef = db.collection("order_items").doc()
+          transaction.set(itemRef, { order_id: orderRef.id, product_id: item.product_id, quantity: Number(item.quantity), price: Number(item.price), store_id: verifiedStops[i].store_id, stop_index: i, created_at: now })
+        }
+      }
+      for (const { ref, quantity } of productRefs) transaction.update(ref, { stock: FieldValue.increment(-quantity), updated_at: now })
+      if (idemRef) transaction.set(idemRef, { order_id: orderRef.id, customer_id: orderData.customer_id, created_at: now })
+      return { orderId: orderRef.id, orderPayload, stops: verifiedStops, deduped: false }
+    })
+
+    if (result.deduped) return { success: true, data: { id: result.orderId } }
+    try {
+      for (const [offerId, qty] of appliedOffers) await db.collection("offers").doc(offerId).update({ used_quantity: FieldValue.increment(qty) })
+    } catch { /* non-critical */ }
+    // إشعار المتاجر بطلب توزيع جديد ينتظر تأكيدها (عند تأكيد الكل يُعرض على السائقين).
+    try {
+      for (const stop of result.stops) {
+        await createNotification({
+          user_id: stop.store_id, type: "order_status",
+          title: "🛒 طلب توصيل جديد", title_en: "🛒 New delivery order",
+          message: `طلب توزيع يحتوي على ${stop.items.length} منتج — أكّده ليُعرض على السائقين.`,
+          message_en: `A dispatch order with ${stop.items.length} items — confirm it to offer it to drivers.`,
+          link: "/seller/orders", data: { order_id: result.orderId, store_id: stop.store_id },
+        })
+      }
+    } catch (e) { logError("[createMultiStoreDispatchOrder] notify", e) }
+    revalidatePath("/account")
+    revalidatePath("/seller/orders")
+    return { success: true, data: { id: result.orderId, ...(result.orderPayload || {}) } }
+  } catch (error: unknown) {
+    await logServerError("createMultiStoreDispatchOrder", error, { customer_id: orderData.customer_id })
+    return { success: false, error: getErrorMessage(error) || "Failed to create order" }
+  }
+}
+
+// تأكيد متجر لحصّته في طلب توزيع متعدد المتاجر. عند تأكيد كل المتاجر يتحوّل الطلب إلى offering
+// ويُعرض على السائقين (مثل confirmDispatchOrder لكن لكل متجر). معاملة ذرّية تمنع تعارض تأكيدين.
+export async function confirmDispatchStop(orderId: string, storeId: string) {
+  if (!(await requireOwner(storeId))) return { success: false, error: "Unauthorized" }
+  const settings = await readDispatchSettings()
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "Order not found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true || o.order_type !== "multi_store") return { ok: false as const, error: "ليس طلب توزيع متعدد" }
+      if (o.status !== "pending") return { ok: false as const, error: "لا يمكن تأكيد الطلب في حالته الحالية" }
+      if (o.driver_id) return { ok: false as const, error: "الطلب مُسنَد بالفعل" }
+      const stops: PickupStop[] = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+      const idx = stops.findIndex((s) => s.store_id === storeId)
+      if (idx < 0) return { ok: false as const, error: "ليس متجرًا في هذا الطلب" }
+      if (stops[idx].status !== "pending") return { ok: false as const, error: "سبق تأكيد متجرك" }
+      const next = stops.map((s, i) => (i === idx ? { ...s, status: "confirmed" as const, confirmed_at: now } : s))
+      const allConfirmed = next.every((s) => s.status === "confirmed")
+      const update: Record<string, unknown> = {
+        pickup_stops: next,
+        timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "store_confirmed", timestamp: now, note: storeId } as TimelineEntry],
+        updated_at: now,
+      }
+      if (allConfirmed) {
+        update.status = "offering"
+        update.offer_expires_at_ms = Date.now() + settings.offer_timeout_sec * 1000
+        update.rejected_by = []
+      }
+      tx.update(ref, update)
+      return { ok: true as const, allConfirmed, customerId: o.customer_id as string | undefined, deliveryPrice: o.delivery_price as number | undefined, deliveryCity: o.delivery_city as string | undefined, distanceKm: o.distance_km as number | undefined }
+    })
+    if (!out.ok) return { success: false, error: out.error }
+    if (out.allConfirmed) {
+      try {
+        if (out.customerId) await createNotification({ user_id: out.customerId, type: "order_status", title: "🛒 تأكّدت متاجر طلبك", title_en: "🛒 Your order's stores confirmed", message: "جاري البحث عن سائق لتوصيل طلبك.", message_en: "Finding a driver to deliver your order.", link: "/account", data: { order_id: orderId, status: "offering" } })
+      } catch (e) { logError("[confirmDispatchStop] notify", e) }
+      try { await notifyDriversOfOffer({ id: orderId, delivery_price: out.deliveryPrice, delivery_city: out.deliveryCity, distance_km: out.distanceKm }) } catch (e) { logError("[confirmDispatchStop] push", e) }
+    }
+    revalidatePath("/seller/orders")
+    return { success: true, all_confirmed: out.allConfirmed }
+  } catch (e) {
+    logError("[confirmDispatchStop]", e)
+    return { success: false, error: "server_error" }
   }
 }
 
