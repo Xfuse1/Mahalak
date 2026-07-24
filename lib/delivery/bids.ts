@@ -157,6 +157,10 @@ export async function respondToDriverBid(
       const next = bids.map((b, i) =>
         i === idx ? { ...b, status: "accepted" as const } : b?.status === "pending" ? { ...b, status: "rejected" as const } : b,
       )
+      // السائقون الخاسرون (عروضهم كانت معلّقة وصارت مرفوضة) — لنُخطرهم بعد المعاملة أنهم لم يُختاروا.
+      const losers = bids
+        .filter((b, i) => i !== idx && b?.status === "pending" && typeof b?.driver_id === "string" && b.driver_id)
+        .map((b) => b.driver_id as string)
       tx.update(ref, {
         driver_id: driverId,
         driver_name: d.name || "",
@@ -169,7 +173,7 @@ export async function respondToDriverBid(
         timeline: tl(o.timeline, { status: "driver_accepted", timestamp: now, note: "بموافقة العميل على عرض السعر" }),
         updated_at: now,
       })
-      return { ok: true as const, accepted: true }
+      return { ok: true as const, accepted: true, losers }
     })
     if (!out.ok) return { success: false, error: out.error }
     // إشعار السائق بردّ العميل على عرضه (بدل انتظاره حتى الاستطلاع التالي). أفضل-جهد.
@@ -180,6 +184,14 @@ export async function respondToDriverBid(
           body: "وافق العميل على سعرك — استلم الطلب من المتجر",
           data: { type: "bid_accepted", order_id: orderId },
         })
+        // إخطار السائقين الخاسرين (اختير غيرهم) — متسق مع مسار الرفض الصريح، ومحدود بعدد العروض.
+        for (const loserId of out.losers || []) {
+          await sendPushToDriver(loserId, {
+            title: "لم يتم اختيار عرضك",
+            body: "اختار العميل سائقًا آخر لهذا الطلب",
+            data: { type: "bid_rejected", order_id: orderId },
+          })
+        }
       } else {
         await sendPushToDriver(driverId, {
           title: "لم يوافق العميل على عرضك",
