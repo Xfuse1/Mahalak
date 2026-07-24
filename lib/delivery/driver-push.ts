@@ -70,6 +70,8 @@ export async function notifyDriversOfOffer(order: {
       .filter((d) => (d.isApproved ?? d.is_approved ?? false) === true)
       .filter((d) => d.disabled !== true)
       .filter((d) => (d.isActive ?? d.is_available ?? true) !== false)
+      // متاح للورديّة: نستبعد من أطفأ حالته صراحةً فقط (الغائب = متاح افتراضيًّا).
+      .filter((d) => (d.isOnline ?? d.is_online) !== false)
       .filter((d) => !rejected.has(d.id))
 
     const fee = order.delivery_price != null ? `${order.delivery_price} ج` : ""
