@@ -69,20 +69,24 @@ export function DispatchMonitorMap({ orders }: { orders: MonitorMarker[] }) {
     const homeIcon = L.divIcon({ html: '<div style="font-size:20px;line-height:1">📍</div>', className: "", iconSize: [20, 20], iconAnchor: [10, 20] })
     for (const o of ords) {
       let has = false
+      let drewDriver = false
       if (Number.isFinite(o.driver_lat) && Number.isFinite(o.driver_lng)) {
         const ll: [number, number] = [o.driver_lat as number, o.driver_lng as number]
         L.marker(ll, { icon: carIcon }).bindTooltip(`${o.driver_name || "سائق"} — ${o.status}`).addTo(layer.current)
-        pts.push(ll); has = true
+        pts.push(ll); has = true; drewDriver = true
       }
       if (Number.isFinite(o.dropoff_lat) && Number.isFinite(o.dropoff_lng)) {
         const ll: [number, number] = [o.dropoff_lat as number, o.dropoff_lng as number]
         L.marker(ll, { icon: homeIcon }).bindTooltip("تسليم").addTo(layer.current)
         pts.push(ll); has = true
       }
-      if (has) ids.push(o.id)
+      // نُدرج وجود علامة السائق في المفتاح: أول ما تظهر سيارة السائق لطلبٍ كان يعرض وجهة التسليم فقط
+      // (offering→accepted) يتغيّر الرمز مرّة واحدة فيُعاد التأطير ليشملها؛ لكنه يثبت بعدها فلا يُعاد
+      // التأطير مع مجرّد تحرّك السائق (يحافظ على تكبير/تحريك المشغّل).
+      if (has) ids.push(drewDriver ? o.id + "+d" : o.id)
     }
-    // نُعيد تأطير الخريطة فقط عند تغيّر مجموعة الطلبات المعروضة (ظهور/اختفاء طلب) — لا عند كل استطلاع
-    // 15ث ولا عند مجرّد تحرّك السائق، حتى لا يُلغى تكبير/تحريك المشغّل اليدوي كل دورة.
+    // نُعيد تأطير الخريطة فقط عند تغيّر مجموعة العلامات المعروضة (ظهور/اختفاء طلب أو أول ظهور لسائق) — لا
+    // عند كل استطلاع 15ث ولا عند مجرّد تحرّك السائق، حتى لا يُلغى تكبير/تحريك المشغّل اليدوي كل دورة.
     const key = ids.sort().join("|")
     if (key !== lastFitKey.current) {
       lastFitKey.current = key
