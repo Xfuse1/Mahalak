@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import Image from "next/image"
-import { MapPin, Phone, Store, Calendar, Hash, Loader2, Truck } from "lucide-react"
+import { MapPin, Phone, Store, Calendar, Hash, Loader2, Truck, Navigation } from "lucide-react"
 import {
     Dialog,
     DialogContent,
@@ -13,6 +14,16 @@ import { OrderTrackingTimeline, type TimelineEntry } from "./order-tracking-time
 import { useLanguage } from "../lib/language-context"
 import { imgSrc } from "../lib/storage/public-url"
 import { Button } from "./ui/button"
+import { getOrderTracking, type OrderTracking } from "../lib/actions/tracking"
+
+// خريطة التتبّع تُحمَّل ديناميكيًّا بلا SSR (Leaflet يحتاج window).
+const DriverTrackingMap = dynamic(
+    () => import("./driver-tracking-map").then((m) => m.DriverTrackingMap),
+    { ssr: false, loading: () => <div className="w-full h-[260px] rounded-xl bg-gray-100 animate-pulse" /> },
+)
+
+// الحالات التي يكون فيها للطلب سائق نشط يتحرّك — عندها نستطلع الموقع الحيّ.
+const LIVE_STATUSES = new Set(["accepted", "on_the_way"])
 
 type OrderItem = {
     id: string
@@ -64,6 +75,32 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
     const pendingBids = (order.bids || []).filter(
         (b) => b?.status === "pending" && !handled.includes(b.driver_id),
     )
+
+    // تتبّع حيّ: نستطلع موقع السائق كل 20ث أثناء فتح النافذة وللطلب سائق نشط (accepted/on_the_way).
+    const [tracking, setTracking] = useState<OrderTracking | null>(null)
+    useEffect(() => {
+        if (!isOpen || !LIVE_STATUSES.has(order.status)) {
+            setTracking(null)
+            return
+        }
+        let cancelled = false
+        const poll = async () => {
+            try {
+                const res = await getOrderTracking(order.id)
+                if (!cancelled) setTracking(res.found ? res : null)
+            } catch {
+                /* أفضل-جهد */
+            }
+        }
+        poll()
+        const iv = setInterval(poll, 20000)
+        return () => {
+            cancelled = true
+            clearInterval(iv)
+        }
+    }, [isOpen, order.id, order.status])
+
+    const driverLoc = tracking?.driver_location
 
     const onBid = async (driverId: string, accept: boolean) => {
         setBidBusy(driverId)
@@ -204,6 +241,33 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                 ))}
                             </div>
                             {bidError && <p className="text-xs text-red-600 mt-2">{bidError}</p>}
+                        </div>
+                    )}
+
+                    {/* خريطة التتبّع الحيّة — تظهر عند وجود موقع سائق مباشر */}
+                    {driverLoc && (
+                        <div className="bg-white rounded-xl">
+                            <h4 className="font-bold text-lg mb-3 flex items-center gap-2 text-gray-900">
+                                <Navigation className="w-5 h-5 text-primary" />
+                                {t("تتبّع السائق", "Track Driver")}
+                                {tracking?.driver?.name && (
+                                    <span className="text-sm font-normal text-gray-500">— {tracking.driver.name}</span>
+                                )}
+                            </h4>
+                            <DriverTrackingMap
+                                driver={{ lat: driverLoc.lat, lng: driverLoc.lng }}
+                                dropoff={tracking?.dropoff ?? null}
+                                driverName={tracking?.driver?.name}
+                            />
+                            {tracking?.driver?.phone && (
+                                <a
+                                    href={`tel:${tracking.driver.phone}`}
+                                    className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary"
+                                >
+                                    <Phone className="w-4 h-4" />
+                                    {t("اتصل بالسائق", "Call driver")} ({tracking.driver.phone})
+                                </a>
+                            )}
                         </div>
                     )}
 
