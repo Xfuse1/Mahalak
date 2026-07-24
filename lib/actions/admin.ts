@@ -474,6 +474,131 @@ export async function createDriver(input: {
   }
 }
 
+// ==================== لوحة مراقبة التوزيع (تشغيل يومي) ====================
+export type DispatchMonitorOrder = {
+  id: string
+  status: string
+  order_type: string
+  customer_name?: string
+  store_names: string[]
+  driver_id?: string
+  driver_name?: string
+  driver_lat?: number
+  driver_lng?: number
+  driver_location_at?: string
+  dropoff_lat?: number
+  dropoff_lng?: number
+  delivery_price?: number
+  total?: number
+  offer_round?: number
+  stalled?: boolean
+  stops_summary?: string // للمتعدد: "2/3 مؤكَّد" أو استلام
+  created_at?: string
+}
+export type DispatchMonitorDriver = {
+  id: string
+  name: string
+  phone?: string
+  is_online: boolean
+  active_orders: number
+}
+
+// لقطة حيّة لعمليات التوزيع: الطلبات النشطة (offering/accepted/on_the_way) + مواقع سائقيها +
+// السائقون المتاحون. للأدمن فقط. لا تكشف كود التسليم.
+export async function getDispatchMonitor(): Promise<{
+  ok: boolean
+  orders?: DispatchMonitorOrder[]
+  drivers?: DispatchMonitorDriver[]
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { ok: false, error: "forbidden" }
+  try {
+    const db = getAdminDb()
+    const ACTIVE = ["offering", "accepted", "on_the_way"]
+    // مساواة بحقل واحد (is_dispatch) — فهرس مفرد تلقائي؛ نرشّح الحالة في JS.
+    const snap = await db.collection("orders").where("is_dispatch", "==", true).limit(400).get()
+    const raw = snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) } as Record<string, any>))
+      .filter((o) => ACTIVE.includes(String(o.status)))
+    // أسماء المتاجر: نجمع كل store_id/store_ids ونجلبها دفعةً.
+    const storeIds = new Set<string>()
+    for (const o of raw) {
+      if (o.store_id) storeIds.add(o.store_id)
+      for (const sid of o.store_ids || []) storeIds.add(sid)
+      for (const s of o.pickup_stops || []) if (s?.store_id) storeIds.add(s.store_id)
+    }
+    const storeNameById = new Map<string, string>()
+    for (const chunk of chunkArray(Array.from(storeIds), 10)) {
+      if (!chunk.length) continue
+      const refs = chunk.map((id) => db.collection("users").doc(id))
+      const docs = await db.getAll(...refs)
+      docs.forEach((doc) => {
+        const store = (doc.data() as { store?: { name?: string } } | undefined)?.store
+        if (store?.name) storeNameById.set(doc.id, store.name)
+      })
+    }
+    const activeByDriver = new Map<string, number>()
+    const orders: DispatchMonitorOrder[] = raw.map((o) => {
+      if (o.driver_id) activeByDriver.set(o.driver_id, (activeByDriver.get(o.driver_id) || 0) + 1)
+      const stopStores: string[] = (o.pickup_stops || []).map((s: any) => s?.store_name || storeNameById.get(s?.store_id) || "متجر")
+      const store_names = o.order_type === "multi_store"
+        ? stopStores
+        : [o.store_name || storeNameById.get(o.store_id) || "متجر"]
+      let stops_summary: string | undefined
+      if (o.order_type === "multi_store" && Array.isArray(o.pickup_stops)) {
+        const total = o.pickup_stops.length
+        if (o.status === "accepted") {
+          const picked = o.pickup_stops.filter((s: any) => s?.status === "picked_up").length
+          stops_summary = `${picked}/${total} استُلم`
+        } else {
+          const conf = o.pickup_stops.filter((s: any) => s?.status === "confirmed" || s?.status === "picked_up").length
+          stops_summary = `${conf}/${total} مؤكَّد`
+        }
+      }
+      const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : undefined)
+      return {
+        id: o.id,
+        status: String(o.status),
+        order_type: String(o.order_type || "single"),
+        customer_name: typeof o.customer_name === "string" ? o.customer_name : undefined,
+        store_names,
+        driver_id: o.driver_id || undefined,
+        driver_name: typeof o.driver_name === "string" ? o.driver_name : undefined,
+        driver_lat: num(o.driver_lat),
+        driver_lng: num(o.driver_lng),
+        driver_location_at: typeof o.driver_location_at === "string" ? o.driver_location_at : undefined,
+        dropoff_lat: num(o.delivery_latitude),
+        dropoff_lng: num(o.delivery_longitude),
+        delivery_price: num(o.delivery_price),
+        total: num(o.total),
+        offer_round: num(o.offer_round),
+        stalled: o.dispatch_stalled === true,
+        stops_summary,
+        created_at: typeof o.created_at === "string" ? o.created_at : undefined,
+      }
+    })
+    orders.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+
+    const dsnap = await db.collection("drivers").get()
+    const drivers: DispatchMonitorDriver[] = dsnap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) } as Record<string, any>))
+      .filter((d) => (d.isApproved ?? d.is_approved ?? false) === true && d.disabled !== true)
+      .map((d) => ({
+        id: d.id,
+        name: d.name || "سائق",
+        phone: typeof d.phone === "string" ? d.phone : undefined,
+        is_online: (d.isOnline ?? d.is_online) !== false,
+        active_orders: activeByDriver.get(d.id) || 0,
+      }))
+      .sort((a, b) => Number(b.is_online) - Number(a.is_online))
+    return { ok: true, orders, drivers }
+  } catch (e) {
+    logError("[admin] getDispatchMonitor", e)
+    return { ok: false, error: "server_error" }
+  }
+}
+
 // ==================== المرحلة 1: إعدادات التوزيع (العدّاد) ====================
 // كل النظام خلف علم enabled (افتراضيًا false) — لا تأثير على الموقع الحي حتى يفعّله الأدمن.
 
