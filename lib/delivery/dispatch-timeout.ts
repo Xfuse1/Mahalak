@@ -2,6 +2,7 @@ import { getAdminDb } from "@/lib/firebase/admin"
 import { FieldValue } from "firebase-admin/firestore"
 import { readDispatchSettings } from "@/lib/delivery/fee"
 import { createNotification } from "@/lib/notifications-internal"
+import { notifyDriversOfOffer } from "@/lib/delivery/driver-push"
 import { logError } from "@/lib/logger"
 
 // انتهاء مهلة العرض: عرضٌ لم يقبله أي سائق قبل offer_expires_at_ms يُعاد عرضه بجولة جديدة
@@ -98,6 +99,15 @@ export async function processExpiredOffers(): Promise<TimeoutSweepResult> {
             data: { order_id: doc.id, status: "offering", offer_round: outcome.round },
           })
         }
+        // إعادة العرض = فرصة جديدة للسائقين ⇒ نبثّ FCM لهم ثانيةً (يستبعد من رفض هذا الطلب).
+        const od = doc.data() as Record<string, any>
+        await notifyDriversOfOffer({
+          id: doc.id,
+          delivery_price: od.delivery_price,
+          delivery_city: od.delivery_city,
+          distance_km: od.distance_km,
+          rejected_by: Array.isArray(od.rejected_by) ? od.rejected_by : [],
+        })
       } else if (outcome.kind === "stalled") {
         out.stalled++
         const payload = {

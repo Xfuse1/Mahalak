@@ -13,6 +13,7 @@ import { createNotification, sendReviewRequestNotification } from "../notificati
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 import { sendPushToOwner } from "../server-push"
 import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings } from "../delivery/fee"
+import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { haversineKm } from "../utils/geo"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
@@ -1134,7 +1135,13 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
         ],
         updated_at: now,
       })
-      return { ok: true as const, customerId: o.customer_id as string | undefined }
+      return {
+        ok: true as const,
+        customerId: o.customer_id as string | undefined,
+        deliveryPrice: typeof o.delivery_price === "number" ? o.delivery_price : undefined,
+        deliveryCity: typeof o.delivery_city === "string" ? o.delivery_city : undefined,
+        distanceKm: typeof o.distance_km === "number" ? o.distance_km : undefined,
+      }
     })
     if (!out.ok) return { success: false, error: out.error }
     try {
@@ -1153,7 +1160,17 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
     } catch (e) {
       logError("[confirmDispatchOrder] notify", e)
     }
-    // TODO(المرحلة 1): بثّ FCM للسائقين المتاحين هنا (شريحة الإشعارات).
+    // بثّ FCM للسائقين المؤهَّلين بأن هناك عرضًا جديدًا (أفضل-جهد، لا يعطّل التأكيد لو فشل).
+    try {
+      await notifyDriversOfOffer({
+        id: orderId,
+        delivery_price: out.deliveryPrice,
+        delivery_city: out.deliveryCity,
+        distance_km: out.distanceKm,
+      })
+    } catch (e) {
+      logError("[confirmDispatchOrder] push", e)
+    }
     revalidatePath("/seller/orders")
     revalidatePath("/account")
     return { success: true }
