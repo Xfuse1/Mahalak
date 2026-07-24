@@ -2,6 +2,7 @@ import { getAdminDb } from "@/lib/firebase/admin"
 import { FieldValue } from "firebase-admin/firestore"
 import { readDispatchSettings } from "@/lib/delivery/fee"
 import { createNotification } from "@/lib/notifications-internal"
+import { sendPushToDriver } from "@/lib/delivery/driver-push"
 import { logError } from "@/lib/logger"
 
 // المزايدة: بدل قبول رسم العدّاد كما هو، يقدّر السائق سعرًا مختلفًا ويرسله للعميل؛ يبقى الطلب
@@ -170,7 +171,26 @@ export async function respondToDriverBid(
       })
       return { ok: true as const, accepted: true }
     })
-    return out.ok ? { success: true } : { success: false, error: out.error }
+    if (!out.ok) return { success: false, error: out.error }
+    // إشعار السائق بردّ العميل على عرضه (بدل انتظاره حتى الاستطلاع التالي). أفضل-جهد.
+    try {
+      if (out.accepted) {
+        await sendPushToDriver(driverId, {
+          title: "✅ تمت الموافقة على عرضك",
+          body: "وافق العميل على سعرك — استلم الطلب من المتجر",
+          data: { type: "bid_accepted", order_id: orderId },
+        })
+      } else {
+        await sendPushToDriver(driverId, {
+          title: "لم يوافق العميل على عرضك",
+          body: "رفض العميل السعر المقترح لهذا الطلب",
+          data: { type: "bid_rejected", order_id: orderId },
+        })
+      }
+    } catch (e) {
+      logError("[bids] notify driver of bid response", e)
+    }
+    return { success: true }
   } catch (e) {
     logError("[bids] respondToDriverBid", e)
     return { success: false, error: "server_error" }
