@@ -249,10 +249,16 @@ export async function driverDeliver(driverId: string, orderId: string, code: str
         })
         return { ok: false as const, error: "invalid_code" }
       }
+      // متاجر مستحِقّة لكاش COD (السائق حصّل الكامل ويحتفظ بأجرته؛ يظلّ مدينًا لكل متجر بقيمة منتجاته)
+      // — تُسوّى لاحقًا من /seller/settlements، ويُزال معرّف المتجر من المصفوفة عند تأكيد المتجر استلام كاشه.
+      const codStores = o.order_type === "multi_store"
+        ? Array.from(new Set((Array.isArray(o.pickup_stops) ? o.pickup_stops : []).map((s: any) => s?.store_id).filter(Boolean)))
+        : (o.store_id ? [o.store_id] : [])
       tx.update(ref, {
         status: "delivered",
         delivered_at: now,
         cash_collected: Number(o.total || 0),
+        unsettled_cod_store_ids: codStores,
         delivery_verified: true,
         delivery_code_attempts: 0,
         delivery_code_locked_until: FieldValue.delete(),

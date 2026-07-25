@@ -1988,6 +1988,22 @@ export async function rejectDispatchStop(orderId: string, storeId: string, reaso
       if (idx < 0) return { ok: false as const, error: "ليس متجرًا في هذا الطلب" }
       const next = stops.map((s, i) => (i === idx ? { ...s, status: "rejected" as const, rejected_at: now, rejection_reason: r || null } : s))
       const alreadyRestored = o.stock_restored === true
+      // استعادة المخزون داخل نفس المعاملة مع علم stock_restored — فلو فشلت الكتابة تُلغى المعاملة كلها
+      // ويبقى الرفض قابلًا للإعادة، بدل ما يعلق stock_restored=true بلا استعادة. نقرأ المنتجات داخل
+      // المعاملة (قبل أي كتابة) ونزيد مخزون الموجود فقط — منتج محذوف لا يُجهض الرفض (تحديث مستند غير
+      // موجود يُلغي المعاملة). الحالة pending فقط ⇒ لا محطة مُستَلَمة، فكل المحطات قابلة للاستعادة.
+      if (!alreadyRestored) {
+        const items: Array<{ pid: string; q: number }> = []
+        for (const stop of stops) {
+          for (const it of stop.items || []) {
+            const q = Number(it.quantity) || 0
+            if (it.product_id && q > 0) items.push({ pid: String(it.product_id), q })
+          }
+        }
+        const refs = items.map((x) => db.collection("products").doc(x.pid))
+        const snaps = await Promise.all(refs.map((rf) => tx.get(rf)))
+        snaps.forEach((s, i) => { if (s.exists) tx.update(refs[i], { stock: FieldValue.increment(items[i].q) }) })
+      }
       tx.update(ref, {
         pickup_stops: next,
         status: "cancelled",
@@ -1995,22 +2011,9 @@ export async function rejectDispatchStop(orderId: string, storeId: string, reaso
         timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "cancelled", timestamp: now, note: `رفض ${storeId}${r ? ": " + r : ""}` } as TimelineEntry],
         updated_at: now,
       })
-      return { ok: true as const, customerId: o.customer_id as string | undefined, stops, restore: !alreadyRestored }
+      return { ok: true as const, customerId: o.customer_id as string | undefined }
     })
     if (!out.ok) return { success: false, error: out.error }
-    // إعادة كل المخزون (الطلب أُلغي) — مرة واحدة فقط.
-    if (out.restore) {
-      try {
-        const batch = db.batch()
-        for (const stop of out.stops) {
-          for (const it of stop.items || []) {
-            const q = Number(it.quantity) || 0
-            if (it.product_id && q > 0) batch.update(db.collection("products").doc(it.product_id), { stock: FieldValue.increment(q), updated_at: now })
-          }
-        }
-        await batch.commit()
-      } catch (e) { logError("[rejectDispatchStop] restore stock", e) }
-    }
     try {
       if (out.customerId) await createNotification({ user_id: out.customerId, type: "order_status", title: "⚠️ تعذّر تنفيذ طلبك", title_en: "⚠️ Your order could not be fulfilled", message: "رفض أحد المتاجر الطلب فأُلغي. يمكنك إعادة الطلب.", message_en: "A store declined the order, so it was cancelled. You can reorder.", link: "/account", data: { order_id: orderId, status: "cancelled" } })
     } catch (e) { logError("[rejectDispatchStop] notify", e) }
