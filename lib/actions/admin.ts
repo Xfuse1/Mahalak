@@ -15,6 +15,8 @@ import type { PickupStop } from "./orders"
 import { logError } from "../logger"
 import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
 import { readDispatchSettings } from "../delivery/fee"
+import { notifyDriversOfOffer } from "../delivery/driver-push"
+import { sendPushToOwner } from "../server-push"
 
 export type AdminStore = {
   id: string
@@ -605,6 +607,143 @@ export async function getDispatchMonitor(): Promise<{
   } catch (e) {
     logError("[admin] getDispatchMonitor", e)
     return { ok: false, error: "server_error" }
+  }
+}
+
+// ==================== إنقاذ طلبات التوزيع من اللوحة ====================
+// طلب توزيع قد يعلق: لم يقبله أي سائق (dispatch_stalled)، أو قبِله سائق ثم تخلّى عنه قبل الاستلام.
+// آلة الحالة لا تملك إعادة إسناد تلقائية بعد القبول، فنمنح الأدمن فعلين يدويين ذرّيين من اللوحة.
+
+// إلغاء طلب توزيع عالق + استعادة كل المخزون (أحادي عبر order_items، متعدد عبر pickup_stops).
+// لأي حالة غير نهائية. علم stock_restored يمنع الاستعادة المزدوجة (تنسيقًا مع مسار الإلغاء/الرفض الآخر).
+export async function adminCancelDispatchOrder(orderId: string, reason?: string) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false as const, error: "forbidden" }
+  if (typeof orderId !== "string" || !orderId) return { success: false as const, error: "bad_request" }
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  const r = String(reason || "").trim().slice(0, 280)
+  try {
+    // قراءة order_items خارج المعاملة (القراءات-قبل-الكتابات). المعاملة تُعيد قراءة الطلب وتستعيد
+    // المخزون وتضبط العلم ذرّيًّا معًا — فلا يعلق stock_restored=true بلا استعادة فعلية لو فشلت الكتابة.
+    const itemsSnap = await db.collection("order_items").where("order_id", "==", orderId).get()
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "order_not_found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true) return { ok: false as const, error: "not_dispatch_order" }
+      if (o.status === "delivered" || o.status === "cancelled") return { ok: false as const, error: "already_terminal" }
+      const alreadyRestored = o.stock_restored === true
+      let terminalizedStops: Array<Record<string, any>> | null = null
+      if (!alreadyRestored) {
+        if (o.order_type === "multi_store") {
+          const stops: PickupStop[] = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+          terminalizedStops = stops.map((stop) => {
+            // المرفوضة استُعيدت مسبقًا، والمُستَلَمة خرجت بضاعتها فعليًا مع السائق — لا نعيدها (وإلا مخزون وهمي).
+            if (stop?.status === "rejected" || stop?.status === "picked_up") return stop
+            for (const it of stop?.items || []) {
+              const q = Number(it?.quantity) || 0
+              if (it?.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+            }
+            return { ...stop, status: "cancelled" }
+          })
+        } else {
+          for (const itemDoc of itemsSnap.docs) {
+            const it = itemDoc.data() as Record<string, any>
+            const q = Number(it.quantity) || 0
+            if (it.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+          }
+        }
+      }
+      tx.update(ref, {
+        status: "cancelled",
+        stock_restored: true,
+        offer_expires_at_ms: FieldValue.delete(),
+        timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "cancelled", timestamp: now, note: `إلغاء إداري${r ? ": " + r : ""}` }],
+        updated_at: now,
+        ...(terminalizedStops ? { pickup_stops: terminalizedStops } : {}),
+      })
+      return { ok: true as const, customerId: o.customer_id as string | undefined }
+    })
+    if (!out.ok) return { success: false as const, error: out.error }
+    if (out.customerId) {
+      try {
+        await createNotification({ user_id: out.customerId, type: "order_status", title: "⚠️ أُلغي طلبك", title_en: "⚠️ Your order was cancelled", message: "أُلغي الطلب من الإدارة. يمكنك إعادة الطلب.", message_en: "The order was cancelled by support. You can reorder.", link: "/account", data: { order_id: orderId, status: "cancelled" } })
+        await sendPushToOwner("user", out.customerId, { title: "⚠️ أُلغي طلبك", body: "أُلغي الطلب من الإدارة. يمكنك إعادة الطلب.", link: "/account" })
+      } catch (e) { logError("[admin] adminCancelDispatchOrder notify", e) }
+    }
+    revalidatePath("/admin/dispatch")
+    return { success: true as const }
+  } catch (e) {
+    logError("[admin] adminCancelDispatchOrder", e)
+    return { success: false as const, error: "server_error" }
+  }
+}
+
+// إعادة عرض طلب توزيع عالق على السائقين: يزيل السائق (لو مُسنَد ولم يستلم بعد)، يعيد الحالة إلى
+// offering بجولة جديدة ومهلة جديدة، يصفّر rejected_by/dispatch_stalled، ثم يبثّ العرض. مقصور على
+// offering (متعثّر) أو accepted (سائق تخلّى قبل الاستلام) — بعد الاستلام (on_the_way) البضاعة مع
+// السائق فلا يصحّ إعادة العرض (استخدم الإلغاء).
+export async function adminReofferDispatchOrder(orderId: string) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false as const, error: "forbidden" }
+  if (typeof orderId !== "string" || !orderId) return { success: false as const, error: "bad_request" }
+  const settings = await readDispatchSettings()
+  const db = getAdminDb()
+  const ref = db.collection("orders").doc(orderId)
+  const now = new Date().toISOString()
+  try {
+    const out = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return { ok: false as const, error: "order_not_found" }
+      const o = snap.data() as Record<string, any>
+      if (o.is_dispatch !== true) return { ok: false as const, error: "not_dispatch_order" }
+      if (o.status !== "offering" && o.status !== "accepted") return { ok: false as const, error: "cannot_reoffer_state" }
+      // متعدد المتاجر: لو استُلم أي متجر فالبضاعة بدأت تتجمّع مع السائق — لا نعيد العرض.
+      const stops: PickupStop[] = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+      if (o.order_type === "multi_store" && stops.some((s) => s.status === "picked_up")) {
+        return { ok: false as const, error: "already_picking_up" }
+      }
+      tx.update(ref, {
+        status: "offering",
+        driver_id: FieldValue.delete(),
+        driver_name: FieldValue.delete(),
+        driver_lat: FieldValue.delete(),
+        driver_lng: FieldValue.delete(),
+        driver_heading: FieldValue.delete(),
+        driver_location_at: FieldValue.delete(),
+        accepted_at: FieldValue.delete(),
+        offer_expires_at_ms: Date.now() + settings.offer_timeout_sec * 1000,
+        offer_round: 1,
+        rejected_by: [],
+        dispatch_stalled: FieldValue.delete(),
+        timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "offering", timestamp: now, note: "إعادة عرض إدارية" }],
+        updated_at: now,
+      })
+      return {
+        ok: true as const,
+        customerId: o.customer_id as string | undefined,
+        deliveryPrice: o.delivery_price as number | undefined,
+        deliveryCity: o.delivery_city as string | undefined,
+        distanceKm: o.distance_km as number | undefined,
+      }
+    })
+    if (!out.ok) return { success: false as const, error: out.error }
+    try {
+      await notifyDriversOfOffer({ id: orderId, delivery_price: out.deliveryPrice, delivery_city: out.deliveryCity, distance_km: out.distanceKm, rejected_by: [] })
+    } catch (e) { logError("[admin] adminReoffer push", e) }
+    if (out.customerId) {
+      try {
+        await createNotification({ user_id: out.customerId, type: "order_status", title: "🔄 نعيد البحث عن سائق", title_en: "🔄 Re-searching for a driver", message: "أعدنا عرض طلبك على السائقين.", message_en: "We re-offered your order to drivers.", link: "/account", data: { order_id: orderId, status: "offering" } })
+        await sendPushToOwner("user", out.customerId, { title: "🔄 نعيد البحث عن سائق", body: "أعدنا عرض طلبك على السائقين.", link: "/account" })
+      } catch (e) { logError("[admin] adminReoffer notify", e) }
+    }
+    revalidatePath("/admin/dispatch")
+    return { success: true as const }
+  } catch (e) {
+    logError("[admin] adminReofferDispatchOrder", e)
+    return { success: false as const, error: "server_error" }
   }
 }
 

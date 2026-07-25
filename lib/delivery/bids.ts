@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore"
 import { readDispatchSettings } from "@/lib/delivery/fee"
 import { createNotification } from "@/lib/notifications-internal"
 import { sendPushToDriver } from "@/lib/delivery/driver-push"
+import { sendPushToOwner } from "@/lib/server-push"
 import { logError } from "@/lib/logger"
 
 // المزايدة: بدل قبول رسم العدّاد كما هو، يقدّر السائق سعرًا مختلفًا ويرسله للعميل؛ يبقى الطلب
@@ -96,6 +97,12 @@ export async function submitDriverBid(
           message_en: `Driver ${out.driverName} offers delivery for ${price} EGP — approve or decline from your orders page.`,
           link: "/account",
           data: { order_id: orderId, bid_price: price, driver_id: driverId },
+        })
+        // دفع Web Push كذلك (خامل حتى يُضبط VAPID) — العميل قد لا يكون فاتحًا صفحة الطلبات.
+        await sendPushToOwner("user", out.customerId, {
+          title: "💰 عرض سعر جديد للتوصيل",
+          body: `السائق ${out.driverName} يعرض التوصيل مقابل ${price} ج — وافق أو ارفض من صفحة طلباتك.`,
+          link: "/account",
         })
       }
     } catch (e) {

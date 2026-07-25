@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore"
 import { readDispatchSettings } from "@/lib/delivery/fee"
 import { createNotification } from "@/lib/notifications-internal"
 import { notifyDriversOfOffer } from "@/lib/delivery/driver-push"
+import { sendPushToOwner } from "@/lib/server-push"
 import { logError } from "@/lib/logger"
 
 // انتهاء مهلة العرض: عرضٌ لم يقبله أي سائق قبل offer_expires_at_ms يُعاد عرضه بجولة جديدة
@@ -98,6 +99,11 @@ export async function processExpiredOffers(): Promise<TimeoutSweepResult> {
             link: "/account",
             data: { order_id: doc.id, status: "offering", offer_round: outcome.round },
           })
+          await sendPushToOwner("user", outcome.customerId, {
+            title: "⏳ ما زلنا نبحث عن سائق",
+            body: "لم يقبل سائق طلبك بعد — نُعيد عرضه على السائقين الآن.",
+            link: "/account",
+          })
         }
         // إعادة العرض = فرصة جديدة للسائقين ⇒ نبثّ FCM لهم ثانيةً (يستبعد من رفض هذا الطلب).
         const od = doc.data() as Record<string, any>
@@ -119,8 +125,14 @@ export async function processExpiredOffers(): Promise<TimeoutSweepResult> {
           link: "/account",
           data: { order_id: doc.id, status: "offering", stalled: true },
         }
-        if (outcome.storeId) await createNotification({ user_id: outcome.storeId, ...payload, link: "/seller/orders" })
-        if (outcome.customerId) await createNotification({ user_id: outcome.customerId, ...payload })
+        if (outcome.storeId) {
+          await createNotification({ user_id: outcome.storeId, ...payload, link: "/seller/orders" })
+          await sendPushToOwner("user", outcome.storeId, { title: payload.title, body: payload.message, link: "/seller/orders" })
+        }
+        if (outcome.customerId) {
+          await createNotification({ user_id: outcome.customerId, ...payload })
+          await sendPushToOwner("user", outcome.customerId, { title: payload.title, body: payload.message, link: "/account" })
+        }
       } else {
         out.skipped++
       }

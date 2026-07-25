@@ -2,6 +2,7 @@ import { getAdminDb } from "@/lib/firebase/admin"
 import { FieldValue } from "firebase-admin/firestore"
 import { logError } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications-internal"
+import { sendPushToOwner } from "@/lib/server-push"
 
 // أفعال السائق في تدفق التوزيع (أحادي المتجر — المرحلة 1). كل فعل معاملة ذرّية تتحقق أن الطلب
 // طلب توزيع (is_dispatch === true)، وفي الحالة الصحيحة، والسائق صاحب الحق. الهوية تُمرَّر من
@@ -23,6 +24,13 @@ async function notifyCustomer(
     await createNotification({ user_id: customerId, type: "order_status", ...payload })
   } catch (e) {
     logError("[dispatch] notify", e)
+  }
+  // دفع Web Push كذلك (خامل حتى يُضبط VAPID) — يصل العميل حتى لو مش فاتح صفحة الطلبات.
+  // sendPushToOwner أفضل-جهد ولا يرمي، لكن نحصره احتياطًا كي لا يُبطل تدفّق التسليم.
+  try {
+    await sendPushToOwner("user", customerId, { title: payload.title, body: payload.message, link: payload.link })
+  } catch (e) {
+    logError("[dispatch] push", e)
   }
 }
 

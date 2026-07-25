@@ -63,15 +63,16 @@ export async function notifyDriversOfOffer(order: {
 }): Promise<{ notified: number }> {
   try {
     const db = getAdminDb()
-    const snap = await db.collection("drivers").get()
+    const snap = await db.collection("drivers").limit(500).get()
     const rejected = new Set(Array.isArray(order.rejected_by) ? order.rejected_by : [])
     const eligible = snap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) } as Record<string, any>))
       .filter((d) => (d.isApproved ?? d.is_approved ?? false) === true)
       .filter((d) => d.disabled !== true)
       .filter((d) => (d.isActive ?? d.is_available ?? true) !== false)
-      // متاح للورديّة: نستبعد من أطفأ حالته صراحةً فقط (الغائب = متاح افتراضيًّا).
-      .filter((d) => (d.isOnline ?? d.is_online) !== false)
+      // متاح للورديّة: يجب أن يكون السائق أونلاين صراحةً (الغائب = غير متاح) — متسق مع لوحة المراقبة
+      // و/admin/drivers، وكي لا تصل عروض حسّاسة للوقت لسائق لم يبدأ ورديّته.
+      .filter((d) => (d.isOnline ?? d.is_online ?? false) === true)
       .filter((d) => !rejected.has(d.id))
 
     const fee = order.delivery_price != null ? `${order.delivery_price} ج` : ""

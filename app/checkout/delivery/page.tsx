@@ -163,6 +163,12 @@ export default function DeliveryPage() {
   const selectedDriverData = sortedDrivers.find((d) => d.id === selectedDriver)
   // وضع التوزيع (خلف flag): التوزيع مفعّل (أحادي أو متعدد). وقتها لا اختيار سائق ولا سعر سائق.
   const isDispatch = dispatchQuote?.enabled === true
+  // إحداثيات صالحة؟ لطلب التوزيع تحديد الموقع على الخريطة إلزامي: عليه يعتمد رسم العدّاد الدقيق
+  // (بلا إحداثيات يسقط السعر إلى الأساس فقط) ووجهةُ السائق على خريطة التتبّع/الملاحة.
+  const cLat = checkoutData?.latitude ? parseFloat(checkoutData.latitude) : NaN
+  const cLng = checkoutData?.longitude ? parseFloat(checkoutData.longitude) : NaN
+  const hasCoords = Number.isFinite(cLat) && Number.isFinite(cLng) && !(cLat === 0 && cLng === 0)
+  const needsLocation = isDispatch && !hasCoords
   const meterFee = dispatchQuote && dispatchQuote.enabled ? dispatchQuote.fee : 0
   // رسوم التوصيل: في التوزيع = رسوم العدّاد؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
   const deliveryPrice = isDispatch ? meterFee : (selectedDriverData?.price ?? 0)
@@ -188,6 +194,15 @@ export default function DeliveryPage() {
         setSelectedDriver(null)
         return
       }
+    }
+
+    // التوزيع يتطلّب موقعًا دقيقًا على الخريطة — نمنع الإرسال بدونه (وإلا سعر توصيل خاطئ وسائق بلا وجهة).
+    if (needsLocation) {
+      toast.error(t(
+        "حدّد موقعك على الخريطة لإتمام طلب التوصيل — عليه يعتمد سعر التوصيل ووصول السائق إليك",
+        "Set your location on the map to place a delivery order — the fee and driver navigation depend on it",
+      ))
+      return
     }
 
     setIsSubmitting(true)
@@ -676,12 +691,40 @@ export default function DeliveryPage() {
             </CardContent>
           </Card>
 
+          {/* تنبيه إلزام تحديد الموقع لطلب التوزيع */}
+          {needsLocation && (
+            <Card className="mb-4 border-0 shadow-lg rounded-2xl overflow-hidden bg-amber-50 ring-1 ring-amber-200">
+              <CardContent className="p-5 flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-5 w-5 text-amber-700" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-amber-900">{t("حدّد موقعك على الخريطة", "Set your location on the map")}</h4>
+                  <p className="text-sm text-amber-800 mt-1">
+                    {t(
+                      "لإتمام التوصيل لازم تحدّد موقعك بدقّة على الخريطة — عليه يعتمد سعر التوصيل ووصول السائق إليك.",
+                      "To place a delivery order, pin your exact location on the map — the delivery fee and the driver reaching you depend on it.",
+                    )}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-3 border-amber-300 text-amber-900 hover:bg-amber-100"
+                    onClick={() => router.push(isBuyNowMode ? "/checkout?mode=buynow" : "/checkout")}
+                  >
+                    <MapPin className="h-4 w-4 me-2" />
+                    {t("أضف موقعك على الخريطة", "Add your location")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Confirm Button */}
           <Button
             onClick={handleConfirmOrder}
             className="w-full bg-primary hover:bg-primary/90 rounded-xl h-14 text-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
             size="lg"
-            disabled={isSubmitting || (!isDispatch && !selectedDriver)}
+            disabled={isSubmitting || (!isDispatch && !selectedDriver) || needsLocation}
           >
             {isSubmitting
               ? t("جاري تأكيد الطلب...", "Confirming order...")

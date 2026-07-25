@@ -22,8 +22,9 @@ const DriverTrackingMap = dynamic(
     { ssr: false, loading: () => <div className="w-full h-[260px] rounded-xl bg-gray-100 animate-pulse" /> },
 )
 
-// الحالات التي يكون فيها للطلب سائق نشط يتحرّك — عندها نستطلع الموقع الحيّ.
-const LIVE_STATUSES = new Set(["accepted", "on_the_way"])
+// الحالات الحيّة التي نستطلع فيها الخادم: offering (تصل عروض الأسعار + قد يُسنَد سائق) و
+// accepted/on_the_way (يتحرّك السائق). خارجها لا استطلاع.
+const POLL_STATUSES = new Set(["offering", "accepted", "on_the_way"])
 
 type OrderItem = {
     id: string
@@ -42,6 +43,7 @@ type OrderBid = {
     price: number
     reason?: string
     status?: string
+    created_at?: string
 }
 
 type Order = {
@@ -72,14 +74,12 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
     const [bidBusy, setBidBusy] = useState<string | null>(null)
     const [bidError, setBidError] = useState<string | null>(null)
     const [handled, setHandled] = useState<string[]>([])
-    const pendingBids = (order.bids || []).filter(
-        (b) => b?.status === "pending" && !handled.includes(b.driver_id),
-    )
 
-    // تتبّع حيّ: نستطلع موقع السائق كل 20ث أثناء فتح النافذة وللطلب سائق نشط (accepted/on_the_way).
+    // تتبّع حيّ: نستطلع الخادم كل 15ث أثناء فتح النافذة والطلب في حالة حيّة — يجلب عروض الأسعار
+    // الطازجة وموقع السائق المباشر وحالة الطلب الحيّة.
     const [tracking, setTracking] = useState<OrderTracking | null>(null)
     useEffect(() => {
-        if (!isOpen || !LIVE_STATUSES.has(order.status)) {
+        if (!isOpen || !POLL_STATUSES.has(order.status)) {
             setTracking(null)
             return
         }
@@ -93,23 +93,35 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
             }
         }
         poll()
-        const iv = setInterval(poll, 20000)
+        const iv = setInterval(poll, 15000)
         return () => {
             cancelled = true
             clearInterval(iv)
         }
     }, [isOpen, order.id, order.status])
 
+    // الحالة الحيّة من الاستطلاع تسبق الحالة الثابتة القادمة كخاصية (تنعكس فورًا بعد قبول عرض مثلًا).
+    const liveStatus = tracking?.status || order.status
     const driverLoc = tracking?.driver_location
+    const liveDeliveryPrice = tracking?.delivery_price ?? order.delivery_price
+    // توقيع العرض = السائق + وقت الإنشاء: نُخفي العرض الذي عالجه العميل تفاؤليًّا، لكن السائق قد يقدّم
+    // عرضًا جديدًا بعد الرفض (يُعطى created_at جديدًا)، فالتوقيع الجديد يمرّ من الفلتر ويظهر خلال استطلاع.
+    const bidSig = (b: { driver_id: string; created_at?: string }) => `${b.driver_id}:${b.created_at || ""}`
+    // نُفضّل عروض الأسعار الطازجة من الاستطلاع على الثابتة القادمة كخاصية — فعرضٌ يصل والنافذة مفتوحة
+    // يظهر خلال 15ث بدل ما يفضل مخفيًّا حتى إعادة تحميل الصفحة.
+    const pendingBids = (
+        tracking?.pending_bids ??
+        (order.bids || []).filter((b) => b?.status === "pending")
+    ).filter((b) => !handled.includes(bidSig(b)))
 
-    const onBid = async (driverId: string, accept: boolean) => {
-        setBidBusy(driverId)
+    const onBid = async (b: { driver_id: string; created_at?: string }, accept: boolean) => {
+        setBidBusy(b.driver_id)
         setBidError(null)
         try {
             const { respondToBid } = await import("../lib/actions/bids")
-            const res = await respondToBid(order.id, driverId, accept)
+            const res = await respondToBid(order.id, b.driver_id, accept)
             if (res?.success) {
-                setHandled((prev) => [...prev, driverId])
+                setHandled((prev) => [...prev, bidSig(b)])
             } else {
                 setBidError(t("تعذّر تنفيذ الطلب، حدّث الصفحة وحاول مجددًا", "Could not complete, refresh and try again"))
             }
@@ -200,8 +212,8 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                             </h4>
                             <p className="text-xs text-gray-600 mb-3">
                                 {t(
-                                    `سعر التوصيل الحالي ${order.delivery_price ?? "-"} ج. وافق على عرض ليُسنَد الطلب للسائق.`,
-                                    `Current delivery fee ${order.delivery_price ?? "-"} EGP. Approving assigns the order to that driver.`,
+                                    `سعر التوصيل الحالي ${liveDeliveryPrice ?? "-"} ج. وافق على عرض ليُسنَد الطلب للسائق.`,
+                                    `Current delivery fee ${liveDeliveryPrice ?? "-"} EGP. Approving assigns the order to that driver.`,
                                 )}
                             </p>
                             <div className="space-y-2">
@@ -220,7 +232,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                             <Button
                                                 size="sm"
                                                 disabled={bidBusy === b.driver_id}
-                                                onClick={() => onBid(b.driver_id, true)}
+                                                onClick={() => onBid(b, true)}
                                             >
                                                 {bidBusy === b.driver_id ? (
                                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -232,7 +244,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                                                 size="sm"
                                                 variant="outline"
                                                 disabled={bidBusy === b.driver_id}
-                                                onClick={() => onBid(b.driver_id, false)}
+                                                onClick={() => onBid(b, false)}
                                             >
                                                 {t("رفض", "Decline")}
                                             </Button>
@@ -278,7 +290,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
                             {t("مسار الطلب", "Order Timeline")}
                         </h4>
                         <OrderTrackingTimeline
-                            currentStatus={order.status}
+                            currentStatus={liveStatus}
                             timeline={order.timeline}
                             createdAt={order.created_at}
                         />

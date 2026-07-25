@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react"
 import dynamic from "next/dynamic"
-import { getDispatchMonitor, type DispatchMonitorOrder, type DispatchMonitorDriver } from "@/lib/actions/admin"
+import {
+  getDispatchMonitor,
+  adminCancelDispatchOrder,
+  adminReofferDispatchOrder,
+  type DispatchMonitorOrder,
+  type DispatchMonitorDriver,
+} from "@/lib/actions/admin"
+import { useToast } from "@/components/ui/toast"
 
 const DispatchMonitorMap = dynamic(
   () => import("@/components/dispatch-monitor-map").then((m) => m.DispatchMonitorMap),
@@ -21,6 +28,8 @@ export default function AdminDispatchPage() {
   const [drivers, setDrivers] = useState<DispatchMonitorDriver[]>([])
   const [loading, setLoading] = useState(true)
   const [updatedAt, setUpdatedAt] = useState<string>("")
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const toast = useToast()
 
   const load = useCallback(async () => {
     const res = await getDispatchMonitor()
@@ -31,6 +40,26 @@ export default function AdminDispatchPage() {
     }
     setLoading(false)
   }, [])
+
+  // أفعال إنقاذ يدوية للطلبات العالقة — أفعال الخادم ذرّية ومحميّة بـ ensureAdmin.
+  const doReoffer = useCallback(async (id: string) => {
+    setBusyId(id)
+    try {
+      const res = await adminReofferDispatchOrder(id)
+      if (res.success) { toast.success("أُعيد عرض الطلب على السائقين"); await load() }
+      else toast.error(res.error === "already_picking_up" ? "بدأ استلام البضاعة — استخدم الإلغاء" : res.error === "cannot_reoffer_state" ? "لا يمكن إعادة العرض في هذه الحالة" : "تعذّرت إعادة العرض")
+    } catch { toast.error("تعذّر الاتصال بالخادم") } finally { setBusyId(null) }
+  }, [load, toast])
+
+  const doCancel = useCallback(async (id: string) => {
+    if (typeof window !== "undefined" && !window.confirm("إلغاء هذا الطلب واستعادة المخزون؟ لا يمكن التراجع.")) return
+    setBusyId(id)
+    try {
+      const res = await adminCancelDispatchOrder(id)
+      if (res.success) { toast.success("أُلغي الطلب واستُعيد المخزون"); await load() }
+      else toast.error("تعذّر الإلغاء")
+    } catch { toast.error("تعذّر الاتصال بالخادم") } finally { setBusyId(null) }
+  }, [load, toast])
 
   useEffect(() => {
     load()
@@ -92,6 +121,25 @@ export default function AdminDispatchPage() {
                     {o.driver_name ? <span>🚗 {o.driver_name}</span> : <span className="text-amber-600">بانتظار سائق{o.offer_round && o.offer_round > 1 ? ` (جولة ${o.offer_round})` : ""}</span>}
                     <span>💰 {o.delivery_price ?? "-"} ج</span>
                     {o.driver_lat != null && <span className="text-emerald-600">📡 موقع مباشر</span>}
+                  </div>
+                  {/* أفعال إنقاذ الطلب العالق */}
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-50">
+                    {(o.status === "offering" || o.status === "accepted") && (
+                      <button
+                        onClick={() => doReoffer(o.id)}
+                        disabled={busyId === o.id}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                      >
+                        {busyId === o.id ? "…" : "🔄 إعادة عرض"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => doCancel(o.id)}
+                      disabled={busyId === o.id}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 transition-colors"
+                    >
+                      {busyId === o.id ? "…" : "✖ إلغاء واستعادة المخزون"}
+                    </button>
                   </div>
                 </div>
               ))}
