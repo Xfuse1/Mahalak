@@ -49,7 +49,11 @@ export async function registerForPush(): Promise<void> {
     const perm = await Notification.requestPermission()
     if (perm !== "granted") return
 
-    const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js")
+    // نعيد استخدام العامل الموحّد (/sw.js) الذي يسجّله PWARegister ويحوي منطق FCM في الخلفية —
+    // فلا نُسجّل عاملًا ثانيًا يتنازع على النطاق "/". نسجّله هنا احتياطًا لو لم يُسجَّل بعد.
+    const reg =
+      (await navigator.serviceWorker.getRegistration()) ||
+      (await navigator.serviceWorker.register("/sw.js"))
     const messaging = getMessaging(getClientApp())
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg })
 

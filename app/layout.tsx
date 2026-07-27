@@ -19,8 +19,11 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: "محلك - منصة التجارة الإلكترونية المحلية",
   description: "اكتشف أفضل المنتجات والمتاجر المحلية",
+  applicationName: "محلك",
   generator: "v0.app",
-  metadataBase: new URL('https://mahalak.com'),
+  // النطاق الفعلي للإنتاج (كان mahalak.com بالخطأ ⇒ روابط OG/canonical مكسورة).
+  metadataBase: new URL("https://www.m7lk.com"),
+  appleWebApp: { capable: true, title: "محلك", statusBarStyle: "default" },
   openGraph: {
     title: "محلك - منصة التجارة الإلكترونية المحلية",
     description: "اكتشف أفضل المنتجات والمتاجر المحلية",

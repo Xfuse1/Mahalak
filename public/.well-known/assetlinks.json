@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mahalak.app",
+      "sha256_cert_fingerprints": [
+        "AA:C3:DE:95:FF:E6:C8:DF:39:67:35:32:E6:9F:AE:7F:76:83:FE:FD:6F:57:EB:22:42:14:81:4E:E2:DA:26:43"
+      ]
+    }
+  }
+]

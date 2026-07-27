@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { ToastProvider } from "./ui/toast"
 import { ConfirmProvider } from "./ui/confirm-dialog"
+import { PWARegister } from "./pwa-register"
 
 const TrackingConsent = dynamic(
   () => import("./tracking-consent"),
@@ -21,6 +22,7 @@ export function LayoutClientComponents({ children }: { children?: React.ReactNod
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <PWARegister />
         <TrackingConsent />
         <GlobalContactTracker />
         <ScrollToTop />
