@@ -55,6 +55,8 @@ export default function ImportPage() {
   const [publishing, setPublishing] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [finished, setFinished] = useState<{ created: number } | null>(null)
+  // موضع آخر دفعة نجحت — يبقى ثابتًا عبر إعادة المحاولة فيُكمّل النشر من حيث وقف بدل التكرار من الصفر.
+  const [committedOffset, setCommittedOffset] = useState(0)
 
   useEffect(() => {
     if (isLoading) return
@@ -64,6 +66,7 @@ export default function ImportPage() {
   const runParse = useCallback(async (f: File, override: Record<string, number> | null) => {
     setParsing(true)
     setFinished(null)
+    setCommittedOffset(0) // تحليل/مطابقة جديدة ⇒ استيراد جديد من الصفر
     try {
       const fd = new FormData()
       fd.set("file", f)
@@ -105,9 +108,9 @@ export default function ImportPage() {
       return
     }
     setPublishing(true)
-    setProgress({ done: 0, total: res.total })
-    let offset = 0
-    let created = 0
+    // نبدأ من آخر موضع نجح (استئناف بعد فشل) بدل الصفر — يمنع تكرار المنتجات المُنشأة.
+    let offset = committedOffset
+    setProgress({ done: offset, total: res.total })
     try {
       // نكرّر على دفعات حتى done — يتفادى حدّ زمن الطلب ويعطي تقدّمًا.
       for (let guard = 0; guard < 200; guard++) {
@@ -119,20 +122,26 @@ export default function ImportPage() {
         fd.set("limit", "400")
         const r = await commitImport(fd)
         if (!r.ok) {
-          toast.error(r.error === "store_not_approved" ? "متجرك لسه مش معتمد — راجع الإدارة" : "حصل خطأ أثناء النشر")
+          toast.error(
+            r.error === "store_not_approved" ? "متجرك لسه مش معتمد — راجع الإدارة"
+              : r.error === "rate_limited" ? "محاولات كتير — استنى شوية وأعد المحاولة (هيكمّل من حيث وقف)"
+              : r.error === "too_many_products" ? "الملف كبير جدًا (فوق 20 ألف منتج)"
+              : "حصل خطأ — أعد المحاولة (هيكمّل من حيث وقف)",
+          )
           break
         }
-        created += r.created
         offset = r.nextOffset
+        setCommittedOffset(offset)
         setProgress({ done: offset, total: r.total })
         if (r.done) {
-          setFinished({ created })
-          toast.success(`تم استيراد ${created} منتج بنجاح 🎉`)
+          setFinished({ created: r.total })
+          setCommittedOffset(0)
+          toast.success(`تم استيراد ${r.total} منتج بنجاح 🎉`)
           break
         }
       }
     } catch {
-      toast.error("تعذّر الاتصال بالخادم أثناء النشر")
+      toast.error("تعذّر الاتصال بالخادم — أعد المحاولة (هيكمّل من حيث وقف)")
     } finally {
       setPublishing(false)
     }

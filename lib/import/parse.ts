@@ -133,7 +133,9 @@ export function extractTable(buffer: ArrayBuffer | Uint8Array | Buffer, override
     .map((label, index) => ({ index, label: String(label ?? "").trim() }))
     .filter((h) => h.label)
   const suggested = suggestMapping(headers)
-  const mapping: Mapping = { ...suggested, ...(override || {}) }
+  // عند وجود تخصيص من التاجر نعتبره المطابقة الكاملة (لا ندمجه فوق المقترحة) — وإلا لا يمكن إلغاء
+  // مطابقة حقل شاله التاجر (كان يرجع للمقترحة). بلا تخصيص (أول تحليل) ⇒ المقترحة.
+  const mapping: Mapping = override ?? suggested
   const dataRows = rows.slice(headerRowIndex + 1)
   const { drafts, stats } = buildDrafts(dataRows, mapping)
 

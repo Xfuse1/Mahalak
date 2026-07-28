@@ -60,6 +60,8 @@ export async function parseImportFile(formData: FormData) {
 export async function commitImport(formData: FormData) {
   const uid = await getCurrentUid()
   if (!uid) return { ok: false as const, error: "unauthenticated" }
+  // كبح إنشاء منتجات بالجملة (100 دفعة/دقيقة تكفي استيرادًا كبيرًا وتحدّ الإساءة).
+  if (!(await checkRateLimit("import_commit:" + uid, 100, 60_000))) return { ok: false as const, error: "rate_limited" }
   const file = formData.get("file")
   if (!(file instanceof File)) return { ok: false as const, error: "no_file" }
   if (file.size > MAX_FILE_BYTES) return { ok: false as const, error: "file_too_large" }
