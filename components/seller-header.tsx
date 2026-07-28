@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu, BookText, Wallet } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingBag, Tag, Settings, LogOut, Home, Menu, BookText, Wallet, FileSpreadsheet } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../lib/auth-context"
 import { useRouter } from "next/navigation"
@@ -69,6 +69,7 @@ export function SellerHeader() {
   const navItems = [
     { href: "/seller/dashboard", label: t("لوحة التحكم", "Dashboard"), icon: LayoutDashboard },
     { href: "/seller/products", label: t("المنتجات", "Products"), icon: Package },
+    { href: "/seller/import", label: t("استيراد", "Import"), icon: FileSpreadsheet },
     { href: "/seller/orders", label: t("الطلبات", "Orders"), icon: ShoppingBag },
     { href: "/seller/offers", label: t("العروض", "Offers"), icon: Tag },
     { href: "/seller/ledger", label: t("الديون", "Debts"), icon: BookText },
