@@ -14,7 +14,7 @@ import { signKycFields } from "./stores"
 import type { PickupStop } from "./orders"
 import { logError } from "../logger"
 import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
-import { readDispatchSettings } from "../delivery/fee"
+import { readDispatchSettings, computeDeliveryFee } from "../delivery/fee"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { sendPushToOwner } from "../server-push"
 
@@ -493,6 +493,7 @@ export type DispatchMonitorOrder = {
   delivery_price?: number
   total?: number
   offer_round?: number
+  offer_expires_at_ms?: number
   stalled?: boolean
   stops_summary?: string // للمتعدد: "2/3 مؤكَّد" أو استلام
   created_at?: string
@@ -580,6 +581,7 @@ export async function getDispatchMonitor(): Promise<{
         delivery_price: num(o.delivery_price),
         total: num(o.total),
         offer_round: num(o.offer_round),
+        offer_expires_at_ms: num(o.offer_expires_at_ms) || undefined, // للوحة: تكشف عرضًا منتهيًا لكن ما زال offering (كرون متجمّد)
         stalled: o.dispatch_stalled === true,
         stops_summary,
         created_at: typeof o.created_at === "string" ? o.created_at : undefined,
@@ -705,7 +707,7 @@ export async function adminReofferDispatchOrder(orderId: string) {
       if (o.order_type === "multi_store" && stops.some((s) => s.status === "picked_up")) {
         return { ok: false as const, error: "already_picking_up" }
       }
-      tx.update(ref, {
+      const update: Record<string, unknown> = {
         status: "offering",
         driver_id: FieldValue.delete(),
         driver_name: FieldValue.delete(),
@@ -720,11 +722,22 @@ export async function adminReofferDispatchOrder(orderId: string) {
         dispatch_stalled: FieldValue.delete(),
         timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "offering", timestamp: now, note: "إعادة عرض إدارية" }],
         updated_at: now,
-      })
+      }
+      // لو كان الطلب أُسنِد بعرض سعر (مزايدة)، فإعادة العرض ترجّع رسم العدّاد الأصلي وتصحّح الإجمالي —
+      // وإلا نعيد عرضه بسعر مزايدة قديم لسائق آخر. نعيد الحساب من المسافة المخزّنة فقط (بلاها نترك السعر).
+      let newFee = Number(o.delivery_price) || 0
+      const km = Number(o.distance_km)
+      if (Number.isFinite(km)) {
+        newFee = computeDeliveryFee(km, settings)
+        update.delivery_price = newFee
+        update.total = Math.max(0, (Number(o.total) || 0) + (newFee - (Number(o.delivery_price) || 0)))
+      }
+      tx.update(ref, update)
       return {
         ok: true as const,
         customerId: o.customer_id as string | undefined,
-        deliveryPrice: o.delivery_price as number | undefined,
+        // نُرجع الرسم المكتوب فعلًا (لا القديم) كي يُعلن للسائقين نفس السعر المخزّن على الطلب.
+        deliveryPrice: newFee as number | undefined,
         deliveryCity: o.delivery_city as string | undefined,
         distanceKm: o.distance_km as number | undefined,
       }

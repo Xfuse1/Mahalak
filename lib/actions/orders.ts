@@ -14,6 +14,7 @@ import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "
 import { sendPushToOwner } from "../server-push"
 import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings } from "../delivery/fee"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
+import { checkRateLimit } from "../utils/rate-limit"
 import { haversineKm } from "../utils/geo"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
@@ -517,9 +518,10 @@ export async function updateOrderStatus(
 
     // طلبات التوزيع تُدار حصراً عبر آلة الحالة الذرّية (lib/delivery/dispatch.ts + confirmDispatchOrder).
     // هذا المسار القديم قراءة-تعديل-كتابة غير ذرّية بـset(merge) — لو مسّ طلب توزيع لأمكنه تخطّي شروط
-    // الانتقال (مثل on_the_way بلا استلام) أو طمس خط زمني كتبته معاملة توزيع متزامنة. نستثني الأدمن
-    // فقط كي تبقى استعادة طلب عالق ممكنة من اللوحة. (نظير القيد الموجود في markOrderDeliveredByDriver.)
-    if (currentData.is_dispatch === true && !hasAdminAccess(caller?.role)) {
+    // الانتقال (مثل on_the_way بلا استلام) أو طمس خط زمني كتبته معاملة توزيع متزامنة. نحجب حتى الأدمن:
+    // هذا المسار غير ذرّي (set/merge) ولا يكتب آثار COD (cash_collected/unsettled_cod_store_ids) فيُيتّم
+    // تسوية المتجر؛ للإنقاذ الإداري توجد أفعال ذرّية مخصّصة (adminCancelDispatchOrder/adminReofferDispatchOrder).
+    if (currentData.is_dispatch === true) {
       return { success: false, error: "طلب توزيع — يُدار عبر تدفق التوزيع" }
     }
 
@@ -955,6 +957,10 @@ export async function createDispatchOrder(orderData: {
   if (!(await requireOwner(orderData.customer_id))) {
     return { success: false, error: "Unauthorized" }
   }
+  // كبح إنشاء طلبات مكثّف (حرمان مخزون / إغراق عروض السائقين) — لكل عميل+IP.
+  if (!(await checkRateLimit("create_dispatch_order:" + orderData.customer_id, 15, 60_000))) {
+    return { success: false, error: "rate_limited" }
+  }
   const settings = await readDispatchSettings()
   // حارس الـflag: لا تُنشأ طلبات توزيع والنظام مطفّي (belt & suspenders فوق حجب الـUI في الـcheckout).
   if (!settings.enabled) {
@@ -996,6 +1002,10 @@ export async function createDispatchOrder(orderData: {
         const productDoc = await transaction.get(productRef)
         if (!productDoc.exists) throw new Error("Product not found")
         const productData = productDoc.data()
+        // المنتج لازم يخصّ متجر الطلب — يمنع حقن منتج متجر آخر (يشوّه المخزون وإسناد كاش COD).
+        if (productData?.store_id && String(productData.store_id) !== String(orderData.store_id)) {
+          throw new Error("Product does not belong to store")
+        }
         const availableStock = productData?.stock ?? 0
         if (quantity > availableStock) {
           throw new Error(`Requested quantity for "${productData?.name || 'product'}" (${quantity}) exceeds available stock (${availableStock})`)
@@ -1019,9 +1029,16 @@ export async function createDispatchOrder(orderData: {
       }
 
       const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      // رسوم العدّاد من إحداثيات المتجر والعميل؛ نقص أي إحداثي → فتح العداد فقط (رسم أساسي) بدل رقم مضلِّل.
-      const custLat = orderData.delivery_latitude
-      const custLng = orderData.delivery_longitude
+      // إحداثيات العميل إلزامية وصالحة لطلب توزيع — بلاها (أو خارج المدى/صفرية) نرفض بدل تسعير بالأساس
+      // فقط، وإلا العميل يقلّل الرسم عبر حذف الإحداثيات ويضلّل السائق بمسافة كاذبة. (الـUI بيلزم الدبوس؛
+      // ده الحارس السيرفري لأن server action نقطة عامة.)
+      const custLat = Number(orderData.delivery_latitude)
+      const custLng = Number(orderData.delivery_longitude)
+      const validCoord =
+        Number.isFinite(custLat) && Number.isFinite(custLng) &&
+        custLat >= -90 && custLat <= 90 && custLng >= -180 && custLng <= 180 &&
+        !(custLat === 0 && custLng === 0)
+      if (!validCoord) throw new Error("delivery_location_required")
       const deliveryFee =
         computeDeliveryFeeFromCoords(
           { lat: storeInfo?.latitude, lng: storeInfo?.longitude },
@@ -1771,6 +1788,9 @@ export async function createMultiStoreDispatchOrder(orderData: {
   idempotency_key?: string
 }) {
   if (!(await requireOwner(orderData.customer_id))) return { success: false, error: "Unauthorized" }
+  if (!(await checkRateLimit("create_dispatch_order:" + orderData.customer_id, 15, 60_000))) {
+    return { success: false, error: "rate_limited" }
+  }
   const settings = await readDispatchSettings()
   if (!settings.enabled) return { success: false, error: "dispatch_disabled" }
   const db = getAdminDb()
@@ -1779,8 +1799,14 @@ export async function createMultiStoreDispatchOrder(orderData: {
   const activeOffers = await getActiveOffersForStores(storeIdsForOffers)
   const today = now.split("T")[0]
   const appliedOffers = new Map<string, number>()
-  const custLat = orderData.delivery_latitude
-  const custLng = orderData.delivery_longitude
+  // إحداثيات العميل إلزامية وصالحة لطلب توزيع متعدد المتاجر (مثل الأحادي) — بلاها نرفض بدل تسعير بالأساس.
+  const custLat = Number(orderData.delivery_latitude)
+  const custLng = Number(orderData.delivery_longitude)
+  const validCoord =
+    Number.isFinite(custLat) && Number.isFinite(custLng) &&
+    custLat >= -90 && custLat <= 90 && custLng >= -180 && custLng <= 180 &&
+    !(custLat === 0 && custLng === 0)
+  if (!validCoord) return { success: false, error: "delivery_location_required" }
 
   try {
     const result = await db.runTransaction(async (transaction) => {
@@ -1810,12 +1836,14 @@ export async function createMultiStoreDispatchOrder(orderData: {
         qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + validateQuantity(item.quantity))
       }
       const priceByProduct = new Map<string, number>()
+      const ownerByProduct = new Map<string, string>() // منتج → متجره الحقيقي (للتحقق أن كل صنف في محطة متجره)
       const productRefs: { ref: FirebaseFirestore.DocumentReference; quantity: number }[] = []
       for (const [productId, totalQty] of qtyByProduct) {
         const productRef = db.collection("products").doc(productId)
         const productDoc = await transaction.get(productRef)
         if (!productDoc.exists) throw new Error("Product not found")
         const productData = productDoc.data()
+        ownerByProduct.set(productId, String(productData?.store_id || ""))
         const availableStock = productData?.stock ?? 0
         if (totalQty > availableStock) throw new Error(`Requested quantity for "${productData?.name || "product"}" (${totalQty}) exceeds available stock (${availableStock})`)
         const basePrice = Number(productData?.price)
@@ -1830,7 +1858,12 @@ export async function createMultiStoreDispatchOrder(orderData: {
       }
 
       const verifiedStops: PickupStop[] = orderData.pickup_stops.map((stop) => {
-        const verifiedItems = stop.items.map((item) => ({ ...item, quantity: validateQuantity(item.quantity), price: priceByProduct.get(item.product_id) ?? 0 }))
+        const verifiedItems = stop.items.map((item) => {
+          // كل صنف لازم يخصّ متجر محطته — يمنع تلاعب العميل بـstore_id فيشوّه تقسيم كاش COD.
+          const owner = ownerByProduct.get(item.product_id)
+          if (owner && owner !== stop.store_id) throw new Error("Item does not belong to store")
+          return { ...item, quantity: validateQuantity(item.quantity), price: priceByProduct.get(item.product_id) ?? 0 }
+        })
         return { ...stop, items: verifiedItems, subtotal: verifiedItems.reduce((s, it) => s + it.price * it.quantity, 0), status: "pending" as const, confirmed_at: null, picked_up_at: null, rejected_at: null, rejection_reason: null }
       })
       const subtotal = verifiedStops.reduce((s, stop) => s + stop.subtotal, 0)
@@ -2042,6 +2075,12 @@ export async function confirmStorePickup(orderId: string, storeId: string) {
       }
 
       const orderData = orderDoc.data() as Record<string, any>
+      // طلبات التوزيع تُدار حصراً عبر تدفق التوزيع — المسار القديم كان ينقلها لحالة خارج آلة التوزيع
+      // (offering) فتعلق للأبد ومخزونها محجوز، وrejectStorePickup كان يعيد المخزون بلا علم stock_restored
+      // فيتضاعف مع rejectDispatchStop. (نظير حارس markOrderDeliveredByDriver.)
+      if (orderData?.is_dispatch === true) {
+        return { ok: false as const, error: "طلب توزيع — يُدار عبر تدفق التوزيع" }
+      }
       if (orderData?.order_type !== "multi_store") {
         return { ok: false as const, error: "This is not a multi-store order" }
       }
@@ -2170,6 +2209,12 @@ export async function rejectStorePickup(orderId: string, storeId: string, reason
       }
 
       const orderData = orderDoc.data() as Record<string, any>
+      // طلبات التوزيع تُدار حصراً عبر تدفق التوزيع — المسار القديم كان ينقلها لحالة خارج آلة التوزيع
+      // (offering) فتعلق للأبد ومخزونها محجوز، وrejectStorePickup كان يعيد المخزون بلا علم stock_restored
+      // فيتضاعف مع rejectDispatchStop. (نظير حارس markOrderDeliveredByDriver.)
+      if (orderData?.is_dispatch === true) {
+        return { ok: false as const, error: "طلب توزيع — يُدار عبر تدفق التوزيع" }
+      }
       if (orderData?.order_type !== "multi_store") {
         return { ok: false as const, error: "This is not a multi-store order" }
       }
@@ -2334,6 +2379,10 @@ export async function markStorePickedUp(orderId: string, _driverId: string, stor
       const orderData = orderDoc.data() as Record<string, any>
       if (orderData?.driver_id !== sessionDriverId) {
         return { ok: false as const, error: "You are not allowed to update this order" }
+      }
+      // طلبات التوزيع تُدار عبر تدفق التوزيع (driverPickupStore) — لا المسار القديم.
+      if (orderData?.is_dispatch === true) {
+        return { ok: false as const, error: "طلب توزيع — استخدم تدفق التوزيع" }
       }
       // حارس الحالة النهائية للطلب (mirror markOrderDeliveredByDriver): بدونه أمكن استلام محطة في
       // طلب ملغى/مُسلَّم — يعيد الطلب المُنهى إلى picking_up/on_the_way.

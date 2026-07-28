@@ -26,7 +26,10 @@ service cloud.firestore {
       // على الحذف يكون request.resource == null (لا مستند ناتج) — نحرس ضده أولًا كي لا نمنع الحذف.
       return request.resource != null
         && 'role' in request.resource.data
-        && request.resource.data.role in ['admin', 'superAdmin', 'super_admin', 'superadmin']
+        && request.resource.data.role is string
+        // نُطبّع الحالة قبل المقارنة: فحص الدور في التطبيق غير حسّاس للحالة، فبلا التطبيع يمرّ "Admin"/"ADMIN"
+        // من القائمة (غير مطابق حرفيًّا) بينما يُعامَل كأدمن ⇒ رفع صلاحية.
+        && request.resource.data.role.lower() in ['admin', 'superadmin', 'super_admin']
         && (resource == null || request.resource.data.role != resource.data.role);
     }
 

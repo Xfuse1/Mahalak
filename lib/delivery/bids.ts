@@ -56,16 +56,21 @@ export async function submitDriverBid(
       if (Array.isArray(o.rejected_by) && o.rejected_by.includes(driverId)) {
         return { ok: false as const, error: "already_rejected" }
       }
-      // سقف المزايدة: رسم العدّاد + نسبة يحدّدها الأدمن — يمنع أسعارًا استغلالية.
+      // سقف المزايدة: نستخدم أرضية = فتح العدّاد كي لا يُعطَّل السقف حين يكون رسم العدّاد 0 (كان
+      // `metered > 0` يسمح بعرض غير محدود ساعتها). السقف = max(العدّاد، الأساس) × (1 + النسبة).
       const metered = Number(o.delivery_price || 0)
-      const cap = metered * (1 + Math.max(0, settings.bid_cap_pct) / 100)
-      if (metered > 0 && price > cap) return { ok: false as const, error: "bid_too_high" }
+      const effective = Math.max(metered, Number(settings.base_fare) || 0)
+      const cap = effective * (1 + Math.max(0, settings.bid_cap_pct) / 100)
+      if (cap > 0 && price > cap) return { ok: false as const, error: "bid_too_high" }
       // تحقق صلاحية السائق (توازيًا مع accept/reject).
       const dSnap = await tx.get(db.collection("drivers").doc(driverId))
       const d = dSnap.exists ? (dSnap.data() as Record<string, any>) : null
       if (!d) return { ok: false as const, error: "driver_not_found" }
       if (d.disabled === true) return { ok: false as const, error: "driver_disabled" }
       if ((d.isApproved ?? d.is_approved ?? false) !== true) return { ok: false as const, error: "driver_not_approved" }
+      // سائق غير أونلاين (أو حقله غائب) لا يقدّم عرضًا — وإلا يبقى عرض "ميت" يفشل قبوله دائمًا. متسق مع
+      // بثّ العروض (لا يصل العرض إلا لأونلاين) والقبول.
+      if ((d.isOnline ?? d.is_online ?? false) !== true) return { ok: false as const, error: "driver_offline" }
 
       const existing: OrderBid[] = Array.isArray(o.bids) ? o.bids : []
       const others = existing.filter((b) => b?.driver_id !== driverId)
@@ -156,6 +161,8 @@ export async function respondToDriverBid(
       if (!d) return { ok: false as const, error: "driver_not_found" }
       if (d.disabled === true) return { ok: false as const, error: "driver_disabled" }
       if ((d.isApproved ?? d.is_approved ?? false) !== true) return { ok: false as const, error: "driver_not_approved" }
+      // لا نُسند لسائق أطفأ ورديّته بعد تقديم العرض — متسق مع بثّ العروض (لا نُسند لسائق غير متاح).
+      if ((d.isOnline ?? d.is_online ?? false) !== true) return { ok: false as const, error: "driver_offline" }
 
       const oldFee = Number(o.delivery_price || 0)
       const newFee = Number(bid.price)
@@ -176,6 +183,7 @@ export async function respondToDriverBid(
         status: "accepted",
         accepted_at: now,
         offer_expires_at_ms: FieldValue.delete(),
+        dispatch_stalled: FieldValue.delete(), // خرج من offering ⇒ لم يعد متعثّرًا
         bids: next,
         timeline: tl(o.timeline, { status: "driver_accepted", timestamp: now, note: "بموافقة العميل على عرض السعر" }),
         updated_at: now,

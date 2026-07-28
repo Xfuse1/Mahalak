@@ -63,6 +63,7 @@ export async function acceptOrderOffer(driverId: string, orderId: string): Promi
         status: "accepted",
         accepted_at: now,
         offer_expires_at_ms: FieldValue.delete(),
+        dispatch_stalled: FieldValue.delete(), // خرج من offering ⇒ لم يعد متعثّرًا (وإلا إعادة عرض إدارية تخطف السائق)
         timeline: tl(o.timeline, { status: "driver_accepted", timestamp: now }),
         updated_at: now,
       })
