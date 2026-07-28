@@ -13,6 +13,11 @@ import { logError } from "@/lib/logger"
 
 const MAX_OFFER_ROUNDS = 3
 const SCAN_LIMIT = 200
+// سقف زمني للمسحة الواحدة: تتوقّف عند تجاوزه ويكمّل التيك التالي البقية — يمنع تدهور مسحة على تراكم
+// كبير (مثلًا بعد انقطاع كرون) من تجاوز مهلة تنفيذ الدالة.
+const SWEEP_BUDGET_MS = 40_000
+// مهلة تأكيد التاجر لطلب توزيع: بعدها يُصعَّد (dispatch_stalled + إشعار) كي لا تعلق طلبات COD صامتة.
+export const PENDING_TIMEOUT_MS = 20 * 60 * 1000
 
 type Outcome =
   | { kind: "reoffered"; round: number; customerId?: string }
@@ -44,7 +49,9 @@ export async function processExpiredOffers(): Promise<TimeoutSweepResult> {
   })
   out.scanned = candidates.length
 
+  const sweepStart = Date.now()
   for (const doc of candidates) {
+    if (Date.now() - sweepStart > SWEEP_BUDGET_MS) break // ميزانية وقت — نكمّل الباقي في التيك التالي
     let outcome: Outcome = { kind: "skipped" }
     try {
       outcome = await db.runTransaction(async (tx): Promise<Outcome> => {
@@ -140,5 +147,67 @@ export async function processExpiredOffers(): Promise<TimeoutSweepResult> {
       logError(`[dispatch-timeout] notify ${doc.id}`, e)
     }
   }
+
+  // مسح الطلبات المعلّقة (pending) التي تجاوزت مهلة تأكيد التاجر — نُصعّدها (dispatch_stalled + إشعار
+  // التاجر/العميل) كي لا تعلق طلبات COD صامتةً بلا سائق ولا تأكيد. الطلب يبقى pending فيقدر التاجر
+  // تأكيده لاحقًا؛ العلم يمنع تكرار الإشعار.
+  try {
+    const now = Date.now()
+    // نرتّب بـ pending_expires_at_ms: يستبعد الطلبات غير-التوزيعية تلقائيًّا (لا تملك الحقل) ويقدّم
+    // الأقرب انتهاءً — فلا تُزاحمنا 200 طلب pending عادي فيضيع طلب توزيع بعد الحدّ. يتطلّب فهرسًا مركّبًا.
+    const pSnap = await db
+      .collection("orders")
+      .where("status", "==", "pending")
+      .orderBy("pending_expires_at_ms", "asc")
+      .limit(SCAN_LIMIT)
+      .get()
+    const pendingCandidates = pSnap.docs.filter((d) => {
+      const o = d.data() as Record<string, any>
+      if (o.is_dispatch !== true || o.driver_id || o.dispatch_stalled === true) return false
+      const exp = Number(o.pending_expires_at_ms || 0)
+      return exp > 0 && exp < now
+    })
+    for (const doc of pendingCandidates) {
+      if (Date.now() - sweepStart > SWEEP_BUDGET_MS) break
+      let esc: { customerId?: string; storeId?: string } | null = null
+      try {
+        esc = await db.runTransaction(async (tx) => {
+          const s = await tx.get(doc.ref)
+          if (!s.exists) return null
+          const o = s.data() as Record<string, any>
+          if (o.is_dispatch !== true || o.status !== "pending" || o.driver_id || o.dispatch_stalled === true) return null
+          const exp = Number(o.pending_expires_at_ms || 0)
+          if (!(exp > 0 && exp < Date.now())) return null
+          const nowIso = new Date().toISOString()
+          tx.update(doc.ref, {
+            dispatch_stalled: true,
+            timeline: tl(o.timeline, { status: "pending_stalled", timestamp: nowIso, note: "لم يؤكّد المتجر الطلب في المهلة" }),
+            updated_at: nowIso,
+          })
+          return { customerId: o.customer_id as string | undefined, storeId: o.store_id as string | undefined }
+        })
+      } catch (e) {
+        logError(`[dispatch-timeout] pending ${doc.id}`, e)
+      }
+      if (esc) {
+        out.stalled++
+        try {
+          if (esc.storeId) {
+            await createNotification({ user_id: esc.storeId, type: "order_status", title: "⏰ طلب ينتظر تأكيدك", title_en: "⏰ An order awaits your confirmation", message: "أكّد الطلب كي يُعرض على السائقين، أو ارفضه.", message_en: "Confirm the order so it can be offered to drivers, or reject it.", link: "/seller/orders", data: { order_id: doc.id, status: "pending", stalled: true } })
+            await sendPushToOwner("user", esc.storeId, { title: "⏰ طلب ينتظر تأكيدك", body: "أكّد الطلب كي يُعرض على السائقين.", link: "/seller/orders" })
+          }
+          if (esc.customerId) {
+            await createNotification({ user_id: esc.customerId, type: "order_status", title: "⏳ طلبك ينتظر تأكيد المتجر", title_en: "⏳ Your order awaits store confirmation", message: "لم يؤكّد المتجر طلبك بعد — نتابع معه.", message_en: "The store hasn't confirmed your order yet — we're following up.", link: "/account", data: { order_id: doc.id, status: "pending", stalled: true } })
+            await sendPushToOwner("user", esc.customerId, { title: "⏳ طلبك ينتظر تأكيد المتجر", body: "لم يؤكّد المتجر طلبك بعد — نتابع معه.", link: "/account" })
+          }
+        } catch (e) {
+          logError(`[dispatch-timeout] pending notify ${doc.id}`, e)
+        }
+      }
+    }
+  } catch (e) {
+    logError("[dispatch-timeout] pending sweep", e)
+  }
+
   return out
 }

@@ -15,6 +15,7 @@ import { sendPushToOwner } from "../server-push"
 import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings } from "../delivery/fee"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { checkRateLimit } from "../utils/rate-limit"
+import { PENDING_TIMEOUT_MS } from "../delivery/dispatch-timeout"
 import { haversineKm } from "../utils/geo"
 
 // تحقق من الكمية: عدد صحيح موجب ضمن حد معقول — يمنع الكميات السالبة (التي تُحوّل
@@ -1061,6 +1062,7 @@ export async function createDispatchOrder(orderData: {
         delivery_address: orderData.delivery_address,
         delivery_price: deliveryFee,
         status: "pending",
+        pending_expires_at_ms: Date.now() + PENDING_TIMEOUT_MS, // مهلة تأكيد التاجر — يُصعَّد بعدها
         created_at: now,
         updated_at: now,
         delivery_code: String(Math.floor(1000 + Math.random() * 9000)), // دائمًا — fail-closed يعتمد عليه
@@ -1146,6 +1148,7 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
         status: "offering",
         offer_expires_at_ms: Date.now() + settings.offer_timeout_sec * 1000,
         rejected_by: [], // عرض جديد نظيف
+        dispatch_stalled: FieldValue.delete(), // لو تعثّر كـpending ثم أكّده التاجر ⇒ يزول التعثّر (لا إنذار كاذب)
         timeline: [
           ...(Array.isArray(o.timeline) ? o.timeline : []),
           { status: "offering", timestamp: now, note: "التاجر أكّد — عرض على السائقين" } as TimelineEntry,
@@ -1887,6 +1890,7 @@ export async function createMultiStoreDispatchOrder(orderData: {
       const orderPayload: Record<string, unknown> = {
         order_type: "multi_store",
         is_dispatch: true,
+        pending_expires_at_ms: Date.now() + PENDING_TIMEOUT_MS, // مهلة تأكيد التاجر — يُصعَّد بعدها
         customer_id: orderData.customer_id,
         customer_name: orderData.customer_name,
         customer_phone: orderData.customer_phone,
@@ -1981,6 +1985,7 @@ export async function confirmDispatchStop(orderId: string, storeId: string) {
         update.status = "offering"
         update.offer_expires_at_ms = Date.now() + settings.offer_timeout_sec * 1000
         update.rejected_by = []
+        update.dispatch_stalled = FieldValue.delete() // يزول التعثّر عند تأكيد كل المتاجر (لا إنذار كاذب)
       }
       tx.update(ref, update)
       return { ok: true as const, allConfirmed, customerId: o.customer_id as string | undefined, deliveryPrice: o.delivery_price as number | undefined, deliveryCity: o.delivery_city as string | undefined, distanceKm: o.distance_km as number | undefined }

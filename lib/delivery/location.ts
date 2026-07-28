@@ -29,27 +29,30 @@ export async function updateDriverLocation(
   try {
     const db = getAdminDb()
     const refs = ids.map((id) => db.collection("orders").doc(id))
-    const docs = await db.getAll(...refs)
     const now = new Date().toISOString()
     const h = heading != null && Number.isFinite(heading) ? Number(heading) : null
-    const batch = db.batch()
-    let updated = 0
-    for (const d of docs) {
-      if (!d.exists) continue
-      const o = d.data() as Record<string, unknown>
-      // إعادة تحقق إجبارية: الطلب مِلك هذا السائق وفي حالة نشطة — يمنع كتابة موقع على طلب الغير.
-      if (o.driver_id !== driverId) continue
-      if (!ACTIVE_STATUSES.includes(String(o.status))) continue
-      batch.update(d.ref, {
-        driver_lat: lat,
-        driver_lng: lng,
-        ...(h != null ? { driver_heading: h } : {}),
-        driver_location_at: now,
-      })
-      updated++
-    }
-    if (updated === 0) return { ok: true, updated: 0 }
-    await batch.commit()
+    // معاملة ذرّية (قراءة+كتابة معًا): بلاها كان تحديث موقع متأخّر يعيد ختم إحداثيات السائق على طلب
+    // أعادت اللوحة عرضه (صار بلا سائق، status=offering) بين القراءة والكتابة — إحداثيات "شبح".
+    // القراءة داخل المعاملة ترى الحالة الطازجة فتتخطّى، وأي تعارض يُعيد المحاولة.
+    const updated = await db.runTransaction(async (tx) => {
+      const docs = await tx.getAll(...refs)
+      let u = 0
+      for (const d of docs) {
+        if (!d.exists) continue
+        const o = d.data() as Record<string, unknown>
+        // إعادة تحقق إجبارية: الطلب مِلك هذا السائق وفي حالة توصيل نشطة — يمنع كتابة موقع على طلب الغير.
+        if (o.driver_id !== driverId) continue
+        if (!ACTIVE_STATUSES.includes(String(o.status))) continue
+        tx.update(d.ref, {
+          driver_lat: lat,
+          driver_lng: lng,
+          ...(h != null ? { driver_heading: h } : {}),
+          driver_location_at: now,
+        })
+        u++
+      }
+      return u
+    })
     return { ok: true, updated }
   } catch (e) {
     logError("[location] updateDriverLocation", e)

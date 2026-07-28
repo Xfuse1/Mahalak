@@ -69,6 +69,11 @@ export default function AdminDispatchPage() {
 
   const online = drivers.filter((d) => d.is_online).length
   const withLoc = orders.filter((o) => o.driver_lat != null)
+  const nowMs = Date.now()
+  // طلبات تحتاج انتباهًا: متعثّرة، أو عرضها منتهٍ وما زال offering (مؤشّر كرون متجمّد).
+  const alarmCount = orders.filter(
+    (o) => o.stalled || (o.status === "offering" && o.offer_expires_at_ms != null && o.offer_expires_at_ms < nowMs),
+  ).length
 
   return (
     <div className="p-4 sm:p-6 space-y-5" dir="rtl">
@@ -86,6 +91,13 @@ export default function AdminDispatchPage() {
         <Stat label="في الطريق" value={orders.filter((o) => o.status === "on_the_way").length} color="text-emerald-600" />
         <Stat label="سائقون متاحون" value={`${online}/${drivers.length}`} />
       </div>
+
+      {/* إنذار: طلبات متعثّرة أو عروض منتهية بلا إعادة عرض (كرون متجمّد؟) */}
+      {alarmCount > 0 && (
+        <div className="rounded-2xl bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm font-semibold flex items-center gap-2">
+          ⚠️ {alarmCount} طلب يحتاج انتباهك (متعثّر أو عرض منتهٍ). راجعه بالأسفل واستخدم "إعادة عرض" أو "إلغاء". لو كثُرت العروض المنتهية فتأكّد أن الكرون يعمل.
+        </div>
+      )}
 
       {/* الخريطة */}
       <div className="bg-white rounded-2xl p-3 shadow-sm">
@@ -109,6 +121,9 @@ export default function AdminDispatchPage() {
                     <span className="font-mono text-sm">#{o.id.slice(-6)}</span>
                     <div className="flex items-center gap-2">
                       {o.stalled && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">متعثّر</span>}
+                      {o.status === "offering" && o.offer_expires_at_ms != null && o.offer_expires_at_ms < nowMs && (
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full" title="عرض منتهي ولم يُعَد عرضه — تأكّد أن الكرون يعمل">⏰ منتهي</span>
+                      )}
                       {o.order_type === "multi_store" && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">متعدد</span>}
                       <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[o.status] || "bg-gray-100"}`}>{STATUS_AR[o.status] || o.status}</span>
                     </div>
