@@ -11,6 +11,7 @@ import { logError } from "@/lib/logger"
 import { calculateProfitPerUnit } from "@/lib/utils/product-pricing"
 import { extractTable, type Mapping } from "@/lib/import/parse"
 import { checkRateLimit } from "@/lib/utils/rate-limit"
+import { geminiMapColumns, isGeminiEnabled } from "@/lib/ai/gemini"
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024 // 15MB — ملفات المخزون نصّية صغيرة عادةً
 const MAX_PRODUCTS = 20000 // سقف أمان لكل رفعة
@@ -36,7 +37,18 @@ export async function parseImportFile(formData: FormData) {
   if (file.size > MAX_FILE_BYTES) return { ok: false as const, error: "file_too_large" }
   try {
     const buf = await file.arrayBuffer()
-    const res = extractTable(buf, parseMapping(formData.get("mapping")))
+    const userOverride = parseMapping(formData.get("mapping"))
+    let res = extractTable(buf, userOverride)
+    let aiUsed = false
+    // على التحليل الأول فقط (بلا تخصيص من التاجر) نطلب من Gemini تحسين المطابقة — يفوز على الاستدلال
+    // حيث يعطي قيمة. أي فشل/غياب مفتاح ⇒ نُبقي الاستدلال (لا شيء يكسر).
+    if (!userOverride && isGeminiEnabled()) {
+      const ai = await geminiMapColumns(res.headers, res.sampleRows)
+      if (ai) {
+        res = extractTable(buf, { ...res.mapping, ...ai })
+        aiUsed = true
+      }
+    }
     return {
       ok: true as const,
       sheetName: res.sheetName,
@@ -49,6 +61,7 @@ export async function parseImportFile(formData: FormData) {
       preview: res.drafts.slice(0, 100), // معاينة فقط — الالتزام يعيد قراءة الملف
       stats: res.stats,
       warnings: res.warnings,
+      aiUsed,
     }
   } catch (e) {
     logError("[import] parseImportFile", e)
@@ -98,6 +111,8 @@ export async function commitImport(formData: FormData) {
         category: d.category && d.category.length ? d.category.slice(0, 60) : defaultCategory,
         stock,
         image_url: d.image_url || "",
+        // حالة الصورة: من الملف = "file"؛ بلا صورة = "pending" (مرشَّح لجلب صور لاحقًا بموافقة التاجر).
+        image_status: d.image_url ? "file" : "pending",
         store_id: uid,
         barcode: d.barcode || "",
         simulator_section: null,
@@ -124,5 +139,49 @@ export async function commitImport(formData: FormData) {
   } catch (e) {
     logError("[import] commitImport", e)
     return { ok: false as const, error: "commit_failed" }
+  }
+}
+
+// (3) موافقة صريحة على جلب الصور: يعلّم منتجات المتجر بلا صورة (pending) → queued فتلتقطها مكنسة
+// الكرون. الباركود يُطبَّق تلقائيًّا؛ البحث بالاسم (لاحقًا) مرشَّح للمراجعة.
+export async function startImageFetch() {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  if (!(await checkRateLimit("import_imgfetch:" + uid, 10, 60_000))) return { ok: false as const, error: "rate_limited" }
+  try {
+    const db = getAdminDb()
+    const snap = await db.collection("products").where("store_id", "==", uid).where("image_status", "==", "pending").limit(10000).get()
+    const docs = snap.docs
+    let queued = 0
+    for (let i = 0; i < docs.length; i += 400) {
+      const batch = db.batch()
+      for (const d of docs.slice(i, i + 400)) { batch.update(d.ref, { image_status: "queued" }); queued++ }
+      await batch.commit()
+    }
+    return { ok: true as const, queued }
+  } catch (e) {
+    logError("[import] startImageFetch", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// حالة جلب الصور لمتجر التاجر (عدّاد لكل حالة) — لعرض التقدّم.
+export async function getImageStatus() {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  try {
+    const db = getAdminDb()
+    const statuses = ["pending", "queued", "processing", "done", "review", "none", "file"] as const
+    const counts: Record<string, number> = {}
+    await Promise.all(
+      statuses.map(async (s) => {
+        const q = await db.collection("products").where("store_id", "==", uid).where("image_status", "==", s).count().get()
+        counts[s] = q.data().count
+      }),
+    )
+    return { ok: true as const, counts }
+  } catch (e) {
+    logError("[import] getImageStatus", e)
+    return { ok: false as const, error: "server_error" }
   }
 }

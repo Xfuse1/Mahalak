@@ -24,6 +24,7 @@ export type ExtractResult = {
   headerRowIndex: number
   headers: HeaderCell[]
   mapping: Mapping
+  sampleRows: string[][] // أوائل صفوف البيانات (لمساعدة مطابقة الـAI)
   totalDataRows: number
   drafts: ProductDraft[]
   stats: { extracted: number; skipped: number; priceBelowCost: number; zeroStock: number }
@@ -138,6 +139,12 @@ export function extractTable(buffer: ArrayBuffer | Uint8Array | Buffer, override
   const mapping: Mapping = override ?? suggested
   const dataRows = rows.slice(headerRowIndex + 1)
   const { drafts, stats } = buildDrafts(dataRows, mapping)
+  // عيّنة صفوف غير فارغة (لمطالبة الـAI) — نحدّها بالأعمدة المعنونة لتقليل الضجيج.
+  const maxCol = headers.length ? Math.max(...headers.map((h) => h.index)) : 0
+  const sampleRows = dataRows
+    .filter((r) => (r || []).some((c) => String(c ?? "").trim()))
+    .slice(0, 5)
+    .map((r) => Array.from({ length: maxCol + 1 }, (_, i) => String((r as unknown[])[i] ?? "").slice(0, 40)))
 
   const warnings: string[] = []
   if (mapping.name == null) warnings.push("لم نتعرّف على عمود «اسم المنتج» — اختره يدويًا.")
@@ -148,5 +155,5 @@ export function extractTable(buffer: ArrayBuffer | Uint8Array | Buffer, override
   if (stats.skipped > 0) warnings.push(`تخطّينا ${stats.skipped} صفًّا (بلا اسم أو بسعر غير صالح — غالبًا صفوف فارغة/ملخّص).`)
   if (stats.priceBelowCost > 0) warnings.push(`${stats.priceBelowCost} منتج سعره أقل من تكلفته في الملف — صحّحنا التكلفة = السعر. راجعها.`)
 
-  return { sheetNames: wb.SheetNames, sheetName, headerRowIndex, headers, mapping, totalDataRows: dataRows.length, drafts, stats, warnings }
+  return { sheetNames: wb.SheetNames, sheetName, headerRowIndex, headers, mapping, sampleRows, totalDataRows: dataRows.length, drafts, stats, warnings }
 }

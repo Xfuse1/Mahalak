@@ -12,7 +12,7 @@ import { Label } from "../../../components/ui/label"
 import { Spinner } from "../../../components/ui/spinner"
 import { useToast } from "../../../components/ui/toast"
 import { useAuth } from "../../../lib/auth-context"
-import { parseImportFile, commitImport } from "../../../lib/actions/import"
+import { parseImportFile, commitImport, startImageFetch } from "../../../lib/actions/import"
 import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, Loader2, Package } from "lucide-react"
 
 type HeaderCell = { index: number; label: string }
@@ -26,6 +26,7 @@ type ParseRes = {
   preview: Draft[]
   stats: { extracted: number; skipped: number; priceBelowCost: number; zeroStock: number }
   warnings: string[]
+  aiUsed?: boolean
 }
 
 const FIELDS: { key: string; label: string; required?: boolean }[] = [
@@ -57,6 +58,21 @@ export default function ImportPage() {
   const [finished, setFinished] = useState<{ created: number } | null>(null)
   // موضع آخر دفعة نجحت — يبقى ثابتًا عبر إعادة المحاولة فيُكمّل النشر من حيث وقف بدل التكرار من الصفر.
   const [committedOffset, setCommittedOffset] = useState(0)
+  const [imgFetching, setImgFetching] = useState(false)
+  const [imgQueued, setImgQueued] = useState<number | null>(null)
+
+  const doFetchImages = async () => {
+    setImgFetching(true)
+    try {
+      const r = await startImageFetch()
+      if (r.ok) setImgQueued(r.queued)
+      else toast.error(r.error === "rate_limited" ? "استنى شوية وأعد المحاولة" : "تعذّر بدء جلب الصور")
+    } catch {
+      toast.error("تعذّر الاتصال بالخادم")
+    } finally {
+      setImgFetching(false)
+    }
+  }
 
   useEffect(() => {
     if (isLoading) return
@@ -205,7 +221,10 @@ export default function ImportPage() {
             {/* مطابقة الأعمدة */}
             <Card className="border-0 shadow-sm rounded-2xl">
               <CardContent className="p-5">
-                <h2 className="font-bold mb-1 text-gray-900">مطابقة الأعمدة</h2>
+                <h2 className="font-bold mb-1 text-gray-900 flex items-center gap-2">
+                  مطابقة الأعمدة
+                  {res.aiUsed && <span className="text-[11px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">✨ بمساعدة الذكاء الاصطناعي</span>}
+                </h2>
                 <p className="text-xs text-gray-500 mb-4">تعرّفنا على {res.total} منتج (صف العناوين رقم {res.headerRowIndex + 1}). صحّح أي عمود لو المطابقة غلط.</p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {FIELDS.map((f) => (
@@ -276,10 +295,29 @@ export default function ImportPage() {
             <Card className="border-0 shadow-sm rounded-2xl">
               <CardContent className="p-5">
                 {finished ? (
-                  <div className="flex flex-col items-center gap-2 py-4 text-center">
+                  <div className="flex flex-col items-center gap-3 py-4 text-center">
                     <CheckCircle2 className="h-12 w-12 text-green-500" />
                     <p className="font-bold text-gray-900">تم استيراد {finished.created} منتج بنجاح</p>
-                    <Button onClick={() => router.push("/seller/products")} className="mt-2">عرض منتجاتي</Button>
+
+                    {/* جلب الصور (بموافقة التاجر) */}
+                    <div className="w-full max-w-md border-t border-gray-100 pt-3 mt-1">
+                      {imgQueued == null ? (
+                        <>
+                          <p className="text-sm text-gray-600 mb-2">
+                            عايز نجيب صور للمنتجات اللي مالهاش صورة؟ نحاول بالباركود من قاعدة منتجات مرخّصة (والبحث بالاسم يتفعّل لاحقًا بمراجعتك). بيتم في الخلفية على دفعات.
+                          </p>
+                          <Button variant="outline" disabled={imgFetching} onClick={doFetchImages}>
+                            {imgFetching ? <><Loader2 className="h-4 w-4 animate-spin me-2" /> جارٍ…</> : "✨ ابدأ جلب الصور"}
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-sm text-green-700">
+                          ✅ اتضاف {imgQueued} منتج لقائمة جلب الصور — بيتجابوا في الخلفية على دفعات، وهتظهر على منتجاتك تدريجيًّا.
+                        </p>
+                      )}
+                    </div>
+
+                    <Button onClick={() => router.push("/seller/products")} className="mt-1">عرض منتجاتي</Button>
                   </div>
                 ) : (
                   <>
