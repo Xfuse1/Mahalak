@@ -6,6 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "محلك — سوق الحي المصري",
     short_name: "محلك",
     description: "اكتشف أفضل المنتجات والمتاجر المحلية في حيّك واطلبها بسهولة مع الدفع عند الاستلام.",
+    id: "/",
     start_url: "/",
     display: "standalone",
     background_color: "#FBF8F1",
