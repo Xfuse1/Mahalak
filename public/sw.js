@@ -40,7 +40,10 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
+      // ضمان أفضل-جهد: لو فشل تخزين صفحة الأوفلاين وقت install نعيد المحاولة عند التفعيل،
+      // فلا يواجه العميل 504 فارغة لو فُقد الاتصال قبل أول تنقّل ناجح.
+      .then(() => ensureOffline().catch(() => {})),
   )
 })
 
@@ -131,7 +134,10 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
-        if (client.url.includes(link) && "focus" in client) return client.focus()
+        // نطابق المسار لا includes: مع link="/" كانت includes تركّز أي لسان مفتوح في النطاق.
+        if ("focus" in client) {
+          try { if (new URL(client.url).pathname === new URL(link, self.location.origin).pathname) return client.focus() } catch {}
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(link)
       return undefined

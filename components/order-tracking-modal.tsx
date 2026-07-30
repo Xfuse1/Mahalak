@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import { MapPin, Phone, Store, Calendar, Hash, Loader2, Truck, Navigation } from "lucide-react"
@@ -74,6 +74,8 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
     const [bidBusy, setBidBusy] = useState<string | null>(null)
     const [bidError, setBidError] = useState<string | null>(null)
     const [handled, setHandled] = useState<string[]>([])
+    // حارس in-flight متزامن: setBidBusy حالة React غير متزامنة، فضغط مزدوج سريع كان يُطلق respondToBid مرّتين.
+    const inFlight = useRef<Set<string>>(new Set())
 
     // تتبّع حيّ: نستطلع الخادم كل 15ث أثناء فتح النافذة والطلب في حالة حيّة — يجلب عروض الأسعار
     // الطازجة وموقع السائق المباشر وحالة الطلب الحيّة.
@@ -84,19 +86,26 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
             return
         }
         let cancelled = false
+        let iv: ReturnType<typeof setInterval> | undefined
         const poll = async () => {
             try {
                 const res = await getOrderTracking(order.id)
-                if (!cancelled) setTracking(res.found ? res : null)
+                if (cancelled) return
+                setTracking(res.found ? res : null)
+                // بلوغ حالة نهائية/غير حيّة ⇒ لا داعي لاستطلاع دوري بعدها
+                if (res.found && res.status && !POLL_STATUSES.has(res.status)) {
+                    cancelled = true
+                    if (iv) clearInterval(iv)
+                }
             } catch {
                 /* أفضل-جهد */
             }
         }
         poll()
-        const iv = setInterval(poll, 15000)
+        if (!cancelled) iv = setInterval(poll, 15000)
         return () => {
             cancelled = true
-            clearInterval(iv)
+            if (iv) clearInterval(iv)
         }
     }, [isOpen, order.id, order.status])
 
@@ -115,6 +124,9 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
     ).filter((b) => !handled.includes(bidSig(b)))
 
     const onBid = async (b: { driver_id: string; created_at?: string }, accept: boolean) => {
+        const sig = bidSig(b)
+        if (inFlight.current.has(sig)) return
+        inFlight.current.add(sig)
         setBidBusy(b.driver_id)
         setBidError(null)
         try {
@@ -128,6 +140,7 @@ export function OrderTrackingModal({ order, isOpen, onClose }: OrderTrackingModa
         } catch {
             setBidError(t("تعذّر الاتصال بالخادم", "Could not reach the server"))
         } finally {
+            inFlight.current.delete(sig)
             setBidBusy(null)
         }
     }
