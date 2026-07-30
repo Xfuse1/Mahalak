@@ -122,10 +122,14 @@ export function buildDrafts(dataRows: unknown[][], mapping: Mapping) {
   return { drafts, stats: { extracted: drafts.length, skipped, priceBelowCost, zeroStock } }
 }
 
+// سقف صفوف التحليل (أعلى من سقف المنتجات 20000 + صفوف العنوان) — ملف مصمَّم خصيصًا كان يمكن أن
+// ينتشر في الذاكرة قبل بلوغ MAX_PRODUCTS، والتحليل يتكرّر لكل دفعة commit (OOM على Vercel Hobby).
+const MAX_PARSE_ROWS = 30000
+
 // نقطة الدخول: يستخرج الجدول من buffer الملف (xls/xlsx/csv) ويُرجّع المطابقة والمسودّات والتحذيرات.
 // override يسمح للتاجر بتصحيح المطابقة (يُدمج فوق المقترحة).
 export function extractTable(buffer: ArrayBuffer | Uint8Array | Buffer, override?: Mapping): ExtractResult {
-  const wb = XLSX.read(buffer, { type: "array", cellDates: false })
+  const wb = XLSX.read(buffer, { type: "array", cellDates: false, sheetRows: MAX_PARSE_ROWS })
   const sheetName = wb.SheetNames[0]
   const ws = wb.Sheets[sheetName]
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, defval: "" })

@@ -4,12 +4,82 @@
 //    (مفاتيح جوجل). نتائج البحث تحتاج مراجعة التاجر (حقوق الملكية) فتُحفظ كمرشَّح لا كصورة نهائية.
 // الصور تُنزَّل وتُعاد استضافتها على R2 (تحكّم + ثبات) وتُخزَّن كـ«مفتاح».
 import { randomUUID } from "node:crypto"
+import { lookup } from "node:dns/promises"
 import { putObject } from "@/lib/storage/r2"
 import { getAdminDb } from "@/lib/firebase/admin"
 import { logError } from "@/lib/logger"
 
 const MAX_IMG_BYTES = 5 * 1024 * 1024
-const EXT_BY_TYPE: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }
+const TYPE_BY_EXT: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" }
+
+// عنوان خاص/محلي؟ (IPv4: 0.x، 10.x، 127.x، 169.254.x، 172.16–31.x، 192.168.x، 100.64–127.x —
+// IPv6: ::1، ::، fe80:، fc/fd، والمعيّنة ::ffff:… بصيغتيها النقطية والسداسية نفحص جزءها الـIPv4).
+function isPrivateIp(ip: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip)
+  if (m) {
+    const a = Number(m[1]), b = Number(m[2])
+    // يبدو IPv4 لكن أوكتته خارج النطاق: نعتبره غير آمن (مقفول عند الشك) بدل السماح به.
+    if (a > 255 || b > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) return true
+    if (a === 0 || a === 10 || a === 127) return true
+    if (a === 169 && b === 254) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 100 && b >= 64 && b <= 127) return true
+    return false
+  }
+  const v6 = ip.toLowerCase()
+  if (v6 === "::1" || v6 === "::") return true
+  if (v6.startsWith("fe80:") || v6.startsWith("fc") || v6.startsWith("fd")) return true
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(v6)
+  if (mapped) return isPrivateIp(mapped[1])
+  // الصيغة السداسية ::ffff:HHHH:HHHH (كل هكستيت 1–4 خانات hex = 16 بتًا من الـIPv4؛ «1» تعني 0x0001).
+  // تصل من مسار DNS المُحلَّل (lookup قد يعيد عنوانًا معيّنًا من سجل AAAA). مثال: 7f00:1 = 127.0.0.1.
+  const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v6)
+  if (mappedHex) {
+    const h1 = parseInt(mappedHex[1], 16)
+    const h2 = parseInt(mappedHex[2], 16)
+    return isPrivateIp(`${(h1 >> 8) & 255}.${h1 & 255}.${(h2 >> 8) & 255}.${h2 & 255}`)
+  }
+  return false
+}
+
+// يقبل فقط روابط http/https العامة: يرفض localhost وأي host يُحلّ (حرفيًّا أو عبر DNS) لعنوان
+// خاص/محلي، ويرفض عند فشل التحليل (مقفول عند الشك). حماية SSRF لما يصير الرابط متأثّرًا بالتاجر.
+async function isSafePublicUrl(u: string): Promise<boolean> {
+  let url: URL
+  try {
+    url = new URL(u)
+  } catch {
+    return false
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false
+  const host = url.hostname.toLowerCase()
+  if (host === "localhost" || host.endsWith(".localhost")) return false
+  const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host
+  // عنوان IPv4 نقطي حرفي: فحص مباشر بلا DNS.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(bare)) return !isPrivateIp(bare)
+  // أي IPv6 حرفي يُرفض قاطعًا: محلّل URL يحوّل ::ffff:a.b.c.d النقطية إلى سداسية (::ffff:7f00:1)
+  // فيفوت فحص الصيغة النقطية، وروابط الصور المشروعة تستخدم أسماء مضيفات لا IPv6 حرفيًّا إطلاقًا.
+  if (bare.includes(":")) return false
+  try {
+    const addrs = await lookup(host, { all: true })
+    if (!addrs.length) return false
+    return addrs.every((a) => !isPrivateIp(a.address))
+  } catch {
+    return false
+  }
+}
+
+// يستنتج امتداد الصورة من أوائل البايتات (توقيع الملف) لا من ترويسة الخادم التي قد يزيّفها المصدر.
+function sniffImageExt(buf: Buffer): string | null {
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "png"
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg"
+  if (buf.length >= 4 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return "gif" // "GIF8"
+  if (buf.length >= 12 &&
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && // "RIFF"
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "webp" // "WEBP"
+  return null
+}
 
 // باركود صالح (GTIN 8–14 رقمًا).
 export function isValidBarcode(bc?: string): boolean {
@@ -47,18 +117,20 @@ export async function searchImageByName(_name: string): Promise<string | null> {
 // ينزّل صورة من رابط ويعيد استضافتها على R2 العام؛ يعيد المفتاح أو null.
 export async function fetchAndStoreImage(sourceUrl: string, storeId: string, timeoutMs = 12000): Promise<string | null> {
   if (!/^https?:\/\//.test(sourceUrl)) return null
+  if (!(await isSafePublicUrl(sourceUrl))) return null // SSRF: نرفض العناوين الداخلية/المحلية
   try {
-    const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(timeoutMs) })
+    // redirect: "error" كي لا تتخطّى إعادةُ توجيه إلى host داخلي فحصَ isSafePublicUrl.
+    const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(timeoutMs), redirect: "error" })
     if (!res.ok) return null
-    const type = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase()
-    const ext = EXT_BY_TYPE[type]
-    if (!ext) return null // ليست صورة معروفة
     const len = Number(res.headers.get("content-length") || 0)
     if (len && len > MAX_IMG_BYTES) return null
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.byteLength > MAX_IMG_BYTES || buf.byteLength < 100) return null
+    // النوع يُستنتج من توقيع البايتات لا من ترويسة content-type (قد يعلن المصدر image/png لجسم ليس صورة).
+    const ext = sniffImageExt(buf)
+    if (!ext) return null // ليست صورة معروفة
     const key = `products/${storeId}/imp-${randomUUID()}.${ext}`
-    await putObject("public", key, buf, type)
+    await putObject("public", key, buf, TYPE_BY_EXT[ext])
     return key
   } catch (e) {
     logError("[import-images] fetchStore", e)
