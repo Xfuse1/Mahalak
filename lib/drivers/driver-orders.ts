@@ -32,6 +32,11 @@ export type DriverOrder = {
   landmark?: string
   delivery_latitude?: number
   delivery_longitude?: number
+  // لقطة موقع/عنوان المتجر (نقطة الاستلام) — تُكشف فقط بعد الإسناد (scope="assigned") مثل بيانات العميل
+  store_name?: string
+  store_address?: string
+  store_latitude?: number
+  store_longitude?: number
   offer_expires_at_ms?: number // للعروض المتاحة: وقت انتهاء العرض (عدّاد تنازلي في التطبيق)
   items?: DriverOrderItem[] // الطلب الأحادي
   pickup_stops?: PickupStop[] // المتعدد (كود التسليم ليس داخل المحطات — هو على مستوى الطلب فنُسقطه)
@@ -51,12 +56,16 @@ function str(v: unknown): string | undefined {
 
 // إعادة بناء محطات الاستلام بقائمة سماح صريحة (نفس ضمان الطلب الأحادي) — لا نمرّر أي حقل غير مُدرَج
 // من مستند Firestore (دفاع عمق ضد تسريب حقول مستقبلية قد تُكتب داخل pickup_stops).
-function mapPickupStops(raw: unknown): PickupStop[] {
+// full=false (تغذية العروض قبل القبول) يُبقي الموقع الدقيق للمتجر مخفيًّا — يُكشف فقط بعد الإسناد.
+function mapPickupStops(raw: unknown, full: boolean): PickupStop[] {
   if (!Array.isArray(raw)) return []
   const STATUSES = ["pending", "confirmed", "rejected", "picked_up"]
   return raw.map((s: Record<string, any>) => ({
     store_id: str(s?.store_id) || "",
     store_name: str(s?.store_name) || "",
+    ...(full && typeof s?.store_latitude === "number" ? { store_latitude: s.store_latitude } : {}),
+    ...(full && typeof s?.store_longitude === "number" ? { store_longitude: s.store_longitude } : {}),
+    ...(full && str(s?.store_address) ? { store_address: str(s?.store_address) } : {}),
     items: Array.isArray(s?.items)
       ? s.items.map((it: Record<string, any>) => ({
           product_id: str(it?.product_id) || "",
@@ -192,10 +201,15 @@ async function hydrateDriverOrders(
       landmark: full ? str(o.landmark) : undefined,
       delivery_latitude: full && o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
       delivery_longitude: full && o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
+      // موقع المتجر الدقيق (نقطة الاستلام) خلف نفس شرط الإسناد — لا يظهر في تغذية العروض
+      store_name: full ? str(o.store_name) : undefined,
+      store_address: full ? str(o.store_address) : undefined,
+      store_latitude: full && o.store_latitude != null ? num(o.store_latitude) : undefined,
+      store_longitude: full && o.store_longitude != null ? num(o.store_longitude) : undefined,
       distance_km: o.distance_km != null ? num(o.distance_km) : undefined,
       offer_expires_at_ms: o.offer_expires_at_ms != null ? num(o.offer_expires_at_ms) : undefined,
       ...(isMulti
-        ? { pickup_stops: mapPickupStops(o.pickup_stops) }
+        ? { pickup_stops: mapPickupStops(o.pickup_stops, full) }
         : { items: itemsByOrder.get(o.id) || [] }),
     }
   })

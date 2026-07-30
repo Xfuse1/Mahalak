@@ -88,6 +88,10 @@ type TimelineEntry = {
 export type PickupStop = {
   store_id: string
   store_name: string
+  // لقطة موقع/عنوان المتجر (نقطة الاستلام) وقت إنشاء الطلب — يعتمد عليها السائق للوصول للمتجر
+  store_latitude?: number | null
+  store_longitude?: number | null
+  store_address?: string | null
   items: {
     product_id: string
     name: string
@@ -760,7 +764,8 @@ export async function createOrder(orderData: {
       // FIX 7: رفض الطلبات للمتاجر المحظورة (is_approved === false) — نقرأ مستند المتجر داخل المعاملة.
       // المتاجر القديمة/قيد المراجعة (بلا الحقل) تبقى مسموحة (mirror getStores !== false).
       const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
-      if ((storeUserSnap.data() as { store?: { is_approved?: boolean } } | undefined)?.store?.is_approved === false) {
+      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
+      if (storeInfo?.is_approved === false) {
         throw new Error("Store not available")
       }
       // Step 1: Read and verify stock + prices atomically
@@ -861,6 +866,12 @@ export async function createOrder(orderData: {
         orderPayload.delivery_latitude = Number(orderData.delivery_latitude)
         orderPayload.delivery_longitude = Number(orderData.delivery_longitude)
       }
+
+      // لقطة موقع/عنوان المتجر (نقطة الاستلام) من نفس قراءة مستند المتجر أعلاه — تُكتب شرطيًّا فقط عند توفّر القيمة
+      if (storeInfo?.name) orderPayload.store_name = String(storeInfo.name)
+      if (storeInfo?.address) orderPayload.store_address = String(storeInfo.address)
+      if (typeof storeInfo?.latitude === "number") orderPayload.store_latitude = Number(storeInfo.latitude)
+      if (typeof storeInfo?.longitude === "number") orderPayload.store_longitude = Number(storeInfo.longitude)
 
       // Step 3: Create order atomically
       transaction.set(orderRef, orderPayload)
@@ -986,7 +997,7 @@ export async function createDispatchOrder(orderData: {
         }
       }
       const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
-      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; latitude?: number; longitude?: number } } | undefined)?.store
+      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
       if (storeInfo?.is_approved === false) {
         throw new Error("Store not available")
       }
@@ -1075,6 +1086,11 @@ export async function createDispatchOrder(orderData: {
       if (orderData.delivery_state) orderPayload.delivery_state = orderData.delivery_state
       if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
       if (orderData.landmark) orderPayload.landmark = orderData.landmark
+      // لقطة موقع/عنوان المتجر (نقطة الاستلام) من نفس قراءة مستند المتجر أعلاه — تُكتب شرطيًّا فقط عند توفّر القيمة
+      if (storeInfo?.name) orderPayload.store_name = String(storeInfo.name)
+      if (storeInfo?.address) orderPayload.store_address = String(storeInfo.address)
+      if (typeof storeInfo?.latitude === "number") orderPayload.store_latitude = Number(storeInfo.latitude)
+      if (typeof storeInfo?.longitude === "number") orderPayload.store_longitude = Number(storeInfo.longitude)
       if (custLat !== undefined && custLng !== undefined) {
         orderPayload.delivery_latitude = Number(custLat)
         orderPayload.delivery_longitude = Number(custLng)
@@ -1535,11 +1551,15 @@ export async function createMultiStoreOrder(orderData: {
       const uniqueStoreIds = Array.from(
         new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean)),
       ) as string[]
+      // نلتقط من نفس القراءة لقطة موقع/عنوان كل متجر (نقطة الاستلام) لتُخزَّن على محطات الطلب
+      const storeMeta = new Map<string, { name?: string; address?: string; latitude?: number; longitude?: number }>()
       for (const sid of uniqueStoreIds) {
         const storeUserSnap = await transaction.get(db.collection("users").doc(sid))
-        if ((storeUserSnap.data() as { store?: { is_approved?: boolean } } | undefined)?.store?.is_approved === false) {
+        const store = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
+        if (store?.is_approved === false) {
           throw new Error("Store not available")
         }
+        storeMeta.set(sid, { name: store?.name, address: store?.address, latitude: store?.latitude, longitude: store?.longitude })
       }
       // Step 1: Read and verify stock + prices atomically.
       // تجميع الكميات لكل product_id عبر كل المحطات — للفحص والخصم مرة واحدة فقط، فلا يتجاوز
@@ -1616,14 +1636,21 @@ export async function createMultiStoreOrder(orderData: {
       const total = subtotal + serverDeliveryPrice
 
       // Prepare pickup stops with default status
-      const stops: PickupStop[] = verifiedStops.map((stop) => ({
-        ...stop,
-        status: "pending",
-        confirmed_at: null,
-        picked_up_at: null,
-        rejected_at: null,
-        rejection_reason: null,
-      }))
+      const stops: PickupStop[] = verifiedStops.map((stop) => {
+        const meta = storeMeta.get(stop.store_id)
+        return {
+          ...stop,
+          status: "pending",
+          confirmed_at: null,
+          picked_up_at: null,
+          rejected_at: null,
+          rejection_reason: null,
+          // لقطة موقع/عنوان المتجر لهذه المحطة — شرطيًّا فقط عند توفّر القيمة (store_name يأتي عبر ...stop)
+          ...(typeof meta?.latitude === "number" ? { store_latitude: meta.latitude } : {}),
+          ...(typeof meta?.longitude === "number" ? { store_longitude: meta.longitude } : {}),
+          ...(meta?.address ? { store_address: String(meta.address) } : {}),
+        }
+      })
       const storeIds = Array.from(new Set(stops.map((stop) => stop.store_id).filter(Boolean)))
 
       const orderPayload: Record<string, unknown> = {
@@ -1823,14 +1850,14 @@ export async function createMultiStoreDispatchOrder(orderData: {
           return { orderId: String(idemDoc.data()?.order_id || ""), orderPayload: null as Record<string, unknown> | null, stops: [] as PickupStop[], deduped: true }
         }
       }
-      // نقرأ مستندات المتاجر: نرفض المحظور، ونلتقط إحداثياتها لحساب رسم العدّاد.
+      // نقرأ مستندات المتاجر: نرفض المحظور، ونلتقط إحداثياتها لحساب رسم العدّاد + لقطة موقع/عنوان كل متجر (نقطة الاستلام).
       const uniqueStoreIds = Array.from(new Set((orderData.pickup_stops || []).map((s) => s.store_id).filter(Boolean))) as string[]
-      const storeCoords = new Map<string, { lat?: number; lng?: number }>()
+      const storeCoords = new Map<string, { lat?: number; lng?: number; name?: string; address?: string }>()
       for (const sid of uniqueStoreIds) {
         const storeUserSnap = await transaction.get(db.collection("users").doc(sid))
-        const store = (storeUserSnap.data() as { store?: { is_approved?: boolean; latitude?: number; longitude?: number } } | undefined)?.store
+        const store = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
         if (store?.is_approved === false) throw new Error("Store not available")
-        storeCoords.set(sid, { lat: store?.latitude, lng: store?.longitude })
+        storeCoords.set(sid, { lat: store?.latitude, lng: store?.longitude, name: store?.name, address: store?.address })
       }
 
       // تجميع الكميات + فحص المخزون والسعر ذرّيًا (نفس منطق createMultiStoreOrder).
@@ -1867,7 +1894,12 @@ export async function createMultiStoreDispatchOrder(orderData: {
           if (owner && owner !== stop.store_id) throw new Error("Item does not belong to store")
           return { ...item, quantity: validateQuantity(item.quantity), price: priceByProduct.get(item.product_id) ?? 0 }
         })
-        return { ...stop, items: verifiedItems, subtotal: verifiedItems.reduce((s, it) => s + it.price * it.quantity, 0), status: "pending" as const, confirmed_at: null, picked_up_at: null, rejected_at: null, rejection_reason: null }
+        const meta = storeCoords.get(stop.store_id)
+        // لقطة موقع/عنوان المتجر لهذه المحطة — شرطيًّا فقط عند توفّر القيمة (store_name يأتي عبر ...stop)
+        return { ...stop, items: verifiedItems, subtotal: verifiedItems.reduce((s, it) => s + it.price * it.quantity, 0), status: "pending" as const, confirmed_at: null, picked_up_at: null, rejected_at: null, rejection_reason: null,
+          ...(typeof meta?.lat === "number" ? { store_latitude: meta.lat } : {}),
+          ...(typeof meta?.lng === "number" ? { store_longitude: meta.lng } : {}),
+          ...(meta?.address ? { store_address: String(meta.address) } : {}) }
       })
       const subtotal = verifiedStops.reduce((s, stop) => s + stop.subtotal, 0)
 
