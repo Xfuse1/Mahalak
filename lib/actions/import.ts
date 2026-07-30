@@ -82,6 +82,8 @@ export async function commitImport(formData: FormData) {
   const defaultCategory = String(formData.get("defaultCategory") || "").trim().slice(0, 60) || "عام"
   const offset = Math.max(0, Number(formData.get("offset") || 0))
   const limit = Math.min(Math.max(1, Number(formData.get("limit") || COMMIT_CHUNK_MAX)), COMMIT_CHUNK_MAX)
+  // معرّف جلسة الاستيراد من العميل (يُعقَّم): يجعل إعادة التزام نفس الدفعة تكتب فوق نفس المستندات.
+  const importId = String(formData.get("importId") || "").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 60)
 
   // تحقّق ملكية + اعتماد المتجر مرة واحدة (بدل createProduct لكل منتج) — ثم دُفعة كتابة.
   const db = getAdminDb()
@@ -97,7 +99,10 @@ export async function commitImport(formData: FormData) {
     const now = new Date().toISOString()
     const batch = db.batch()
     let created = 0
-    for (const d of chunk) {
+    // فهرس الحلقة i على chunk هو الفهرس المحلي للصف؛ الفهرس العام = offset + i ولا يتأثر بالصفوف
+    // المتخطّاة (continue)، فيبقى الربط صف↔معرّف ثابتًا عبر إعادة المحاولة.
+    for (let i = 0; i < chunk.length; i++) {
+      const d = chunk[i]
       if (!d.name || !Number.isFinite(d.price) || d.price <= 0) continue
       let cost = Number.isFinite(d.cost_price) && d.cost_price > 0 ? d.cost_price : d.price
       if (cost > d.price) cost = d.price
@@ -125,7 +130,14 @@ export async function commitImport(formData: FormData) {
         created_at: now,
         updated_at: now,
       }
-      batch.set(db.collection("products").doc(), payload)
+      if (importId) {
+        // معرّف deterministic لكل صف داخل جلسة الاستيراد: إعادة التزام نفس الدفعة بعد انقطاع
+        // الرد تكتب فوق نفس المستندات (idempotent) بدل إنشاء منتجات مكرَّرة.
+        batch.set(db.collection("products").doc(`imp_${uid}_${importId}_${offset + i}`), payload)
+      } else {
+        // توافق خلفي: عميل بلا importId يُبقي السلوك القديم بمعرّف عشوائي.
+        batch.set(db.collection("products").doc(), payload)
+      }
       created++
     }
     if (created > 0) await batch.commit()

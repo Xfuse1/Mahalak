@@ -42,6 +42,12 @@ const FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: "image", label: "رابط الصورة" },
 ]
 
+// معرّف عشوائي لجلسة استيراد واحدة — crypto.randomUUID مع احتياط بسيط لو غير متاح.
+const genImportId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `imp-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+
 export default function ImportPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
@@ -58,6 +64,8 @@ export default function ImportPage() {
   const [finished, setFinished] = useState<{ created: number } | null>(null)
   // موضع آخر دفعة نجحت — يبقى ثابتًا عبر إعادة المحاولة فيُكمّل النشر من حيث وقف بدل التكرار من الصفر.
   const [committedOffset, setCommittedOffset] = useState(0)
+  // معرّف جلسة الاستيراد — يُرسل مع كل دفعة كي تعيد الكتابة فوق نفس المستندات عند إعادة المحاولة.
+  const [importId, setImportId] = useState("")
   const [imgFetching, setImgFetching] = useState(false)
   const [imgQueued, setImgQueued] = useState<number | null>(null)
 
@@ -83,6 +91,7 @@ export default function ImportPage() {
     setParsing(true)
     setFinished(null)
     setCommittedOffset(0) // تحليل/مطابقة جديدة ⇒ استيراد جديد من الصفر
+    setImportId(genImportId()) // تحليل جديد ⇒ جلسة استيراد جديدة بمعرّف جديد
     try {
       const fd = new FormData()
       fd.set("file", f)
@@ -136,6 +145,7 @@ export default function ImportPage() {
         fd.set("defaultCategory", defaultCategory.trim() || "عام")
         fd.set("offset", String(offset))
         fd.set("limit", "400")
+        fd.set("importId", importId)
         const r = await commitImport(fd)
         if (!r.ok) {
           toast.error(
