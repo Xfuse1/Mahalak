@@ -651,10 +651,14 @@ export async function adminCancelDispatchOrder(orderId: string, reason?: string)
             return { ...stop, status: "cancelled" }
           })
         } else {
-          for (const itemDoc of itemsSnap.docs) {
-            const it = itemDoc.data() as Record<string, any>
-            const q = Number(it.quantity) || 0
-            if (it.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+          // on_the_way = السائق استلم البضاعة فعليًا فهي معه — لا نعيد المخزون (وإلا مخزون وهمي)،
+          // نظير تخطّي المحطات picked_up في الفرع المتعدد أعلاه.
+          if (o.status !== "on_the_way") {
+            for (const itemDoc of itemsSnap.docs) {
+              const it = itemDoc.data() as Record<string, any>
+              const q = Number(it.quantity) || 0
+              if (it.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+            }
           }
         }
       }
@@ -719,6 +723,9 @@ export async function adminReofferDispatchOrder(orderId: string) {
         offer_expires_at_ms: Date.now() + settings.offer_timeout_sec * 1000,
         offer_round: 1,
         rejected_by: [],
+        // نصفّر عروض المزايدة القديمة مع إعادة العرض — وإلا تراكمت واحتُسبت في سقف submitDriverBid
+        // (MAX_BIDS_PER_ORDER) فحُجب أي عرض جديد بعد تكرار إعادة العرض.
+        bids: [],
         dispatch_stalled: FieldValue.delete(),
         timeline: [...(Array.isArray(o.timeline) ? o.timeline : []), { status: "offering", timestamp: now, note: "إعادة عرض إدارية" }],
         updated_at: now,

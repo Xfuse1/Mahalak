@@ -57,6 +57,8 @@ export async function acceptOrderOffer(driverId: string, orderId: string): Promi
       if (!d) return { ok: false as const, error: "driver_not_found" }
       if (d.disabled === true) return { ok: false as const, error: "driver_disabled" }
       if ((d.isApproved ?? d.is_approved ?? false) !== true) return { ok: false as const, error: "driver_not_approved" }
+      // سائق أطفأ ورديّته (غير أونلاين) لا يُسنَد إليه طلب — تماثلًا مع submitDriverBid/respondToDriverBid.
+      if ((d.isOnline ?? d.is_online ?? false) !== true) return { ok: false as const, error: "driver_offline" }
       tx.update(ref, {
         driver_id: driverId,
         driver_name: d.name || "",
