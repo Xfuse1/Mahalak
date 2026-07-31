@@ -12,7 +12,7 @@ import { logError } from "../logger"
 import { createNotification, sendReviewRequestNotification } from "../notifications-internal"
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 import { sendPushToOwner } from "../server-push"
-import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings } from "../delivery/fee"
+import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings, splitDeliveryFee } from "../delivery/fee"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { checkRateLimit } from "../utils/rate-limit"
 import { PENDING_TIMEOUT_MS } from "../delivery/dispatch-timeout"
@@ -764,7 +764,7 @@ export async function createOrder(orderData: {
       // FIX 7: رفض الطلبات للمتاجر المحظورة (is_approved === false) — نقرأ مستند المتجر داخل المعاملة.
       // المتاجر القديمة/قيد المراجعة (بلا الحقل) تبقى مسموحة (mirror getStores !== false).
       const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
-      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
+      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number; free_shipping?: boolean; free_shipping_cap?: number } } | undefined)?.store
       if (storeInfo?.is_approved === false) {
         throw new Error("Store not available")
       }
@@ -825,7 +825,10 @@ export async function createOrder(orderData: {
 
       // Step 2: Calculate verified total (الكمية مُتحقَّقة، ورسوم التوصيل مُشتقّة من السائق)
       const verifiedSubtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const verifiedTotal = verifiedSubtotal + serverDeliveryPrice
+      // شحن مجاني: يقسّم أجرة السائق (serverDeliveryPrice) بين العميل والتاجر حسب إعداد المتجر.
+      // العميل يدفع ship.delivery_price؛ التاجر يتحمّل ship.merchant_absorbed؛ أجرة السائق ship.driver_fee ثابتة.
+      const ship = splitDeliveryFee(serverDeliveryPrice, storeInfo?.free_shipping === true, Number(storeInfo?.free_shipping_cap) || 0)
+      const verifiedTotal = verifiedSubtotal + ship.delivery_price
 
       const orderRef = db.collection("orders").doc()
 
@@ -855,7 +858,13 @@ export async function createOrder(orderData: {
       if (orderData.delivery_notes) orderPayload.delivery_notes = orderData.delivery_notes
       if (orderData.landmark) orderPayload.landmark = orderData.landmark
       if (orderData.delivery_company) orderPayload.delivery_company = orderData.delivery_company
-      orderPayload.delivery_price = serverDeliveryPrice
+      // شحن مجاني: delivery_price = ما يدفعه العميل؛ driver_fee = أجرة السائق الكاملة؛ merchant_absorbed = ما يتحمّله التاجر.
+      orderPayload.delivery_price = ship.delivery_price
+      orderPayload.driver_fee = ship.driver_fee
+      orderPayload.merchant_absorbed_delivery = ship.merchant_absorbed
+      orderPayload.is_free_shipping = storeInfo?.free_shipping === true && ship.merchant_absorbed > 0
+      orderPayload.free_shipping = storeInfo?.free_shipping === true
+      orderPayload.free_shipping_cap = Number(storeInfo?.free_shipping_cap) || 0
 
       // Add driver information
       if (orderData.driver_id) orderPayload.driver_id = orderData.driver_id
@@ -997,7 +1006,7 @@ export async function createDispatchOrder(orderData: {
         }
       }
       const storeUserSnap = await transaction.get(db.collection("users").doc(orderData.store_id))
-      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number } } | undefined)?.store
+      const storeInfo = (storeUserSnap.data() as { store?: { is_approved?: boolean; name?: string; address?: string; latitude?: number; longitude?: number; free_shipping?: boolean; free_shipping_cap?: number } } | undefined)?.store
       if (storeInfo?.is_approved === false) {
         throw new Error("Store not available")
       }
@@ -1062,7 +1071,9 @@ export async function createDispatchOrder(orderData: {
         typeof custLat === "number" && typeof custLng === "number"
           ? haversineKm(storeInfo.latitude, storeInfo.longitude, custLat, custLng)
           : null
-      const verifiedTotal = verifiedSubtotal + deliveryFee
+      // شحن مجاني: يقسّم رسم العدّاد (deliveryFee) بين العميل والتاجر حسب إعداد المتجر.
+      const ship = splitDeliveryFee(deliveryFee, storeInfo?.free_shipping === true, Number(storeInfo?.free_shipping_cap) || 0)
+      const verifiedTotal = verifiedSubtotal + ship.delivery_price
 
       const orderRef = db.collection("orders").doc()
       const orderPayload: Record<string, unknown> = {
@@ -1071,7 +1082,13 @@ export async function createDispatchOrder(orderData: {
         store_id: orderData.store_id,
         total: Number(verifiedTotal),
         delivery_address: orderData.delivery_address,
-        delivery_price: deliveryFee,
+        // شحن مجاني: delivery_price = ما يدفعه العميل؛ driver_fee = أجرة السائق الكاملة (للعرض والتسوية).
+        delivery_price: ship.delivery_price,
+        driver_fee: ship.driver_fee,
+        merchant_absorbed_delivery: ship.merchant_absorbed,
+        is_free_shipping: storeInfo?.free_shipping === true && ship.merchant_absorbed > 0,
+        free_shipping: storeInfo?.free_shipping === true,
+        free_shipping_cap: Number(storeInfo?.free_shipping_cap) || 0,
         status: "pending",
         pending_expires_at_ms: Date.now() + PENDING_TIMEOUT_MS, // مهلة تأكيد التاجر — يُصعَّد بعدها
         created_at: now,
@@ -1175,6 +1192,7 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
         ok: true as const,
         customerId: o.customer_id as string | undefined,
         deliveryPrice: typeof o.delivery_price === "number" ? o.delivery_price : undefined,
+        driverFee: typeof o.driver_fee === "number" ? o.driver_fee : (typeof o.delivery_price === "number" ? o.delivery_price : undefined),
         deliveryCity: typeof o.delivery_city === "string" ? o.delivery_city : undefined,
         distanceKm: typeof o.distance_km === "number" ? o.distance_km : undefined,
       }
@@ -1201,6 +1219,7 @@ export async function confirmDispatchOrder(orderId: string, storeId: string) {
       await notifyDriversOfOffer({
         id: orderId,
         delivery_price: out.deliveryPrice,
+        driver_fee: out.driverFee,
         delivery_city: out.deliveryCity,
         distance_km: out.distanceKm,
       })
@@ -1224,34 +1243,39 @@ export async function getDeliveryQuote(input: {
   customer_lng?: number
 }): Promise<
   | { enabled: false }
-  | { enabled: true; fee: number; distance_km: number | null; base_fare: number; per_km_rate: number }
+  | { enabled: true; fee: number; driver_fee: number; free_shipping: boolean; distance_km: number | null; base_fare: number; per_km_rate: number }
 > {
   const settings = await readDispatchSettings()
   if (!settings.enabled) return { enabled: false }
   try {
     const db = getAdminDb()
     const snap = await db.collection("users").doc(input.store_id).get()
-    const store = (snap.data() as { store?: { latitude?: number; longitude?: number } } | undefined)?.store
+    const store = (snap.data() as { store?: { latitude?: number; longitude?: number; free_shipping?: boolean; free_shipping_cap?: number } } | undefined)?.store
     const hasCoords =
       typeof store?.latitude === "number" &&
       typeof store?.longitude === "number" &&
       typeof input.customer_lat === "number" &&
       typeof input.customer_lng === "number"
-    const fee =
+    const rawFee =
       computeDeliveryFeeFromCoords(
         { lat: store?.latitude, lng: store?.longitude },
         { lat: input.customer_lat, lng: input.customer_lng },
         settings,
       ) ?? computeDeliveryFee(0, settings)
+    // شحن مجاني: نعرض للعميل نصيبه فقط (fee=0 لو التاجر يتحمّل الكل)؛ driver_fee = أجرة السائق الكاملة (تُعرض للسائق).
+    const ship = splitDeliveryFee(rawFee, store?.free_shipping === true, Number(store?.free_shipping_cap) || 0)
     const distance_km = hasCoords
       ? Number(haversineKm(store!.latitude!, store!.longitude!, input.customer_lat!, input.customer_lng!).toFixed(2))
       : null
-    return { enabled: true, fee, distance_km, base_fare: settings.base_fare, per_km_rate: settings.per_km_rate }
+    return { enabled: true, fee: ship.delivery_price, driver_fee: ship.driver_fee, free_shipping: store?.free_shipping === true && ship.merchant_absorbed > 0, distance_km, base_fare: settings.base_fare, per_km_rate: settings.per_km_rate }
   } catch {
-    // fail-safe: لا نعطّل الـcheckout بسبب حساب المسافة — نرجّع فتح العداد فقط
+    // fail-safe: لا نعطّل الـcheckout بسبب حساب المسافة — نرجّع فتح العداد فقط (بلا شحن مجاني، تعذّرت قراءة المتجر)
+    const fallbackFee = computeDeliveryFee(0, settings)
     return {
       enabled: true,
-      fee: computeDeliveryFee(0, settings),
+      fee: fallbackFee,
+      driver_fee: fallbackFee,
+      free_shipping: false,
       distance_km: null,
       base_fare: settings.base_fare,
       per_km_rate: settings.per_km_rate,
@@ -1414,10 +1438,12 @@ export async function changeOrderDriver(
     // سعر التوصيل يُشتق من مستند السائق سيرفر-سايد — لا نثق بقيمة العميل (كانت تسمح بجعله 0).
     const safeDeliveryPrice = sanitizeMoney(Number(driverData?.price ?? 0))
 
-    // Calculate new total (subtract old delivery price, add new)
+    // Calculate new total (subtract old delivery price, add new). شحن مجاني: نقسّم أجرة السائق الجديدة
+    // حسب إعداد المتجر المخزَّن على الطلب (free_shipping/cap) — العميل يدفع نصيبه فقط.
     const oldDeliveryPrice = orderData.delivery_price || 0
     const productTotal = (orderData.total || 0) - oldDeliveryPrice
-    const newTotal = productTotal + safeDeliveryPrice
+    const ship = splitDeliveryFee(safeDeliveryPrice, orderData.free_shipping === true, Number(orderData.free_shipping_cap) || 0)
+    const newTotal = productTotal + ship.delivery_price
 
     // Create timeline entry
     const timelineEntry: TimelineEntry = {
@@ -1431,7 +1457,10 @@ export async function changeOrderDriver(
       status: "pending", // Reset to pending for new driver to accept
       driver_id: newDriverId,
       driver_name: verifiedDriverName,
-      delivery_price: safeDeliveryPrice,
+      delivery_price: ship.delivery_price,
+      driver_fee: ship.driver_fee,
+      merchant_absorbed_delivery: ship.merchant_absorbed,
+      is_free_shipping: orderData.free_shipping === true && ship.merchant_absorbed > 0,
       total: newTotal,
       driver_rejected_at: null,
       driver_rejection_reason: null,
@@ -2020,14 +2049,14 @@ export async function confirmDispatchStop(orderId: string, storeId: string) {
         update.dispatch_stalled = FieldValue.delete() // يزول التعثّر عند تأكيد كل المتاجر (لا إنذار كاذب)
       }
       tx.update(ref, update)
-      return { ok: true as const, allConfirmed, customerId: o.customer_id as string | undefined, deliveryPrice: o.delivery_price as number | undefined, deliveryCity: o.delivery_city as string | undefined, distanceKm: o.distance_km as number | undefined }
+      return { ok: true as const, allConfirmed, customerId: o.customer_id as string | undefined, deliveryPrice: o.delivery_price as number | undefined, driverFee: (typeof o.driver_fee === "number" ? o.driver_fee : o.delivery_price) as number | undefined, deliveryCity: o.delivery_city as string | undefined, distanceKm: o.distance_km as number | undefined }
     })
     if (!out.ok) return { success: false, error: out.error }
     if (out.allConfirmed) {
       try {
         if (out.customerId) await createNotification({ user_id: out.customerId, type: "order_status", title: "🛒 تأكّدت متاجر طلبك", title_en: "🛒 Your order's stores confirmed", message: "جاري البحث عن سائق لتوصيل طلبك.", message_en: "Finding a driver to deliver your order.", link: "/account", data: { order_id: orderId, status: "offering" } })
       } catch (e) { logError("[confirmDispatchStop] notify", e) }
-      try { await notifyDriversOfOffer({ id: orderId, delivery_price: out.deliveryPrice, delivery_city: out.deliveryCity, distance_km: out.distanceKm }) } catch (e) { logError("[confirmDispatchStop] push", e) }
+      try { await notifyDriversOfOffer({ id: orderId, delivery_price: out.deliveryPrice, driver_fee: out.driverFee, delivery_city: out.deliveryCity, distance_km: out.distanceKm }) } catch (e) { logError("[confirmDispatchStop] push", e) }
     }
     revalidatePath("/seller/orders")
     return { success: true, all_confirmed: out.allConfirmed }

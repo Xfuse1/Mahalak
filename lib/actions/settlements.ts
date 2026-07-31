@@ -68,8 +68,11 @@ export async function getStoreCodHoldings(): Promise<{
         orderType = "multi_store"
       } else {
         if (o.cod_settled === true) continue
-        // المستحق للمتجر = قيمة المنتجات = الإجمالي − أجرة التوصيل (subtotal لا يُخزَّن للأحادي).
-        owed = round2(num(o.total) - num(o.delivery_price))
+        // المستحق للمتجر = قيمة المنتجات = الإجمالي − أجرة السائق الكاملة (driver_fee). مع «الشحن المجاني»
+        // العميل يدفع أقل (delivery_price) لكن السائق يأخذ حقه كاملًا، فيُخصم من حصيلة المتجر عبر driver_fee.
+        // الطلبات القديمة بلا driver_fee ⇒ رجوع لـdelivery_price (نفس السلوك السابق). قد يصير المستحق سالبًا
+        // (تاجر تحمّل أكثر من قيمة منتجاته) — مقصود، لا نُصفّره (المتجر مدين للسائق ساعتها).
+        owed = round2(num(o.total) - (o.driver_fee != null ? num(o.driver_fee) : num(o.delivery_price)))
         orderType = "single"
       }
       holdings.push({

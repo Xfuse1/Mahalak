@@ -65,7 +65,7 @@ export default function DeliveryPage() {
   const [driverCommission, setDriverCommission] = useState<number>(0)
   // المرحلة 1 — تسعيرة التوزيع (خلف flag). null = لم تُجلب بعد؛ enabled=false = التوزيع مطفّي.
   const [dispatchQuote, setDispatchQuote] = useState<
-    | { enabled: true; fee: number; distance_km: number | null; base_fare: number; per_km_rate: number }
+    | { enabled: true; fee: number; driver_fee?: number; free_shipping?: boolean; distance_km: number | null; base_fare: number; per_km_rate: number }
     | { enabled: false }
     | null
   >(null)
@@ -170,7 +170,9 @@ export default function DeliveryPage() {
   const hasCoords = Number.isFinite(cLat) && Number.isFinite(cLng) && !(cLat === 0 && cLng === 0)
   const needsLocation = isDispatch && !hasCoords
   const meterFee = dispatchQuote && dispatchQuote.enabled ? dispatchQuote.fee : 0
-  // رسوم التوصيل: في التوزيع = رسوم العدّاد؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
+  // شحن مجاني: التاجر يتحمّل التوصيل ⇒ نصيب العميل = 0 (الخادم يحسبه؛ التسعيرة ترجّع نصيب العميل مباشرةً).
+  const freeShipping = isDispatch && dispatchQuote?.enabled === true && dispatchQuote.free_shipping === true
+  // رسوم التوصيل: في التوزيع = رسوم العدّاد (بعد الشحن المجاني)؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
   const deliveryPrice = isDispatch ? meterFee : (selectedDriverData?.price ?? 0)
   const grandTotal = total + deliveryPrice
 
@@ -612,11 +614,11 @@ export default function DeliveryPage() {
                     </p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-primary">{meterFee}</p>
-                    <p className="text-xs text-gray-500">{t("جنيه", "EGP")}</p>
+                    <p className="text-2xl font-bold text-primary">{freeShipping ? t("مجاني", "Free") : meterFee}</p>
+                    <p className="text-xs text-gray-500">{freeShipping ? t("شحن مجاني من المتجر", "Free from store") : t("جنيه", "EGP")}</p>
                   </div>
                 </div>
-                {dispatchQuote && dispatchQuote.enabled && dispatchQuote.distance_km != null && (
+                {dispatchQuote && dispatchQuote.enabled && dispatchQuote.distance_km != null && !freeShipping && (
                   <p className="text-xs text-gray-500 mt-3 text-center">
                     {t("فتح العداد", "Base")} {dispatchQuote.base_fare} + {dispatchQuote.per_km_rate}/{t("كم", "km")} × {dispatchQuote.distance_km} {t("كم", "km")}
                   </p>
@@ -635,7 +637,13 @@ export default function DeliveryPage() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">{t("التوصيل", "Delivery")}</span>
                 <span className="font-medium">
-                  {deliveryPrice > 0 ? `${deliveryPrice.toFixed(2)} ${t("جنيه", "EGP")}` : "-"}
+                  {freeShipping ? (
+                    <span className="text-green-600 font-bold">{t("شحن مجاني 🎉", "Free shipping 🎉")}</span>
+                  ) : deliveryPrice > 0 ? (
+                    `${deliveryPrice.toFixed(2)} ${t("جنيه", "EGP")}`
+                  ) : (
+                    "-"
+                  )}
                 </span>
               </div>
               <div className="border-t pt-4 flex justify-between items-center">

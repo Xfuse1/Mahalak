@@ -57,6 +57,7 @@ export async function sendPushToDriver(
 export async function notifyDriversOfOffer(order: {
   id: string
   delivery_price?: number
+  driver_fee?: number // أجرة السائق الكاملة — تُعرض للسائق (مع شحن مجاني delivery_price قد يكون 0 لكن السائق يأخذ حقه)
   delivery_city?: string
   distance_km?: number
   rejected_by?: string[]
@@ -75,7 +76,9 @@ export async function notifyDriversOfOffer(order: {
       .filter((d) => (d.isOnline ?? d.is_online ?? false) === true)
       .filter((d) => !rejected.has(d.id))
 
-    const fee = order.delivery_price != null ? `${order.delivery_price} ج` : ""
+    // نعرض أجرة السائق (driver_fee) لا سعر العميل — مع الشحن المجاني delivery_price=0 لكن السائق يأخذ حقه كاملًا.
+    const feeVal = order.driver_fee != null ? order.driver_fee : order.delivery_price
+    const fee = feeVal != null ? `${feeVal} ج` : ""
     const dist = order.distance_km != null ? ` • ${order.distance_km} كم` : ""
     const city = order.delivery_city ? ` • ${order.delivery_city}` : ""
     let notified = 0

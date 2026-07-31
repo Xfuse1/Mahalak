@@ -60,6 +60,24 @@ export function computeDeliveryFeeFromCoords(
   return computeDeliveryFee(km, s)
 }
 
+// يقسّم أجرة السائق الخام بين العميل والتاجر حسب إعداد «الشحن المجاني» للمتجر. جنيهات صحيحة غير سالبة.
+//  - بلا شحن مجاني: العميل يدفع الأجرة كاملة، التاجر لا يتحمّل شيئًا (السلوك القديم).
+//  - شحن مجاني + cap=0: التاجر يتحمّل الأجرة كاملة، العميل يدفع 0.
+//  - شحن مجاني + cap>0: التاجر يتحمّل حتى cap، والزيادة (إن وُجدت) على العميل.
+// driver_fee (أجرة السائق) لا تتغيّر أبدًا — يتغيّر فقط مَن يدفعها. المستخدَم في كل مسار يحدّد رسمًا
+// (إنشاء/تغيير سائق/قبول مزايدة/إعادة عرض) كي لا يفترق الحساب بين المسارات.
+export function splitDeliveryFee(
+  driverFee: number,
+  freeShipping: boolean,
+  cap: number,
+): { driver_fee: number; delivery_price: number; merchant_absorbed: number } {
+  const F = Math.max(0, Math.round(Number(driverFee) || 0))
+  if (!freeShipping) return { driver_fee: F, delivery_price: F, merchant_absorbed: 0 }
+  const c = Math.max(0, Math.round(Number(cap) || 0)) // 0 = يتحمّل الكل
+  const absorbed = c > 0 ? Math.min(F, c) : F
+  return { driver_fee: F, delivery_price: Math.max(0, F - absorbed), merchant_absorbed: absorbed }
+}
+
 // قراءة إعدادات التوزيع من settings/dispatch مع دمج الافتراضيات. fail-safe: أي خطأ يرجع الافتراضيات
 // (enabled=false) فلا يتعطّل شيء بسبب قراءة إعدادات.
 export async function readDispatchSettings(): Promise<DispatchSettings> {

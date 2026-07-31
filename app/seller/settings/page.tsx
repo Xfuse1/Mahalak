@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { getStoreByUserId, updateStore, createStore, uploadStoreImage, getCategoryNameById, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
 import { logError } from "../../../lib/logger"
 import Image from "next/image"
-import { Upload, Phone, MapPin, Loader2, CheckCircle } from "lucide-react"
+import { Upload, Phone, MapPin, Loader2, CheckCircle, Truck } from "lucide-react"
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
@@ -141,7 +141,9 @@ export default function SettingsPage() {
     working_days: defaultWorkingDays,
     support_email: "",
     whatsapp_number: "",
-    return_policy: defaultReturnPolicy
+    return_policy: defaultReturnPolicy,
+    free_shipping: false,
+    free_shipping_cap: 0,
   })
 
   useEffect(() => {
@@ -178,7 +180,9 @@ export default function SettingsPage() {
           working_days: storeData.working_days || defaultWorkingDays,
           support_email: storeData.support_email || user?.email || "",
           whatsapp_number: storeData.phone || "",
-          return_policy: storeData.return_policy || defaultReturnPolicy
+          return_policy: storeData.return_policy || defaultReturnPolicy,
+          free_shipping: storeData.free_shipping || false,
+          free_shipping_cap: storeData.free_shipping_cap || 0,
         })
         // Fetch fresh category name from Firebase by ID
         if (storeData.category_id) {
@@ -631,6 +635,63 @@ export default function SettingsPage() {
                     className="mt-2 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20"
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* شحن مجاني */}
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-primary" />
+                  {t("شحن مجاني", "Free Shipping")}
+                </CardTitle>
+                <CardDescription>
+                  {t(
+                    "تتحمّل أنت رسوم التوصيل عن العميل (تُخصم من حصيلتك). السائق يأخذ أجرته كاملة.",
+                    "You cover the delivery fee instead of the customer (deducted from your payout). The driver still gets paid in full.",
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-gray-800">{t("تفعيل الشحن المجاني", "Enable free shipping")}</p>
+                    <p className="text-sm text-gray-500">{t("العميل يدفع 0 للتوصيل", "Customer pays 0 for delivery")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formData.free_shipping}
+                    onClick={() => setFormData((p) => ({ ...p, free_shipping: !p.free_shipping }))}
+                    className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${formData.free_shipping ? "bg-primary" : "bg-gray-300"}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${formData.free_shipping ? "translate-x-1" : "translate-x-6"}`}
+                    />
+                  </button>
+                </div>
+                {formData.free_shipping && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <Label htmlFor="freeShipCap" className="text-gray-700 font-medium">
+                      {t("سقف ما تتحمّله لكل طلب (جنيه)", "Cap per order you cover (EGP)")}
+                    </Label>
+                    <Input
+                      id="freeShipCap"
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={formData.free_shipping_cap}
+                      onChange={(e) => setFormData((p) => ({ ...p, free_shipping_cap: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                      className="mt-2 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 max-w-[200px]"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {t(
+                        "0 = تتحمّل التوصيل كاملًا. أي رقم = تتحمّل حتى هذا الحدّ والباقي على العميل (يحميك في التوصيلات البعيدة).",
+                        "0 = cover the full delivery. Any number = cover up to this amount, the customer pays the rest (protects you on far deliveries).",
+                      )}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

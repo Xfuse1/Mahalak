@@ -1,6 +1,6 @@
 import { getAdminDb } from "@/lib/firebase/admin"
 import { FieldValue } from "firebase-admin/firestore"
-import { readDispatchSettings } from "@/lib/delivery/fee"
+import { readDispatchSettings, splitDeliveryFee } from "@/lib/delivery/fee"
 import { createNotification } from "@/lib/notifications-internal"
 import { sendPushToDriver } from "@/lib/delivery/driver-push"
 import { sendPushToOwner } from "@/lib/server-push"
@@ -164,10 +164,12 @@ export async function respondToDriverBid(
       // لا نُسند لسائق أطفأ ورديّته بعد تقديم العرض — متسق مع بثّ العروض (لا نُسند لسائق غير متاح).
       if ((d.isOnline ?? d.is_online ?? false) !== true) return { ok: false as const, error: "driver_offline" }
 
-      const oldFee = Number(o.delivery_price || 0)
-      const newFee = Number(bid.price)
-      // الإجمالي = المنتجات + التوصيل ⇒ نصحّحه بالفرق فقط (لا نلمس سعر المنتجات المتحقَّق سيرفر-سايد).
-      const newTotal = Math.max(0, Number(o.total || 0) + (newFee - oldFee))
+      // شحن مجاني: عرض السائق = أجرته الجديدة؛ نقسّمها بين العميل والتاجر حسب إعداد المتجر المخزَّن
+      // على الطلب. سعر المنتجات = الإجمالي − ما كان يدفعه العميل (delivery_price)، يبقى ثابتًا.
+      const subtotal = Math.max(0, Number(o.total || 0) - Number(o.delivery_price || 0))
+      const bidFee = Number(bid.price)
+      const ship = splitDeliveryFee(bidFee, o.free_shipping === true, Number(o.free_shipping_cap) || 0)
+      const newTotal = subtotal + ship.delivery_price
       const next = bids.map((b, i) =>
         i === idx ? { ...b, status: "accepted" as const } : b?.status === "pending" ? { ...b, status: "rejected" as const } : b,
       )
@@ -178,7 +180,10 @@ export async function respondToDriverBid(
       tx.update(ref, {
         driver_id: driverId,
         driver_name: d.name || "",
-        delivery_price: newFee,
+        delivery_price: ship.delivery_price,
+        driver_fee: ship.driver_fee,
+        merchant_absorbed_delivery: ship.merchant_absorbed,
+        is_free_shipping: o.free_shipping === true && ship.merchant_absorbed > 0,
         total: newTotal,
         status: "accepted",
         accepted_at: now,

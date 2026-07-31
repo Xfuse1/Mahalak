@@ -34,6 +34,9 @@ export type StoreRecord = {
   close_time?: string
   working_days?: string
   return_policy?: string
+  // شحن مجاني: التاجر يتحمّل أجرة التوصيل بدل العميل. cap = سقف ما يتحمّله لكل طلب (0/غياب = يتحمّل الكل).
+  free_shipping?: boolean
+  free_shipping_cap?: number | null
   is_approved?: boolean
   rating?: number
   created_at?: string
@@ -468,6 +471,14 @@ export async function updateStore(
     if (value !== undefined) {
       storeUpdates[`store.${key}`] = value
     }
+  }
+  // شحن مجاني: مُعقَّم صراحةً (لا يُنسخ خامًا) — boolean صريح وسقف رقمي صحيح غير سالب (0 = يتحمّل الكل).
+  const fdRaw = formData as Record<string, unknown>
+  if (fdRaw.free_shipping !== undefined) {
+    storeUpdates["store.free_shipping"] = fdRaw.free_shipping === true || fdRaw.free_shipping === "true"
+  }
+  if (fdRaw.free_shipping_cap !== undefined) {
+    storeUpdates["store.free_shipping_cap"] = Math.max(0, Math.floor(Number(fdRaw.free_shipping_cap) || 0))
   }
   if (typeof formData.name === "string") {
     storeUpdates["store_name_lower"] = normalizeStoreName(formData.name)

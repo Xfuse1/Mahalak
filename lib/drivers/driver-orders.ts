@@ -22,6 +22,7 @@ export type DriverOrder = {
   distance_km?: number // مسافة المتجر→العميل (تقدير للسائق قبل القبول)
   total: number
   delivery_price: number
+  driver_fee?: number // أجرة السائق الكاملة (= delivery_price بلا شحن مجاني؛ أكبر منه مع الشحن المجاني حيث يتحمّل التاجر)
   created_at?: string
   updated_at?: string
   customer_name?: string
@@ -191,6 +192,8 @@ async function hydrateDriverOrders(
       is_dispatch: o.is_dispatch === true,
       total: num(o.total),
       delivery_price: num(o.delivery_price),
+      // أجرة السائق الكاملة — يعرضها التطبيق كدخل السائق (مع الشحن المجاني delivery_price قد يكون 0 لكن السائق يأخذ حقه)
+      driver_fee: o.driver_fee != null ? num(o.driver_fee) : num(o.delivery_price),
       created_at: str(o.created_at?.toDate?.()?.toISOString?.() || o.created_at),
       updated_at: str(o.updated_at?.toDate?.()?.toISOString?.() || o.updated_at),
       customer_name: full ? str(o.customer_name) : undefined,

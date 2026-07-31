@@ -14,7 +14,7 @@ import { signKycFields } from "./stores"
 import type { PickupStop } from "./orders"
 import { logError } from "../logger"
 import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
-import { readDispatchSettings, computeDeliveryFee } from "../delivery/fee"
+import { readDispatchSettings, computeDeliveryFee, splitDeliveryFee } from "../delivery/fee"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { sendPushToOwner } from "../server-push"
 
@@ -732,26 +732,32 @@ export async function adminReofferDispatchOrder(orderId: string) {
       }
       // لو كان الطلب أُسنِد بعرض سعر (مزايدة)، فإعادة العرض ترجّع رسم العدّاد الأصلي وتصحّح الإجمالي —
       // وإلا نعيد عرضه بسعر مزايدة قديم لسائق آخر. نعيد الحساب من المسافة المخزّنة فقط (بلاها نترك السعر).
-      let newFee = Number(o.delivery_price) || 0
+      // شحن مجاني: نقسّم أجرة السائق المُعاد حسابها بين العميل والتاجر حسب إعداد المتجر المخزَّن على الطلب.
+      let newDriverFee = Number(o.driver_fee ?? o.delivery_price) || 0 // أجرة السائق (لا سعر العميل)
       const km = Number(o.distance_km)
       if (Number.isFinite(km)) {
-        newFee = computeDeliveryFee(km, settings)
-        update.delivery_price = newFee
-        update.total = Math.max(0, (Number(o.total) || 0) + (newFee - (Number(o.delivery_price) || 0)))
+        newDriverFee = computeDeliveryFee(km, settings)
+        const ship = splitDeliveryFee(newDriverFee, o.free_shipping === true, Number(o.free_shipping_cap) || 0)
+        const subtotal = Math.max(0, (Number(o.total) || 0) - (Number(o.delivery_price) || 0)) // سعر المنتجات، ثابت
+        update.delivery_price = ship.delivery_price
+        update.driver_fee = ship.driver_fee
+        update.merchant_absorbed_delivery = ship.merchant_absorbed
+        update.is_free_shipping = o.free_shipping === true && ship.merchant_absorbed > 0
+        update.total = subtotal + ship.delivery_price
       }
       tx.update(ref, update)
       return {
         ok: true as const,
         customerId: o.customer_id as string | undefined,
-        // نُرجع الرسم المكتوب فعلًا (لا القديم) كي يُعلن للسائقين نفس السعر المخزّن على الطلب.
-        deliveryPrice: newFee as number | undefined,
+        // نُعلن للسائقين أجرة السائق (لا سعر العميل) — مع الشحن المجاني السائق يأخذ حقه كاملًا.
+        driverFee: newDriverFee as number | undefined,
         deliveryCity: o.delivery_city as string | undefined,
         distanceKm: o.distance_km as number | undefined,
       }
     })
     if (!out.ok) return { success: false as const, error: out.error }
     try {
-      await notifyDriversOfOffer({ id: orderId, delivery_price: out.deliveryPrice, delivery_city: out.deliveryCity, distance_km: out.distanceKm, rejected_by: [] })
+      await notifyDriversOfOffer({ id: orderId, driver_fee: out.driverFee, delivery_city: out.deliveryCity, distance_km: out.distanceKm, rejected_by: [] })
     } catch (e) { logError("[admin] adminReoffer push", e) }
     if (out.customerId) {
       try {
