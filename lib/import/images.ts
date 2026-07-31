@@ -1,6 +1,6 @@
 // مصادر صور المنتجات لخطّ استيراد الكتالوج (المرحلة 2). سيرفر فقط، أفضل-جهد، لا يرمي.
 //  - بالباركود: Open Food Facts (مجاني، صور بترخيص مفتوح CC) — يُطبَّق تلقائيًّا.
-//  - بالاسم: بحث Google Programmable Search (searchImageCandidates) ثم مُتحقِّق paligemma
+//  - بالاسم: بحث DuckDuckGo (searchImageCandidates) ثم مُتحقِّق paligemma
 //    (verifyImageMatchesProduct، أفضل-جهد fail-open). نتائج البحث تحتاج مراجعة التاجر
 //    (حقوق الملكية) فتُحفظ كمرشَّح لا كصورة نهائية.
 // الصور تُنزَّل وتُعاد استضافتها على R2 (تحكّم + ثبات) وتُخزَّن كـ«مفتاح».
@@ -107,27 +107,41 @@ export async function imageUrlFromBarcode(barcode: string, timeoutMs = 8000): Pr
   }
 }
 
-// بحث صور بالاسم عبر Google Programmable Search (Custom Search JSON API)؛ يعيد روابط مرشّحين أو [].
-// معطّل بلا GOOGLE_SEARCH_API_KEY/GOOGLE_SEARCH_CX (يعيد [])، وأي فشل ⇒ [] — أفضل-جهد بلا كسر.
-// المفتاح يُمرَّر في الـquery (واجهة جوجل تتطلّبه) ⇒ لا نسجّل الرابط كاملًا أبدًا، الحالة فقط.
-export async function searchImageCandidates(name: string, timeoutMs = 8000): Promise<string[]> {
-  const key = process.env.GOOGLE_SEARCH_API_KEY
-  const cx = process.env.GOOGLE_SEARCH_CX
-  if (!key || !cx || !name.trim()) return []
+const DDG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+
+// بحث صور بالاسم عبر DuckDuckGo (مجاني، بلا مفتاح). أفضل-جهد: أي فشل ⇒ []؛ لا يرمي.
+// نقطة i.js غير رسمية وقد تتغيّر — لذا محاطة بـtry/catch وتسقط بأمان. النتائج تحتاج مراجعة التاجر
+// (حقوق ملكية). كِل-سويتش: IMPORT_IMAGE_SEARCH="off" لتعطيل البحث بالاسم كليًّا.
+export async function searchImageCandidates(name: string, timeoutMs = 15000): Promise<string[]> {
+  if (process.env.IMPORT_IMAGE_SEARCH === "off") return []
+  const q = String(name || "").replace(/\s+/g, " ").trim()
+  if (!q) return []
   try {
-    const u = new URL("https://www.googleapis.com/customsearch/v1")
-    u.searchParams.set("key", key); u.searchParams.set("cx", cx)
-    u.searchParams.set("searchType", "image"); u.searchParams.set("num", "5")
-    u.searchParams.set("safe", "active"); u.searchParams.set("q", name)
-    const res = await fetch(u, { signal: AbortSignal.timeout(timeoutMs) })
-    if (!res.ok) {
-      if (res.status !== 429) logError("[import-images] search http " + res.status) // لا نسجّل u (يحوي المفتاح)
-      return []
-    }
-    const data = (await res.json()) as { items?: Array<{ link?: string }> }
-    return (data.items || []).map((i) => i.link).filter((l): l is string => typeof l === "string" && /^https?:\/\//.test(l))
+    const r1 = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(q)}&iax=images&ia=images`, {
+      headers: { "User-Agent": DDG_UA },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!r1.ok) return []
+    const html = await r1.text()
+    const m =
+      html.match(/vqd=["']([\d-]+)["']/) ||
+      html.match(/vqd=([\d-]+)&/) ||
+      html.match(/"vqd":"([\d-]+)"/) ||
+      html.match(/vqd=([\d-]+)/)
+    if (!m) return []
+    const r2 = await fetch(
+      `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(q)}&vqd=${m[1]}&f=,,,&p=1`,
+      {
+        headers: { "User-Agent": DDG_UA, Referer: "https://duckduckgo.com/", Accept: "application/json" },
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    )
+    if (!r2.ok) return []
+    const data = (await r2.json()) as { results?: Array<{ image?: string }> }
+    return (data.results || [])
+      .map((x) => x.image)
+      .filter((s): s is string => typeof s === "string" && /^https?:\/\//.test(s))
   } catch {
-    // لا نسجّل e: الرابط في e.cause قد يحوي GOOGLE_SEARCH_API_KEY فيُطبع في dev.
     logError("[import-images] search failed")
     return []
   }
