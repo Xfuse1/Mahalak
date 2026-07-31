@@ -5,6 +5,7 @@
 // الملف لا من العميل) ويُنشئ المنتجات على دفعات. الملكية سيرفر-سايد: المتجر المستهدف = uid المستدعي.
 
 import { revalidatePath, revalidateTag } from "next/cache"
+import { FieldPath, FieldValue } from "firebase-admin/firestore"
 import { getAdminDb } from "@/lib/firebase/admin"
 import { getCurrentUid } from "@/lib/auth/session"
 import { logError } from "@/lib/logger"
@@ -198,6 +199,139 @@ export async function getImageStatus() {
     return { ok: true as const, counts }
   } catch (e) {
     logError("[import] getImageStatus", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// ─── مراجعة صور البحث بالاسم (image_status="review") ───
+// المرشَّح يُخزَّن في image_candidate ويبقى image_url فارغًا فلا يظهر للعميل، حتى يوافق التاجر
+// (يُنقل المرشَّح إلى image_url والحالة done) أو يرفض (الحالة none). كل دالة تشتق الهوية من
+// الجلسة وتفلتر/تتحقق من store_id == uid — لا نثق بأي معرّف من العميل.
+
+// قائمة الصور بانتظار المراجعة لمتجر التاجر — ترقيم بمؤشر على documentId.
+export async function getReviewImages(cursor?: string, limit = 40) {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  try {
+    const db = getAdminDb()
+    const pageSize = Math.min(Math.max(1, Math.floor(Number(limit) || 40)), 60)
+    let q = db
+      .collection("products")
+      .where("store_id", "==", uid)
+      .where("image_status", "==", "review")
+      .orderBy(FieldPath.documentId())
+      .limit(pageSize)
+    if (cursor) q = q.startAfter(String(cursor))
+    const snap = await q.get()
+    const items = snap.docs.map((d) => ({
+      id: d.id,
+      name: String(d.data().name || ""),
+      price: Number(d.data().price) || 0,
+      image_candidate: String(d.data().image_candidate || ""),
+    }))
+    const nextCursor = snap.size === pageSize && snap.docs.length > 0 ? snap.docs[snap.docs.length - 1].id : null
+    return { ok: true as const, items, nextCursor }
+  } catch (e) {
+    logError("[import] getReviewImages", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// عدّاد الصور بانتظار المراجعة — لعرضه في ترويسة الشاشة وزرّ «وافق على الكل».
+export async function getReviewImagesCount() {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  try {
+    const db = getAdminDb()
+    const q = await db.collection("products").where("store_id", "==", uid).where("image_status", "==", "review").count().get()
+    return { ok: true as const, count: q.data().count }
+  } catch (e) {
+    logError("[import] getReviewImagesCount", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// موافقة على صورة مرشَّحة: تُنقل إلى image_url فتظهر للعملاء. ملكية المنتج تُتحقق قبل الكتابة.
+export async function approveProductImage(productId: string) {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("products").doc(String(productId))
+    const doc = await ref.get()
+    const p = doc.data()
+    if (!doc.exists || p?.store_id !== uid) return { ok: false as const, error: "not_found" } // ملكية إلزامية
+    const cand = String(p?.image_candidate || "")
+    if (!cand) return { ok: false as const, error: "no_candidate" }
+    await ref.update({
+      image_url: cand,
+      image_status: "done",
+      image_candidate: FieldValue.delete(),
+      updated_at: new Date().toISOString(),
+    })
+    revalidatePath("/seller/products")
+    try { revalidateTag("products", "max") } catch {}
+    return { ok: true as const }
+  } catch (e) {
+    logError("[import] approveProductImage", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// رفض صورة مرشَّحة: تُحذف وتُعلَّم الحالة none (يُعاد ترشيحها لاحقًا لو تغيّرت النتائج). image_url يبقى كما هو.
+export async function rejectProductImage(productId: string) {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("products").doc(String(productId))
+    const doc = await ref.get()
+    const p = doc.data()
+    if (!doc.exists || p?.store_id !== uid) return { ok: false as const, error: "not_found" } // ملكية إلزامية
+    await ref.update({
+      image_status: "none",
+      image_candidate: FieldValue.delete(),
+      updated_at: new Date().toISOString(),
+    })
+    revalidatePath("/seller/products")
+    return { ok: true as const }
+  } catch (e) {
+    logError("[import] rejectProductImage", e)
+    return { ok: false as const, error: "server_error" }
+  }
+}
+
+// موافقة جماعية على كل صور المراجعة (بسقف 5000) على دفعات كتابة ≤400 — الفلترة بـstore_id==uid
+// في الاستعلام نفسه فلا تمسّ منتجًا لا يملكه التاجر.
+export async function approveAllReviewImages() {
+  const uid = await getCurrentUid()
+  if (!uid) return { ok: false as const, error: "unauthenticated" }
+  if (!(await checkRateLimit("approve_all_images:" + uid, 10, 60_000))) return { ok: false as const, error: "rate_limited" }
+  try {
+    const db = getAdminDb()
+    const snap = await db.collection("products").where("store_id", "==", uid).where("image_status", "==", "review").limit(5000).get()
+    const now = new Date().toISOString()
+    let approved = 0
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = db.batch()
+      for (const d of snap.docs.slice(i, i + 400)) {
+        const cand = String(d.data().image_candidate || "")
+        if (!cand) continue
+        batch.update(d.ref, {
+          image_url: cand,
+          image_status: "done",
+          image_candidate: FieldValue.delete(),
+          updated_at: now,
+        })
+        approved++
+      }
+      await batch.commit()
+    }
+    revalidatePath("/seller/products")
+    try { revalidateTag("products", "max") } catch {}
+    return { ok: true as const, approved }
+  } catch (e) {
+    logError("[import] approveAllReviewImages", e)
     return { ok: false as const, error: "server_error" }
   }
 }
