@@ -161,10 +161,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   }
 
   const handleWhatsApp = async () => {
-    if (!user) {
-      router.push("/auth")
-      return
-    }
+    // التواصل عبر واتساب متاح للجميع بلا تسجيل دخول — نفتح المحادثة مباشرة.
 
     // Track contact event via Meta Pixel
     try {
@@ -179,17 +176,20 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
       // ignore
     }
 
-    // Save contact inquiry to database
-    try {
-      await createContactInquiry({
-        customer_id: user.id,
-        product_id: product.id,
-        store_id: product.store_id,
-        price: product.price,
-        contact_method: "whatsapp",
-      })
-    } catch (_error) {
-      // silently fail — analytics tracking is non-critical
+    // تسجيل الاستفسار في قاعدة البيانات — للمسجَّلين فقط (يتطلّب customer_id). الزائر غير المسجَّل
+    // يتواصل عادي؛ نتخطّى السجل (غير حرِج) بلا أي تحويل لتسجيل الدخول.
+    if (user) {
+      try {
+        await createContactInquiry({
+          customer_id: user.id,
+          product_id: product.id,
+          store_id: product.store_id,
+          price: product.price,
+          contact_method: "whatsapp",
+        })
+      } catch (_error) {
+        // silently fail — analytics tracking is non-critical
+      }
     }
 
     const arMessage = `مرحباً، أريد الاستفسار عن ${product.name}`
@@ -221,10 +221,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   }
 
   const handleCall = async () => {
-    if (!user) {
-      router.push("/auth")
-      return
-    }
+    // الاتصال متاح للجميع بلا تسجيل دخول — نفتح المكالمة مباشرة.
 
     // Track contact event via Meta Pixel
     try {
@@ -239,17 +236,19 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
       // ignore
     }
 
-    // Save contact inquiry to database
-    try {
-      await createContactInquiry({
-        customer_id: user.id,
-        product_id: product.id,
-        store_id: product.store_id,
-        price: product.price,
-        contact_method: "call",
-      })
-    } catch (_error) {
-      // silently fail — analytics tracking is non-critical
+    // تسجيل الاستفسار — للمسجَّلين فقط (يتطلّب customer_id). الزائر غير المسجَّل يتصل عادي.
+    if (user) {
+      try {
+        await createContactInquiry({
+          customer_id: user.id,
+          product_id: product.id,
+          store_id: product.store_id,
+          price: product.price,
+          contact_method: "call",
+        })
+      } catch (_error) {
+        // silently fail — analytics tracking is non-critical
+      }
     }
 
     const phone = product.stores?.phone
