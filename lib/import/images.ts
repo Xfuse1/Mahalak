@@ -1,7 +1,8 @@
 // مصادر صور المنتجات لخطّ استيراد الكتالوج (المرحلة 2). سيرفر فقط، أفضل-جهد، لا يرمي.
 //  - بالباركود: Open Food Facts (مجاني، صور بترخيص مفتوح CC) — يُطبَّق تلقائيًّا.
-//  - بالاسم: نقطة توصيل قابلة للضبط (searchImageByName) — معطّلة حتى يوفّر المالك مزوّد بحث الصور
-//    (مفاتيح جوجل). نتائج البحث تحتاج مراجعة التاجر (حقوق الملكية) فتُحفظ كمرشَّح لا كصورة نهائية.
+//  - بالاسم: بحث Google Programmable Search (searchImageCandidates) ثم مُتحقِّق paligemma
+//    (verifyImageMatchesProduct، أفضل-جهد fail-open). نتائج البحث تحتاج مراجعة التاجر
+//    (حقوق الملكية) فتُحفظ كمرشَّح لا كصورة نهائية.
 // الصور تُنزَّل وتُعاد استضافتها على R2 (تحكّم + ثبات) وتُخزَّن كـ«مفتاح».
 import { randomUUID } from "node:crypto"
 import { lookup } from "node:dns/promises"
@@ -106,16 +107,35 @@ export async function imageUrlFromBarcode(barcode: string, timeoutMs = 8000): Pr
   }
 }
 
-// نقطة توصيل بحث الصور بالاسم — معطّلة حتى يُضبط المزوّد (مفاتيح المالك). تعود null الآن.
-// عند التوصيل: تُرجِع رابط صورة مرشَّحة (تحتاج مراجعة التاجر لحقوق الملكية).
-export async function searchImageByName(_name: string): Promise<string | null> {
-  // TODO(المالك): وصّل مزوّد بحث صور جوجل هنا (Custom Search / غيره) عبر env عند توفّر الطريقة.
-  if (!process.env.IMAGE_SEARCH_API_KEY) return null
-  return null
+// بحث صور بالاسم عبر Google Programmable Search (Custom Search JSON API)؛ يعيد روابط مرشّحين أو [].
+// معطّل بلا GOOGLE_SEARCH_API_KEY/GOOGLE_SEARCH_CX (يعيد [])، وأي فشل ⇒ [] — أفضل-جهد بلا كسر.
+// المفتاح يُمرَّر في الـquery (واجهة جوجل تتطلّبه) ⇒ لا نسجّل الرابط كاملًا أبدًا، الحالة فقط.
+export async function searchImageCandidates(name: string, timeoutMs = 8000): Promise<string[]> {
+  const key = process.env.GOOGLE_SEARCH_API_KEY
+  const cx = process.env.GOOGLE_SEARCH_CX
+  if (!key || !cx || !name.trim()) return []
+  try {
+    const u = new URL("https://www.googleapis.com/customsearch/v1")
+    u.searchParams.set("key", key); u.searchParams.set("cx", cx)
+    u.searchParams.set("searchType", "image"); u.searchParams.set("num", "5")
+    u.searchParams.set("safe", "active"); u.searchParams.set("q", name)
+    const res = await fetch(u, { signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) {
+      if (res.status !== 429) logError("[import-images] search http " + res.status) // لا نسجّل u (يحوي المفتاح)
+      return []
+    }
+    const data = (await res.json()) as { items?: Array<{ link?: string }> }
+    return (data.items || []).map((i) => i.link).filter((l): l is string => typeof l === "string" && /^https?:\/\//.test(l))
+  } catch {
+    // لا نسجّل e: الرابط في e.cause قد يحوي GOOGLE_SEARCH_API_KEY فيُطبع في dev.
+    logError("[import-images] search failed")
+    return []
+  }
 }
 
-// ينزّل صورة من رابط ويعيد استضافتها على R2 العام؛ يعيد المفتاح أو null.
-export async function fetchAndStoreImage(sourceUrl: string, storeId: string, timeoutMs = 12000): Promise<string | null> {
+// ينزّل صورة من رابط ويفحصها (SSRF + حجم + توقيع بايتات)؛ يعيد البايتات والامتداد أو null.
+// منفصلة عن الرفع كي يعيد المُتحقِّق استخدام البايتات قبل التخزين.
+export async function fetchImageBytes(sourceUrl: string, timeoutMs = 12000): Promise<{ buf: Buffer; ext: string } | null> {
   if (!/^https?:\/\//.test(sourceUrl)) return null
   if (!(await isSafePublicUrl(sourceUrl))) return null // SSRF: نرفض العناوين الداخلية/المحلية
   try {
@@ -129,12 +149,63 @@ export async function fetchAndStoreImage(sourceUrl: string, storeId: string, tim
     // النوع يُستنتج من توقيع البايتات لا من ترويسة content-type (قد يعلن المصدر image/png لجسم ليس صورة).
     const ext = sniffImageExt(buf)
     if (!ext) return null // ليست صورة معروفة
+    return { buf, ext }
+  } catch (e) {
+    logError("[import-images] fetchBytes", e)
+    return null
+  }
+}
+
+// يرفع بايتات صورة مفحوصة إلى R2 العام؛ يعيد المفتاح أو null.
+export async function storeImageBuffer(buf: Buffer, ext: string, storeId: string): Promise<string | null> {
+  try {
     const key = `products/${storeId}/imp-${randomUUID()}.${ext}`
     await putObject("public", key, buf, TYPE_BY_EXT[ext])
     return key
   } catch (e) {
-    logError("[import-images] fetchStore", e)
+    logError("[import-images] store", e)
     return null
+  }
+}
+
+// ينزّل صورة من رابط ويعيد استضافتها على R2 العام؛ يعيد المفتاح أو null.
+export async function fetchAndStoreImage(sourceUrl: string, storeId: string, timeoutMs = 12000): Promise<string | null> {
+  const r = await fetchImageBytes(sourceUrl, timeoutMs)
+  if (!r) return null
+  return storeImageBuffer(r.buf, r.ext, storeId)
+}
+
+const VERIFY_URL = process.env.IMAGE_VERIFY_URL || "https://ai.api.nvidia.com/v1/vlm/google/paligemma"
+const VERIFY_MAX_INLINE = 180_000 // حدّ NVIDIA للصورة inline (~180KB)؛ الأكبر يُمرَّر بلا تحقّق (للمراجعة)
+
+// يعيد true = مطابقة / المُتحقِّق معطّل / صورة كبيرة / أي فشل (fail-open للمراجعة البشرية)،
+// false فقط عند رفض صريح من paligemma ("no" بلا "yes"). النية: فلتر محافظ يُسقط الأخطاء الواضحة فقط.
+export async function verifyImageMatchesProduct(buf: Buffer, ext: string, name: string, timeoutMs = 8000): Promise<boolean> {
+  const key = process.env.IMPORT_AI_API_KEY
+  if (!key) return true
+  if (buf.byteLength > VERIFY_MAX_INLINE) return true
+  try {
+    const mime = TYPE_BY_EXT[ext] || "image/jpeg"
+    const b64 = buf.toString("base64")
+    // تسخيف اسم المنتج قبل إدراجه في الـprompt: إزالة أسطر/اقتباس/باكسلاش + سقف طول (تحصين حقن prompt).
+    const safeName = name.replace(/[\r\n"\\]+/g, " ").slice(0, 100)
+    const res = await fetch(VERIFY_URL, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: `Does this image show "${safeName}"? Answer yes or no. <img src="data:${mime};base64,${b64}" />` }],
+        max_tokens: 8, temperature: 0, stream: false,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return true // fail-open
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> }
+    const c = data?.choices?.[0]?.message?.content
+    if (typeof c !== "string") return true
+    // رفض فقط عند "no" صريح بلا "yes" — غير ذلك يمرّ للمراجعة.
+    return !(/\bno\b/i.test(c) && !/\byes\b/i.test(c))
+  } catch {
+    return true // fail-open للمراجعة
   }
 }
 
@@ -144,21 +215,31 @@ export type ImageOutcome =
   | { kind: "none" }
 
 // يحلّ صورة منتج: الباركود أولًا (يُطبَّق تلقائيًّا)، ثم البحث بالاسم (مرشَّح للمراجعة). يعيد النتيجة.
+// budgetMs ميزانية زمنية للمنتج الواحد: سقف كل نداء خارجي = الأقل من الافتراضي والمتبقّي،
+// كي لا يتجاوز منتج واحد حدّ دالة Vercel فيضيّع التيك.
 export async function resolveProductImage(
   product: { barcode?: string; name?: string },
   storeId: string,
+  budgetMs = 12000,
 ): Promise<ImageOutcome> {
+  const deadline = Date.now() + Math.max(0, budgetMs)
+  const left = () => deadline - Date.now()
+  const cap = (ms: number) => Math.min(ms, Math.max(1, left())) // سقف كل نداء = الأقل من الافتراضي والمتبقّي
   if (isValidBarcode(product.barcode)) {
-    const src = await imageUrlFromBarcode(product.barcode!)
+    const src = await imageUrlFromBarcode(product.barcode!, cap(8000))
     if (src) {
-      const key = await fetchAndStoreImage(src, storeId)
+      const key = await fetchAndStoreImage(src, storeId, cap(12000))
       if (key) return { kind: "applied", key, source: "barcode" }
     }
   }
-  if (product.name) {
-    const src = await searchImageByName(product.name)
-    if (src) {
-      const key = await fetchAndStoreImage(src, storeId)
+  if (product.name && left() > 500) {
+    const candidates = await searchImageCandidates(product.name, cap(8000))
+    for (const url of candidates.slice(0, 3)) { // أعلى 3 مرشّحين كحدّ (ميزانية + تكلفة)
+      if (left() <= 500) break // لا وقت كافٍ لمرشّح آخر
+      const img = await fetchImageBytes(url, cap(12000))
+      if (!img) continue
+      if (!(await verifyImageMatchesProduct(img.buf, img.ext, product.name, cap(8000)))) continue
+      const key = await storeImageBuffer(img.buf, img.ext, storeId)
       if (key) return { kind: "review", key, source: "search" }
     }
   }
@@ -170,7 +251,7 @@ const IMG_BATCH = 15 // جلب الصورة بطيء (استدعاء خارجي 
 const IMG_BUDGET_MS = 8_000
 
 // مكنسة جلب الصور: تعالج المنتجات المطلوب لها صور (image_status="queued") على دفعات. باركود ⇒ تُطبَّق
-// تلقائيًّا؛ بحث بالاسم ⇒ مرشَّح للمراجعة (حاليًّا معطّل). يستدعيها كرون. لكل متجر بعد موافقته الصريحة.
+// تلقائيًّا؛ بحث بالاسم ⇒ مرشَّح للمراجعة. يستدعيها كرون. لكل متجر بعد موافقته الصريحة.
 export async function processQueuedImages(): Promise<{ scanned: number; applied: number; review: number; none: number }> {
   const db = getAdminDb()
   const out = { scanned: 0, applied: 0, review: 0, none: 0 }
@@ -178,11 +259,12 @@ export async function processQueuedImages(): Promise<{ scanned: number; applied:
   out.scanned = snap.size
   const start = Date.now()
   for (const doc of snap.docs) {
-    if (Date.now() - start > IMG_BUDGET_MS) break
+    const remaining = IMG_BUDGET_MS - (Date.now() - start)
+    if (remaining <= 0) break
     const p = doc.data() as Record<string, any>
     let outcome: ImageOutcome
     try {
-      outcome = await resolveProductImage({ barcode: p.barcode, name: p.name }, String(p.store_id || ""))
+      outcome = await resolveProductImage({ barcode: p.barcode, name: p.name }, String(p.store_id || ""), remaining)
     } catch {
       outcome = { kind: "none" }
     }
