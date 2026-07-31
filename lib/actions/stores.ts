@@ -37,6 +37,8 @@ export type StoreRecord = {
   // شحن مجاني: التاجر يتحمّل أجرة التوصيل بدل العميل. cap = سقف ما يتحمّله لكل طلب (0/غياب = يتحمّل الكل).
   free_shipping?: boolean
   free_shipping_cap?: number | null
+  // بروفايل استيراد الكاشير (يُكتب سيرفر-سايد من import.ts فقط، لا عبر updateStore) — لتفعيل «المزامنة اليومية».
+  import_profile?: { mapping?: Record<string, number>; default_category?: string; updated_at?: string }
   is_approved?: boolean
   rating?: number
   created_at?: string
