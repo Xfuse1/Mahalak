@@ -12,6 +12,7 @@ import { calculateProfitPerUnit } from "@/lib/utils/product-pricing"
 import { extractTable, type Mapping } from "@/lib/import/parse"
 import { checkRateLimit } from "@/lib/utils/rate-limit"
 import { geminiMapColumns, isGeminiEnabled } from "@/lib/ai/gemini"
+import { mapColumnsOpenAICompat, isOpenAICompatEnabled } from "@/lib/ai/openai-compat"
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024 // 15MB — ملفات المخزون نصّية صغيرة عادةً
 const MAX_PRODUCTS = 20000 // سقف أمان لكل رفعة
@@ -40,10 +41,13 @@ export async function parseImportFile(formData: FormData) {
     const userOverride = parseMapping(formData.get("mapping"))
     let res = extractTable(buf, userOverride)
     let aiUsed = false
-    // على التحليل الأول فقط (بلا تخصيص من التاجر) نطلب من Gemini تحسين المطابقة — يفوز على الاستدلال
-    // حيث يعطي قيمة. أي فشل/غياب مفتاح ⇒ نُبقي الاستدلال (لا شيء يكسر).
-    if (!userOverride && isGeminiEnabled()) {
-      const ai = await geminiMapColumns(res.headers, res.sampleRows)
+    // على التحليل الأول فقط (بلا تخصيص من التاجر) نطلب من الـAI تحسين المطابقة — يفوز على الاستدلال
+    // حيث يعطي قيمة. الترتيب: OpenAI-compatible (NVIDIA) ثم Gemini؛ أي فشل/غياب مفتاح ⇒ نُبقي
+    // الاستدلال (لا شيء يكسر).
+    if (!userOverride) {
+      let ai: Awaited<ReturnType<typeof geminiMapColumns>> = null
+      if (isOpenAICompatEnabled()) ai = await mapColumnsOpenAICompat(res.headers, res.sampleRows)
+      if (!ai && isGeminiEnabled()) ai = await geminiMapColumns(res.headers, res.sampleRows)
       if (ai) {
         res = extractTable(buf, { ...res.mapping, ...ai })
         aiUsed = true
