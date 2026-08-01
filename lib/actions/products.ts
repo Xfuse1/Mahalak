@@ -24,6 +24,7 @@ type ProductRecord = {
   image_url?: string
   store_id?: string
   barcode?: string
+  expiry_date?: string | null // تاريخ الصلاحية (ISO/YYYY-MM-DD) — معمَّم لكل الأنواع، اختياري
   simulator_section?: string | null
   rating?: number
   rating_count?: number
@@ -394,6 +395,7 @@ export async function createProduct(formData: {
   image_url?: string
   store_id: string
   barcode?: string
+  expiry_date?: string | null
   simulator_section?: string | null
   reservation_enabled?: boolean
 }, callerUserId?: string) {
@@ -449,6 +451,7 @@ export async function createProduct(formData: {
       image_url: formData.image_url || "",
       store_id: formData.store_id,
       barcode: formData.barcode || "",
+      expiry_date: formData.expiry_date || null,
       simulator_section: formData.simulator_section || null,
       reservation_enabled: formData.reservation_enabled || false,
       rating: 0,
@@ -480,6 +483,7 @@ export async function updateProduct(
     rating: number
     simulator_section?: string | null
     barcode?: string
+    expiry_date?: string | null
     reservation_enabled?: boolean
   }>,
   callerUserId?: string,
@@ -541,6 +545,7 @@ export async function updateProduct(
     "image_url",
     "simulator_section",
     "barcode",
+    "expiry_date",
     "reservation_enabled",
   ] as const
   const sanitized: Record<string, unknown> = {}

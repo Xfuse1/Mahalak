@@ -11,7 +11,8 @@ import { Input } from "../../../../../components/ui/input"
 import { Label } from "../../../../../components/ui/label"
 import { Textarea } from "../../../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../../../components/ui/select"
-import { Upload, Pill, Shirt, ShoppingBasket, Package } from "lucide-react"
+import { Upload, Pill, Shirt, ShoppingBasket, Package, ScanLine, CalendarClock } from "lucide-react"
+import nextDynamic from "next/dynamic"
 import { getOwnedProduct, updateProduct, uploadProductImage } from "../../../../../lib/actions/products"
 import { getStoreByUserId } from "../../../../../lib/actions/stores"
 import { getCategoryNameForForm } from "../../../../../lib/actions/product-form-actions"
@@ -20,6 +21,12 @@ import { fetchStoreSubcategories, type SubcategoryItem } from "../../../../../li
 import { useToast } from "@/components/ui/toast"
 import { useLanguage } from "../../../../../lib/language-context"
 import { imgSrc } from "@/lib/storage/public-url"
+
+// ماسح الباركود بالكاميرا (نفس مكوّن الكاشير) — تحميل كسول client-side فقط.
+const BarcodeScanner = nextDynamic(
+  () => import("../../../../../components/barcode-scanner").then((m) => ({ default: m.BarcodeScanner })),
+  { ssr: false },
+)
 
 type StoreType = "pharmacy" | "clothing" | "grocery" | "electronics" | "general"
 
@@ -51,6 +58,7 @@ type EditableProduct = {
   category?: string
   image_url?: string
   barcode?: string
+  expiry_date?: string | null
   reservation_enabled?: boolean
 }
 
@@ -73,6 +81,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
   const [storeType, setStoreType] = useState<StoreType>("general")
   const [isReservationEnabled, setIsReservationEnabled] = useState(false)
+  const [barcode, setBarcode] = useState("")
+  const [expiryDate, setExpiryDate] = useState("") // YYYY-MM-DD
+  const [showScanner, setShowScanner] = useState(false)
 
   const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
     PRODUCT_NOT_FOUND: {
@@ -163,6 +174,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setProduct(productData)
       setImagePreview(productData.image_url ?? null)
       setIsReservationEnabled(productData.reservation_enabled ?? false)
+      setBarcode(productData.barcode || "")
+      setExpiryDate(String(productData.expiry_date || "").slice(0, 10)) // YYYY-MM-DD لحقل type=date
       
       // Set store category from the store object we already fetched
       const currentStoreCategory = store?.category || ""
@@ -291,7 +304,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         cost_price: costPrice,
         stock,
         category: finalCategory,
-        barcode: (formData.get("barcode") as string)?.trim() || "",
+        barcode: barcode.trim(),
+        expiry_date: expiryDate || null,
         image_url: imageUrl,
         reservation_enabled: isReservationEnabled,
       }, user?.id)
@@ -542,16 +556,51 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="barcode" className="text-gray-700 font-medium">{t("الباركود (اختياري)", "Barcode (Optional)")}</Label>
-                  <Input
-                    id="barcode"
-                    name="barcode"
-                    defaultValue={product.barcode || ""}
-                    placeholder={t("مثال: 6221507001016", "Example: 6221507001016")}
-                    className="mt-1.5 h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 font-mono"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{t("رقم الباركود المطبوع على المنتج (إن وجد)", "Barcode printed on the product (if available)")}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="barcode" className="text-gray-700 font-medium">{t("الباركود (اختياري)", "Barcode (Optional)")}</Label>
+                    <div className="mt-1.5 flex gap-2">
+                      <Input
+                        id="barcode"
+                        name="barcode"
+                        value={barcode}
+                        onChange={(e) => setBarcode(e.target.value)}
+                        placeholder={t("مثال: 6221507001016", "Example: 6221507001016")}
+                        className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 font-mono flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowScanner(true)}
+                        className="h-12 px-4 rounded-xl border-2 shrink-0"
+                        title={t("مسح بالكاميرا", "Scan with camera")}
+                      >
+                        <ScanLine className="h-5 w-5" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{t("اطبع الرقم أو امسحه بالكاميرا", "Type it or scan with the camera")}</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="expiry_date" className="text-gray-700 font-medium flex items-center gap-1.5">
+                      <CalendarClock className="h-4 w-4 text-amber-600" /> {t("تاريخ الصلاحية (اختياري)", "Expiry Date (Optional)")}
+                    </Label>
+                    <div className="mt-1.5 flex gap-2">
+                      <Input
+                        id="expiry_date"
+                        type="date"
+                        value={expiryDate}
+                        onChange={(e) => setExpiryDate(e.target.value)}
+                        className="h-12 rounded-xl border-gray-200 focus:border-primary focus:ring-primary/20 flex-1"
+                      />
+                      {expiryDate && (
+                        <Button type="button" variant="outline" onClick={() => setExpiryDate("")} className="h-12 px-4 rounded-xl border-2 shrink-0">
+                          {t("مسح", "Clear")}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{t("ننبّهك قبل انتهائها في لوحة التحكم", "We alert you before it expires on the dashboard")}</p>
+                  </div>
                 </div>
 
                 <div>
@@ -674,6 +723,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </Card>
         </div>
       </main >
+
+      {showScanner && (
+        <BarcodeScanner
+          onScan={(code) => { setBarcode(code); setShowScanner(false); toast.success(t("تم مسح الباركود", "Barcode scanned")) }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div >
   )
 }

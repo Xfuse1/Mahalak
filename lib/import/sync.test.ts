@@ -105,6 +105,36 @@ describe("computeSyncPlan — احترام الحقول التي يوفّرها 
   })
 })
 
+describe("computeSyncPlan — مزامنة تاريخ الصلاحية", () => {
+  const exE = (id: string, sku: string, expiry?: string): ExistingProduct => ({ id, sku, stock: 5, price: 10, cost_price: 6, expiry })
+  const drE = (sku: string, expiry?: string): ProductDraft => ({ name: "x", price: 10, cost_price: 6, stock: 5, sku, expiry })
+  const withExp = { hasStock: true, hasCost: true, hasExpiry: true }
+
+  it("عمود صلاحية + تاريخ جديد مختلف ⇒ تحديث يحمل الصلاحية الجديدة", () => {
+    const plan = computeSyncPlan([exE("p1", "A1", "2026-01-01")], [drE("A1", "2027-06-30")], withExp)
+    expect(plan.updates).toHaveLength(1)
+    expect(plan.updates[0].expiry).toBe("2027-06-30")
+  })
+
+  it("نفس الصلاحية بلا تغيير آخر ⇒ لا تحديث", () => {
+    const plan = computeSyncPlan([exE("p1", "A1", "2027-06-30")], [drE("A1", "2027-06-30")], withExp)
+    expect(plan.updates).toHaveLength(0)
+    expect(plan.matchedUnchanged).toBe(1)
+  })
+
+  it("بلا عمود صلاحية ⇒ لا نلمس الصلاحية (expiry غير موجود في التحديث)", () => {
+    const plan = computeSyncPlan([exE("p1", "A1", "2027-06-30")], [{ ...drE("A1"), stock: 9 }], { hasStock: true, hasCost: true, hasExpiry: false })
+    expect(plan.updates).toHaveLength(1)
+    expect(plan.updates[0].expiry).toBeUndefined()
+  })
+
+  it("عمود صلاحية لكن خلية الصنف فاضية ⇒ لا نمحو الصلاحية القديمة", () => {
+    const plan = computeSyncPlan([exE("p1", "A1", "2027-06-30")], [drE("A1")], withExp)
+    expect(plan.updates).toHaveLength(0)
+    expect(plan.matchedUnchanged).toBe(1)
+  })
+})
+
 describe("computeSyncPlan — حالات حدّية", () => {
   it("كود مكرّر داخل الملف ⇒ يفوز الأخير + يُعدّ التكرار", () => {
     const plan = computeSyncPlan([ex("p1", "A1", 5)], [dr("A1", 3), dr("A1", 9)])

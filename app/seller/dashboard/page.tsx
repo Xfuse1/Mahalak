@@ -7,10 +7,11 @@ import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
-import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle, Calendar, XCircle, Wallet } from "lucide-react"
+import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle, Calendar, XCircle, Wallet, CalendarClock } from "lucide-react"
 import Link from "next/link"
 import { getStoreByUserId } from "../../../lib/actions/stores"
 import { getDashboardAnalytics, getRecentOrders, getSellerDailyStats, getStockAlerts, type RecentDashboardOrder, type SellerDailyStats, type StockAlerts } from "../../../lib/actions/dashboard"
+import { getExpiryAlerts } from "../../../lib/actions/pos-pharmacy"
 import { logError } from "../../../lib/logger"
 
 export default function SellerDashboard() {
@@ -31,6 +32,7 @@ export default function SellerDashboard() {
   const [recentOrders, setRecentOrders] = useState<RecentDashboardOrder[]>([])
   const [daily, setDaily] = useState<SellerDailyStats | null>(null)
   const [stockAlerts, setStockAlerts] = useState<StockAlerts | null>(null)
+  const [expiry, setExpiry] = useState<Awaited<ReturnType<typeof getExpiryAlerts>>>([])
   const [loading, setLoading] = useState(true)
   const [store, setStore] = useState<any>(null)
   const [storeApproved, setStoreApproved] = useState<boolean | null>(null)
@@ -77,11 +79,16 @@ export default function SellerDashboard() {
 
           // إحصائيات «اليوم» + تنبيهات المخزون (قراءة فقط) — أفضل-جهد، لا تكسر بقية اللوحة لو فشلت.
           try {
-            const [dailyData, alertsData] = await Promise.all([getSellerDailyStats(user.id), getStockAlerts(5, user.id)])
+            const [dailyData, alertsData, expiryData] = await Promise.all([
+              getSellerDailyStats(user.id),
+              getStockAlerts(5, user.id),
+              getExpiryAlerts(store.id),
+            ])
             setDaily(dailyData)
             setStockAlerts(alertsData)
+            setExpiry(expiryData)
           } catch (e) {
-            logError("[dashboard] daily/stock", e)
+            logError("[dashboard] daily/stock/expiry", e)
           }
         }
       } catch (error) {
@@ -293,8 +300,8 @@ export default function SellerDashboard() {
             </div>
           </div>
 
-          {/* ═══ تنبيهات المخزون + الأكثر مبيعًا اليوم ═══ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+          {/* ═══ تنبيهات المخزون + الصلاحية + الأكثر مبيعًا اليوم ═══ */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <div className="flex items-center justify-between">
@@ -328,6 +335,41 @@ export default function SellerDashboard() {
               </CardContent>
             </Card>
 
+            {/* تنبيهات الصلاحية */}
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-100 rounded-xl"><CalendarClock className="h-5 w-5 text-amber-600" /></div>
+                  {t("تنبيهات الصلاحية", "Expiry Alerts")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                {expiry.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">{t("مفيش أصناف قربت تنتهي 👍", "Nothing expiring soon 👍")}</p>
+                ) : (
+                  <>
+                    <div className="flex gap-3">
+                      <div className="flex-1 rounded-xl bg-red-50 p-3 text-center"><div className="text-2xl font-extrabold text-red-600">{expiry.filter((e) => e.status === "expired").length}</div><div className="text-xs text-gray-500">{t("منتهية", "Expired")}</div></div>
+                      <div className="flex-1 rounded-xl bg-amber-50 p-3 text-center"><div className="text-2xl font-extrabold text-amber-600">{expiry.filter((e) => e.status !== "expired").length}</div><div className="text-xs text-gray-500">{t("قربت تنتهي", "Expiring soon")}</div></div>
+                    </div>
+                    {expiry.filter((e) => e.status === "expired").length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-red-600 mb-1">{t("منتهية", "Expired")}</div>
+                        <div className="space-y-1">{expiry.filter((e) => e.status === "expired").slice(0, 5).map((e) => (<div key={e.product_id} className="text-sm text-gray-700 flex justify-between gap-2"><span className="truncate">{e.product_name}</span><span className="text-red-600 shrink-0 text-xs">{e.expiry_date}</span></div>))}</div>
+                      </div>
+                    )}
+                    {expiry.filter((e) => e.status !== "expired").length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-amber-600 mb-1">{t("قربت تنتهي", "Expiring soon")}</div>
+                        <div className="space-y-1">{expiry.filter((e) => e.status !== "expired").slice(0, 5).map((e) => (<div key={e.product_id} className="text-sm text-gray-700 flex justify-between gap-2"><span className="truncate">{e.product_name}</span><span className="text-amber-600 shrink-0 text-xs">{t(`باقي ${e.days_remaining}ي`, `${e.days_remaining}d`)}</span></div>))}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* الأكثر مبيعًا اليوم */}
             <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
                 <CardTitle className="flex items-center gap-3">

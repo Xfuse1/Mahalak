@@ -3,7 +3,7 @@
 // لكنه يعمل وحده على ملفات كاشير حقيقية (اختُبر على تقرير مخزون صيدلية 1715 صفًا).
 import * as XLSX from "xlsx"
 
-export type FieldKey = "name" | "price" | "cost_price" | "stock" | "unit" | "brand" | "sku" | "barcode" | "category" | "image"
+export type FieldKey = "name" | "price" | "cost_price" | "stock" | "unit" | "brand" | "sku" | "barcode" | "category" | "image" | "expiry"
 export type Mapping = Partial<Record<FieldKey, number>> // الحقل → رقم العمود في الملف
 export type HeaderCell = { index: number; label: string }
 export type ProductDraft = {
@@ -17,6 +17,7 @@ export type ProductDraft = {
   barcode?: string
   category?: string
   image_url?: string
+  expiry?: string // YYYY-MM-DD بعد التطبيع (أو غير موجود)
 }
 export type ExtractResult = {
   sheetNames: string[]
@@ -42,6 +43,7 @@ const KW: Record<FieldKey, string[]> = {
   barcode: ["باركود", "الباركود", "barcode", "gtin", "ean", "upc"],
   category: ["التصنيف", "تصنيف", "القسم", "المجموعة", "الفئة", "category", "cat", "group", "department", "type", "class"],
   image: ["صورة", "الصورة", "image", "img", "photo", "picture", "url", "link"],
+  expiry: ["الصلاحية", "تاريخ الصلاحية", "تاريخ الانتهاء", "انتهاء الصلاحية", "الانتهاء", "تاريخ النفاذ", "expiry", "exp", "expiration", "expiry date", "expire", "expiration date", "best before"],
 }
 // عناوين لا يصحّ أن تُطابَق كسعر البيع أو التكلفة أو المخزون (إجمالى = سعر×كمية، نسبة، ضريبة…)
 const NEG: Partial<Record<FieldKey, string[]>> = {
@@ -61,6 +63,48 @@ export function parseNum(v: unknown): number {
   s = s.replace(/[^\d.\-]/g, "")
   if (!s || s === "-" || s === ".") return NaN
   return Number(s)
+}
+
+// تطبيع تاريخ الصلاحية من خلية الكاشير → "YYYY-MM-DD" أو undefined. يدعم: ISO، DD/MM/YYYY (مصري)،
+// MM/YYYY (شائع للأدوية → آخر يوم في الشهر)، ورقم Excel التسلسلي. القيم غير المفهومة تُهمَل (لا نخزّن تاريخًا غلط).
+export function parseExpiry(v: unknown): string | undefined {
+  if (v == null) return undefined
+  const s = String(v).replace(/[٠-٩]/g, (d) => AR_DIGITS[d] || d).trim()
+  if (!s) return undefined
+  const fmt = (y: number, m: number, d: number): string | undefined => {
+    if (!(y >= 2000 && y <= 2100) || m < 1 || m > 12 || d < 1 || d > 31) return undefined
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+  }
+  // رقم Excel تسلسلي بحت (بلا فواصل تاريخ) — أيام منذ 1899-12-30.
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const serial = Number(s)
+    if (serial > 20000 && serial < 80000) {
+      const dt = new Date(Date.UTC(1899, 11, 30) + serial * 86400000)
+      return fmt(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate())
+    }
+    return undefined
+  }
+  // ISO: YYYY-MM-DD (أو YYYY/MM/DD).
+  let m = s.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/)
+  if (m) return fmt(Number(m[1]), Number(m[2]), Number(m[3]))
+  // DD/MM/YYYY (اليوم أولًا، مصري) — نُبدّل إن كان الأول شهرًا مؤكَّدًا.
+  m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  if (m) {
+    let d = Number(m[1]); let mo = Number(m[2]); let y = Number(m[3])
+    if (y < 100) y += 2000
+    if (mo > 12 && d <= 12) { const t = d; d = mo; mo = t } // كان الترتيب شهر/يوم
+    return fmt(y, mo, d)
+  }
+  // MM/YYYY أو M-YYYY → آخر يوم في الشهر.
+  m = s.match(/^(\d{1,2})[/\-.](\d{4})$/)
+  if (m) {
+    const mo = Number(m[1]); const y = Number(m[2])
+    if (mo >= 1 && mo <= 12 && y >= 2000 && y <= 2100) {
+      const last = new Date(Date.UTC(y, mo, 0)).getUTCDate()
+      return fmt(y, mo, last)
+    }
+  }
+  return undefined
 }
 
 // صف العناوين قد لا يكون الأول (تقارير الكاشير فيها صفوف عنوان فوق الجدول). نختار الصف بأعلى عدد
@@ -117,6 +161,7 @@ export function buildDrafts(dataRows: unknown[][], mapping: Mapping) {
       barcode: g(mapping.barcode) || undefined,
       category: g(mapping.category) || undefined,
       image_url: g(mapping.image) || undefined,
+      expiry: mapping.expiry != null ? parseExpiry(g(mapping.expiry)) : undefined,
     })
   }
   return { drafts, stats: { extracted: drafts.length, skipped, priceBelowCost, zeroStock } }

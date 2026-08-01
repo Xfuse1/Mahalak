@@ -22,7 +22,7 @@ const MAX_PRODUCTS = 20000 // سقف أمان لكل رفعة
 const COMMIT_CHUNK_MAX = 400 // أقل من حدّ الدُفعة (500) بهامش
 
 // مفاتيح المطابقة المعروفة فقط — نمنع نسخ مفاتيح عشوائية من العميل (تضخّم مستند المتجر عند حفظ البروفايل).
-const FIELD_KEYS = new Set(["name", "price", "cost_price", "stock", "unit", "brand", "sku", "barcode", "category", "image"])
+const FIELD_KEYS = new Set(["name", "price", "cost_price", "stock", "unit", "brand", "sku", "barcode", "category", "image", "expiry"])
 function parseMapping(raw: FormDataEntryValue | null): Mapping | undefined {
   if (!raw) return undefined
   try {
@@ -132,6 +132,7 @@ export async function commitImport(formData: FormData) {
         image_status: d.image_url ? "file" : "pending",
         store_id: uid,
         barcode: d.barcode || "",
+        expiry_date: d.expiry || null,
         simulator_section: null,
         reservation_enabled: stock === 0, // مخزون صفر ⇒ قابل للحجز كي يمرّ تحقّق المنتج ولا يضيع
         rating: 0,
@@ -184,7 +185,7 @@ const SYNC_EXISTING_CAP = MAX_PRODUCTS // سقف حجم الكتالوج الذ�
 async function loadExistingForSync(db: Firestore, uid: string) {
   // نستعلم واحدًا فوق السقف للتمييز بين «عند السقف بالضبط» (مقبول) و«أكثر منه» (overflow).
   const snap = await db.collection("products").where("store_id", "==", uid)
-    .select("import_sku", "stock", "price", "cost_price", "name").limit(SYNC_EXISTING_CAP + 1).get()
+    .select("import_sku", "stock", "price", "cost_price", "name", "expiry_date").limit(SYNC_EXISTING_CAP + 1).get()
   const overflow = snap.size > SYNC_EXISTING_CAP
   const existing: ExistingProduct[] = []
   const nameById = new Map<string, string>()
@@ -199,6 +200,7 @@ async function loadExistingForSync(db: Firestore, uid: string) {
       stock: Number(data.stock) || 0,
       price: Number(data.price) || 0,
       cost_price: Number(data.cost_price) || 0,
+      expiry: String(data.expiry_date ?? "") || undefined,
     })
     nameById.set(d.id, String(data.name ?? ""))
   }
@@ -246,7 +248,7 @@ export async function syncCatalogPreview(formData: FormData) {
     if (overflow) return { ok: false as const, error: "catalog_too_large" }
     // كتالوج حالي بلا أي أكواد (استُورد أول مرة بلا عمود كود) ⇒ المزامنة ستكرّره بالكامل — نمنعها.
     if (existing.length > 0 && withSku === 0) return { ok: false as const, error: "catalog_has_no_codes" }
-    const fields = { hasStock: res.mapping.stock != null, hasCost: res.mapping.cost_price != null }
+    const fields = { hasStock: res.mapping.stock != null, hasCost: res.mapping.cost_price != null, hasExpiry: res.mapping.expiry != null }
     const plan = computeSyncPlan(existing, res.drafts, fields)
     const warnings = [...res.warnings]
     if (!fields.hasStock) warnings.push("الملف مافيهوش عمود «المخزون» — مش هنعدّل الكميات ولا نصفّر أي صنف، بس نحدّث الأسعار ونضيف الجديد.")
@@ -303,7 +305,7 @@ export async function syncCatalogApply(formData: FormData) {
     const { existing, overflow, withSku } = await loadExistingForSync(db, uid)
     if (overflow) return { ok: false as const, error: "catalog_too_large" }
     if (existing.length > 0 && withSku === 0) return { ok: false as const, error: "catalog_has_no_codes" }
-    const fields = { hasStock: res.mapping.stock != null, hasCost: res.mapping.cost_price != null }
+    const fields = { hasStock: res.mapping.stock != null, hasCost: res.mapping.cost_price != null, hasExpiry: res.mapping.expiry != null }
     const plan = computeSyncPlan(existing, res.drafts, fields)
     const now = new Date().toISOString()
 
@@ -322,6 +324,7 @@ export async function syncCatalogApply(formData: FormData) {
         stock: u.stock, price: u.price, cost_price: u.cost_price, profit_per_unit: u.profit_per_unit, updated_at: now,
       }
       if (u.stock === 0) data.reservation_enabled = true
+      if (u.expiry) data.expiry_date = u.expiry // نحدّث الصلاحية فقط عند تغيّرها (لا نمحو القديمة)
       ops.push({ kind: "update", ref: db.collection("products").doc(u.id), data })
     }
     // تصفير ما غاب عن الملف (نفد) — للمستورَد-بكود فقط، والمنتج موجود مؤكَّد (قُرئ من DB).
@@ -341,7 +344,7 @@ export async function syncCatalogApply(formData: FormData) {
         category: d.category && d.category.length ? d.category.slice(0, 60) : defaultCategory,
         stock, image_url: d.image_url || "",
         image_status: d.image_url ? "file" : "queued",
-        store_id: uid, barcode: d.barcode || "", simulator_section: null,
+        store_id: uid, barcode: d.barcode || "", expiry_date: d.expiry || null, simulator_section: null,
         reservation_enabled: stock === 0, rating: 0, rating_count: 0, imported: true,
         import_unit: d.unit || "", import_sku: d.sku || "", created_at: now, updated_at: now,
       } })

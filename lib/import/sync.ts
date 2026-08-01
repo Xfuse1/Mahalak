@@ -14,6 +14,7 @@ export type ExistingProduct = {
   stock: number
   price: number
   cost_price: number
+  expiry?: string // expiry_date الحالي (YYYY-MM-DD) — للمقارنة عند مزامنة الصلاحية
 }
 
 export type SyncUpdate = {
@@ -23,6 +24,7 @@ export type SyncUpdate = {
   price: number
   cost_price: number
   profit_per_unit: number
+  expiry?: string // يُضبط فقط عند تغيّر تاريخ الصلاحية (وإلا لا نلمسه)
 }
 
 export type SyncPlan = {
@@ -42,7 +44,7 @@ export function normalizeSku(raw: unknown): string {
 }
 
 // أي حقول يوفّرها ملف اليوم فعلاً — لا نحدّث حقلًا غائبًا عن الملف (كي لا نمحو تكلفة/مخزون التاجر).
-export type SyncFields = { hasStock: boolean; hasCost: boolean }
+export type SyncFields = { hasStock: boolean; hasCost: boolean; hasExpiry?: boolean }
 
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
 const intStock = (n: unknown) => Math.max(0, Math.round(Number(n) || 0))
@@ -83,10 +85,16 @@ export function computeSyncPlan(existing: ExistingProduct[], drafts: ProductDraf
       const cost = fields.hasCost
         ? round2(Math.min(Number(d.cost_price), price)) // التكلفة لا تتجاوز السعر
         : round2(Math.min(Number(e.cost_price), price)) // نُبقي القديمة لكن لا تتجاوز السعر الجديد
-      if (eqMoney(e.price, price) && eqMoney(e.cost_price, cost) && intStock(e.stock) === stock) {
+      // الصلاحية: نحدّثها فقط لو الملف فيه عمود صلاحية وقيمته موجودة ومختلفة (لا نمحو القديمة ببلاغ).
+      const newExpiry = fields.hasExpiry && d.expiry ? String(d.expiry) : ""
+      const expiryChanged = !!newExpiry && newExpiry !== String(e.expiry || "")
+      const sameMoneyStock = eqMoney(e.price, price) && eqMoney(e.cost_price, cost) && intStock(e.stock) === stock
+      if (sameMoneyStock && !expiryChanged) {
         matchedUnchanged++
       } else {
-        updates.push({ id: e.id, sku, stock, price, cost_price: cost, profit_per_unit: calculateProfitPerUnit(price, cost) })
+        const u: SyncUpdate = { id: e.id, sku, stock, price, cost_price: cost, profit_per_unit: calculateProfitPerUnit(price, cost) }
+        if (expiryChanged) u.expiry = newExpiry
+        updates.push(u)
       }
     } else if (fields.hasStock && intStock(e.stock) > 0) {
       // كود موجود في الكتالوج لكنه غاب عن ملف النهاردة ⇒ نفد ⇒ صفّر (فقط لو الملف ملف مخزون ومخزونه > 0).

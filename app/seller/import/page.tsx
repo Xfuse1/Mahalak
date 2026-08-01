@@ -55,6 +55,7 @@ const FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: "unit", label: "الوحدة" },
   { key: "sku", label: "الكود" },
   { key: "barcode", label: "الباركود" },
+  { key: "expiry", label: "تاريخ الصلاحية" },
   { key: "image", label: "رابط الصورة" },
 ]
 
