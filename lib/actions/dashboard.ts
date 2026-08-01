@@ -168,6 +168,167 @@ export async function getDashboardAnalytics(storeId: string, callerId?: string):
   }
 }
 
+// ─── لوحة «اليوم» + تنبيهات المخزون ───
+// «اليوم» بتوقيت القاهرة (يوم التاجر المحلي) لا UTC. created_at نصّي ISO(UTC) في كل المجموعات، فنقارن
+// تاريخ القاهرة المُنسَّق (YYYY-MM-DD). الهوية سيرفر-سايد من الجلسة؛ callerId من العميل يُتجاهَل أمنيًّا.
+
+const cairoDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }) // en-CA ⇒ YYYY-MM-DD
+function cairoDateStr(d: Date): string {
+  return Number.isNaN(d.getTime()) ? "" : cairoDateFmt.format(d)
+}
+
+export type SellerDailyStats = {
+  salesCount: number
+  revenue: number
+  profit: number
+  pos: { count: number; revenue: number; profit: number }
+  cod: { count: number; revenue: number; profit: number }
+  topItems: { name: string; quantity: number }[]
+  codProfitApprox: boolean // ربح التوصيل تقديري (تكلفة المنتج الحالية؛ order_items بلا تكلفة)
+}
+
+const EMPTY_DAILY: SellerDailyStats = {
+  salesCount: 0, revenue: 0, profit: 0,
+  pos: { count: 0, revenue: 0, profit: 0 },
+  cod: { count: 0, revenue: 0, profit: 0 },
+  topItems: [], codProfitApprox: false,
+}
+
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
+
+// إحصائيات اليوم للتاجر: مبيعات/ربح الكاشير (دقيق، التكلفة لقطة وقت البيع) + التوصيل (ربحه تقديري
+// من تكلفة المنتج الحالية لأن order_items بلا تكلفة) + أكثر الأصناف مبيعًا اليوم (كاشير + توصيل).
+export async function getSellerDailyStats(callerId?: string): Promise<SellerDailyStats> {
+  const uid = await getCurrentUid()
+  if (!uid) return EMPTY_DAILY
+  const db = getAdminDb()
+  const today = cairoDateStr(new Date())
+  // حدّ أدنى للاستعلام (لتفادي قراءة كل التاريخ) يغطّي يوم القاهرة مهما كان الإزاحة/DST.
+  const lowerBound = new Date(Date.now() - 30 * 3600 * 1000).toISOString()
+  const isToday = (createdAt: unknown) => cairoDateStr(new Date(String(createdAt || ""))) === today
+
+  const qtyByProduct = new Map<string, { name: string; quantity: number }>()
+  const addQty = (productId: string, name: string, quantity: number) => {
+    if (!productId || !(quantity > 0)) return
+    const cur = qtyByProduct.get(productId)
+    if (cur) { cur.quantity += quantity; if (!cur.name && name) cur.name = name }
+    else qtyByProduct.set(productId, { name: name || "", quantity })
+  }
+
+  // ── الكاشير (pos_sales) ──
+  let posDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  try {
+    const snap = await db.collection("pos_sales").where("store_id", "==", uid)
+      .where("created_at", ">=", lowerBound).get()
+    posDocs = snap.docs
+  } catch {
+    // لا فهرس مركّب (store_id+created_at) على pos_sales ⇒ نجيب بالمتجر فقط ونفلتر في الذاكرة.
+    const snap = await db.collection("pos_sales").where("store_id", "==", uid).get()
+    posDocs = snap.docs
+  }
+  let posCount = 0, posRevenue = 0, posProfit = 0
+  for (const d of posDocs) {
+    const s = d.data() as Record<string, any>
+    if (!isToday(s.created_at)) continue
+    posCount++
+    posRevenue += Number(s.total) || 0
+    posProfit += Number(s.total_profit) || 0
+    for (const it of Array.isArray(s.items) ? s.items : []) {
+      addQty(String(it?.product_id || ""), String(it?.name || ""), Number(it?.quantity) || 0)
+    }
+  }
+
+  // ── التوصيل (orders) اليوم — نستبعد الملغي فقط ──
+  let orderDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  try {
+    const snap = await db.collection("orders").where("store_id", "==", uid)
+      .where("created_at", ">=", lowerBound).get()
+    orderDocs = snap.docs
+  } catch {
+    const snap = await db.collection("orders").where("store_id", "==", uid).get()
+    orderDocs = snap.docs
+  }
+  const todayOrders = orderDocs.filter((d) => {
+    const o = d.data() as Record<string, any>
+    return isToday(o.created_at) && o.status !== "cancelled"
+  })
+  let codCount = 0, codRevenue = 0, codProfit = 0
+  let codProfitApprox = false
+  for (const d of todayOrders) {
+    const o = d.data() as Record<string, any>
+    codCount++
+    codRevenue += (Number(o.total) || 0) - (Number(o.delivery_price) || 0) // نصيب المنتجات (بلا رسم توصيل)
+  }
+  if (todayOrders.length > 0) {
+    // ربح التوصيل + أصنافه: من order_items (سعر+كمية) × تكلفة المنتج الحالية (تقديري).
+    const orderIds = todayOrders.map((d) => d.id)
+    const items = await fetchByIn<{ order_id?: string; product_id?: string; quantity?: number | string; price?: number | string }>(
+      db, "order_items", "order_id", orderIds,
+    )
+    const prodIds = Array.from(new Set(items.map((i) => String(i.product_id || "")).filter(Boolean)))
+    const prodMap = await fetchDocsMap<{ name?: string; cost_price?: number | string }>(db, "products", prodIds)
+    if (items.length > 0) codProfitApprox = true
+    for (const it of items) {
+      const pid = String(it.product_id || "")
+      const qty = Number(it.quantity) || 0
+      const price = Number(it.price) || 0
+      const prod = prodMap.get(pid)
+      const cost = Number(prod?.cost_price) || 0
+      codProfit += (price - cost) * qty
+      addQty(pid, String(prod?.name || ""), qty)
+    }
+  }
+
+  const topItems = Array.from(qtyByProduct.values())
+    .filter((x) => x.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5)
+    .map((x) => ({ name: x.name || "منتج", quantity: x.quantity }))
+
+  return {
+    salesCount: posCount + codCount,
+    revenue: round2(posRevenue + codRevenue),
+    profit: round2(posProfit + codProfit),
+    pos: { count: posCount, revenue: round2(posRevenue), profit: round2(posProfit) },
+    cod: { count: codCount, revenue: round2(codRevenue), profit: round2(codProfit) },
+    topItems,
+    codProfitApprox,
+  }
+}
+
+export type StockAlerts = {
+  outOfStock: { id: string; name: string }[]
+  lowStock: { id: string; name: string; stock: number }[]
+  outCount: number
+  lowCount: number
+  threshold: number
+}
+
+// تنبيهات المخزون: نفد (stock<=0) + قرب يخلص (0<stock<=threshold). قوائم بأسماء (بسقف عرض) + العدّ الكامل.
+export async function getStockAlerts(threshold = 5, callerId?: string): Promise<StockAlerts> {
+  const uid = await getCurrentUid()
+  const th = Math.max(1, Math.floor(Number(threshold) || 5))
+  if (!uid) return { outOfStock: [], lowStock: [], outCount: 0, lowCount: 0, threshold: th }
+  const db = getAdminDb()
+  const snap = await db.collection("products").where("store_id", "==", uid).select("name", "stock").get()
+  const outOfStock: { id: string; name: string }[] = []
+  const lowStock: { id: string; name: string; stock: number }[] = []
+  for (const d of snap.docs) {
+    const stock = Number(d.data().stock) || 0
+    const name = String(d.data().name || "")
+    if (stock <= 0) outOfStock.push({ id: d.id, name })
+    else if (stock <= th) lowStock.push({ id: d.id, name, stock })
+  }
+  lowStock.sort((a, b) => a.stock - b.stock)
+  return {
+    outOfStock: outOfStock.slice(0, 100),
+    lowStock: lowStock.slice(0, 100),
+    outCount: outOfStock.length,
+    lowCount: lowStock.length,
+    threshold: th,
+  }
+}
+
 export async function getRecentOrders(storeId: string, limit = 3, callerId?: string): Promise<RecentDashboardOrder[]> {
   // Ownership check
   const uid = await getCurrentUid()

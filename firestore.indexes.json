@@ -48,6 +48,14 @@
         { "fieldPath": "store_id", "order": "ASCENDING" },
         { "fieldPath": "image_status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "pos_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "store_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

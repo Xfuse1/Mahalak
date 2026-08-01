@@ -7,10 +7,10 @@ import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
-import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle } from "lucide-react"
+import { BarChart3, DollarSign, Package, ShoppingBag, TrendingUp, AlertTriangle, Star, Plus, Monitor, ShoppingCart, MapPin, Clock, CheckCircle, Calendar, XCircle, Wallet } from "lucide-react"
 import Link from "next/link"
 import { getStoreByUserId } from "../../../lib/actions/stores"
-import { getDashboardAnalytics, getRecentOrders, type RecentDashboardOrder } from "../../../lib/actions/dashboard"
+import { getDashboardAnalytics, getRecentOrders, getSellerDailyStats, getStockAlerts, type RecentDashboardOrder, type SellerDailyStats, type StockAlerts } from "../../../lib/actions/dashboard"
 import { logError } from "../../../lib/logger"
 
 export default function SellerDashboard() {
@@ -29,6 +29,8 @@ export default function SellerDashboard() {
     totalReviews: 0,
   })
   const [recentOrders, setRecentOrders] = useState<RecentDashboardOrder[]>([])
+  const [daily, setDaily] = useState<SellerDailyStats | null>(null)
+  const [stockAlerts, setStockAlerts] = useState<StockAlerts | null>(null)
   const [loading, setLoading] = useState(true)
   const [store, setStore] = useState<any>(null)
   const [storeApproved, setStoreApproved] = useState<boolean | null>(null)
@@ -72,6 +74,15 @@ export default function SellerDashboard() {
 
           setAnalytics(analyticsData)
           setRecentOrders(ordersData)
+
+          // إحصائيات «اليوم» + تنبيهات المخزون (قراءة فقط) — أفضل-جهد، لا تكسر بقية اللوحة لو فشلت.
+          try {
+            const [dailyData, alertsData] = await Promise.all([getSellerDailyStats(user.id), getStockAlerts(5, user.id)])
+            setDaily(dailyData)
+            setStockAlerts(alertsData)
+          } catch (e) {
+            logError("[dashboard] daily/stock", e)
+          }
         }
       } catch (error) {
         logError("[v0] Error fetching dashboard data:", error)
@@ -237,9 +248,114 @@ export default function SellerDashboard() {
             </div>
           )}
 
-          {/* Financial Performance */}
+          {/* ═══ اليوم ═══ */}
           <div className="mb-10">
-            <h2 className="text-xl font-bold mb-5 text-gray-800">{t("الأداء المالي", "Financial Performance")}</h2>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" /> {t("اليوم", "Today")}
+              </h2>
+              <span className="text-xs text-gray-400">{t("بتوقيت القاهرة · كاشير + توصيل", "Cairo time · POS + delivery")}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden bg-gradient-to-br from-white to-emerald-50">
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500 mb-2">{t("مبيعات اليوم", "Today's Sales")}</p>
+                      <p className="text-2xl font-extrabold text-emerald-600">{(daily?.revenue ?? 0).toLocaleString()} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span></p>
+                      <p className="text-xs text-gray-400 mt-1">{daily?.salesCount ?? 0} {t("عملية بيع", "sales")}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-4 rounded-2xl shadow-lg"><DollarSign className="h-6 w-6 text-white" /></div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden bg-primary/5">
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500 mb-2">{t("ربح اليوم", "Today's Profit")}</p>
+                      <p className="text-2xl font-extrabold text-primary">{(daily?.profit ?? 0).toLocaleString()} <span className="text-base text-gray-500">{t("جنيه", "EGP")}</span></p>
+                      <p className="text-xs text-gray-400 mt-1">{daily?.codProfitApprox ? t("الكاشير دقيق · التوصيل تقديري", "POS exact · delivery est.") : t("من الكاشير", "from POS")}</p>
+                    </div>
+                    <div className="bg-primary p-4 rounded-2xl shadow-lg"><TrendingUp className="h-6 w-6 text-white" /></div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-lg rounded-2xl overflow-hidden bg-gradient-to-br from-white to-amber-50">
+                <CardContent className="pt-6 pb-5">
+                  <p className="text-sm text-gray-500 mb-3 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> {t("التقسيم", "Breakdown")}</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-600">{t("الكاشير", "POS")}</span><span className="font-bold text-gray-800">{(daily?.pos.revenue ?? 0).toLocaleString()} <span className="text-xs text-gray-400">({daily?.pos.count ?? 0})</span></span></div>
+                    <div className="flex justify-between"><span className="text-gray-600">{t("التوصيل", "Delivery")}</span><span className="font-bold text-gray-800">{(daily?.cod.revenue ?? 0).toLocaleString()} <span className="text-xs text-gray-400">({daily?.cod.count ?? 0})</span></span></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* ═══ تنبيهات المخزون + الأكثر مبيعًا اليوم ═══ */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-100 rounded-xl"><AlertTriangle className="h-5 w-5 text-amber-600" /></div>
+                    {t("تنبيهات المخزون", "Stock Alerts")}
+                  </CardTitle>
+                  <Button variant="outline" size="sm" asChild className="rounded-xl"><Link href="/seller/products">{t("المنتجات", "Products")}</Link></Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex-1 rounded-xl bg-red-50 p-3 text-center"><div className="text-2xl font-extrabold text-red-600">{stockAlerts?.outCount ?? 0}</div><div className="text-xs text-gray-500">{t("نفد", "Out of stock")}</div></div>
+                  <div className="flex-1 rounded-xl bg-amber-50 p-3 text-center"><div className="text-2xl font-extrabold text-amber-600">{stockAlerts?.lowCount ?? 0}</div><div className="text-xs text-gray-500">{t("قرب يخلص", "Low stock")} (≤{stockAlerts?.threshold ?? 5})</div></div>
+                </div>
+                {(stockAlerts?.outOfStock.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-red-600 mb-1 flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> {t("نفد", "Out")}</div>
+                    <div className="space-y-1">{stockAlerts!.outOfStock.slice(0, 6).map((p) => (<div key={p.id} className="text-sm text-gray-700 truncate">{p.name}</div>))}{stockAlerts!.outCount > 6 && <div className="text-xs text-gray-400">+{stockAlerts!.outCount - 6} {t("غيرها", "more")}</div>}</div>
+                  </div>
+                )}
+                {(stockAlerts?.lowStock.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-amber-600 mb-1">{t("قرب يخلص", "Low stock")}</div>
+                    <div className="space-y-1">{stockAlerts!.lowStock.slice(0, 6).map((p) => (<div key={p.id} className="text-sm text-gray-700 truncate flex justify-between"><span className="truncate">{p.name}</span><span className="text-amber-600 font-semibold shrink-0 ms-2">{p.stock}</span></div>))}{stockAlerts!.lowCount > 6 && <div className="text-xs text-gray-400">+{stockAlerts!.lowCount - 6} {t("غيرها", "more")}</div>}</div>
+                  </div>
+                )}
+                {(stockAlerts?.outCount ?? 0) === 0 && (stockAlerts?.lowCount ?? 0) === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">{t("كل المنتجات مخزونها كويس 👍", "All products well-stocked 👍")}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                <CardTitle className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-xl"><BarChart3 className="h-5 w-5 text-primary" /></div>
+                  {t("الأكثر مبيعًا اليوم", "Top Sellers Today")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {(daily?.topItems.length ?? 0) === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">{t("لسه مفيش مبيعات النهاردة", "No sales yet today")}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {daily!.topItems.map((it, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                        <span className="flex-1 text-sm text-gray-700 truncate">{it.name}</span>
+                        <span className="text-sm font-bold text-gray-800">{it.quantity} {t("قطعة", "pcs")}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Financial Performance (all-time) */}
+          <div className="mb-10">
+            <h2 className="text-xl font-bold mb-5 text-gray-800">{t("الإجمالي (كل الوقت)", "All-Time")}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <Card className="border-0 shadow-lg rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-primary/5">
                 <CardContent className="pt-6 pb-5">
