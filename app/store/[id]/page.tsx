@@ -5,8 +5,11 @@ import { Footer } from "../../../components/footer"
 import { ProductCard } from "../../../components/product-card"
 import { BackButton } from "../../../components/back-button"
 import { ShareButton } from "../../../components/share-button"
-import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package } from "lucide-react"
+import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package, SearchX, Flame, Sparkles, Clock, LayoutGrid } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
+import { SearchBar } from "../../../components/search-bar"
+import { searchTokens } from "../../../lib/utils/arabic"
+import { normalizeArabic } from "../../../lib/utils/arabic"
 import { Button } from "../../../components/ui/button"
 import {
   Sheet,
@@ -19,9 +22,9 @@ import {
 import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { getStore } from "../../../lib/actions/stores"
-import { getProductsByStoreId } from "../../../lib/actions/products"
+import { getProductsByStoreId, getStoreTopSellers } from "../../../lib/actions/products"
 import { trackMetaEvent } from "../../../lib/utils"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
@@ -50,12 +53,21 @@ type Product = {
   category: string
   stock: number
   image: string
+  image_url?: string | null
   store_id: string
   rating: number
+  rating_count?: number
+  discount_percentage?: number
+  created_at?: string
   storeName: string
   storeId: string
   reviewCount: number
 }
+
+// أقصى عدد بطاقات في القسم الواحد — الأقسام نافذة سريعة لا شبكة كاملة
+const SECTION_SIZE = 8
+// دفعة العرض في الشبكة الكاملة: متاجر الاستيراد تتجاوز 1500 صنف، ورسمها دفعة واحدة يُجمّد الهاتف
+const PAGE_SIZE = 24
 
 type Offer = {
   id: string
@@ -78,6 +90,9 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
   const [store, setStore] = useState<Store | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
+  const [topSellerIds, setTopSellerIds] = useState<string[]>([])
+  const [query, setQuery] = useState("")
+  const [activeCategory, setActiveCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
   const [userStoreReview, setUserStoreReview] = useState<number | null>(null)
   const [hoverRating, setHoverRating] = useState<number | null>(null)
@@ -98,7 +113,7 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
         setStore(storeData)
 
         // Fetch offers and products in parallel, handling individual failures
-        const [offersData, productsData] = await Promise.all([
+        const [offersData, productsData, topSellers] = await Promise.all([
           getStoreOffers(id).catch((err) => {
             console.error("[debug] Error fetching store offers:", err)
             return []
@@ -107,7 +122,11 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
             console.error("[debug] Error fetching store products:", err)
             return []
           }),
+          // قسم «الأكثر مبيعًا» تحسين لا شرط عرض — فشله يُخفي القسم ولا يُسقط الصفحة
+          getStoreTopSellers(id).catch(() => [] as string[]),
         ])
+
+        setTopSellerIds(topSellers)
 
         const now = new Date()
         const activeOffers = offersData.filter((offer: any) => {
@@ -174,6 +193,101 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
       mounted = false
     }
   }, [store, user])
+
+  // ═══ البحث والتقسيم داخل المتجر ═══
+  // كل الخطّافات تُعلَن قبل أي return مبكّر (تحميل/notFound) وإلا اختلف عددها بين الرسمات.
+
+  // فهرس بحث مُطبَّع يُحسب مرة لكل قائمة منتجات: متجر الصيدلية يحمل آلاف الأصناف، وتطبيع
+  // النص داخل الفلتر كان سيعيد تطبيع كل اسم مع كل ضغطة مفتاح.
+  const searchIndex = useMemo(
+    () =>
+      products.map((product) => ({
+        product,
+        blob: normalizeArabic(`${product.name} ${product.description || ""} ${product.category || ""}`),
+      })),
+    [products],
+  )
+
+  const tokens = useMemo(() => searchTokens(query), [query])
+
+  // فئات المتجر (تقسيم داخلي) — تظهر فقط عند وجود فئتين فأكثر، وإلا فالشريط زينة بلا فائدة
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    products.forEach((product) => {
+      const name = (product.category || "").trim()
+      if (!name) return
+      counts.set(name, (counts.get(name) || 0) + 1)
+    })
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }))
+  }, [products])
+
+  const visibleProducts = useMemo(() => {
+    let list = searchIndex
+    if (activeCategory !== "all") {
+      list = list.filter(({ product }) => (product.category || "").trim() === activeCategory)
+    }
+    if (tokens.length) {
+      list = list.filter(({ blob }) => tokens.every((token) => blob.includes(token)))
+    }
+    return list.map(({ product }) => product)
+  }, [searchIndex, tokens, activeCategory])
+
+  // ترقيم تدريجي للشبكة الكاملة. نُصفّره وقت الرسم عند تغيّر البحث/الفئة بدل setState داخل
+  // effect (يمنع الرسمات المتتالية ويُبقي فحص الـlint نظيفًا).
+  const filterKey = `${activeCategory}::${query}`
+  const [pager, setPager] = useState({ key: filterKey, count: PAGE_SIZE })
+  const visibleCount = pager.key === filterKey ? pager.count : PAGE_SIZE
+
+  // أقسام العرض السريع — تُبنى من نفس القائمة المحمَّلة (بلا أي قراءة إضافية) عدا «الأكثر مبيعًا»
+  const sections = useMemo(() => {
+    const byId = new Map(products.map((product) => [product.id, product]))
+
+    const topSelling = topSellerIds
+      .map((productId) => byId.get(productId))
+      .filter((product): product is Product => Boolean(product))
+      .slice(0, SECTION_SIZE)
+
+    const discounted = products
+      .filter((product) => Number(product.discount_percentage || 0) > 0)
+      .sort((a, b) => Number(b.discount_percentage || 0) - Number(a.discount_percentage || 0))
+      .slice(0, SECTION_SIZE)
+
+    // «الأعلى تقييمًا» مشروط بوجود تقييمات فعلية: كل منتج يُنشأ بـ rating_count = 0، فبدون
+    // الشرط يعرض القسم شريحة عشوائية من منتجات بلا تقييم ويبدو معطوبًا.
+    const topRated = products
+      .filter((product) => Number(product.rating_count || 0) > 0 && Number(product.rating || 0) > 0)
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0) || Number(b.rating_count || 0) - Number(a.rating_count || 0))
+      .slice(0, SECTION_SIZE)
+
+    // «وصل حديثًا» بلا معنى لكتالوج مستورَد دفعة واحدة (كل الأصناف بنفس created_at) — نُخفيه حينها
+    const dated = products.filter((product) => Boolean(product.created_at))
+    const newest = [...dated]
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, SECTION_SIZE)
+    const newestIsMeaningful =
+      newest.length > 1 && new Set(dated.map((product) => String(product.created_at))).size > 1
+
+    // العناوين تُترجَم وقت الرسم لا هنا: مرجع t يتغيّر مع كل رسمة للسياق فكان يُبطل الذاكرة
+    // ويعيد فرز آلاف الأصناف بلا داعٍ.
+    return [
+      { key: "top", icon: Flame, items: topSelling },
+      { key: "offers", icon: Tag, items: discounted },
+      { key: "rated", icon: Sparkles, items: topRated },
+      { key: "new", icon: Clock, items: newestIsMeaningful ? newest : [] },
+    ].filter((section) => section.items.length > 0)
+  }, [products, topSellerIds])
+
+  const sectionTitles: Record<string, string> = {
+    top: t("الأكثر مبيعًا", "Best sellers"),
+    offers: t("عروض وخصومات", "Deals & discounts"),
+    rated: t("الأعلى تقييمًا", "Top rated"),
+    new: t("وصل حديثًا", "New arrivals"),
+  }
+
+  // الأقسام نافذة تصفّح سريعة: تُخفى فور بدء البحث أو اختيار فئة كي لا تُشوّش على النتائج
+  const isBrowsingAll = activeCategory === "all" && tokens.length === 0
 
   if (loading) {
     return (
@@ -334,7 +448,9 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
                                   setStore((s) => (s ? { ...s, rating: newAvg } : s))
                                   setUserStoreReview(n)
                                 } else if (res && res.error) {
-                                  toast.error(t(`فشل التقييم: ${res.error}`, `Rating failed: ${res.error}`))
+                                  // رسالة الخادم عربية جاهزة للعرض — لا نسبقها بـ«فشل التقييم» كي لا
+                                  // تُقرأ كعطل بينما هي شرط مفهوم (لم يكتمل تسليم طلب من هذا المتجر)
+                                  toast.error(res.error)
                                 }
                               } catch (err: any) {
                                 toast.error(t("حدث خطأ أثناء إرسال التقييم", "An error occurred while submitting your rating"))
@@ -397,17 +513,109 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
 
 
           <div>
-            <h2 className="text-2xl font-bold mb-6">{t("منتجات المتجر", "Store Products")}</h2>
-            {products.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
-            ) : (
+            <h2 className="text-2xl font-bold mb-4">{t("منتجات المتجر", "Store Products")}</h2>
+
+            {products.length > 0 && (
+              <>
+                {/* بحث داخل هذا المتجر وحده — غير البحث العام في أعلى الموقع */}
+                <div className="mb-4">
+                  <SearchBar
+                    placeholder={t(`ابحث داخل ${store.name}...`, `Search inside ${store.name}...`)}
+                    onSearch={setQuery}
+                  />
+                </div>
+
+                {/* تقسيم داخلي بالفئات */}
+                {categories.length > 1 && (
+                  <div className="mb-6 -mx-2 px-2 overflow-x-auto">
+                    <div className="flex gap-2 min-w-max pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategory("all")}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${activeCategory === "all"
+                          ? "bg-primary text-primary-foreground shadow-md"
+                          : "bg-card border border-border text-foreground hover:bg-secondary"
+                          }`}
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                        {t("الكل", "All")} ({products.length})
+                      </button>
+                      {categories.map((category) => (
+                        <button
+                          key={category.name}
+                          type="button"
+                          onClick={() => setActiveCategory(category.name)}
+                          className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${activeCategory === category.name
+                            ? "bg-primary text-primary-foreground shadow-md"
+                            : "bg-card border border-border text-foreground hover:bg-secondary"
+                            }`}
+                        >
+                          {category.name} ({category.count})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* أقسام سريعة (الأكثر مبيعًا / عروض / الأعلى تقييمًا / وصل حديثًا) */}
+            {isBrowsingAll &&
+              sections.map((section) => (
+                <section key={section.key} className="mb-8">
+                  <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
+                    <section.icon className="h-5 w-5 text-primary" />
+                    {sectionTitles[section.key]}
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {section.items.map((product) => (
+                      <ProductCard key={`${section.key}-${product.id}`} product={product} showActions storePhone={store.phone} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+
+            {products.length > 0 && (
+              <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                {tokens.length > 0 || activeCategory !== "all"
+                  ? t(`النتائج (${visibleProducts.length})`, `Results (${visibleProducts.length})`)
+                  : t(`كل المنتجات (${visibleProducts.length})`, `All products (${visibleProducts.length})`)}
+              </h3>
+            )}
+
+            {products.length === 0 ? (
               <EmptyState
                 icon={Package}
                 title={t("لا توجد منتجات في هذا المتجر حالياً", "No products available in this store currently")}
+              />
+            ) : visibleProducts.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {visibleProducts.slice(0, visibleCount).map((product) => (
+                    <ProductCard key={product.id} product={product} showActions storePhone={store.phone} />
+                  ))}
+                </div>
+                {visibleProducts.length > visibleCount && (
+                  <div className="flex justify-center mt-8">
+                    <Button
+                      variant="outline"
+                      onClick={() => setPager({ key: filterKey, count: visibleCount + PAGE_SIZE })}
+                      className="border-2 border-primary text-primary hover:bg-primary/10 rounded-xl px-8 h-12 font-bold"
+                    >
+                      {t(
+                        `عرض المزيد (${visibleProducts.length - visibleCount} متبقٍ)`,
+                        `Show more (${visibleProducts.length - visibleCount} left)`,
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <EmptyState
+                icon={SearchX}
+                title={t("لا توجد نتائج مطابقة", "No matching results")}
+                description={t("جرّب كلمات أخرى أو اختر فئة مختلفة", "Try different words or pick another category")}
               />
             )}
           </div>

@@ -1,19 +1,23 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { SlidersHorizontal, Calendar, Banknote } from "lucide-react"
+import { SlidersHorizontal, Calendar, Banknote, MapPin } from "lucide-react"
 import { Button } from "./ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Label } from "./ui/label"
 import { Input } from "./ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet"
 import { useLanguage } from "../lib/language-context"
+import { useUserLocation } from "../lib/location/user-location"
+import { NearbyControl } from "./nearby-control"
 
 export interface FilterState {
   sortBy: string
   priceMin: number | null
   priceMax: number | null
   daysAgo: number | null
+  /** نصف قطر بالكيلومتر من موقع المستخدم — null = بلا حدّ */
+  maxKm: number | null
 }
 
 interface FilterSortProps {
@@ -31,21 +35,31 @@ const DATE_OPTIONS = [
   { value: 90, labelAr: "3 أشهر", labelEn: "3 months" },
 ]
 
+// خطوات نصف قطر المسافة (كم) — 0 = بلا حدّ
+const KM_OPTIONS = [0, 1, 2, 5, 10, 20, 50]
+
 export function FilterSort({ onFilterChange, initialSort = "relevance" }: FilterSortProps) {
   const [sortBy, setSortBy] = useState(initialSort)
   const [priceMin, setPriceMin] = useState("")
   const [priceMax, setPriceMax] = useState("")
   const [daysAgo, setDaysAgo] = useState(0)
+  const [maxKm, setMaxKm] = useState(0)
   const [open, setOpen] = useState(false)
   const { t, language } = useLanguage()
+  const { coords } = useUserLocation()
 
   const isRTL = language === "ar"
+
+  // نصف القطر بلا موقع معروف يُفرغ النتائج بلا سبب مفهوم — نُعطّله اشتقاقًا (لا بـsetState داخل
+  // effect) فيعود تلقائيًا لو أعاد المستخدم تحديد موقعه بلا أن يفقد اختياره.
+  const effectiveMaxKm = coords && maxKm > 0 ? maxKm : 0
 
   const hasActiveFilters =
     sortBy !== "relevance" ||
     priceMin !== "" ||
     priceMax !== "" ||
-    daysAgo > 0
+    daysAgo > 0 ||
+    effectiveMaxKm > 0
 
   // تطبيق التغييرات تلقائياً عند تغيير أي فلتر
   const isFirstMount = useRef(true)
@@ -60,9 +74,10 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
         priceMin: priceMin ? Number(priceMin) : null,
         priceMax: priceMax ? Number(priceMax) : null,
         daysAgo: daysAgo > 0 ? daysAgo : null,
+        maxKm: effectiveMaxKm > 0 ? effectiveMaxKm : null,
       })
     }
-  }, [sortBy, priceMin, priceMax, daysAgo, onFilterChange])
+  }, [sortBy, priceMin, priceMax, daysAgo, effectiveMaxKm, onFilterChange])
 
   const handleSortChange = (value: string) => {
     setSortBy(value)
@@ -75,6 +90,7 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
         priceMin: priceMin ? Number(priceMin) : null,
         priceMax: priceMax ? Number(priceMax) : null,
         daysAgo: daysAgo > 0 ? daysAgo : null,
+        maxKm: effectiveMaxKm > 0 ? effectiveMaxKm : null,
       })
     }
     setOpen(false)
@@ -85,8 +101,9 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
     setPriceMin("")
     setPriceMax("")
     setDaysAgo(0)
+    setMaxKm(0)
     if (onFilterChange) {
-      onFilterChange({ sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null })
+      onFilterChange({ sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null, maxKm: null })
     }
     setOpen(false)
   }
@@ -229,6 +246,64 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
             )}
           </div>
 
+          {/* ───── قسم فلترة المسافة ───── */}
+          <div className="space-y-3">
+            <Label className={`text-base font-semibold flex items-center gap-2 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
+              <MapPin className="h-4 w-4 text-primary" />
+              {t("المسافة من موقعك", "Distance from you")}
+            </Label>
+
+            {!coords ? (
+              // بلا إذن موقع لا معنى لنصف قطر — نعرض طلب الموقع بدل شريط ميت
+              <div className={`p-3 bg-secondary rounded-lg space-y-2 ${isRTL ? "text-right" : "text-left"}`}>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "فعّل تحديد موقعك لعرض المنتجات القريبة منك فقط",
+                    "Enable your location to show only nearby products",
+                  )}
+                </p>
+                <NearbyControl />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className={`text-xs text-gray-500 ${isRTL ? "text-right" : "text-left"}`}>
+                  {t("عرض المنتجات داخل نطاق محدد حول موقعك", "Show products within a set radius around you")}
+                </p>
+                <input
+                  type="range"
+                  min={0}
+                  max={KM_OPTIONS.length - 1}
+                  step={1}
+                  value={KM_OPTIONS.indexOf(maxKm) === -1 ? 0 : KM_OPTIONS.indexOf(maxKm)}
+                  onChange={(e) => setMaxKm(KM_OPTIONS[Number(e.target.value)])}
+                  aria-label={t("نطاق المسافة بالكيلومتر", "Distance radius in kilometers")}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+                  style={{ direction: "ltr" }}
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 px-0.5" dir="ltr">
+                  {KM_OPTIONS.map((km) => (
+                    <span key={km} className={`transition-colors ${maxKm === km ? "text-primary font-bold" : ""}`}>
+                      {km === 0 ? t("الكل", "All") : `${km}`}
+                    </span>
+                  ))}
+                </div>
+                {maxKm > 0 && (
+                  <div className={`p-3 bg-primary/10 rounded-lg border border-primary/20 ${isRTL ? "text-right" : "text-left"}`}>
+                    <p className="text-sm text-primary font-medium">
+                      {t(`ضمن ${maxKm} كم من موقعك`, `Within ${maxKm} km of you`)}
+                    </p>
+                    <p className="text-xs text-primary/80 mt-1">
+                      {t(
+                        "المتاجر التي لم تحدّد موقعها على الخريطة لن تظهر ضمن هذا النطاق",
+                        "Stores without a map location won't appear inside this radius",
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* ───── قسم فلترة التاريخ ───── */}
           <div className="space-y-3">
             <Label className={`text-base font-semibold flex items-center gap-2 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
@@ -288,6 +363,14 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
                   <span className="text-sm font-medium text-gray-700">{t("السعر:", "Price:")}</span>
                   <span className="text-sm text-primary font-semibold">
                     {priceMin || "0"} → {priceMax || "∞"}
+                  </span>
+                </div>
+              )}
+              {effectiveMaxKm > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">{t("المسافة:", "Distance:")}</span>
+                  <span className="text-sm text-primary font-semibold">
+                    {t(`أقل من ${effectiveMaxKm} كم`, `Under ${effectiveMaxKm} km`)}
                   </span>
                 </div>
               )}

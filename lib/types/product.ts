@@ -11,5 +11,8 @@ export interface ProductListItem {
   category?: string
   description?: string
   store_id?: string
-  stores?: { name: string } | null
+  stock?: number
+  discount_percentage?: number
+  // هاتف المتجر للأزرار السريعة (واتساب/اتصال) وإحداثياته لفلتر المسافة — حقول عامة أصلًا
+  stores?: { name: string; phone?: string | null; latitude?: number | null; longitude?: number | null } | null
 }
