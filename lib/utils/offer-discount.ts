@@ -2,6 +2,9 @@
 // عرض المنتجات وإنشاء الطلبات، حتى يُحاسَب العميل بالسعر المخفّض نفسه الذي رآه.
 // ملاحظة: تستورد firebase-admin لذا تُستخدم في سياق السيرفر فقط (لا في مكوّنات العميل).
 import { getAdminDb } from "@/lib/firebase/admin"
+// قواعد الفعالية (توقيت القاهرة + نافذة الفلاش) تعيش في وحدة نقية يشاركها العميل — نسخة ثانية
+// منها هنا كانت ستفترق عمّا تعرضه صفحة المتجر فيرى العميل حملة بسعر لا يطابقها.
+import { cairoNow, isOfferActiveNow } from "@/lib/utils/offer-active"
 
 export type OfferRecord = {
   id?: string
@@ -16,37 +19,6 @@ export type OfferRecord = {
   duration_hours?: number
   used_quantity?: number
   [key: string]: unknown
-}
-
-// الوقت الحالي بتوقيت القاهرة (يتعامل مع التوقيت الصيفي تلقائيًا عبر Intl) بدل UTC.
-function cairoNow(): { date: string; hourFraction: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Cairo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date())
-  const get = (t: string) => parts.find((p) => p.type === t)?.value || "00"
-  let hh = parseInt(get("hour"), 10)
-  if (hh === 24) hh = 0
-  return { date: `${get("year")}-${get("month")}-${get("day")}`, hourFraction: hh + parseInt(get("minute"), 10) / 60 }
-}
-
-// هل العرض نشط الآن بتوقيت القاهرة؟ يطابق getOfferStatus في واجهة البائع:
-// عرض الفلاش (نفس اليوم + duration_hours) ينتهي بعد duration_hours من منتصف الليل.
-function isOfferActiveNow(offer: OfferRecord, cairoToday: string, hourFraction: number): boolean {
-  const startDay = String(offer.start_date || "").split("T")[0]
-  const endDay = String(offer.end_date || "").split("T")[0]
-  if (startDay && startDay > cairoToday) return false // قادم
-  if (endDay && endDay < cairoToday) return false // منتهٍ
-  const durationH = Number(offer.duration_hours)
-  if (startDay && startDay === endDay && Number.isFinite(durationH) && durationH > 0) {
-    if (cairoToday !== startDay || hourFraction > durationH) return false
-  }
-  return true
 }
 
 /**
