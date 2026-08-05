@@ -5,11 +5,19 @@ import { Footer } from "../../../components/footer"
 import { ProductCard } from "../../../components/product-card"
 import { BackButton } from "../../../components/back-button"
 import { ShareButton } from "../../../components/share-button"
-import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package, SearchX, Flame, Sparkles, Clock, LayoutGrid } from "lucide-react"
+import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package, SearchX, Flame, Sparkles, Clock, LayoutGrid, Timer, BadgePercent } from "lucide-react"
 import { notFound, useRouter } from "next/navigation"
 import { SearchBar } from "../../../components/search-bar"
 import { searchTokens } from "../../../lib/utils/arabic"
 import { normalizeArabic } from "../../../lib/utils/arabic"
+import {
+  isOfferActiveNow,
+  isOfferSoldOut,
+  isFlashOffer,
+  flashRemainingSeconds,
+  offerRemainingQuantity,
+  formatCountdown,
+} from "../../../lib/utils/offer-active"
 import { Button } from "../../../components/ui/button"
 import {
   Sheet,
@@ -66,6 +74,28 @@ type Product = {
 
 // أقصى عدد بطاقات في القسم الواحد — الأقسام نافذة سريعة لا شبكة كاملة
 const SECTION_SIZE = 8
+
+// عدّاد تنازلي حيّ لعرض الفلاش. مكوّن منفصل عن الصفحة عمدًا: النبضة كل ثانية تُعيد رسم هذا
+// العنصر وحده بدل إعادة رسم شبكة فيها مئات البطاقات كل ثانية.
+function FlashCountdown({ offer }: { offer: Offer }) {
+  const { t } = useLanguage()
+  // نبضة كل ثانية تُعيد الرسم، والمتبقّي يُحسب وقت الرسم من ساعة القاهرة — لا حالة مشتقّة
+  // تتقادم عند تغيّر العرض، ولا setState داخل جسم الـeffect.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => tick((v) => v + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const seconds = flashRemainingSeconds(offer)
+  if (seconds == null) return null
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-destructive/10 text-destructive px-2.5 py-1 rounded-full text-xs font-bold">
+      <Timer className="h-3.5 w-3.5" />
+      {t("ينتهي بعد", "Ends in")} <span dir="ltr" className="tabular-nums">{formatCountdown(seconds)}</span>
+    </span>
+  )
+}
 // دفعة العرض في الشبكة الكاملة: متاجر الاستيراد تتجاوز 1500 صنف، ورسمها دفعة واحدة يُجمّد الهاتف
 const PAGE_SIZE = 24
 
@@ -76,7 +106,17 @@ type Offer = {
   discount_percentage: number
   start_date: string
   end_date: string
+  // هدف الحملة: منتج بعينه، أو فئة، أو المتجر كله (الاثنان غائبان)
+  product_id?: string
+  category?: string
+  // عرض محدود الكمية / عرض فلاش بالساعات من منتصف الليل
+  quantity?: number
+  used_quantity?: number
+  duration_hours?: number
 }
+
+// حملة عرض بعد ربطها بمنتجاتها — وحدة العرض في قسم «العروض»
+type Campaign = { offer: Offer; items: Product[]; total: number }
 
 export default function StorePage({ params }: { params: Promise<{ id: string }> }) {
   const { user } = useAuth()
@@ -128,14 +168,13 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
 
         setTopSellerIds(topSellers)
 
-        const now = new Date()
-        const activeOffers = offersData.filter((offer: any) => {
-          // end_date شامل لليوم الأخير (نهاية اليوم) وبداية اليوم لـ start_date
-          const startDate = new Date(offer.start_date + "T00:00:00.000Z")
-          const endDate = new Date(offer.end_date + "T23:59:59.999Z")
-          return startDate <= now && endDate >= now
-        })
-        setOffers(activeOffers as Offer[])
+        // الفعالية بنفس قاعدة الخادم التي تحسب السعر (توقيت القاهرة + نافذة الفلاش + نفاد الكمية).
+        // الفلترة القديمة هنا كانت بيوم UTC بلا فلاش ولا كمية، فكان يظهر عرض منتهٍ فعليًّا بينما
+        // المنتجات معروضة بسعرها الكامل — وعد لا يفي به الحساب.
+        const activeOffers = (offersData as Offer[]).filter(
+          (offer) => isOfferActiveNow(offer) && !isOfferSoldOut(offer),
+        )
+        setOffers(activeOffers)
 
         const transformedProducts = productsData.map((product: any) => ({
           ...product,
@@ -240,6 +279,34 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
   const [pager, setPager] = useState({ key: filterKey, count: PAGE_SIZE })
   const visibleCount = pager.key === filterKey ? pager.count : PAGE_SIZE
 
+  // ═══ قسم «العروض»: حملات المتجر النشطة، كل حملة بمنتجاتها ═══
+  // المطابقة تكرّر قواعد findBestDiscount حرفيًّا (منتج بعينه ← فئة ← المتجر كله) كي لا تظهر
+  // حملة فوق منتجات لا يطبّق عليها الخادم خصمها. الحملة بلا منتجات معروضة (منتج محذوف مثلًا)
+  // تُسقَط بدل عرض عنوان فوق شبكة فارغة.
+  const campaigns = useMemo<Campaign[]>(() => {
+    return offers
+      .map((offer) => {
+        const matched = offer.product_id
+          ? products.filter((product) => product.id === offer.product_id)
+          : offer.category
+            ? products.filter((product) => (product.category || "").trim() === offer.category)
+            : products
+        // داخل الحملة نُقدّم المنتج المتوفّر ثم الأعلى تقييمًا — الشبكة نافذة لا جرد كامل
+        const ordered = [...matched].sort(
+          (a, b) =>
+            Number(b.stock > 0) - Number(a.stock > 0) || Number(b.rating || 0) - Number(a.rating || 0),
+        )
+        return { offer, items: ordered.slice(0, SECTION_SIZE), total: ordered.length }
+      })
+      .filter((campaign) => campaign.items.length > 0)
+      .sort((a, b) => {
+        // الفلاش أولًا (ينتهي اليوم)، ثم الأعلى خصمًا
+        const flashDiff = Number(isFlashOffer(b.offer)) - Number(isFlashOffer(a.offer))
+        if (flashDiff !== 0) return flashDiff
+        return Number(b.offer.discount_percentage || 0) - Number(a.offer.discount_percentage || 0)
+      })
+  }, [offers, products])
+
   // أقسام العرض السريع — تُبنى من نفس القائمة المحمَّلة (بلا أي قراءة إضافية) عدا «الأكثر مبيعًا»
   const sections = useMemo(() => {
     const byId = new Map(products.map((product) => [product.id, product]))
@@ -249,10 +316,8 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
       .filter((product): product is Product => Boolean(product))
       .slice(0, SECTION_SIZE)
 
-    const discounted = products
-      .filter((product) => Number(product.discount_percentage || 0) > 0)
-      .sort((a, b) => Number(b.discount_percentage || 0) - Number(a.discount_percentage || 0))
-      .slice(0, SECTION_SIZE)
+    // «عروض وخصومات» لم يعد قسمًا مشتقًّا: قسم «العروض» أعلاه يعرض الحملات نفسها بمنتجاتها،
+    // فشبكة «كل المنتجات المخفَّضة» كانت ستكرّر نفس البطاقات بلا سياق الحملة.
 
     // «الأعلى تقييمًا» مشروط بوجود تقييمات فعلية: كل منتج يُنشأ بـ rating_count = 0، فبدون
     // الشرط يعرض القسم شريحة عشوائية من منتجات بلا تقييم ويبدو معطوبًا.
@@ -273,7 +338,6 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
     // ويعيد فرز آلاف الأصناف بلا داعٍ.
     return [
       { key: "top", icon: Flame, items: topSelling },
-      { key: "offers", icon: Tag, items: discounted },
       { key: "rated", icon: Sparkles, items: topRated },
       { key: "new", icon: Clock, items: newestIsMeaningful ? newest : [] },
     ].filter((section) => section.items.length > 0)
@@ -281,7 +345,6 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
 
   const sectionTitles: Record<string, string> = {
     top: t("الأكثر مبيعًا", "Best sellers"),
-    offers: t("عروض وخصومات", "Deals & discounts"),
     rated: t("الأعلى تقييمًا", "Top rated"),
     new: t("وصل حديثًا", "New arrivals"),
   }
@@ -559,7 +622,75 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
               </>
             )}
 
-            {/* أقسام سريعة (الأكثر مبيعًا / عروض / الأعلى تقييمًا / وصل حديثًا) */}
+            {/* ═══ العروض: حملات المتجر النشطة، كل حملة باسمها ومدتها ومنتجاتها ═══ */}
+            {isBrowsingAll && campaigns.length > 0 && (
+              <section className="mb-8">
+                <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
+                  <BadgePercent className="h-5 w-5 text-primary" />
+                  {t("العروض", "Offers")}
+                </h3>
+
+                <div className="space-y-4">
+                  {campaigns.map(({ offer, items, total }) => (
+                    <div key={offer.id} className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="bg-primary text-primary-foreground px-2.5 py-1 rounded-full text-xs font-bold">
+                          {t(`خصم ${offer.discount_percentage}%`, `${offer.discount_percentage}% OFF`)}
+                        </span>
+                        <h4 className="font-bold text-base break-words">{offer.title}</h4>
+                        {isFlashOffer(offer) && <FlashCountdown offer={offer} />}
+                      </div>
+
+                      {offer.description && (
+                        <p className="text-sm text-muted-foreground mb-2 break-words">{offer.description}</p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mb-3">
+                        {!isFlashOffer(offer) && offer.end_date && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            {t("يسري حتى", "Valid until")}{" "}
+                            {new Date(offer.end_date).toLocaleDateString(language === "ar" ? "ar-EG" : "en-US")}
+                          </span>
+                        )}
+                        {offerRemainingQuantity(offer) != null && (
+                          <span className="inline-flex items-center gap-1 font-medium text-primary">
+                            <Package className="h-3.5 w-3.5" />
+                            {t(`متبقي ${offerRemainingQuantity(offer)} قطعة`, `${offerRemainingQuantity(offer)} left`)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {items.map((product) => (
+                          <ProductCard
+                            key={`${offer.id}-${product.id}`}
+                            product={product}
+                            showActions
+                            storePhone={store.phone}
+                          />
+                        ))}
+                      </div>
+
+                      {/* الحملة على فئة كاملة: نُعيد استخدام شريحة الفئة بدل حالة فلترة ثالثة */}
+                      {offer.category && total > items.length && (
+                        <div className="mt-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setActiveCategory(offer.category!)}
+                            className="border-2 border-primary text-primary hover:bg-primary/10 rounded-xl h-10 font-bold"
+                          >
+                            {t(`عرض كل «${offer.category}» (${total})`, `See all "${offer.category}" (${total})`)}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* أقسام سريعة (الأكثر مبيعًا / الأعلى تقييمًا / وصل حديثًا) */}
             {isBrowsingAll &&
               sections.map((section) => (
                 <section key={section.key} className="mb-8">
