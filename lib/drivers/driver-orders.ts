@@ -55,34 +55,100 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined
 }
 
+// لقطة متجر (نقطة استلام) تُقرأ من مستند البائع عند غيابها عن مستند الطلب.
+type StoreSnapshot = { name?: string; address?: string; latitude?: number; longitude?: number }
+
+// ذاكرة قصيرة داخل العملية: التطبيق يستطلع كل 30 ثانية، والطلبات القديمة تنقصها اللقطة دائمًا
+// (إخفاق دائم)، فبلا هذه الذاكرة كنّا نعيد قراءة نفس مستند البائع مرّتين في الدقيقة لكل سائق أبدًا.
+// بيانات المتجر (اسم/عنوان/موقع) شبه ثابتة، فتقادُم عشر دقائق مقبول تمامًا هنا.
+const STORE_SNAPSHOT_TTL_MS = 10 * 60 * 1000
+const storeSnapshotCache = new Map<string, { at: number; value: StoreSnapshot | null }>()
+
+// الطلب يحمل لقطة المتجر (اسم/عنوان/إحداثيات) وقت الإنشاء، لكن اللقطة تُكتب *شرطيًّا*: الطلبات
+// المُنشأة قبل إضافتها، والمتاجر التي لم تكن قد ضبطت عنوانها/موقعها وقت الطلب، تُخزَّن بلا نقطة
+// استلام — فيرى السائق وجهة التسليم فقط ولا يعرف من أين يستلم. نكمل الناقص من مستند البائع وقت
+// القراءة (نفس احتياطي getStoreMap في lib/actions/products.ts: العنوان من store.address ثم
+// المدينة/الشارع). قراءة واحدة مجمّعة لكل المتاجر الناقصة، ولا تُستدعى إطلاقًا في تغذية العروض.
+async function fetchStoreSnapshots(
+  db: ReturnType<typeof getAdminDb>,
+  storeIds: string[],
+): Promise<Map<string, StoreSnapshot>> {
+  const now = Date.now()
+  const map = new Map<string, StoreSnapshot>()
+  const missing: string[] = []
+
+  for (const id of new Set(storeIds.filter(Boolean))) {
+    const cached = storeSnapshotCache.get(id)
+    if (cached && now - cached.at < STORE_SNAPSHOT_TTL_MS) {
+      if (cached.value) map.set(id, cached.value)
+      continue
+    }
+    missing.push(id)
+  }
+
+  // حدّ أعلى بسيط ضد نمو الذاكرة بلا سقف في عملية طويلة العمر (عدد المتاجر صغير عمليًّا)
+  if (storeSnapshotCache.size > 500) storeSnapshotCache.clear()
+
+  for (const chunk of chunkArray(missing, 10)) {
+    if (!chunk.length) continue
+    const docs = await db.getAll(...chunk.map((id) => db.collection("users").doc(id)))
+    docs.forEach((doc) => {
+      const data = (doc.exists ? doc.data() : null) as Record<string, any> | null
+      // حارس الدور إلزامي: مستند users قد يخصّ عميلًا عاديًّا، وبلا هذا الشرط كان الاحتياطي
+      // (full_name / city+street) يضع اسم شخص وعنوان سكنه في تغذية السائق لو حمل الطلب
+      // معرّف متجر خاطئًا. كل قارئ آخر لهذا المستند يفرض role === "seller" (getStoreMap/extractStore).
+      if (!data || data.role !== "seller") {
+        storeSnapshotCache.set(doc.id, { at: now, value: null })
+        return
+      }
+      const store = (data.store || {}) as Record<string, any>
+      const value: StoreSnapshot = {
+        name: str(store.name) || str(data.full_name),
+        address: str(store.address) || [data.city, data.street].filter(Boolean).join("، ") || undefined,
+        latitude: typeof store.latitude === "number" ? store.latitude : undefined,
+        longitude: typeof store.longitude === "number" ? store.longitude : undefined,
+      }
+      storeSnapshotCache.set(doc.id, { at: now, value })
+      map.set(doc.id, value)
+    })
+  }
+  return map
+}
+
 // إعادة بناء محطات الاستلام بقائمة سماح صريحة (نفس ضمان الطلب الأحادي) — لا نمرّر أي حقل غير مُدرَج
 // من مستند Firestore (دفاع عمق ضد تسريب حقول مستقبلية قد تُكتب داخل pickup_stops).
 // full=false (تغذية العروض قبل القبول) يُبقي الموقع الدقيق للمتجر مخفيًّا — يُكشف فقط بعد الإسناد.
-function mapPickupStops(raw: unknown, full: boolean): PickupStop[] {
+function mapPickupStops(raw: unknown, full: boolean, stores?: Map<string, StoreSnapshot>): PickupStop[] {
   if (!Array.isArray(raw)) return []
   const STATUSES = ["pending", "confirmed", "rejected", "picked_up"]
-  return raw.map((s: Record<string, any>) => ({
-    store_id: str(s?.store_id) || "",
-    store_name: str(s?.store_name) || "",
-    ...(full && typeof s?.store_latitude === "number" ? { store_latitude: s.store_latitude } : {}),
-    ...(full && typeof s?.store_longitude === "number" ? { store_longitude: s.store_longitude } : {}),
-    ...(full && str(s?.store_address) ? { store_address: str(s?.store_address) } : {}),
-    items: Array.isArray(s?.items)
-      ? s.items.map((it: Record<string, any>) => ({
-          product_id: str(it?.product_id) || "",
-          name: str(it?.name) || "",
-          quantity: num(it?.quantity),
-          price: num(it?.price),
-          image_url: typeof it?.image_url === "string" ? it.image_url : null,
-        }))
-      : [],
-    subtotal: num(s?.subtotal),
-    status: (STATUSES.includes(s?.status) ? s.status : "pending") as PickupStop["status"],
-    confirmed_at: str(s?.confirmed_at) ?? null,
-    picked_up_at: str(s?.picked_up_at) ?? null,
-    rejected_at: str(s?.rejected_at) ?? null,
-    rejection_reason: str(s?.rejection_reason) ?? null,
-  }))
+  return raw.map((s: Record<string, any>) => {
+    const fallback = full ? stores?.get(str(s?.store_id) || "") : undefined
+    const lat = typeof s?.store_latitude === "number" ? s.store_latitude : fallback?.latitude
+    const lng = typeof s?.store_longitude === "number" ? s.store_longitude : fallback?.longitude
+    const address = str(s?.store_address) || fallback?.address
+    return {
+      store_id: str(s?.store_id) || "",
+      store_name: str(s?.store_name) || fallback?.name || "",
+      ...(full && typeof lat === "number" ? { store_latitude: lat } : {}),
+      ...(full && typeof lng === "number" ? { store_longitude: lng } : {}),
+      ...(full && address ? { store_address: address } : {}),
+      items: Array.isArray(s?.items)
+        ? s.items.map((it: Record<string, any>) => ({
+            product_id: str(it?.product_id) || "",
+            name: str(it?.name) || "",
+            quantity: num(it?.quantity),
+            price: num(it?.price),
+            image_url: typeof it?.image_url === "string" ? it.image_url : null,
+          }))
+        : [],
+      subtotal: num(s?.subtotal),
+      status: (STATUSES.includes(s?.status) ? s.status : "pending") as PickupStop["status"],
+      confirmed_at: str(s?.confirmed_at) ?? null,
+      picked_up_at: str(s?.picked_up_at) ?? null,
+      rejected_at: str(s?.rejected_at) ?? null,
+      rejection_reason: str(s?.rejection_reason) ?? null,
+    }
+  })
 }
 
 export async function getDriverOrders(driverId: string): Promise<DriverOrder[]> {
@@ -179,12 +245,39 @@ async function hydrateDriverOrders(
     }
   }
 
+  // في تغذية العروض (قبل القبول) لا نكشف بيانات تواصل العميل ولا موقعه الدقيق: أي سائق مسجَّل
+  // يتصفّح العروض كان سيقرأ اسم العميل وهاتفه وعنوانه بلا أي التزام بالطلب. نكتفي بالمدينة
+  // والمعالم التقريبية ليقدّر المسافة، وتُكشف التفاصيل كاملةً بعد الإسناد (تغذية "طلباتي").
+  const full = scope === "assigned"
+
+  // إكمال نقطة الاستلام الناقصة من مستند البائع — بعد الإسناد فقط (نفس شرط كشف موقع المتجر).
+  const storeSnapshots = full
+    ? await fetchStoreSnapshots(
+        db,
+        orders.flatMap((o) => {
+          if (o.order_type === "multi_store") {
+            const stops = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
+            // الاسم جزء من شرط النقص كالمسار الأحادي: محطة كُتبت بلا store_name (سلة قديمة في
+            // متصفّح العميل) لكن بعنوان وإحداثيات من المتجر كانت تفشل الشرط فلا تُكمَّل أبدًا،
+            // فيرى السائق عنوان استلام بلا اسم متجر.
+            return stops
+              .filter(
+                (s: Record<string, any>) =>
+                  !str(s?.store_name) || !str(s?.store_address) || typeof s?.store_latitude !== "number",
+              )
+              .map((s: Record<string, any>) => str(s?.store_id) || "")
+          }
+          const missing = !str(o.store_address) || !str(o.store_name) || typeof o.store_latitude !== "number"
+          return missing ? [str(o.store_id) || ""] : []
+        }),
+      )
+    : new Map<string, StoreSnapshot>()
+
   return orders.map((o): DriverOrder => {
     const isMulti = o.order_type === "multi_store"
-    // في تغذية العروض (قبل القبول) لا نكشف بيانات تواصل العميل ولا موقعه الدقيق: أي سائق مسجَّل
-    // يتصفّح العروض كان سيقرأ اسم العميل وهاتفه وعنوانه بلا أي التزام بالطلب. نكتفي بالمدينة
-    // والمعالم التقريبية ليقدّر المسافة، وتُكشف التفاصيل كاملةً بعد الإسناد (تغذية "طلباتي").
-    const full = scope === "assigned"
+    const storeFallback = full && !isMulti ? storeSnapshots.get(str(o.store_id) || "") : undefined
+    const storeLat = o.store_latitude != null ? num(o.store_latitude) : storeFallback?.latitude
+    const storeLng = o.store_longitude != null ? num(o.store_longitude) : storeFallback?.longitude
     return {
       id: o.id,
       order_type: isMulti ? "multi_store" : "single",
@@ -205,14 +298,14 @@ async function hydrateDriverOrders(
       delivery_latitude: full && o.delivery_latitude != null ? num(o.delivery_latitude) : undefined,
       delivery_longitude: full && o.delivery_longitude != null ? num(o.delivery_longitude) : undefined,
       // موقع المتجر الدقيق (نقطة الاستلام) خلف نفس شرط الإسناد — لا يظهر في تغذية العروض
-      store_name: full ? str(o.store_name) : undefined,
-      store_address: full ? str(o.store_address) : undefined,
-      store_latitude: full && o.store_latitude != null ? num(o.store_latitude) : undefined,
-      store_longitude: full && o.store_longitude != null ? num(o.store_longitude) : undefined,
+      store_name: full ? str(o.store_name) || storeFallback?.name : undefined,
+      store_address: full ? str(o.store_address) || storeFallback?.address : undefined,
+      store_latitude: full && typeof storeLat === "number" ? storeLat : undefined,
+      store_longitude: full && typeof storeLng === "number" ? storeLng : undefined,
       distance_km: o.distance_km != null ? num(o.distance_km) : undefined,
       offer_expires_at_ms: o.offer_expires_at_ms != null ? num(o.offer_expires_at_ms) : undefined,
       ...(isMulti
-        ? { pickup_stops: mapPickupStops(o.pickup_stops, full) }
+        ? { pickup_stops: mapPickupStops(o.pickup_stops, full, storeSnapshots) }
         : { items: itemsByOrder.get(o.id) || [] }),
     }
   })

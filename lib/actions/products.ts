@@ -6,6 +6,8 @@ import { revalidatePath, revalidateTag } from "next/cache"
 import { unstable_cache } from "next/cache"
 import { getAdminDb } from "../firebase/admin"
 import { getCurrentUid, requireOwner } from "../auth/session"
+import { logError } from "../logger"
+import { checkRateLimit } from "../utils/rate-limit"
 import { putObject, PUBLIC_BUCKET } from "../storage/r2"
 import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore-helpers"
 import { storeCategorySubcategories } from "../mock-data"
@@ -41,7 +43,7 @@ type ProductRecord = {
     phone?: string
     address?: unknown
   }
-  | { name?: string }
+  | { name?: string; phone?: string | null; latitude?: number | null; longitude?: number | null }
   | null
   [key: string]: unknown
 }
@@ -126,6 +128,20 @@ async function getStoreMap(db: Firestore, storeIds: string[]) {
   return map
 }
 
+// حقول المتجر العامة التي تُرفَق ببطاقة المنتج في القوائم: الاسم للعرض، والهاتف لأزرار
+// «واتساب/اتصال» السريعة، والإحداثيات لفلتر المسافة. تُعدَّد صراحةً ولا تُنسخ بـ spread أبدًا:
+// قيمة storeMap هي مستند المتجر المضمَّن كاملًا وفيه حقول KYC (رقم الهوية وصور البطاقة) — نسخها
+// بالجملة كان سينشرها في حمولة RSC لكل زائر. كلها منشورة أصلًا عبر getStores/getProduct.
+function publicStoreFields(store: StoreRecord | undefined) {
+  if (!store) return null
+  return {
+    name: store.name,
+    phone: typeof store.phone === "string" ? store.phone : null,
+    latitude: typeof store.latitude === "number" ? store.latitude : null,
+    longitude: typeof store.longitude === "number" ? store.longitude : null,
+  }
+}
+
 function attachStore(product: ProductRecord, storeMap: Map<string, StoreRecord>) {
   if (!product.store_id) return product
   const store = storeMap.get(product.store_id)
@@ -185,7 +201,15 @@ async function _getProductsImpl(category?: string) {
     sellersSnapshot.docs.forEach((doc) => {
       const data = doc.data()
       if (data.store && data.store.category === category) {
-        storeMap.set(doc.id, { id: doc.id, seller_id: doc.id, ...(data.store as Record<string, unknown>) })
+        const storeData = data.store as Record<string, unknown>
+        storeMap.set(doc.id, {
+          id: doc.id,
+          seller_id: doc.id,
+          ...storeData,
+          // احتياطي جذر مستند المستخدم مثل getStoreMap — بيانات قديمة كتبت الاسم/الهاتف خارج store
+          name: (storeData.name as string) || (data.full_name as string) || "متجر غير معروف",
+          phone: (storeData.phone as string) || (data.phone as string) || "",
+        })
       }
     })
 
@@ -209,7 +233,7 @@ async function _getProductsImpl(category?: string) {
 
         return publicProductPayload({
           ...product,
-          stores: store ? { name: store.name } : null,
+          stores: publicStoreFields(store),
           discount_percentage,
           offer_title
         })
@@ -250,7 +274,7 @@ async function _getProductsImpl(category?: string) {
 
       return publicProductPayload({
         ...product,
-        stores: store ? { name: store.name } : null,
+        stores: publicStoreFields(store),
         discount_percentage,
         offer_title
       })
@@ -649,6 +673,121 @@ export async function getProductsByStoreId(storeId: string) {
 
   enriched.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
   return serializeData(enriched)
+}
+
+// ==================== الأكثر مبيعًا داخل المتجر (قسم عام على صفحة المتجر) ====================
+
+const TOP_SELLERS_POS_SCAN = 500 // سقف فواتير الكاشير المقروءة لكل حساب
+const TOP_SELLERS_ORDERS_SCAN = 150 // سقف طلبات التوصيل المقروءة لكل حساب
+// نافذة الاحتساب وعدد الأصناف ثابتان عمدًا — ليسا وسيطين من المستدعي: هذه الدالة نقطة عامة،
+// وأي قيمة يتحكّم بها المتصل تدخل مفتاح الذاكرة المؤقتة فتصنع آلاف المفاتيح لنفس المتجر، كل
+// واحد منها إخفاق يقرأ مئات المستندات (مضخّم قراءات على قاعدة إنتاج بالخطة المجانية).
+const TOP_SELLERS_WINDOW_DAYS = 60
+const TOP_SELLERS_LIMIT = 12
+
+// ترتيب أصناف المتجر بالكمية المُباعة. يُرجع **معرّفات مرتَّبة فقط** بلا كميات ولا مستندات منتجات:
+// (أ) الصفحة تملك المنتجات أصلًا وتربطها محليًّا، (ب) عناصر pos_sales تحمل cost_price/profit_per_unit
+// فإرجاعها خامًا كان سيكشف هامش ربح التاجر، (ج) هذه الدالة نقطة عامة تُستدعى بأي معرّف متجر —
+// إرجاع الكميات كان سيسلّم منافسًا حجم مبيعات كل صنف عند أي تاجر.
+//
+// المصدران: فواتير الكاشير (pos_sales — استعلام واحد، العناصر مضمَّنة) وطلبات التوصيل
+// (orders + order_items). لا نلمس أي مسار كتابة (لا عدّاد مبيعات على مستند المنتج) — قراءة فقط.
+// قصور معروف (v1): الطلبات متعددة المتاجر لا تُحتسب — تمييزها يحتاج
+// (store_ids array-contains + نافذة تاريخ) وهو فهرس مركّب غير منشور.
+async function _getStoreTopSellersImpl(storeId: string): Promise<string[]> {
+  const db = getAdminDb()
+
+  // خروج مبكّر قبل أي استعلام: المعرّف يأتي من المستدعي (نقطة عامة)، ومعرّف وهمي كان يمضي إلى
+  // استعلامَي pos_sales/orders فيكلّف قراءات على كل معرّف مختلَق — مضخّم قراءات رخيص على قاعدة
+  // بالخطة المجانية. الآن معرّف غير موجود أو ليس بائعًا = قراءة واحدة ثم انتهاء.
+  // ويشمل ذلك مرآة حظر المتجر (نفس قاعدة getProductsByStoreId/getStores).
+  const storeUserSnap = await db.collection("users").doc(storeId).get()
+  const storeUser = storeUserSnap.data() as { role?: string; store?: { is_approved?: boolean } } | undefined
+  if (!storeUserSnap.exists || storeUser?.role !== "seller" || storeUser?.store?.is_approved === false) {
+    return []
+  }
+
+  const cutoff = new Date(Date.now() - TOP_SELLERS_WINDOW_DAYS * 24 * 3600 * 1000).toISOString()
+  const qtyByProduct = new Map<string, number>()
+  const addQty = (productId: unknown, quantity: unknown) => {
+    const id = typeof productId === "string" ? productId : ""
+    const qty = Number(quantity) || 0
+    if (!id || qty <= 0) return
+    qtyByProduct.set(id, (qtyByProduct.get(id) || 0) + qty)
+  }
+
+  // أحدث مستندات متجر من مجموعة، بسقف صارم. الشكل المفضَّل (مساواة + ترتيب تنازلي بالتاريخ)
+  // يطابق الفهارس المركّبة المعلَنة (orders/pos_sales: store_id + created_at)، ويقرأ الأحدث فقط
+  // بدل شريحة عشوائية. إن رُفض (اتجاه فهرس مختلف) نسقط لمساواة مفردة ونفلتر في الذاكرة —
+  // نفس احتياطي getMerchantToday في dashboard.ts. الفشل هنا يُخفي القسم ولا يكسر الصفحة.
+  const recentByStore = async (collection: string, cap: number) => {
+    const base = db.collection(collection).where("store_id", "==", storeId)
+    try {
+      return (await base.orderBy("created_at", "desc").limit(cap).get()).docs
+    } catch (err) {
+      // نُسجّل الهبوط للمسار المتدهور: بلا ذلك يصير الترتيب التقريبي دائمًا وصامتًا
+      // (التجميع مخزَّن 6 ساعات فالتسجيل لا يتكرّر أكثر من ~4 مرات يوميًّا لكل متجر)
+      logError(`[getStoreTopSellers] ${collection} orderBy fallback`, err)
+      try {
+        // اتجاه الفهرس المعلَن تصاعدي: نستبدل الترتيب التنازلي بنافذة زمنية يخدمها نفس الفهرس
+        return (await base.where("created_at", ">=", cutoff).limit(cap).get()).docs
+      } catch {
+        return (await base.limit(cap).get()).docs
+      }
+    }
+  }
+
+  // ── الكاشير (pos_sales) ──
+  const posDocs = await recentByStore("pos_sales", TOP_SELLERS_POS_SCAN)
+  for (const doc of posDocs) {
+    const sale = doc.data() as Record<string, any>
+    if (String(sale.created_at || "") < cutoff) continue
+    // الكمية بوحدة البيع كما سجّلها الكاشير (قطعة/شريط/علبة) — ترتيب تقريبي مثل لوحة التاجر.
+    for (const item of Array.isArray(sale.items) ? sale.items : []) addQty(item?.product_id, item?.quantity)
+  }
+
+  // ── التوصيل (orders + order_items) ──
+  const orderDocs = await recentByStore("orders", TOP_SELLERS_ORDERS_SCAN)
+  const countedOrderIds = orderDocs
+    .filter((doc) => {
+      const o = doc.data() as Record<string, any>
+      if (String(o.created_at || "") < cutoff) return false
+      if (o.status === "cancelled") return false
+      // الاستفسارات (واتساب/اتصال) طلبات شكلية بلا أصناف مُباعة — لا تُحتسب مبيعًا
+      return !(o.order_type === "inquiry" || o.status === "inquiry")
+    })
+    .map((doc) => doc.id)
+
+  for (const chunk of chunkArray(countedOrderIds, 10)) {
+    if (!chunk.length) continue
+    const snap = await db.collection("order_items").where("order_id", "in", chunk).get()
+    snap.docs.forEach((doc) => {
+      const it = doc.data() as Record<string, any>
+      addQty(it?.product_id, it?.quantity)
+    })
+  }
+
+  return Array.from(qtyByProduct.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_SELLERS_LIMIT)
+    .map(([productId]) => productId)
+}
+
+/**
+ * معرّفات أكثر أصناف المتجر مبيعًا، مرتَّبة تنازليًّا — للعرض العام على صفحة المتجر.
+ * مخزَّن 6 ساعات بوسم خاص به: وسم "products" يُبطَل مع كل مزامنة مخزون يومية (import.ts)
+ * فكان التجميع يُعاد حسابه مع كل مزامنة بلا داعٍ — والإشارة نفسها بطيئة التغيّر.
+ */
+export async function getStoreTopSellers(storeId: string): Promise<string[]> {
+  if (typeof storeId !== "string" || !storeId) return []
+  // حدّ معدل على المدخل العام: الكاش يحمي تكرار نفس المعرّف، لكنه لا يحمي من *تدوير* المعرّفات
+  // (كل معرّف جديد = مفتاح كاش جديد = إخفاق). فشل الحدّ يُخفي القسم فقط ولا يكسر الصفحة.
+  if (!(await checkRateLimit("store_top_sellers", 60, 60_000))) return []
+  return unstable_cache(
+    () => _getStoreTopSellersImpl(storeId),
+    ["store-top-sellers", storeId],
+    { revalidate: 21600, tags: [`store-top-sellers-${storeId}`] },
+  )()
 }
 
 async function _searchProductsImpl(normalizedQuery: string) {

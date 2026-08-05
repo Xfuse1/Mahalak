@@ -110,8 +110,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [addToast]
   )
 
+  // قيمة السياق مثبّتة المرجع: كانت كائنًا جديدًا مع كل إظهار/إخفاء toast، وتغيّر قيمة السياق
+  // يتجاوز React.memo فيُعيد رسم كل مستهلك — وشبكات المنتجات صارت تستهلكه في كل بطاقة.
+  const contextValue = React.useMemo(() => ({ toast }), [toast])
+
   return (
-    <ToastContext.Provider value={{ toast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {/* Toast container — fixed at top center */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none w-full px-4">

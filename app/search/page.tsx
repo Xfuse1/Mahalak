@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect, useCallback, useRef } from "react"
+import { useState, Suspense, useEffect, useCallback, useMemo, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Header } from "../../components/header"
 import { Footer } from "../../components/footer"
@@ -8,7 +8,7 @@ import { ProductCard } from "../../components/product-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { Card, CardContent } from "../../components/ui/card"
 import Link from "next/link"
-import { Star, Package, Store as StoreIcon } from "lucide-react"
+import { Star, Package, Store as StoreIcon, MapPin } from "lucide-react"
 import { SearchBar } from "../../components/search-bar"
 import { SkeletonGrid } from "../../components/ui/skeleton-grid"
 import { EmptyState } from "../../components/ui/empty-state"
@@ -22,11 +22,30 @@ import Image from "next/image"
 import { searchProducts, getProducts } from "../../lib/actions/products"
 import { searchStores, getStores } from "../../lib/actions/stores"
 import { imgSrc } from "@/lib/storage/public-url"
+import { useUserLocation } from "../../lib/location/user-location"
+import { storeDistanceKm, formatDistanceAr, withinKm } from "../../lib/utils/geo"
 import type { ProductListItem } from "../../lib/types/product"
 import type { StoreListItem } from "../../lib/types/store"
 
-// تطبيق الفلاتر/الترتيب — دالة نقية تُعاد استخدامها عند تغيير الاستعلام أو الفلاتر
-function applyFilters(list: ProductListItem[], filters: FilterState, isRTL: boolean): ProductListItem[] {
+type Coords = { lat: number; lng: number } | null
+
+// إحداثيات متجر المنتج (تصل ضمن حمولة القائمة) — الأساس لفلتر المسافة وترتيب «الأقرب»
+function productStoreCoords(product: ProductListItem) {
+  return { latitude: product.stores?.latitude ?? null, longitude: product.stores?.longitude ?? null }
+}
+
+// الفلاتر الافتراضية: تُطبَّق قبل أن يلمس المستخدم لوحة الفلترة أصلًا، وإلا كانت اللوحة تعلن
+// «الأقرب» كترتيب فعّال بينما القائمة غير مرتَّبة بالمسافة إطلاقًا حتى يغيّر المستخدم شيئًا.
+const DEFAULT_FILTERS: FilterState = { sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null, maxKm: null }
+
+// تطبيق الفلاتر/الترتيب — دالة نقية تُعاد استخدامها عند تغيير الاستعلام أو الفلاتر.
+// تُرجع القائمة وعدد ما أسقطه نصف القطر لغياب موقع المتجر (لعرضه للمستخدم بدل اختفاء صامت).
+function applyFilters(
+  list: ProductListItem[],
+  filters: FilterState,
+  isRTL: boolean,
+  coords: Coords,
+): { list: ProductListItem[]; droppedForDistance: number } {
   let filtered = [...list]
 
   if (filters.priceMin !== null) {
@@ -43,6 +62,14 @@ function applyFilters(list: ProductListItem[], filters: FilterState, isRTL: bool
       const date = new Date(p.updatedAt || p.createdAt || 0)
       return date >= cutoff
     })
+  }
+
+  // نصف قطر المسافة: يستبعد المنتجات مجهولة الموقع عمدًا (انظر withinKm) — الواجهة تُعلن ذلك.
+  // العدّ يتم بعد باقي الفلاتر لا قبلها، وإلا أعلنّا رقمًا أكبر من الواقع.
+  let droppedForDistance = 0
+  if (filters.maxKm !== null && filters.maxKm > 0) {
+    droppedForDistance = filtered.filter((p) => storeDistanceKm(coords, productStoreCoords(p)) == null).length
+    filtered = filtered.filter((p) => withinKm(coords, productStoreCoords(p), filters.maxKm))
   }
 
   switch (filters.sortBy) {
@@ -65,10 +92,22 @@ function applyFilters(list: ProductListItem[], filters: FilterState, isRTL: bool
       filtered.sort((a, b) => b.name.localeCompare(a.name, isRTL ? "ar" : "en"))
       break
     default:
+      // «الأقرب» كان تسمية بلا سلوك: نرتّب فعليًا بالمسافة عند معرفة الموقع، ومجهول
+      // الموقع ينزل للأسفل (نفس قاعدة قائمة المتاجر) بدل أن يختفي.
+      if (coords) {
+        filtered.sort((a, b) => {
+          const da = storeDistanceKm(coords, productStoreCoords(a))
+          const db = storeDistanceKm(coords, productStoreCoords(b))
+          if (da == null && db == null) return 0
+          if (da == null) return 1
+          if (db == null) return -1
+          return da - db
+        })
+      }
       break
   }
 
-  return filtered
+  return { list: filtered, droppedForDistance }
 }
 
 function SearchResults() {
@@ -82,6 +121,7 @@ function SearchResults() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const { language, t } = useLanguage()
+  const { coords } = useUserLocation()
 
   const isRTL = language === "ar"
 
@@ -132,13 +172,34 @@ function SearchResults() {
 
   // اشتقاق النتائج المعروضة من المنتجات + الفلاتر الحالية — يُعيد تطبيق الفلاتر تلقائيًا
   // عند تغيّر الاستعلام (كانت الفلاتر تُفقد سابقًا عند كل بحث جديد).
+  const [hiddenByDistance, setHiddenByDistance] = useState(0)
+
   useEffect(() => {
-    setSortedProducts(currentFilters ? applyFilters(products, currentFilters, isRTL) : products)
-  }, [products, currentFilters, isRTL])
+    const result = applyFilters(products, currentFilters ?? DEFAULT_FILTERS, isRTL, coords)
+    setSortedProducts(result.list)
+    setHiddenByDistance(result.droppedForDistance)
+  }, [products, currentFilters, isRTL, coords])
 
   const handleFilterChange = useCallback((filters: FilterState) => {
     setCurrentFilters(filters)
   }, [])
+
+  // المتاجر (تبويب المتاجر) تخضع لنفس نصف القطر. الترتيب بالمسافة فقط مع الترتيب الافتراضي
+  // «الأقرب»: فرضه دائمًا كان يبطل اختيار المستخدم (مثلًا «الأعلى تقييمًا») بلا أن يطلبه.
+  const visibleStores = useMemo(() => {
+    const maxKm = currentFilters?.maxKm ?? null
+    const list = maxKm && maxKm > 0 ? stores.filter((store) => withinKm(coords, store, maxKm)) : stores
+    const sortByNearest = (currentFilters?.sortBy ?? "relevance") === "relevance"
+    if (!coords || !sortByNearest) return list
+    return [...list].sort((a, b) => {
+      const da = storeDistanceKm(coords, a)
+      const db = storeDistanceKm(coords, b)
+      if (da == null && db == null) return 0
+      if (da == null) return 1
+      if (db == null) return -1
+      return da - db
+    })
+  }, [stores, currentFilters?.maxKm, currentFilters?.sortBy, coords])
 
   const renderProductsGrid = () =>
     sortedProducts.length > 0 ? (
@@ -147,11 +208,22 @@ function SearchResults() {
         dir={isRTL ? "rtl" : "ltr"}
       >
         {sortedProducts.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard key={product.id} product={product} showActions />
         ))}
       </div>
     ) : (
-      <EmptyState icon={Package} title={t("لم يتم العثور على منتجات", "No products found")} />
+      <EmptyState
+        icon={Package}
+        title={t("لم يتم العثور على منتجات", "No products found")}
+        description={
+          hiddenByDistance > 0
+            ? t(
+              `لا توجد منتجات داخل النطاق المحدد. ${hiddenByDistance} منتجًا لم يظهر لأن متجره لم يحدّد موقعه.`,
+              `No products within the selected radius. ${hiddenByDistance} products are hidden because their store has no location.`,
+            )
+            : undefined
+        }
+      />
     )
 
   return (
@@ -171,7 +243,17 @@ function SearchResults() {
             </h1>
             {query && (
               <p className="text-muted-foreground mt-2">
-                {t(`تم العثور على ${sortedProducts.length} منتج و ${stores.length} متجر`, `Found ${sortedProducts.length} products and ${stores.length} stores`)}
+                {t(`تم العثور على ${sortedProducts.length} منتج و ${visibleStores.length} متجر`, `Found ${sortedProducts.length} products and ${visibleStores.length} stores`)}
+              </p>
+            )}
+            {currentFilters?.maxKm && coords && (
+              <p className="text-sm text-primary font-medium mt-1">
+                {t(`ضمن ${currentFilters.maxKm} كم من موقعك`, `Within ${currentFilters.maxKm} km of you`)}
+                {hiddenByDistance > 0 &&
+                  t(
+                    ` — ${hiddenByDistance} منتجًا مخفي لأن متجره لم يحدّد موقعه`,
+                    ` — ${hiddenByDistance} products hidden (store has no location)`,
+                  )}
               </p>
             )}
           </div>
@@ -208,19 +290,19 @@ function SearchResults() {
                   value="stores"
                   className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg px-6 py-3 transition-all"
                 >
-                  {t("المتاجر", "Stores")} ({stores.length})
+                  {t("المتاجر", "Stores")} ({visibleStores.length})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="products">{renderProductsGrid()}</TabsContent>
 
               <TabsContent value="stores">
-                {stores.length > 0 ? (
+                {visibleStores.length > 0 ? (
                   <div
                     className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isRTL ? "text-right" : "text-left"}`}
                     dir={isRTL ? "rtl" : "ltr"}
                   >
-                    {stores.map((store) => (
+                    {visibleStores.map((store) => (
                       <Link key={store.id} href={`/store/${store.id}`}>
                         <Card className="hover:shadow-lg transition-all duration-300 h-full overflow-hidden border border-border bg-card shadow-sm rounded-2xl hover:-translate-y-1 group">
                           <div className="relative h-48 bg-muted overflow-hidden">
@@ -244,6 +326,12 @@ function SearchResults() {
                                 <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                                 <span className="font-bold text-amber-700">{store.rating || 0}</span>
                               </div>
+                              {storeDistanceKm(coords, store) != null && (
+                                <div className="flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1.5 rounded-xl">
+                                  <MapPin className="h-4 w-4" />
+                                  <span className="font-bold text-sm">{formatDistanceAr(storeDistanceKm(coords, store)!)}</span>
+                                </div>
+                              )}
                             </div>
                             <div className={isRTL ? "text-right" : "text-left"}>
                               <span className="inline-block bg-primary/10 px-4 py-1.5 rounded-xl text-sm font-medium text-primary border border-primary/20">

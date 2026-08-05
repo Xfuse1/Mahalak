@@ -28,3 +28,19 @@ export function storeDistanceKm(
   if (typeof lat !== "number" || typeof lng !== "number") return null
   return haversineKm(user.lat, user.lng, lat, lng)
 }
+
+/**
+ * هل يقع الكيان داخل نصف قطر maxKm من المستخدم؟
+ * نصف قطر غير مفعَّل (null/0) ⇒ true للجميع. مسافة مجهولة (موقع المستخدم غير معروف أو المتجر
+ * بلا إحداثيات) ⇒ false عند تفعيل النصف قطر: الفلتر وعدٌ صريح («ضمن X كم»)، وإبقاء المجهول
+ * داخله يكسر الوعد. الواجهة مسؤولة عن إعلام المستخدم بعدد المستبعَدين لغياب الموقع.
+ */
+export function withinKm(
+  user: { lat: number; lng: number } | null,
+  entity: { latitude?: number | null; longitude?: number | null },
+  maxKm: number | null,
+): boolean {
+  if (maxKm == null || !(maxKm > 0)) return true
+  const distance = storeDistanceKm(user, entity)
+  return distance != null && distance <= maxKm
+}

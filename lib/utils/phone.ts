@@ -50,6 +50,21 @@ export function normalizeEgyptPhone(rawPhone: string): string | null {
   return `+20${localPhone.slice(1)}`
 }
 
+/**
+ * رقم صالح لرابط wa.me: أرقام فقط بمفتاح دولي بلا «+».
+ * متسامح عمدًا ولا يمرّ بـ normalizeEgyptPhone: أرقام بعض المتاجر أرضية أو بمفتاح غير مصري،
+ * وكان المُطبِّع الصارم يُرجع null لها فيتحوّل زرّ واتساب إلى زرّ ميت. يُرجع "" لما لا يصلح.
+ */
+export function toWhatsAppDigits(rawPhone: unknown): string {
+  if (typeof rawPhone !== "string" || !rawPhone) return ""
+  let digits = sanitizePhone(rawPhone).replace(/\D/g, "")
+  if (!digits) return ""
+  if (digits.startsWith("00")) digits = digits.slice(2)
+  // صيغة محلية (تبدأ بصفر) ⇒ نفترض مصر كافتراضي معقول: 01012345678 → 201012345678
+  if (digits.startsWith("0")) digits = `20${digits.slice(1)}`
+  return digits.length >= 8 ? digits : ""
+}
+
 export function getEgyptPhoneLookupCandidates(rawPhone: string): string[] {
   const candidates = new Set<string>()
   const sanitized = sanitizePhone(rawPhone)
