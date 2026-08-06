@@ -5,6 +5,9 @@
       "namespace": "android_app",
       "package_name": "com.m7lk.app",
       "sha256_cert_fingerprints": [
+        "ED:D9:E8:26:AC:54:AA:2E:4E:03:61:07:C5:95:43:1B:63:E3:DB:D9:72:62:A7:89:21:00:38:2A:C8:1E:F8:57",
+        "2D:59:ED:E6:DA:67:A3:1C:EA:D0:60:D5:60:D3:AF:00:05:66:FC:4C:2E:51:D8:F9:6D:02:C4:66:1F:6C:D9:C1",
+        "42:A5:F6:43:4E:C7:79:C1:C2:0A:EF:6D:AB:E0:E6:6F:27:B1:F8:B7:03:01:D1:3F:93:EB:30:89:1E:DE:3F:9B",
         "AA:C3:DE:95:FF:E6:C8:DF:39:67:35:32:E6:9F:AE:7F:76:83:FE:FD:6F:57:EB:22:42:14:81:4E:E2:DA:26:43"
       ]
     }
