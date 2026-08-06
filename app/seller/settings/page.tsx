@@ -16,7 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { getStoreByUserId, updateStore, createStore, uploadStoreImage, getCategoryNameById, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
 import { logError } from "../../../lib/logger"
 import Image from "next/image"
-import { Upload, Phone, MapPin, Loader2, CheckCircle, Truck } from "lucide-react"
+import { Upload, Phone, MapPin, Loader2, CheckCircle, Truck, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { requestSellerAccountDeletion } from "../../../lib/actions/account-deletion"
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
@@ -40,6 +42,8 @@ export default function SettingsPage() {
   const toast = useToast()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
+  const [requestingDeletion, setRequestingDeletion] = useState(false)
+  const [deletionRequested, setDeletionRequested] = useState(false)
   const [store, setStore] = useState<Store | null>(null)
   const [isLoadingStore, setIsLoadingStore] = useState(true)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -701,6 +705,59 @@ export default function SettingsPage() {
               </Button>
             </div>
           </form>
+
+          {/* حذف حساب التاجر — مدخل داخل التطبيق (التاجر لا يرى صفحة /account أصلًا) */}
+          <Card className="border border-destructive/30 rounded-2xl overflow-hidden mb-10">
+            <CardHeader className="bg-destructive/5 border-b border-destructive/20">
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                {t("إغلاق المتجر وحذف الحساب", "Close store and delete account")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>{t("• متجرك هيتخفي من الموقع فورًا وما حدش هيقدر يطلب منه.", "• Your store is hidden immediately and can no longer receive orders.")}</li>
+                <li>{t("• بنراجع الطلب وننفّذ حذف الكتالوج والبيانات بعد تسوية المستحقات.", "• We review the request and delete the catalog after settling any dues.")}</li>
+                <li>{t("• لو عندك نقدية غير مسوّاة مع السائقين، لازم تتسوّى الأول.", "• Unsettled cash with drivers must be settled first.")}</li>
+              </ul>
+              {deletionRequested ? (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
+                  {t("تم استلام طلب الحذف — متجرك مخفي دلوقتي وهنتواصل معاك.", "Deletion request received — your store is now hidden.")}
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="rounded-xl px-8"
+                  disabled={requestingDeletion}
+                  onClick={async () => {
+                    setRequestingDeletion(true)
+                    try {
+                      const res = await requestSellerAccountDeletion({})
+                      if (res?.success) {
+                        setDeletionRequested(true)
+                        toast.success(t("تم إرسال طلب حذف الحساب", "Deletion request sent"))
+                      } else {
+                        toast.error(res?.error || t("تعذّر إرسال الطلب", "Could not send the request"))
+                      }
+                    } catch {
+                      toast.error(t("تعذّر إرسال الطلب، حاول مرة أخرى", "Could not send the request"))
+                    } finally {
+                      setRequestingDeletion(false)
+                    }
+                  }}
+                >
+                  {requestingDeletion && <Loader2 className="h-4 w-4 animate-spin ms-2" />}
+                  {t("اطلب حذف الحساب", "Request account deletion")}
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                <Link href="/delete-account" className="text-primary hover:underline">
+                  {t("تفاصيل أكثر عن حذف الحساب", "More about account deletion")}
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>

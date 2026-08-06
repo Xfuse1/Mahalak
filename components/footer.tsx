@@ -114,6 +114,13 @@ const FooterComponent = () => {
                   {t("شروط الاستخدام", "Terms of Use")}
                 </Link>
               </li>
+              {/* رابط دائم وقابل للاكتشاف في كل صفحة — Google Play يطلب رابطًا عامًا لحذف الحساب */}
+              <li>
+                <Link href="/delete-account" className="text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2 group">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full group-hover:scale-150 transition-transform"></span>
+                  {t("حذف الحساب", "Delete Account")}
+                </Link>
+              </li>
             </ul>
           </div>
 
