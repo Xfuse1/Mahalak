@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useLanguage } from "@/lib/language-context"
@@ -137,6 +138,25 @@ export default function PrivacyPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* حذف الحساب — الحق المذكور أعلاه، ومعه الطريق اللي ينفّذه فعلًا */}
+          <div className="mt-10 rounded-2xl border border-destructive/25 bg-destructive/5 p-6 md:p-8 text-center">
+            <h2 className="text-lg md:text-xl font-bold text-foreground mb-2">
+              {t("تريد حذف حسابك؟", "Want to delete your account?")}
+            </h2>
+            <p className="text-muted-foreground mb-5 max-w-xl mx-auto text-sm md:text-base">
+              {t(
+                "تقدر تحذف حسابك وبياناتك الشخصية في أي وقت — من داخل التطبيق مباشرة أو بطلب من الصفحة المخصّصة.",
+                "You can delete your account and personal data at any time — from inside the app or via the dedicated page.",
+              )}
+            </p>
+            <Link
+              href="/delete-account"
+              className="inline-flex items-center justify-center rounded-xl bg-destructive px-6 py-3 font-bold text-destructive-foreground hover:bg-destructive/90 transition-colors"
+            >
+              {t("حذف الحساب وبياناتي", "Delete my account and data")}
+            </Link>
           </div>
 
           {/* Contact Section */}

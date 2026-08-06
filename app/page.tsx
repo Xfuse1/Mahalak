@@ -25,8 +25,11 @@ export default async function Home() {
   } catch {
     // الصفحة تعمل بدون بيانات بدلاً من التعطل الكامل
   }
-  const featuredProducts = allProducts.slice(0, 6)
-  const featuredStores = allStores.slice(0, 4)
+  // ملاحظة: فلترة المتاجر المحظورة تتم داخل مكوّني العرض (مكوّنات عميل). قراءة الكوكي هنا كانت
+  // ستُخرج الصفحة الرئيسية من العرض الثابت وتجعلها ديناميكية لكل زائر بلا مقابل.
+  // نأخذ شريحة أوسع قليلًا كي تبقى الشبكة ممتلئة بعد استبعاد المحظور.
+  const featuredProducts = allProducts.slice(0, 12)
+  const featuredStores = allStores.slice(0, 8)
 
   return (
     <div className="min-h-screen flex flex-col">

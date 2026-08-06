@@ -126,6 +126,9 @@ export function SearchBar({ placeholder, onSearch, className = "", initialValue 
         <Input
           id="search-input"
           type="text"
+          // الاتجاه يتبع ما يُكتب فعلًا لا لغة الواجهة: كتالوجات الكاشير لاتينية بالكامل تقريبًا،
+          // فاستعلام «Panadol 500» داخل حقل مفروض عليه RTL يظهر بترتيب مقلوب أثناء الكتابة.
+          dir="auto"
           placeholder={searchPlaceholder}
           value={query}
           onChange={handleChange}

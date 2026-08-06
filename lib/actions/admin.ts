@@ -117,6 +117,75 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
 }
 
 // اعتماد/رفض متجر — يضبط store.is_approved ويُخطر البائع.
+/**
+ * إزالة منتج بقرار إداري بعد بلاغ — سياسة المحتوى المُنشأ بواسطة المستخدمين تشترط أن يكون
+ * الإبلاغ مصحوبًا بقدرة فعلية على الإزالة، وإلا فالنظام شكليّ.
+ *
+ * نحذف المستند بدل وضع علامة حجب: معاملة إنشاء الطلب ترفض أصلًا أي منتج غير موجود
+ * (orders.ts: "Product not found")، فالحذف يُغلق مسار الشراء فورًا بلا الحاجة لإنفاذ علم جديد
+ * في كل مسار قراءة وكل معاملة — علم يُنسى في مسار واحد يترك المحتوى المُزال قابلًا للشراء.
+ */
+export async function takeDownProduct(productId: string, reason?: string) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(productId || "").trim()
+  if (!id) return { success: false, error: "المنتج غير محدد" }
+
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("products").doc(id)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "المنتج غير موجود" }
+
+    const data = (snap.data() || {}) as Record<string, any>
+    const storeId = String(data.store_id || "")
+    const name = String(data.name || "")
+
+    // أثر تدقيقي قبل الحذف: بلا نسخة محفوظة يصير قرار الإزالة غير قابل للمراجعة أو الاستئناف
+    await db.collection("takedowns").add({
+      product_id: id,
+      store_id: storeId || null,
+      product_name: name || null,
+      snapshot: {
+        name: data.name ?? null,
+        description: data.description ?? null,
+        price: data.price ?? null,
+        category: data.category ?? null,
+        image_url: data.image_url ?? null,
+        barcode: data.barcode ?? null,
+      },
+      reason: String(reason || "").slice(0, 2000) || null,
+      taken_down_by: admin.uid,
+      created_at: new Date().toISOString(),
+    })
+
+    await ref.delete()
+
+    // إخطار التاجر — قرار الإزالة يجب ألّا يكون صامتًا
+    if (storeId) {
+      try {
+        await createNotification({
+          user_id: storeId,
+          title: "تمت إزالة منتج من متجرك",
+          title_en: "A product was removed from your store",
+          message: `تمت إزالة «${name}» بعد بلاغ ومراجعة. ${reason ? `السبب: ${reason}` : ""}`.trim(),
+          message_en: `"${name}" was removed after a report and review.`,
+          type: "general",
+        })
+      } catch (notifyErr) {
+        logError("[admin] takeDownProduct notify", notifyErr)
+      }
+    }
+
+    revalidateTag("products", "max")
+    revalidatePath("/admin/complaints")
+    return { success: true }
+  } catch (e) {
+    logError("[admin] takeDownProduct", e)
+    return { success: false, error: "تعذّر إزالة المنتج" }
+  }
+}
+
 export async function setStoreApproval(storeId: string, approved: boolean) {
   const admin = await ensureAdmin()
   if (!admin) return { success: false, error: "ليس لديك صلاحية" }
@@ -638,6 +707,11 @@ export async function adminCancelDispatchOrder(orderId: string, reason?: string)
       if (o.status === "delivered" || o.status === "cancelled") return { ok: false as const, error: "already_terminal" }
       const alreadyRestored = o.stock_restored === true
       let terminalizedStops: Array<Record<string, any>> | null = null
+      // نجمع الكميات أولًا ثم نقرأ المنتجات ثم نكتب: معاملة Firestore تُلزم بكل القراءات قبل أي
+      // كتابة، والمنتج المحذوف (حذفه التاجر أو أُزيل بقرار إداري بعد بلاغ) كان يجعل tx.update
+      // يرمي "No document to update" فتُجهَض المعاملة كلها — بما فيها قلب الحالة إلى "cancelled"
+      // ⇒ طلب لا يمكن إلغاؤه أبدًا من هذا المسار.
+      const restore = new Map<string, number>()
       if (!alreadyRestored) {
         if (o.order_type === "multi_store") {
           const stops: PickupStop[] = Array.isArray(o.pickup_stops) ? o.pickup_stops : []
@@ -646,7 +720,10 @@ export async function adminCancelDispatchOrder(orderId: string, reason?: string)
             if (stop?.status === "rejected" || stop?.status === "picked_up") return stop
             for (const it of stop?.items || []) {
               const q = Number(it?.quantity) || 0
-              if (it?.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+              if (it?.product_id && q > 0) {
+                const pid = String(it.product_id)
+                restore.set(pid, (restore.get(pid) || 0) + q)
+              }
             }
             return { ...stop, status: "cancelled" }
           })
@@ -657,11 +734,31 @@ export async function adminCancelDispatchOrder(orderId: string, reason?: string)
             for (const itemDoc of itemsSnap.docs) {
               const it = itemDoc.data() as Record<string, any>
               const q = Number(it.quantity) || 0
-              if (it.product_id && q > 0) tx.update(db.collection("products").doc(String(it.product_id)), { stock: FieldValue.increment(q) })
+              if (it.product_id && q > 0) {
+                const pid = String(it.product_id)
+                restore.set(pid, (restore.get(pid) || 0) + q)
+              }
             }
           }
         }
       }
+
+      // آخر قراءة قبل الكتابات: أي منتج لم يعد موجودًا يُتخطّى بدل أن يُسقط المعاملة
+      const existingProducts = new Set<string>()
+      if (restore.size) {
+        const productDocs = await tx.getAll(
+          ...Array.from(restore.keys()).map((pid) => db.collection("products").doc(pid)),
+        )
+        productDocs.forEach((d) => {
+          if (d.exists) existingProducts.add(d.id)
+        })
+      }
+      for (const [pid, qty] of restore) {
+        if (existingProducts.has(pid)) {
+          tx.update(db.collection("products").doc(pid), { stock: FieldValue.increment(qty) })
+        }
+      }
+
       tx.update(ref, {
         status: "cancelled",
         stock_restored: true,
@@ -1363,6 +1460,9 @@ export async function adminCancelOrder(orderId: string, reason: string) {
       // pending/confirmed بجانب طلب ملغى (جنبًا إلى جنب مع حارس الحالة في آلة المحطات).
       let terminalizedStops: any[] | null = null
 
+      // نفس نمط adminCancelDispatchOrder: تجميع ثم قراءة ثم كتابة. منتج محذوف كان يُسقط
+      // المعاملة كلها فيتعذّر إلغاء الطلب نهائيًا من لوحة الأدمن.
+      const restore = new Map<string, number>()
       if (!alreadyRestored) {
         if (data.order_type === "multi_store") {
           const stops: any[] = Array.isArray(data.pickup_stops) ? data.pickup_stops : []
@@ -1372,9 +1472,8 @@ export async function adminCancelOrder(orderId: string, reason: string) {
             for (const it of stop?.items || []) {
               const qty = Number(it?.quantity) || 0
               if (it?.product_id && qty > 0) {
-                tx.update(db.collection("products").doc(String(it.product_id)), {
-                  stock: FieldValue.increment(qty),
-                })
+                const pid = String(it.product_id)
+                restore.set(pid, (restore.get(pid) || 0) + qty)
               }
             }
             // المحطة المُستعادة (pending/confirmed) تُصبح "cancelled" لتعكس إلغاء الطلب
@@ -1385,11 +1484,25 @@ export async function adminCancelOrder(orderId: string, reason: string) {
             const it = itemDoc.data() as Record<string, any>
             const qty = Number(it.quantity) || 0
             if (it.product_id && qty > 0) {
-              tx.update(db.collection("products").doc(String(it.product_id)), {
-                stock: FieldValue.increment(qty),
-              })
+              const pid = String(it.product_id)
+              restore.set(pid, (restore.get(pid) || 0) + qty)
             }
           }
+        }
+      }
+
+      const existingProducts = new Set<string>()
+      if (restore.size) {
+        const productDocs = await tx.getAll(
+          ...Array.from(restore.keys()).map((pid) => db.collection("products").doc(pid)),
+        )
+        productDocs.forEach((d) => {
+          if (d.exists) existingProducts.add(d.id)
+        })
+      }
+      for (const [pid, qty] of restore) {
+        if (existingProducts.has(pid)) {
+          tx.update(db.collection("products").doc(pid), { stock: FieldValue.increment(qty) })
         }
       }
 

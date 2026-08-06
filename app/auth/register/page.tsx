@@ -27,6 +27,7 @@ export default function CustomerRegisterPage() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [selectedCountry, setSelectedCountry] = useState("")
   const [selectedCity, setSelectedCity] = useState("")
   const errorRef = useRef<HTMLDivElement>(null)
@@ -108,6 +109,12 @@ export default function CustomerRegisterPage() {
     const confirmPassword = formData.get("confirmPassword") as string
 
     try {
+      // الزر معطّل بدونها، لكن الفحص هنا يمنع الإرسال بـEnter أو بتعديل الـDOM
+      if (!acceptedTerms) {
+        setError(t("لازم توافق على شروط الاستخدام وسياسة الخصوصية", "You must accept the Terms and Privacy Policy"))
+        return
+      }
+
       if (!name || name.length < 3) {
         setError(t("الاسم يجب أن يكون 3 أحرف على الأقل", "Name must be at least 3 characters"))
         return
@@ -373,10 +380,32 @@ export default function CustomerRegisterPage() {
                     </div>
                   </div>
 
+                  {/* موافقة صريحة على الشروط قبل إنشاء الحساب — سياسة المحتوى المُنشأ بواسطة
+                      المستخدمين في Google Play تشترطها، والموافقة تُختم سيرفر-سايد عند إنشاء المستند */}
+                  <label className="flex items-start gap-3 text-sm text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+                      aria-describedby="terms-help"
+                    />
+                    <span id="terms-help">
+                      {t("أوافق على", "I agree to the")}{" "}
+                      <Link href="/terms" target="_blank" className="text-primary font-medium hover:underline">
+                        {t("شروط الاستخدام", "Terms of Use")}
+                      </Link>{" "}
+                      {t("و", "and the")}{" "}
+                      <Link href="/privacy" target="_blank" className="text-primary font-medium hover:underline">
+                        {t("سياسة الخصوصية", "Privacy Policy")}
+                      </Link>
+                    </span>
+                  </label>
+
                   <Button
                     type="submit"
                     className="h-12 w-full rounded-2xl bg-primary text-sm font-bold shadow-lg transition hover:bg-primary/90 sm:h-14 sm:text-base"
-                    disabled={isLoading || isGoogleLoading}
+                    disabled={isLoading || isGoogleLoading || !acceptedTerms}
                   >
                     {isLoading ? t("جاري إنشاء الحساب...", "Creating account...") : t("إنشاء حساب", "Create Account")}
                   </Button>

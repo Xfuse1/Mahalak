@@ -151,9 +151,16 @@ export default function SupportPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-bold text-foreground">{c.subject}</p>
-                      {c.status === "resolved" ? (
+                      {/* أي حالة غير "open" تعني تذكرة مغلقة (resolved/action_taken/rejected).
+                          الشرط الثنائي القديم كان يُظهر بلاغًا أُزيل محتواه بـ«قيد المراجعة» للأبد. */}
+                      {c.status !== "open" ? (
                         <span className="inline-flex items-center gap-1 text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full flex-shrink-0">
-                          <CheckCircle2 className="h-3 w-3" /> {t("تمت المعالجة", "Resolved")}
+                          <CheckCircle2 className="h-3 w-3" />{" "}
+                          {c.status === "action_taken"
+                            ? t("تمت الإزالة", "Content removed")
+                            : c.status === "rejected"
+                              ? t("مرفوض", "Rejected")
+                              : t("تمت المعالجة", "Resolved")}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-bold bg-accent/15 text-accent-foreground px-2 py-0.5 rounded-full flex-shrink-0">

@@ -21,6 +21,7 @@ import { createSession, destroySession, ensureUserProfile } from "./actions/auth
 import { finalizePhoneVerification } from "./actions/profile"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 import { normalizeEgyptPhone } from "./utils/phone"
+import { clearBlockedStoresCache } from "./hooks/use-blocked-stores"
 
 interface User {
   id: string
@@ -450,6 +451,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // تجاهل فشل حذف الجلسة
     }
+    // النسخة المحفوظة من المتاجر المحظورة تخصّ المستخدم الخارج — على جهاز مشترك كان المستخدم
+    // التالي سيرث حظر غيره حتى يصله رد الخادم.
+    clearBlockedStoresCache()
     setUser(null)
     setFirebaseUser(null)
   }, [auth])

@@ -15,6 +15,7 @@ import { Package, Store, ShoppingBasket, HeartPulse, Shirt, Smartphone, Utensils
 import { memo } from "react"
 import type { ProductListItem } from "@/lib/types/product"
 import type { StoreListItem } from "@/lib/types/store"
+import { useBlockedStoreIds } from "@/lib/hooks/use-blocked-stores"
 
 // Lazy load below-the-fold components
 const BannerCarousel = dynamic(
@@ -120,21 +121,30 @@ export function CategoriesSection() {
   )
 }
 
+// أقصى ما يُعرض في كل قسم بعد استبعاد المحظور (الصفحة ترسل شريحة أوسع لتبقى الشبكة ممتلئة)
+const HOME_STORES = 4
+const HOME_PRODUCTS = 6
+
 export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
   const { t } = useLanguage()
   const { coords } = useUserLocation()
+  const blocked = useBlockedStoreIds()
+
+  const visible = blocked.size ? stores.filter((store) => !blocked.has(store.id)) : stores
 
   // IA-01: عند توفّر الموقع، أبرِز الأقرب إليك أولًا (المتاجر بلا إحداثيات تنزل للأسفل).
-  const displayed = coords
-    ? [...stores].sort((a, b) => {
-        const da = storeDistanceKm(coords, a)
-        const db = storeDistanceKm(coords, b)
-        if (da == null && db == null) return 0
-        if (da == null) return 1
-        if (db == null) return -1
-        return da - db
-      })
-    : stores
+  const displayed = (
+    coords
+      ? [...visible].sort((a, b) => {
+          const da = storeDistanceKm(coords, a)
+          const db = storeDistanceKm(coords, b)
+          if (da == null && db == null) return 0
+          if (da == null) return 1
+          if (db == null) return -1
+          return da - db
+        })
+      : visible
+  ).slice(0, HOME_STORES)
 
   return (
     <section className="py-16 bg-background">
@@ -165,6 +175,11 @@ export function FeaturedStores({ stores }: { stores: StoreListItem[] }) {
 
 export function FeaturedProducts({ products }: { products: ProductListItem[] }) {
   const { t } = useLanguage()
+  const blocked = useBlockedStoreIds()
+  const visible = (blocked.size ? products.filter((p) => !blocked.has(String(p.store_id || ""))) : products).slice(
+    0,
+    HOME_PRODUCTS,
+  )
   return (
     <section className="py-16 bg-secondary/30">
       <div className="container mx-auto px-4">
@@ -178,7 +193,7 @@ export function FeaturedProducts({ products }: { products: ProductListItem[] }) 
           </Button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products.map((product) => (
+          {visible.map((product) => (
             <MemoizedProductCard key={product.id} product={product} showActions />
           ))}
         </div>

@@ -10,6 +10,10 @@ import {
   getCurrentUid,
 } from "@/lib/auth/session"
 
+// نسخة الشروط السارية وقت الموافقة — تطابق «آخر تحديث» في app/terms/page.tsx.
+// ثابت محلي بلا export: ملف "use server" لا يصدّر إلا دوال async.
+const TERMS_VERSION = "2026-06"
+
 /**
  * ينشئ كوكي جلسة موثّق من ID token صادر عن Firebase (client SDK).
  * يُستدعى من العميل بعد تسجيل الدخول/التسجيل وعند تغيّر حالة المصادقة.
@@ -71,6 +75,12 @@ export async function ensureUserProfile(
         street: input.street ?? null,
         city: input.city ?? null,
         country: input.country ?? null,
+        // موافقة الشروط تُختم سيرفر-سايد لحظة إنشاء الحساب — لا تُقبل كعلم من العميل.
+        // سياسة المحتوى المُنشأ بواسطة المستخدمين في Google Play تشترط موافقة قبل الرفع،
+        // والنسخة تُحفظ كي نعرف على أي إصدار وافق كل مستخدم عند تحديث الشروط لاحقًا.
+        terms_accepted: true,
+        terms_accepted_at: now,
+        terms_version: TERMS_VERSION,
         created_at: now,
         updated_at: now,
       })

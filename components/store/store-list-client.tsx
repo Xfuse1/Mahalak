@@ -14,6 +14,7 @@ import { useToast } from "../ui/toast"
 import { useUserLocation } from "../../lib/location/user-location"
 import { storeDistanceKm, formatDistanceAr } from "../../lib/utils/geo"
 import { NearbyControl } from "../nearby-control"
+import { useBlockedStoreIds } from "../../lib/hooks/use-blocked-stores"
 import { imgSrc } from "@/lib/storage/public-url"
 
 type Store = {
@@ -87,10 +88,14 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
   const { t } = useLanguage()
   const toast = useToast()
   const { coords } = useUserLocation()
+  const blocked = useBlockedStoreIds()
+
+  // استبعاد المتاجر التي حظرها هذا المشاهد (تفضيل شخصي — انظر use-blocked-stores)
+  const visible = blocked.size ? stores.filter((store) => !blocked.has(store.id)) : stores
 
   // IA-01: ترتيب «الأقرب إليك» — المتاجر بلا إحداثيات تنزل للأسفل (fallback آمن).
   const displayedStores = coords
-    ? [...stores].sort((a, b) => {
+    ? [...visible].sort((a, b) => {
         const da = storeDistanceKm(coords, a)
         const db = storeDistanceKm(coords, b)
         if (da == null && db == null) return 0
@@ -98,7 +103,7 @@ export function StoreListClient({ initialStores }: { initialStores: Store[] }) {
         if (db == null) return -1
         return da - db
       })
-    : stores
+    : visible
 
   const handleSearch = async (query: string) => {
     if (query.trim()) {

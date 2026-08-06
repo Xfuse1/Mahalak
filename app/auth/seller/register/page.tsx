@@ -38,6 +38,7 @@ export default function SellerRegisterPage() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isLoggingIn] = useState(false)
   
@@ -311,6 +312,12 @@ export default function SellerRegisterPage() {
     const country = selectedCountry.trim()
 
     try {
+      // الزر معطّل بدونها، لكن الفحص هنا يمنع الإرسال بـEnter أو بتعديل الـDOM
+      if (!acceptedTerms) {
+        setError(t("لازم توافق على شروط الاستخدام وسياسة الخصوصية", "You must accept the Terms and Privacy Policy"))
+        return
+      }
+
       if (!name || name.length < 3) {
         setError(t("الاسم يجب أن يكون 3 أحرف على الأقل", "Name must be at least 3 characters"))
         return
@@ -687,10 +694,32 @@ export default function SellerRegisterPage() {
                   </div>
                 )}
 
+                {/* التاجر هو من يرفع المنتجات والصور — الموافقة على الشروط شرط سياسة UGC قبل الرفع */}
+                <label className="flex items-start gap-3 text-sm text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="mt-1 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+                    aria-describedby="seller-terms-help"
+                  />
+                  <span id="seller-terms-help">
+                    {t("أوافق على", "I agree to the")}{" "}
+                    <Link href="/terms" target="_blank" className="text-primary font-medium hover:underline">
+                      {t("شروط الاستخدام", "Terms of Use")}
+                    </Link>{" "}
+                    {t("و", "and the")}{" "}
+                    <Link href="/privacy" target="_blank" className="text-primary font-medium hover:underline">
+                      {t("سياسة الخصوصية", "Privacy Policy")}
+                    </Link>
+                    {t("، وأتحمّل مسؤولية المنتجات والصور التي أرفعها.", ", and I am responsible for the products and images I upload.")}
+                  </span>
+                </label>
+
                 <Button
                   type="submit"
                   className="h-12 w-full rounded-2xl bg-primary text-sm font-bold shadow-lg transition-all hover:scale-[1.01] hover:bg-primary/90 hover:shadow-xl active:scale-[0.99] md:h-14 md:text-base"
-                  disabled={isLoading}
+                  disabled={isLoading || !acceptedTerms}
                 >
                   {isLoading ? t("جاري إنشاء الحساب...", "Creating account...") : t("إنشاء حساب", "Create Account")}
                 </Button>

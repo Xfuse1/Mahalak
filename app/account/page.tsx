@@ -8,16 +8,19 @@ import { BackButton } from "../../components/back-button"
 import { useAuth } from "../../lib/auth-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw, KeyRound } from "lucide-react"
+import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw, KeyRound, Trash2, Loader2, Ban } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
 import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreOrders } from "../../lib/actions/orders"
 import type { PickupStop } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
+import { deleteMyAccount } from "../../lib/actions/account-deletion"
+import { getBlockedStores, unblockStore } from "../../lib/actions/blocks"
 import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
 import { Spinner } from "../../components/ui/spinner"
@@ -66,8 +69,12 @@ type RejectedOrder = {
   created_at?: string
 }
 
+// عبارة التأكيد المكتوبة بيد المستخدم. الخادم يتحقق من نفس النص — الواجهة وحدها ليست حارسًا،
+// لكن الكتابة اليدوية تمنع الحذف بضغطة واحدة على فعل لا رجعة فيه.
+const DELETE_CONFIRM_PHRASE = "حذف حسابي"
+
 export default function AccountPage() {
-  const { user, isLoading, refreshProfile } = useAuth()
+  const { user, isLoading, refreshProfile, logout } = useAuth()
   const router = useRouter()
   const { t } = useLanguage()
   const toast = useToast()
@@ -78,8 +85,53 @@ export default function AccountPage() {
   const [ordersError, setOrdersError] = useState<string | null>(null)
   const [hasStore, setHasStore] = useState(false)
   const [checkingStore, setCheckingStore] = useState(true)
+  const [blockedStores, setBlockedStores] = useState<Array<{ id: string; name: string }>>([])
+  const [unblocking, setUnblocking] = useState<string | null>(null)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState("")
+  const [deletingAccount, setDeletingAccount] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    let mounted = true
+    getBlockedStores()
+      .then((list) => {
+        if (mounted) setBlockedStores(list)
+      })
+      .catch(() => {
+        // قائمة الحظر إضافية — فشل قراءتها لا يمنع بقية الصفحة
+      })
+    return () => {
+      mounted = false
+    }
+  }, [user])
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.trim() !== DELETE_CONFIRM_PHRASE) return
+    setDeletingAccount(true)
+    try {
+      const res = await deleteMyAccount({ confirm: deleteConfirmText.trim() })
+      if (res?.success) {
+        toast.success(t("تم حذف حسابك", "Your account has been deleted"))
+        setShowDeleteAccount(false)
+        // ترتيب مقصود: الحذف تم سيرفر-سايد ⇒ ننهي جلسة العميل قبل التنقّل، وإلا حاول مستمع
+        // onAuthStateChanged إنشاء جلسة لمستخدم محذوف.
+        await logout()
+        router.replace("/")
+      } else if (res?.error === "SELLER_REQUIRES_REVIEW") {
+        toast.error(t("حسابك حساب تاجر — اطلب الحذف من لوحة التاجر", "Merchant account — request deletion from the seller dashboard"))
+      } else {
+        toast.error(res?.error || t("تعذّر حذف الحساب", "Could not delete the account"))
+      }
+    } catch (err) {
+      logError("[account] deleteAccount", err)
+      toast.error(t("تعذّر حذف الحساب، حاول مرة أخرى", "Could not delete the account, please try again"))
+    } finally {
+      setDeletingAccount(false)
+    }
+  }
 
   const fetchOrders = async () => {
     if (!user?.id) return
@@ -749,6 +801,88 @@ export default function AccountPage() {
                   </form>
                 </CardContent>
               </Card>
+
+              {/* المتاجر المحظورة — الحظر لازم يكون قابلًا للتراجع من داخل التطبيق (سياسة UGC) */}
+              {blockedStores.length > 0 && (
+                <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-6">
+                  <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-xl">
+                        <Ban className="h-5 w-5 text-primary" />
+                      </div>
+                      {t("المتاجر المحظورة", "Blocked stores")}
+                    </CardTitle>
+                    <CardDescription>
+                      {t("مش بتظهرلك في الرئيسية ولا في قوائم المتاجر", "Hidden from your home and store lists")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-3">
+                    {blockedStores.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                        <span className="font-medium truncate">{s.name}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl shrink-0"
+                          disabled={unblocking === s.id}
+                          onClick={async () => {
+                            setUnblocking(s.id)
+                            try {
+                              const res = await unblockStore(s.id)
+                              if (res?.success) {
+                                setBlockedStores((prev) => prev.filter((x) => x.id !== s.id))
+                                toast.success(t("تم إلغاء الحظر", "Store unblocked"))
+                              } else {
+                                toast.error(res?.error || t("تعذّر إلغاء الحظر", "Could not unblock"))
+                              }
+                            } finally {
+                              setUnblocking(null)
+                            }
+                          }}
+                        >
+                          {unblocking === s.id && <Loader2 className="h-4 w-4 animate-spin ms-1" />}
+                          {t("إلغاء الحظر", "Unblock")}
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* حذف الحساب — متطلَّب Google Play: مسار حذف داخل التطبيق نفسه */}
+              <Card className="border border-destructive/30 shadow-lg rounded-2xl overflow-hidden mt-6">
+                <CardHeader className="bg-destructive/5 border-b border-destructive/20">
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-destructive/10 rounded-xl">
+                      <Trash2 className="h-5 w-5 text-destructive" />
+                    </div>
+                    {t("حذف الحساب", "Delete account")}
+                  </CardTitle>
+                  <CardDescription>
+                    {t("حذف حسابك وبياناتك الشخصية نهائيًا من محلك", "Permanently delete your account and personal data")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li>{t("• بيتحذف: اسمك وهاتفك وعنوانك وتقييماتك وإشعاراتك وحساب الدخول.", "• Deleted: your name, phone, address, ratings, notifications and sign-in account.")}</li>
+                    <li>{t("• بيتحفظ: سجل الطلبات المكتملة وفواتيرها بدون بياناتك الشخصية (مطلوب محاسبيًا للتاجر والسائق).", "• Retained: completed order records, stripped of your personal data.")}</li>
+                    <li>{t("• لو عندك طلبات جارية لازم تستلمها أو تلغيها الأول.", "• Active orders must be completed or cancelled first.")}</li>
+                  </ul>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteAccount(true)}
+                    className="rounded-xl px-8 py-3"
+                  >
+                    <Trash2 className="h-4 w-4 ms-2" />
+                    {t("حذف حسابي", "Delete my account")}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    <Link href="/delete-account" className="text-primary hover:underline">
+                      {t("تفاصيل أكثر عن حذف الحساب", "More about account deletion")}
+                    </Link>
+                  </p>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="address">
@@ -828,6 +962,65 @@ export default function AccountPage() {
           }}
         />
       )}
+
+      {/* تأكيد حذف الحساب — كتابة العبارة بدل ضغطة واحدة (الفعل لا رجعة فيه) */}
+      <Dialog
+        open={showDeleteAccount}
+        onOpenChange={(open) => {
+          if (deletingAccount) return
+          setShowDeleteAccount(open)
+          if (!open) setDeleteConfirmText("")
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              {t("حذف الحساب نهائيًا", "Delete account permanently")}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                "الخطوة دي مش ممكن التراجع عنها. هيتم حذف بياناتك الشخصية وحساب الدخول.",
+                "This cannot be undone. Your personal data and sign-in account will be deleted.",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Label htmlFor="delete-confirm">
+              {t(`اكتب «${DELETE_CONFIRM_PHRASE}» للتأكيد`, `Type "${DELETE_CONFIRM_PHRASE}" to confirm`)}
+            </Label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={DELETE_CONFIRM_PHRASE}
+              autoComplete="off"
+              className="h-11 rounded-xl"
+            />
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteAccount(false)}
+              disabled={deletingAccount}
+              className="rounded-xl"
+            >
+              {t("إلغاء", "Cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAccount}
+              disabled={deletingAccount || deleteConfirmText.trim() !== DELETE_CONFIRM_PHRASE}
+              className="rounded-xl gap-2"
+            >
+              {deletingAccount && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("احذف حسابي", "Delete my account")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

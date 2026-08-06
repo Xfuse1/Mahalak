@@ -5,6 +5,7 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { BackButton } from "@/components/back-button"
 import { ShareButton } from "@/components/share-button"
+import { ReportButton } from "@/components/report-button"
 import { Star, MessageCircle, Phone, ShoppingCart, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -281,7 +282,11 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             <div className="space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <h1 className="text-4xl font-extrabold text-gray-800 text-balance">{product.name}</h1>
-                <ShareButton title={product.name} text={t(`شوف ${product.name} على محلك`, `Check out ${product.name} on Mahalak`)} className="shrink-0" />
+                <div className="flex items-center gap-1 shrink-0">
+                  <ShareButton title={product.name} text={t(`شوف ${product.name} على محلك`, `Check out ${product.name} on Mahalak`)} />
+                  {/* إبلاغ عن محتوى التاجر — سياسة UGC تطلب طريقًا مباشرًا من نفس الصفحة */}
+                  <ReportButton targetType="product" targetId={product.id} targetName={product.name} />
+                </div>
               </div>
 
               <Link href={`/store/${product.store_id}`} className="inline-flex items-center gap-2 text-primary hover:text-primary/80 font-medium transition-colors">
