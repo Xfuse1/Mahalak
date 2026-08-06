@@ -13,6 +13,8 @@ export default async function StoresPage() {
   } catch {
     // Allow the page to render even when store data is unavailable during build/runtime.
   }
+  // المتاجر المحظورة تُستبعَد داخل StoreListClient (مكوّن عميل) — قراءة الكوكي هنا كانت ستُخرج
+  // الصفحة من العرض الثابت لكل زائر.
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">

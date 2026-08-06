@@ -117,6 +117,75 @@ export async function getAdminStores(): Promise<{ success: boolean; stores?: Adm
 }
 
 // اعتماد/رفض متجر — يضبط store.is_approved ويُخطر البائع.
+/**
+ * إزالة منتج بقرار إداري بعد بلاغ — سياسة المحتوى المُنشأ بواسطة المستخدمين تشترط أن يكون
+ * الإبلاغ مصحوبًا بقدرة فعلية على الإزالة، وإلا فالنظام شكليّ.
+ *
+ * نحذف المستند بدل وضع علامة حجب: معاملة إنشاء الطلب ترفض أصلًا أي منتج غير موجود
+ * (orders.ts: "Product not found")، فالحذف يُغلق مسار الشراء فورًا بلا الحاجة لإنفاذ علم جديد
+ * في كل مسار قراءة وكل معاملة — علم يُنسى في مسار واحد يترك المحتوى المُزال قابلًا للشراء.
+ */
+export async function takeDownProduct(productId: string, reason?: string) {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  const id = String(productId || "").trim()
+  if (!id) return { success: false, error: "المنتج غير محدد" }
+
+  try {
+    const db = getAdminDb()
+    const ref = db.collection("products").doc(id)
+    const snap = await ref.get()
+    if (!snap.exists) return { success: false, error: "المنتج غير موجود" }
+
+    const data = (snap.data() || {}) as Record<string, any>
+    const storeId = String(data.store_id || "")
+    const name = String(data.name || "")
+
+    // أثر تدقيقي قبل الحذف: بلا نسخة محفوظة يصير قرار الإزالة غير قابل للمراجعة أو الاستئناف
+    await db.collection("takedowns").add({
+      product_id: id,
+      store_id: storeId || null,
+      product_name: name || null,
+      snapshot: {
+        name: data.name ?? null,
+        description: data.description ?? null,
+        price: data.price ?? null,
+        category: data.category ?? null,
+        image_url: data.image_url ?? null,
+        barcode: data.barcode ?? null,
+      },
+      reason: String(reason || "").slice(0, 2000) || null,
+      taken_down_by: admin.uid,
+      created_at: new Date().toISOString(),
+    })
+
+    await ref.delete()
+
+    // إخطار التاجر — قرار الإزالة يجب ألّا يكون صامتًا
+    if (storeId) {
+      try {
+        await createNotification({
+          user_id: storeId,
+          title: "تمت إزالة منتج من متجرك",
+          title_en: "A product was removed from your store",
+          message: `تمت إزالة «${name}» بعد بلاغ ومراجعة. ${reason ? `السبب: ${reason}` : ""}`.trim(),
+          message_en: `"${name}" was removed after a report and review.`,
+          type: "general",
+        })
+      } catch (notifyErr) {
+        logError("[admin] takeDownProduct notify", notifyErr)
+      }
+    }
+
+    revalidateTag("products", "max")
+    revalidatePath("/admin/complaints")
+    return { success: true }
+  } catch (e) {
+    logError("[admin] takeDownProduct", e)
+    return { success: false, error: "تعذّر إزالة المنتج" }
+  }
+}
+
 export async function setStoreApproval(storeId: string, approved: boolean) {
   const admin = await ensureAdmin()
   if (!admin) return { success: false, error: "ليس لديك صلاحية" }

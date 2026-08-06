@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw, KeyRound, Trash2, Loader2 } from "lucide-react"
+import { Package, UserIcon, MapPin, Store, Eye, AlertTriangle, Truck, Mail, Phone, ShoppingBag, CreditCard, CheckCircle, RefreshCw, KeyRound, Trash2, Loader2, Ban } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "../../lib/language-context"
 import { getStoreByUserId } from "../../lib/actions/stores"
@@ -20,6 +20,7 @@ import { getCustomerOrders, getRejectedOrdersForCustomer, getCustomerMultiStoreO
 import type { PickupStop } from "../../lib/actions/orders"
 import { updateProfile } from "../../lib/actions/profile"
 import { deleteMyAccount } from "../../lib/actions/account-deletion"
+import { getBlockedStores, unblockStore } from "../../lib/actions/blocks"
 import dynamic from "next/dynamic"
 import type { TimelineEntry } from "../../components/order-tracking-timeline"
 import { Spinner } from "../../components/ui/spinner"
@@ -84,11 +85,28 @@ export default function AccountPage() {
   const [ordersError, setOrdersError] = useState<string | null>(null)
   const [hasStore, setHasStore] = useState(false)
   const [checkingStore, setCheckingStore] = useState(true)
+  const [blockedStores, setBlockedStores] = useState<Array<{ id: string; name: string }>>([])
+  const [unblocking, setUnblocking] = useState<string | null>(null)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    let mounted = true
+    getBlockedStores()
+      .then((list) => {
+        if (mounted) setBlockedStores(list)
+      })
+      .catch(() => {
+        // قائمة الحظر إضافية — فشل قراءتها لا يمنع بقية الصفحة
+      })
+    return () => {
+      mounted = false
+    }
+  }, [user])
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText.trim() !== DELETE_CONFIRM_PHRASE) return
@@ -783,6 +801,53 @@ export default function AccountPage() {
                   </form>
                 </CardContent>
               </Card>
+
+              {/* المتاجر المحظورة — الحظر لازم يكون قابلًا للتراجع من داخل التطبيق (سياسة UGC) */}
+              {blockedStores.length > 0 && (
+                <Card className="border-0 shadow-lg rounded-2xl overflow-hidden mt-6">
+                  <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
+                    <CardTitle className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-xl">
+                        <Ban className="h-5 w-5 text-primary" />
+                      </div>
+                      {t("المتاجر المحظورة", "Blocked stores")}
+                    </CardTitle>
+                    <CardDescription>
+                      {t("مش بتظهرلك في الرئيسية ولا في قوائم المتاجر", "Hidden from your home and store lists")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-3">
+                    {blockedStores.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                        <span className="font-medium truncate">{s.name}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl shrink-0"
+                          disabled={unblocking === s.id}
+                          onClick={async () => {
+                            setUnblocking(s.id)
+                            try {
+                              const res = await unblockStore(s.id)
+                              if (res?.success) {
+                                setBlockedStores((prev) => prev.filter((x) => x.id !== s.id))
+                                toast.success(t("تم إلغاء الحظر", "Store unblocked"))
+                              } else {
+                                toast.error(res?.error || t("تعذّر إلغاء الحظر", "Could not unblock"))
+                              }
+                            } finally {
+                              setUnblocking(null)
+                            }
+                          }}
+                        >
+                          {unblocking === s.id && <Loader2 className="h-4 w-4 animate-spin ms-1" />}
+                          {t("إلغاء الحظر", "Unblock")}
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* حذف الحساب — متطلَّب Google Play: مسار حذف داخل التطبيق نفسه */}
               <Card className="border border-destructive/30 shadow-lg rounded-2xl overflow-hidden mt-6">

@@ -5,7 +5,9 @@ import { Footer } from "../../../components/footer"
 import { ProductCard } from "../../../components/product-card"
 import { BackButton } from "../../../components/back-button"
 import { ShareButton } from "../../../components/share-button"
-import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package, SearchX, Flame, Sparkles, Clock, LayoutGrid, Timer, BadgePercent } from "lucide-react"
+import { Star, MapPin, Phone, MessageCircle, FileText, Tag, Package, SearchX, Flame, Sparkles, Clock, LayoutGrid, Timer, BadgePercent, Ban, Eye, Loader2 } from "lucide-react"
+import { ReportButton } from "../../../components/report-button"
+import { blockStore, unblockStore, getBlockedStoreIds } from "../../../lib/actions/blocks"
 import { notFound, useRouter } from "next/navigation"
 import { SearchBar } from "../../../components/search-bar"
 import { searchTokens } from "../../../lib/utils/arabic"
@@ -131,6 +133,8 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
   const [products, setProducts] = useState<Product[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
   const [topSellerIds, setTopSellerIds] = useState<string[]>([])
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
   const [query, setQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
@@ -209,6 +213,46 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
     // نعتمد على معرّف المتجر الثابت بدل كائن store كاملًا — كان تغيّر مرجعه (مثلًا بعد تقييم)
     // يعيد إطلاق PageView/ViewContent فيضخّم عدّادات Meta Pixel.
   }, [store?.id])
+
+  // حالة الحظر تُقرأ لهذا المشاهد وحده — خارج أي دالة مخزَّنة بالكاش (مفاتيحها بلا هوية مشاهد)
+  useEffect(() => {
+    if (!user) {
+      setIsBlocked(false)
+      return
+    }
+    let mounted = true
+    getBlockedStoreIds()
+      .then((ids) => {
+        if (mounted) setIsBlocked(ids.includes(id))
+      })
+      .catch(() => {
+        // فشل القراءة لا يمنع تصفّح المتجر
+      })
+    return () => {
+      mounted = false
+    }
+  }, [user, id])
+
+  const handleToggleBlock = async () => {
+    if (!user) {
+      router.push("/auth")
+      return
+    }
+    setBlockBusy(true)
+    try {
+      const res = isBlocked ? await unblockStore(id) : await blockStore(id)
+      if (res?.success) {
+        setIsBlocked(!isBlocked)
+        toast.success(isBlocked ? t("تم إلغاء الحظر", "Store unblocked") : t("تم حظر المتجر", "Store blocked"))
+      } else {
+        toast.error(res?.error || t("تعذّر تنفيذ الطلب", "Could not complete the request"))
+      }
+    } catch {
+      toast.error(t("تعذّر تنفيذ الطلب، حاول مرة أخرى", "Could not complete the request"))
+    } finally {
+      setBlockBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!store || !user) return
@@ -570,10 +614,39 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
                     </div>
                   </SheetContent>
                 </Sheet>
+
+                {/* أدوات المحتوى المُنشأ بواسطة المستخدمين: إبلاغ + حظر (متطلَّب سياسة Google Play) */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <ReportButton targetType="store" targetId={store.id} targetName={store.name} variant="full" />
+                  <Button
+                    variant="outline"
+                    onClick={handleToggleBlock}
+                    disabled={blockBusy}
+                    className="flex-1 bg-transparent w-full"
+                  >
+                    {blockBusy ? (
+                      <Loader2 className="ms-2 h-5 w-5 animate-spin" />
+                    ) : isBlocked ? (
+                      <Eye className="ms-2 h-5 w-5" />
+                    ) : (
+                      <Ban className="ms-2 h-5 w-5" />
+                    )}
+                    {isBlocked ? t("إلغاء حظر المتجر", "Unblock store") : t("حظر المتجر", "Block store")}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
 
+          {isBlocked && (
+            <div className="mb-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+              <Ban className="h-8 w-8 text-destructive mx-auto mb-3" />
+              <p className="font-bold text-foreground mb-1">{t("أنت حاظر هذا المتجر", "You blocked this store")}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("منتجاته مش هتظهرلك في الرئيسية ولا في قوائم المتاجر.", "Its products won't appear in your home or store lists.")}
+              </p>
+            </div>
+          )}
 
           <div>
             <h2 className="text-2xl font-bold mb-4">{t("منتجات المتجر", "Store Products")}</h2>
