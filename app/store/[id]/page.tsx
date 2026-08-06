@@ -10,8 +10,8 @@ import { ReportButton } from "../../../components/report-button"
 import { blockStore, unblockStore, getBlockedStoreIds } from "../../../lib/actions/blocks"
 import { notFound, useRouter } from "next/navigation"
 import { SearchBar } from "../../../components/search-bar"
-import { searchTokens } from "../../../lib/utils/arabic"
-import { normalizeArabic } from "../../../lib/utils/arabic"
+import { buildStoreIndex, searchStore } from "../../../lib/search/engine"
+import { aliasesForToken } from "../../../lib/search/aliases"
 import {
   isOfferActiveNow,
   isOfferSoldOut,
@@ -72,6 +72,11 @@ type Product = {
   storeName: string
   storeId: string
   reviewCount: number
+  // حقول يُرجعها getProductsByStoreId أصلًا ضمن المستند ولم تكن مقروءة هنا. فهرستها تغيير عميل
+  // بحت: صفر تعديل خادم، صفر زيادة في الحمولة، صفر قراءة إضافية من Firestore.
+  active_ingredient?: string | null
+  barcode?: string | null
+  manufacturer?: string | null
 }
 
 // أقصى عدد بطاقات في القسم الواحد — الأقسام نافذة سريعة لا شبكة كاملة
@@ -280,18 +285,9 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
   // ═══ البحث والتقسيم داخل المتجر ═══
   // كل الخطّافات تُعلَن قبل أي return مبكّر (تحميل/notFound) وإلا اختلف عددها بين الرسمات.
 
-  // فهرس بحث مُطبَّع يُحسب مرة لكل قائمة منتجات: متجر الصيدلية يحمل آلاف الأصناف، وتطبيع
-  // النص داخل الفلتر كان سيعيد تطبيع كل اسم مع كل ضغطة مفتاح.
-  const searchIndex = useMemo(
-    () =>
-      products.map((product) => ({
-        product,
-        blob: normalizeArabic(`${product.name} ${product.description || ""} ${product.category || ""}`),
-      })),
-    [products],
-  )
-
-  const tokens = useMemo(() => searchTokens(query), [query])
+  // فهرس بحث يُبنى مرة لكل قائمة منتجات: متجر الصيدلية يحمل آلاف الأصناف، وتطبيع النص داخل
+  // الفلتر كان سيعيد تطبيع كل اسم مع كل ضغطة مفتاح. البناء نفسه ~25ms لـ1543 صنفًا (مقيس).
+  const searchIndex = useMemo(() => buildStoreIndex(products), [products])
 
   // فئات المتجر (تقسيم داخلي) — تظهر فقط عند وجود فئتين فأكثر، وإلا فالشريط زينة بلا فائدة
   const categories = useMemo(() => {
@@ -306,16 +302,21 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
       .map(([name, count]) => ({ name, count }))
   }, [products])
 
+  // نتيجة البحث تحمل معها الطبقة التي أنتجتها، كي تُعلن الواجهة للعميل ما فعلته باستعلامه بدل
+  // أن تعرض نتائج ظهرت بلا سبب مفهوم.
+  const outcome = useMemo(
+    () => searchStore(searchIndex, query, { category: activeCategory, expand: aliasesForToken }),
+    [searchIndex, query, activeCategory],
+  )
+
+  const hasQuery = query.trim().length > 0
+
   const visibleProducts = useMemo(() => {
-    let list = searchIndex
-    if (activeCategory !== "all") {
-      list = list.filter(({ product }) => (product.category || "").trim() === activeCategory)
-    }
-    if (tokens.length) {
-      list = list.filter(({ blob }) => tokens.every((token) => blob.includes(token)))
-    }
-    return list.map(({ product }) => product)
-  }, [searchIndex, tokens, activeCategory])
+    const byId = new Map(products.map((product) => [product.id, product]))
+    return outcome.ids
+      .map((id) => byId.get(id))
+      .filter((product): product is Product => Boolean(product))
+  }, [outcome, products])
 
   // ترقيم تدريجي للشبكة الكاملة. نُصفّره وقت الرسم عند تغيّر البحث/الفئة بدل setState داخل
   // effect (يمنع الرسمات المتتالية ويُبقي فحص الـlint نظيفًا).
@@ -394,7 +395,7 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
   }
 
   // الأقسام نافذة تصفّح سريعة: تُخفى فور بدء البحث أو اختيار فئة كي لا تُشوّش على النتائج
-  const isBrowsingAll = activeCategory === "all" && tokens.length === 0
+  const isBrowsingAll = activeCategory === "all" && !hasQuery
 
   if (loading) {
     return (
@@ -782,7 +783,7 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
             {products.length > 0 && (
               <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
                 <Package className="h-5 w-5 text-primary" />
-                {tokens.length > 0 || activeCategory !== "all"
+                {hasQuery || activeCategory !== "all"
                   ? t(`النتائج (${visibleProducts.length})`, `Results (${visibleProducts.length})`)
                   : t(`كل المنتجات (${visibleProducts.length})`, `All products (${visibleProducts.length})`)}
               </h3>
@@ -795,6 +796,15 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
               />
             ) : visibleProducts.length > 0 ? (
               <>
+                {/* إعلان ما فعله المحرّك بالاستعلام: نتيجةٌ بلا تفسير تبدو عشوائية للعميل */}
+                {outcome.droppedToken && (
+                  <div className="mb-4 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+                    {t(
+                      `لا توجد نتائج للاستعلام كاملًا — نعرض نتائج بعد تجاهل «${outcome.droppedToken}»`,
+                      `No results for the full query — showing results after ignoring "${outcome.droppedToken}"`,
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {visibleProducts.slice(0, visibleCount).map((product) => (
                     <ProductCard key={product.id} product={product} showActions storePhone={store.phone} />
@@ -816,11 +826,72 @@ export default function StorePage({ params }: { params: Promise<{ id: string }> 
                 )}
               </>
             ) : (
-              <EmptyState
-                icon={SearchX}
-                title={t("لا توجد نتائج مطابقة", "No matching results")}
-                description={t("جرّب كلمات أخرى أو اختر فئة مختلفة", "Try different words or pick another category")}
-              />
+              /* حالة صفر النتائج ليست نهاية طريق: تُعرض مخارج فعلية بدل شبكة فارغة */
+              <div className="rounded-2xl border border-border bg-card p-6 md:p-8 text-center">
+                <SearchX className="h-12 w-12 mx-auto text-muted-foreground/60 mb-4" />
+                <h3 className="text-lg font-bold text-foreground mb-2">
+                  {t(`لم نجد «${query}» في هذا المتجر`, `No results for "${query}" in this store`)}
+                </h3>
+
+                {outcome.categorySuggestion ? (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {t("هل تقصد تصفّح الفئة؟", "Did you mean to browse the category?")}
+                    </p>
+                    <Button
+                      onClick={() => {
+                        setActiveCategory(outcome.categorySuggestion!)
+                        setQuery("")
+                      }}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl h-11 px-6 font-bold"
+                    >
+                      {outcome.categorySuggestion}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground mb-5">
+                    {t("جرّب اسمًا أقصر، أو تصفّح فئات المتجر:", "Try a shorter name, or browse the store's categories:")}
+                  </p>
+                )}
+
+                {!outcome.categorySuggestion && categories.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 mb-6">
+                    {categories.slice(0, 6).map((category) => (
+                      <button
+                        key={category.name}
+                        onClick={() => {
+                          setActiveCategory(category.name)
+                          setQuery("")
+                        }}
+                        className="px-4 py-2 rounded-xl border border-border bg-background hover:border-primary hover:text-primary transition-colors text-sm font-medium"
+                      >
+                        {category.name} <span className="text-muted-foreground">({category.count})</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* مَخرَج النطاق: البحث داخل متجر واحد يوهم العميل أنه بحث في كل شيء */}
+                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/search?q=${encodeURIComponent(query)}`)}
+                    className="border-2 border-primary text-primary hover:bg-primary/10 rounded-xl h-11 px-6 font-bold"
+                  >
+                    {t("ابحث في كل المتاجر", "Search all stores")}
+                  </Button>
+                  {store.phone && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(`https://wa.me/${store.phone.replace(/\D/g, "")}`, "_blank")}
+                      className="border-2 border-border rounded-xl h-11 px-6 font-bold"
+                    >
+                      <MessageCircle className="h-4 w-4 ms-2" />
+                      {t("اسأل المتجر", "Ask the store")}
+                    </Button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
