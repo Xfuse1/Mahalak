@@ -67,10 +67,12 @@ export function SearchBar({ placeholder, onSearch, className = "", initialValue 
     setQuery(initialValue)
   }, [initialValue])
 
-  // الحالة تُجلب عند أول تفاعل مع البحث (تركيز أو كتابة) لا عند رسم الصفحة.
+  // الحالة تُجلب عند الرسم لا عند أول تفاعل.
   //
-  // شريط البحث يظهر في ترويسة كل صفحة تقريبًا، فالجلب عند الرسم كان يعني نداء شبكة على **كل**
-  // زيارة — بما فيها زيارات لا يلمس فيها أحد البحث، وبينما الميزة مطفأة أصلًا.
+  // كانت تُجلب عند التركيز/الكتابة توفيرًا لنداء شبكة على كل زيارة — وكان ثمنُها أن المبدّل
+  // **لا يظهر إلا بعد أن يلمس المستخدم الصندوق**، فيقرأ ذلك كزرٍّ «يظهر ويختفي» بلا سبب مفهوم.
+  // والتوفير موهوم أصلًا: النداء واحد لكل تحميل صفحة مهما تكرّر الشريط (الوعد محفوظ على مستوى
+  // الوحدة)، والنتيجة محفوظة 60 ثانية على الخادم. ظهورُ عنصر تحكّم لا يجوز أن يتوقّف على تفاعل.
   const askedRef = useRef(false)
   const ensureAvailability = useCallback(() => {
     if (isInPageFilter || askedRef.current) return
@@ -78,10 +80,9 @@ export function SearchBar({ placeholder, onSearch, className = "", initialValue 
     fetchAvailability().then((res) => setAiAvailable(res.enabled === true))
   }, [isInPageFilter])
 
-  // صفحة نتائج البحث الذكي تبدأ بوضع «ذكي»، فتحتاج الحالة فورًا وإلا اختفى الزرّ عن الصفحة التي تعرضه.
   useEffect(() => {
-    if (initialMode === "ai") ensureAvailability()
-  }, [initialMode, ensureAvailability])
+    ensureAvailability()
+  }, [ensureAvailability])
 
   // اقتراح الوضع أثناء الكتابة: جملة أو سؤال ⇒ ذكي، كلمة أو كلمتان ⇒ عادي. يعمل مرّة واحدة فقط،
   // فبمجرّد أن يلمس المستخدم الزرّ يصمت نهائيًّا.

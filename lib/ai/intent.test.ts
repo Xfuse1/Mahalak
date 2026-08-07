@@ -118,6 +118,19 @@ describe("shouldUseAiSearch — اقتراح الوضع", () => {
     expect(shouldUseAiSearch("محتاج منظف")).toBe(true)
   })
 
+  it("كلمة الحالة وحدها تكفي — «جعان» نيّة لا اسم صنف", () => {
+    // المثال الذي بُنيت الميزة حوله كان يفشل: كلمة واحدة بلا فعل طلب ⇒ بحث عادي عن «جعان».
+    for (const q of ["جعان", "عطشان", "مصدع", "دايخ", "جعان اوي"]) {
+      expect(shouldUseAiSearch(q)).toBe(true)
+    }
+  })
+
+  it("ولا تختطف أسماء الأصناف", () => {
+    for (const q of ["عصير", "دواء", "شامبو", "بنادول", "لبن جهينة"]) {
+      expect(shouldUseAiSearch(q)).toBe(false)
+    }
+  })
+
   it("لا يشتغل على الفراغ", () => {
     expect(shouldUseAiSearch("")).toBe(false)
     expect(shouldUseAiSearch("   ")).toBe(false)
