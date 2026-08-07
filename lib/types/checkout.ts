@@ -10,4 +10,6 @@ export type CheckoutItem = {
   quantity: number
   stock?: number
   discount_percentage?: number
+  /** من أين أُضيف الصنف («ai_search»). للقياس فقط — لا يمسّ سعرًا ولا كمية. */
+  source?: string
 }

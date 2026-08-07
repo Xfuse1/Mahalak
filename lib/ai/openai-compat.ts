@@ -3,6 +3,7 @@
 // لا يُستورَد من كود العميل. الافتراضي: NVIDIA API catalog (موديل glm-5.2) عبر /chat/completions.
 import { logError } from "@/lib/logger"
 import { buildColumnMapPrompt, parseColumnMap, type ColumnMap } from "./column-map"
+import { buildIntentPrompt, parseIntent, type SearchIntent } from "./intent"
 
 const BASE = (process.env.IMPORT_AI_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "")
 const MODEL = process.env.IMPORT_AI_MODEL || "z-ai/glm-5.2"
@@ -60,4 +61,11 @@ export async function mapColumnsOpenAICompat(
   if (!isOpenAICompatEnabled() || !headers.length) return null
   const out = await openAICompatJSON(buildColumnMapPrompt(headers, sampleRows))
   return parseColumnMap(out, headers)
+}
+
+// بديل geminiIntent بنفس التوقيع بالضبط — يبقي تبديل المزوّد متغيّرَ بيئة لا تعديلَ كود.
+export async function intentOpenAICompat(query: string, maxConcepts: number): Promise<SearchIntent | null> {
+  if (!isOpenAICompatEnabled() || !String(query || "").trim()) return null
+  const out = await openAICompatJSON(buildIntentPrompt(query, maxConcepts), 8000)
+  return parseIntent(out, maxConcepts)
 }

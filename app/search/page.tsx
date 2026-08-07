@@ -36,7 +36,13 @@ function productStoreCoords(product: ProductListItem) {
 
 // الفلاتر الافتراضية: تُطبَّق قبل أن يلمس المستخدم لوحة الفلترة أصلًا، وإلا كانت اللوحة تعلن
 // «الأقرب» كترتيب فعّال بينما القائمة غير مرتَّبة بالمسافة إطلاقًا حتى يغيّر المستخدم شيئًا.
+//
+// وباستعلام، الترتيب الافتراضي «الأكثر صلة» لا «الأقرب»: الخادم صار يرتّب النتائج بالصلة
+// (lib/search/catalog-index.ts)، وإعادة ترتيبها بالمسافة على العميل كانت تمحو ذلك الترتيب كلَّه —
+// فيهبط الصنف المقصود تحت أصناف لا تمتّ للاستعلام بصلة لمجرّد أن متجرها أقرب. «الأقرب» يبقى
+// خيارًا صريحًا في اللوحة، وهو الافتراضي عند التصفّح بلا استعلام حيث لا صلة تُرتَّب بها أصلًا.
 const DEFAULT_FILTERS: FilterState = { sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null, maxKm: null }
+const DEFAULT_QUERY_FILTERS: FilterState = { ...DEFAULT_FILTERS, sortBy: "best-match" }
 
 // تطبيق الفلاتر/الترتيب — دالة نقية تُعاد استخدامها عند تغيير الاستعلام أو الفلاتر.
 // تُرجع القائمة وعدد ما أسقطه نصف القطر لغياب موقع المتجر (لعرضه للمستخدم بدل اختفاء صامت).
@@ -73,6 +79,9 @@ function applyFilters(
   }
 
   switch (filters.sortBy) {
+    case "best-match":
+      // ترتيب الخادم بالصلة — يُترك كما وصل عمدًا. أي فرز هنا يهدمه.
+      break
     case "price-asc":
       filtered.sort((a, b) => a.price - b.price)
       break
@@ -124,6 +133,10 @@ function SearchResults() {
   const { coords } = useUserLocation()
 
   const isRTL = language === "ar"
+  // `trim` مقصود: رابط مثل `?q=%20` كان يدخل وضع البحث بعنوان فارغ ولوحة تعلن «الأكثر صلة» بينما
+  // الاستعلام بلا كلمات ⇒ القائمة بترتيب Firestore الخام. المسافة البيضاء تصفّحٌ لا بحث.
+  const hasQuery = query.trim().length > 0
+  const defaultFilters = hasQuery ? DEFAULT_QUERY_FILTERS : DEFAULT_FILTERS
 
   const requestIdRef = useRef(0)
 
@@ -174,11 +187,18 @@ function SearchResults() {
   // عند تغيّر الاستعلام (كانت الفلاتر تُفقد سابقًا عند كل بحث جديد).
   const [hiddenByDistance, setHiddenByDistance] = useState(0)
 
+  // الانتقال بين التصفّح (بلا استعلام) والبحث يغيّر الترتيب الافتراضي، ولوحة الفلترة تحتفظ بحالتها
+  // الداخلية من أول رسم — فنُسقط الفلاتر المطبَّقة عند الانتقال (واللوحة تُعاد تركيبها بمفتاحها
+  // أدناه) كي لا تُعلن اللوحة ترتيبًا غير المطبَّق فعلًا على القائمة.
   useEffect(() => {
-    const result = applyFilters(products, currentFilters ?? DEFAULT_FILTERS, isRTL, coords)
+    setCurrentFilters(null)
+  }, [hasQuery])
+
+  useEffect(() => {
+    const result = applyFilters(products, currentFilters ?? defaultFilters, isRTL, coords)
     setSortedProducts(result.list)
     setHiddenByDistance(result.droppedForDistance)
-  }, [products, currentFilters, isRTL, coords])
+  }, [products, currentFilters, defaultFilters, isRTL, coords])
 
   const handleFilterChange = useCallback((filters: FilterState) => {
     setCurrentFilters(filters)
@@ -189,7 +209,11 @@ function SearchResults() {
   const visibleStores = useMemo(() => {
     const maxKm = currentFilters?.maxKm ?? null
     const list = maxKm && maxKm > 0 ? stores.filter((store) => withinKm(coords, store, maxKm)) : stores
-    const sortByNearest = (currentFilters?.sortBy ?? "relevance") === "relevance"
+    // «الأكثر صلة» ترتيب منتجات لا متاجر: `searchStores` تُصفّي ولا ترتّب بالصلة، فلا شيء تُرتَّب به
+    // القائمة هنا. تُعامَل كـ«الأقرب» لأن البديل حالتان افتراضيتان متناقضتان على نفس الشاشة —
+    // قبل لمس اللوحة تُرتَّب المتاجر بالمسافة، وبعد «إعادة التعيين» تتوقّف بلا سبب ظاهر للمستخدم.
+    const effectiveSort = currentFilters?.sortBy ?? defaultFilters.sortBy
+    const sortByNearest = effectiveSort === "relevance" || effectiveSort === "best-match"
     if (!coords || !sortByNearest) return list
     return [...list].sort((a, b) => {
       const da = storeDistanceKm(coords, a)
@@ -199,7 +223,7 @@ function SearchResults() {
       if (db == null) return -1
       return da - db
     })
-  }, [stores, currentFilters?.maxKm, currentFilters?.sortBy, coords])
+  }, [stores, currentFilters?.maxKm, currentFilters?.sortBy, defaultFilters.sortBy, coords])
 
   const renderProductsGrid = () =>
     sortedProducts.length > 0 ? (
@@ -260,13 +284,13 @@ function SearchResults() {
 
           <div className={`mb-8 flex gap-4 ${isRTL ? "justify-start" : "justify-start"} w-full`}>
             <div className={`flex ${isRTL ? "flex-col-reverse" : "flex-col"} md:flex-row gap-4 w-full md:w-4/5 lg:w-3/5 ${isRTL ? "ml-auto" : "mr-auto"}`}>
-              {isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
+              {isRTL && <div className="w-full md:w-auto"><FilterSort key={hasQuery ? "q" : "all"} initialSort={defaultFilters.sortBy} onFilterChange={handleFilterChange} /></div>}
 
               <div className="flex-1 w-full">
                 <SearchBar placeholder={t("ابحث عن منتجات، متاجر...", "Search for products, stores...")} initialValue={query} />
               </div>
 
-              {!isRTL && <div className="w-full md:w-auto"><FilterSort onFilterChange={handleFilterChange} /></div>}
+              {!isRTL && <div className="w-full md:w-auto"><FilterSort key={hasQuery ? "q" : "all"} initialSort={defaultFilters.sortBy} onFilterChange={handleFilterChange} /></div>}
             </div>
           </div>
 

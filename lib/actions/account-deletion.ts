@@ -258,6 +258,13 @@ export async function deleteMyAccount(input: { confirm: string }): Promise<{ suc
     )
     await deleteQueryInChunks(db, db.collection("password_reset_tokens").where("userId", "==", uid))
     await deleteQueryInChunks(db, db.collection("order_idempotency").where("customer_id", "==", uid))
+    // سجلّ استعلامات البحث الذكي. سياسة الخصوصية تَعِد نصًّا بأن «حذف حسابك يحذف سجلّ استعلاماتك
+    // المرتبط به» — ووعدٌ في سياسة بلا كود يُنفّذه أسوأ من عدم الوعد: هو ما يُقاس عليه في مراجعة
+    // متجر التطبيقات وفي أي مساءلة. (`ai_search_cache` غير مشمولة عمدًا: مفتاحها تجزئة الاستعلام
+    // ولا تحمل معرّف مستخدم إطلاقًا، فلا شيء فيها «مرتبط بحسابك» يُحذَف.)
+    await deleteQueryInChunks(db, db.collection("ai_search_logs").where("user_id", "==", uid))
+    // وعدّاد البحث اليومي معها: يحمل `user_id` صراحةً، فهو «سجلّ مرتبط بحسابك» بنصّ الوعد نفسه.
+    await deleteQueryInChunks(db, db.collection("ai_search_user_usage").where("user_id", "==", uid))
 
     // (7) مستند المستخدم
     await userRef.delete()

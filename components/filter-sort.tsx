@@ -54,8 +54,10 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
   // effect) فيعود تلقائيًا لو أعاد المستخدم تحديد موقعه بلا أن يفقد اختياره.
   const effectiveMaxKm = coords && maxKm > 0 ? maxKm : 0
 
+  // «فلتر نشط» = ما يخالف حالة البدء لا ما يخالف قيمة ثابتة: صفحة البحث تبدأ بـ«الأكثر صلة»،
+  // فمقارنة بـ"relevance" كانت ستُظهر شارة فلتر نشط على شاشة لم يلمسها المستخدم بعد.
   const hasActiveFilters =
-    sortBy !== "relevance" ||
+    sortBy !== initialSort ||
     priceMin !== "" ||
     priceMax !== "" ||
     daysAgo > 0 ||
@@ -97,19 +99,21 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
   }
 
   const handleReset = () => {
-    setSortBy("relevance")
+    setSortBy(initialSort)
     setPriceMin("")
     setPriceMax("")
     setDaysAgo(0)
     setMaxKm(0)
     if (onFilterChange) {
-      onFilterChange({ sortBy: "relevance", priceMin: null, priceMax: null, daysAgo: null, maxKm: null })
+      onFilterChange({ sortBy: initialSort, priceMin: null, priceMax: null, daysAgo: null, maxKm: null })
     }
     setOpen(false)
   }
 
   const getSortLabel = () => {
     switch (sortBy) {
+      case "best-match":
+        return t("الأكثر صلة", "Best match")
       case "relevance":
         return t("الأقرب", "Nearest")
       case "price-asc":
@@ -175,6 +179,13 @@ export function FilterSort({ onFilterChange, initialSort = "relevance" }: Filter
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className={isRTL ? "text-right" : "text-left"}>
+                {/* «الأكثر صلة» = ترتيب محرّك البحث. يظهر فقط للسطح الذي طلبه (صفحة بحث باستعلام)،
+                    فقائمة بلا استعلام ليس لها صلة تُرتَّب بها ولا معنى لخيار يعيد الترتيب الخام. */}
+                {initialSort === "best-match" && (
+                  <SelectItem value="best-match" className={isRTL ? "text-right" : "text-left"}>
+                    {t("الأكثر صلة", "Best match")}
+                  </SelectItem>
+                )}
                 <SelectItem value="relevance" className={isRTL ? "text-right" : "text-left"}>
                   {t("الأقرب", "Nearest")}
                 </SelectItem>

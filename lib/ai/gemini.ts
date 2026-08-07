@@ -5,6 +5,7 @@
 // getGeminiKey هي نقطة التوصيل — عدّلها عندها؛ باقي الكود لا يتغيّر.
 import { logError } from "@/lib/logger"
 import { buildColumnMapPrompt, parseColumnMap, type ColumnMap } from "./column-map"
+import { buildIntentPrompt, parseIntent, type SearchIntent } from "./intent"
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash"
 
@@ -58,4 +59,14 @@ export async function geminiMapColumns(
   if (!isGeminiEnabled() || !headers.length) return null
   const out = await geminiJSON(buildColumnMapPrompt(headers, sampleRows))
   return parseColumnMap(out, headers)
+}
+
+// يحوّل استعلام العميل إلى نيّة + مفاهيم للبحث الذكي. يعود null عند أي فشل فيسقط المُستدعي للبحث العادي.
+//
+// المهلة 8 ثوانٍ لا 15: هذا مسار تفاعلي أمام مستخدم ينتظر، بخلاف مطابقة أعمدة الاستيراد التي تجري
+// مرّة داخل معالج ملف. عميل ينتظر 15 ثانية على صفحة بحث يكون قد غادر.
+export async function geminiIntent(query: string, maxConcepts: number): Promise<SearchIntent | null> {
+  if (!isGeminiEnabled() || !String(query || "").trim()) return null
+  const out = await geminiJSON(buildIntentPrompt(query, maxConcepts), 8000)
+  return parseIntent(out, maxConcepts)
 }

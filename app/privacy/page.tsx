@@ -4,7 +4,7 @@ import Link from "next/link"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useLanguage } from "@/lib/language-context"
-import { Shield, Database, Share2, UserCheck, Cookie, RefreshCw, Phone, Lock, Eye, FileText } from "lucide-react"
+import { Shield, Database, Share2, UserCheck, Cookie, RefreshCw, Phone, Lock, Eye, FileText, Sparkles } from "lucide-react"
 
 export default function PrivacyPage() {
   const { t } = useLanguage()
@@ -65,6 +65,37 @@ export default function PrivacyPage() {
       ]
     },
     {
+      icon: Sparkles,
+      color: "from-amber-500 to-amber-600",
+      title: t("البحث الذكي والذكاء الاصطناعي", "AI Search"),
+      content: t(
+        "عند استخدام «البحث الذكي» نرسل نصّ استعلامك إلى مزوّد نماذج ذكاء اصطناعي (Google Gemini) لفهم المقصود منه وتحويله إلى أصناف قابلة للبحث داخل متاجرنا. لا نرسل اسمك ولا رقم هاتفك ولا أي بيانات حسابك مع الاستعلام.",
+        "When you use AI Search we send your query text to an AI model provider (Google Gemini) to interpret it and turn it into product terms searchable in our stores. We never send your name, phone number, or any account data with the query.",
+      ),
+      list: [
+        t(
+          "نحتفظ بنصّ الاستعلام ونتيجته مرتبطًا بمعرّف حسابك لغرضين: تحسين دقّة النتائج، ومعرفة الأصناف التي يطلبها العملاء ولا تتوفّر لدى المتاجر.",
+          "We store the query text and its outcome linked to your account ID for two purposes: improving result accuracy, and identifying products customers ask for that stores do not carry.",
+        ),
+        t(
+          "لا نبيع هذه الاستعلامات ولا نشاركها مع أطراف خارجية. ما يُعرض للتجّار أرقام مجمَّعة عن الطلب غير الملبّى، بلا هوية أي مستخدم.",
+          "We do not sell or share these queries with third parties. Merchants only see aggregate unmet-demand figures with no user identity.",
+        ),
+        t(
+          "البحث الذكي متاح للمستخدمين المسجّلين فقط، ويمكنك دائمًا استخدام البحث العادي الذي لا يمرّ بأي نموذج ذكاء اصطناعي.",
+          "AI Search is available to signed-in users only, and you can always use the regular search, which does not involve any AI model.",
+        ),
+        t(
+          "الاستعلامات ذات الطابع الصحّي استثناء: لا نحتفظ بنصّها ولا بتفاصيلها إطلاقًا — يُسجَّل عدّ مجرَّد فقط لقياس الاستخدام.",
+          "Health-related queries are an exception: we retain neither their text nor their details — only an anonymous count for usage measurement.",
+        ),
+        t(
+          "حذف حسابك يحذف سجلّ استعلاماتك المرتبط به.",
+          "Deleting your account deletes the query history linked to it.",
+        ),
+      ],
+    },
+    {
       icon: Cookie,
       color: "from-cyan-500 to-cyan-600",
       title: t("ملفات تعريف الارتباط (Cookies)", "Cookies"),
@@ -100,7 +131,7 @@ export default function PrivacyPage() {
             </h1>
             <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
               <Lock className="w-4 h-4" />
-              {t("آخر تحديث: يونيو 2026", "Last updated: June 2026")}
+              {t("آخر تحديث: أغسطس 2026", "Last updated: August 2026")}
             </p>
           </div>
 

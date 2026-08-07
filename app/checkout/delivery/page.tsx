@@ -221,6 +221,9 @@ export default function DeliveryPage() {
       }, {} as Record<string, { items: typeof items; store_name: string }>)
 
       const storeIds = Object.keys(itemsByStore)
+      // مصدر الطلب = مصدر أصنافه إن اتّفقت. سلة مختلطة (بحث ذكي + تصفّح عادي) تُنسَب للعادي:
+      // نسبةُ طلبٍ نصفُه من البحث الذكي إليه كاملًا تضخّم مقياس التحويل الذي بُني الحقل لأجله.
+      const orderSource = items.length && items.every((i) => i.source === "ai_search") ? "ai_search" : "web"
       // نبني العنوان من الأجزاء غير الفارغة فقط (الشارع/المدينة اختياريان الآن) ونُضمّن العلامة
       // المميزة كي تظهر لكل من يسلّم الطلب — بدل نص فارغ مثل "، " عند ترك الحقول فارغة.
       const addressParts = [checkoutData.street, checkoutData.city, checkoutData.state]
@@ -250,6 +253,7 @@ export default function DeliveryPage() {
           delivery_notes: checkoutData.notes,
           landmark: checkoutData.landmark,
           idempotency_key: idempotencyKey,
+          source: orderSource,
           items: dispItems.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price })),
         })
         if (!result.success) {
@@ -296,6 +300,7 @@ export default function DeliveryPage() {
           landmark: checkoutData.landmark,
           pickup_stops: dispatchStops,
           idempotency_key: idempotencyKey,
+          source: orderSource,
         })
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
@@ -353,6 +358,7 @@ export default function DeliveryPage() {
           driver_commission: driverCommission,
           pickup_stops: pickupStops,
           idempotency_key: idempotencyKey,
+          source: orderSource,
         })
 
         if (!result.success) {
@@ -386,6 +392,7 @@ export default function DeliveryPage() {
           driver_name: selectedDriverData?.name,
           delivery_price: deliveryPrice,
           idempotency_key: idempotencyKey,
+          source: orderSource,
           items: storeItems.map((item) => {
             const discountedPrice = item.discount_percentage && item.discount_percentage > 0
               ? item.price - (item.price * item.discount_percentage / 100)
