@@ -14,17 +14,54 @@ export type CartItem = {
   quantity: number
   stock: number
   discount_percentage?: number
+  /** من أين أُضيف هذا الصنف. يعيش في السلة لأن الطلب يُنشأ بعد الإضافة بخطوات، ولا سبيل لمعرفة
+   *  المصدر عند الدفع إن لم يُحمَل معه. للقياس فقط — لا يمسّ سعرًا ولا كمية. */
+  source?: string
 }
 
 type CartItemInput = Omit<CartItem, "quantity">
 
+/** مُدخَل الإضافة الجماعية: نفس مُدخَل `addItem` مع كمية اختيارية (الافتراضي 1). */
+export type CartBulkInput = CartItemInput & { quantity?: number }
+
+/**
+ * حصيلة الإضافة الجماعية. الفصل بين «لم يُضَف شيء» و«أُضيف أقلّ من المطلوب» مقصود: الواجهة تقول
+ * «تعذّر إضافة صنفين» في الأولى و«أضفنا 2 من 4» في الثانية، والخلط بينهما يكذب على المستخدم.
+ */
+export type CartBulkResult = {
+  /** أصناف لم تُضَف إطلاقًا (نفد مخزونها أو مخزونها غير معروف). بلا تكرار. */
+  rejected: string[]
+  /** أصناف أُضيفت بكمية أقلّ من المطلوبة لأن المخزون لم يتّسع. بلا تكرار. */
+  partial: string[]
+}
+
 type CartState = {
   items: CartItem[]
   addItem: (item: CartItemInput) => void
+  /** يضيف عدة أصناف بكمياتها دفعةً واحدة (انظر CartBulkResult). */
+  addItems: (entries: CartBulkInput[]) => CartBulkResult
   decrementItem: (id: string) => void
   removeItem: (id: string) => void
   clear: () => void
   syncPrices: (pricing: Record<string, { price: number; discount_percentage: number }>) => void
+}
+
+// كمية صالحة: عدد صحيح موجب. أي شيء آخر (نص، كسر، سالب، NaN) يصير 1 — الإضافة الجماعية تأتي من
+// مصدر مولَّد (سلة وصفة) لا من زرّ يضغطه المستخدم، فقيمة فاسدة يجب ألّا تُفسد السلة ولا تُفشل الطلب.
+function safeQuantity(value: unknown): number {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+// مخزون صالح: عدد صحيح ≥ 0. `null` تعني **غير معروف**، لا صفرًا.
+//
+// التمييز ليس تجميلًا: `Number(undefined)` تساوي NaN، و`quantity >= NaN` كاذبة دائمًا و
+// `Math.min(x, NaN)` تساوي NaN — فكمية NaN كانت تُحفَظ في localStorage (وتصير null في JSON)
+// فتُفسِد كل إجماليات السلة. ومعاملة الغائب كصفر أسوأ: دفعةٌ ينقصها الحقل كانت تُثبِّت
+// `stock = 0` على صنف موجود في سلة المستخدم، فيصير غير قابل للزيادة أبدًا بعدها.
+function safeStock(value: unknown): number | null {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
 
 export const useCartStore = create<CartState>()(
@@ -51,6 +88,55 @@ export const useCartStore = create<CartState>()(
           }
           return { items: [...state.items, { ...item, quantity: 1 }] }
         }),
+      // إضافة جماعية بمرور واحد على الحالة.
+      //
+      // استدعاء `addItem` في حلقة كان يعطي سلوكًا خاطئًا لا بطيئًا فقط: هي تضيف قطعة واحدة مهما
+      // كانت الكمية المطلوبة، فسلة وصفة فيها «٣ عبوات» كانت تصير عبوة. والتجميع هنا يمنع أيضًا
+      // تجاوز المخزون حين يتكرّر الصنف الواحد في أكثر من مكوّن.
+      addItems: (entries) => {
+        const rejected = new Set<string>()
+        const partial = new Set<string>()
+        set((state) => {
+          rejected.clear()
+          partial.clear()
+          const next = new Map(state.items.map((item) => [item.id, { ...item }]))
+
+          for (const entry of entries) {
+            if (!entry?.id) continue
+            const stock = safeStock(entry.stock)
+            const wanted = safeQuantity(entry.quantity)
+            const existing = next.get(entry.id)
+
+            if (existing) {
+              // المخزون يُحدَّث من الحمولة الجديدة كما يفعل addItem (لقطة السلة قد تتقادم) — إلا
+              // إن كان غير معروف، فلا نستبدل رقمًا صحيحًا في السلة بمجهول.
+              if (stock !== null) existing.stock = stock
+              const cap = existing.stock
+              if (!Number.isFinite(cap) || existing.quantity >= cap) {
+                rejected.add(entry.id)
+                continue
+              }
+              const target = Math.min(existing.quantity + wanted, cap)
+              if (target < existing.quantity + wanted) partial.add(entry.id)
+              existing.quantity = target
+              continue
+            }
+
+            // صنف جديد بمخزون مجهول: نرفض بدل أن نضيف. الإضافة الجماعية مصدرها مولَّد (سلة وصفة)
+            // لا نقرة مستخدم، ومسار المخزون يفشل **مقفولًا** في هذا الريبو.
+            if (stock === null || stock <= 0) {
+              rejected.add(entry.id)
+              continue
+            }
+            const { quantity: _ignored, ...rest } = entry
+            if (wanted > stock) partial.add(entry.id)
+            next.set(entry.id, { ...rest, stock, quantity: Math.min(wanted, stock) })
+          }
+
+          return { items: Array.from(next.values()) }
+        })
+        return { rejected: Array.from(rejected), partial: Array.from(partial) }
+      },
       decrementItem: (id) =>
         set((state) => {
           const existing = state.items.find((entry) => entry.id === id)

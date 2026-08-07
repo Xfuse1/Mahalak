@@ -17,9 +17,18 @@ import {
   setCommissionSettings,
   getDispatchSettings,
   updateDispatchSettings,
+  getAiSearchSettings,
+  updateAiSearchSettings,
   type CommissionSettings,
 } from "@/lib/actions/admin"
-import { Coins, Truck, Save, Loader2, Info, Gauge, Power } from "lucide-react"
+import type { AiSearchMode } from "@/lib/ai/search-settings"
+import { Coins, Truck, Save, Loader2, Info, Gauge, Power, Sparkles, Lock } from "lucide-react"
+
+const AI_MODE_LABELS: Record<AiSearchMode, string> = {
+  single_store: "من متجر واحد فقط",
+  multi_store: "أرخص سعر من عدة متاجر",
+  customer_choice: "يختار العميل بنفسه",
+}
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("ar-EG", {
@@ -45,12 +54,26 @@ export default function AdminCommissionSettingsPage() {
   const [offerTimeout, setOfferTimeout] = useState("")
   const [bidCap, setBidCap] = useState("")
   const [savingDispatch, setSavingDispatch] = useState(false)
+  // البحث الذكي — المرحلة 0: الإعدادات فقط. الميزة نفسها لم تُبنَ بعد، والعلم مطفأ افتراضيًا.
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiOtc, setAiOtc] = useState(false)
+  const [aiMode, setAiMode] = useState<AiSearchMode>("customer_choice")
+  const [aiDailyCap, setAiDailyCap] = useState("")
+  const [aiUserCap, setAiUserCap] = useState("")
+  const [aiCacheHours, setAiCacheHours] = useState("")
+  const [aiMaxConcepts, setAiMaxConcepts] = useState("")
+  const [aiCanEdit, setAiCanEdit] = useState(false)
+  const [savingAi, setSavingAi] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(false)
     try {
-      const [res, dres] = await Promise.all([getCommissionSettings(), getDispatchSettings()])
+      const [res, dres, ares] = await Promise.all([
+        getCommissionSettings(),
+        getDispatchSettings(),
+        getAiSearchSettings(),
+      ])
       if (res.success && res.settings) {
         setSettings(res.settings)
         setRate(String(res.settings.rate ?? 0))
@@ -64,6 +87,16 @@ export default function AdminCommissionSettingsPage() {
         setPerKm(String(dres.settings.per_km_rate))
         setOfferTimeout(String(dres.settings.offer_timeout_sec))
         setBidCap(String(dres.settings.bid_cap_pct))
+      }
+      if (ares.success && ares.settings) {
+        setAiEnabled(ares.settings.enabled)
+        setAiOtc(ares.settings.otc_enabled)
+        setAiMode(ares.settings.mode)
+        setAiDailyCap(String(ares.settings.daily_call_cap))
+        setAiUserCap(String(ares.settings.per_user_daily_cap))
+        setAiCacheHours(String(ares.settings.cache_ttl_hours))
+        setAiMaxConcepts(String(ares.settings.max_concepts))
+        setAiCanEdit(ares.canEdit === true)
       }
     } catch (e) {
       logError("[admin/commission-settings] load", e)
@@ -138,6 +171,38 @@ export default function AdminCommissionSettingsPage() {
       toast.error("تعذّر الحفظ")
     } finally {
       setSavingDispatch(false)
+    }
+  }
+
+  const handleSaveAi = async () => {
+    // الحقل الفارغ يُترك بلا تغيير ولا يُرسَل. `Number("")` تساوي صفرًا، وصفر السقف يعني **بلا سقف**:
+    // مسحُ حقل ظنًّا أنه اختياري كان يُلغي سقف فاتورة الموديل على مستوى المنصّة كلها بصمت.
+    const numOrSkip = (raw: string) => (raw.trim() === "" ? undefined : Number(raw))
+    const nums = {
+      daily_call_cap: numOrSkip(aiDailyCap),
+      per_user_daily_cap: numOrSkip(aiUserCap),
+      cache_ttl_hours: numOrSkip(aiCacheHours),
+      max_concepts: numOrSkip(aiMaxConcepts),
+    }
+    const provided = Object.values(nums).filter((n): n is number => n !== undefined)
+    if (!provided.every((n) => Number.isFinite(n) && n >= 0) || (nums.max_concepts ?? 1) < 1) {
+      toast.error("تأكد من القيم (أرقام ≥ 0، وعدد المكوّنات ≥ 1)")
+      return
+    }
+    setSavingAi(true)
+    try {
+      const res = await updateAiSearchSettings({ enabled: aiEnabled, otc_enabled: aiOtc, mode: aiMode, ...nums })
+      if (res.success) {
+        toast.success("تم حفظ إعدادات البحث الذكي")
+        await load()
+      } else {
+        toast.error(res.error || "تعذّر الحفظ")
+      }
+    } catch (e) {
+      logError("[admin/commission-settings] save ai-search", e)
+      toast.error("تعذّر الحفظ")
+    } finally {
+      setSavingAi(false)
     }
   }
 
@@ -281,6 +346,110 @@ export default function AdminCommissionSettingsPage() {
               <div className="flex items-center justify-end pt-1">
                 <Button onClick={handleSaveDispatch} disabled={savingDispatch} className="rounded-xl gap-1">
                   {savingDispatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ إعدادات التوزيع
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* البحث الذكي — المرحلة 0: الإعدادات فقط، الميزة لم تُبنَ بعد. الحفظ لـ superAdmin وحده. */}
+          <Card className="border border-border mt-4">
+            <CardContent className="p-5 space-y-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="flex items-center gap-2 font-bold text-foreground">
+                    <Sparkles className="h-4 w-4 text-accent" /> البحث الذكي
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                    يحوّل سؤال العميل («أكل للغدا») إلى سلة جاهزة من منتجات المتاجر. خلف مفتاح تفعيل —{" "}
+                    <span className="font-medium">لا يؤثر على الموقع حتى تفعّله</span>.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!aiCanEdit}
+                  onClick={() => setAiEnabled((v) => !v)}
+                  className={`rounded-xl gap-1 ${aiEnabled ? "border-accent text-accent" : "text-muted-foreground"}`}
+                >
+                  <Power className="h-4 w-4" /> {aiEnabled ? "مفعّل" : "متوقف"}
+                </Button>
+              </div>
+
+              {!aiCanEdit && (
+                <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-1.5">
+                  <Lock className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  للعرض فقط — تعديل هذه الإعدادات متاح لمدير النظام (superAdmin) وحده.
+                </div>
+              )}
+
+              {/* سلة الوصفة: من متجر واحد أم من عدة متاجر أم يختار العميل */}
+              <div className="space-y-2">
+                <Label className="font-medium text-foreground">مصدر سلة الوصفة</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(AI_MODE_LABELS) as AiSearchMode[]).map((mode) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      variant="outline"
+                      disabled={!aiCanEdit}
+                      onClick={() => setAiMode(mode)}
+                      className={`rounded-xl text-sm ${aiMode === mode ? "border-accent text-accent" : "text-muted-foreground"}`}
+                    >
+                      {AI_MODE_LABELS[mode]}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                  <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  السلة من عدة متاجر تُنشئ طلبًا لكل متجر برحلة سائق واحدة بمحطات — رسوم التوصيل مجموع المسافات.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="aiDailyCap" className="font-medium text-foreground">سقف نداءات الذكاء يوميًّا (المنصّة)</Label>
+                  <Input id="aiDailyCap" type="number" inputMode="numeric" min={0} step="100" disabled={!aiCanEdit} value={aiDailyCap} onChange={(e) => setAiDailyCap(e.target.value)} className="h-11 rounded-xl" placeholder="2000" />
+                  <p className="text-xs text-destructive">0 = بلا سقف (فاتورة مفتوحة). اتركه فارغًا كي لا تغيّر القيمة المحفوظة.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="aiUserCap" className="font-medium text-foreground">سقف نداءات المستخدم يوميًّا</Label>
+                  <Input id="aiUserCap" type="number" inputMode="numeric" min={0} step="5" disabled={!aiCanEdit} value={aiUserCap} onChange={(e) => setAiUserCap(e.target.value)} className="h-11 rounded-xl" placeholder="30" />
+                  <p className="text-xs text-muted-foreground">0 = بلا سقف لكل مستخدم.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="aiCacheHours" className="font-medium text-foreground">عمر النتيجة المحفوظة (ساعة)</Label>
+                  <Input id="aiCacheHours" type="number" inputMode="numeric" min={0} step="1" disabled={!aiCanEdit} value={aiCacheHours} onChange={(e) => setAiCacheHours(e.target.value)} className="h-11 rounded-xl" placeholder="12" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="aiMaxConcepts" className="font-medium text-foreground">أقصى عدد مكوّنات في السلة</Label>
+                  <Input id="aiMaxConcepts" type="number" inputMode="numeric" min={1} step="1" disabled={!aiCanEdit} value={aiMaxConcepts} onChange={(e) => setAiMaxConcepts(e.target.value)} className="h-11 rounded-xl" placeholder="12" />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-medium text-foreground text-sm">مسار الأعراض (منتجات الصيدلية)</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                      يعرض منتجات مرتبطة بعَرَض يذكره العميل. مفتاح منفصل عمدًا: يعمل فقط لمنتجات لا تحتاج
+                      روشتة، ومن صيدليات وقّعت الإقرار، وبلا أي جرعة أو نصيحة طبية.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!aiCanEdit}
+                    onClick={() => setAiOtc((v) => !v)}
+                    className={`rounded-xl gap-1 ${aiOtc ? "border-accent text-accent" : "text-muted-foreground"}`}
+                  >
+                    <Power className="h-4 w-4" /> {aiOtc ? "مفعّل" : "متوقف"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end pt-1">
+                <Button onClick={handleSaveAi} disabled={savingAi || !aiCanEdit} className="rounded-xl gap-1">
+                  {savingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ إعدادات البحث الذكي
                 </Button>
               </div>
             </CardContent>

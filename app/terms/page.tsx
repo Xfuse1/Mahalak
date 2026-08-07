@@ -3,7 +3,7 @@
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useLanguage } from "@/lib/language-context"
-import { FileText, User, CreditCard, RotateCcw, Store, Copyright, AlertTriangle, Edit, Scale, Phone, Clock } from "lucide-react"
+import { FileText, User, CreditCard, RotateCcw, Store, Copyright, AlertTriangle, Edit, Scale, Phone, Clock, Sparkles } from "lucide-react"
 
 export default function TermsPage() {
   const { t } = useLanguage()
@@ -96,6 +96,33 @@ export default function TermsPage() {
       )
     },
     {
+      icon: Sparkles,
+      color: "from-amber-500 to-amber-600",
+      title: t("البحث الذكي", "AI Search"),
+      content: t(
+        "«البحث الذكي» أداة مساعدة تفهم ما تكتبه وتقترح عليك أصنافًا معروضة على المنصّة. هو أداة تسوّق فقط، وليس استشارة من أي نوع.",
+        "\"AI Search\" is an assistive tool that interprets what you type and suggests items listed on the platform. It is a shopping tool only, not advice of any kind.",
+      ),
+      list: [
+        t(
+          "الاقتراحات قد تكون غير دقيقة. راجع اسم الصنف وسعره وتوفّره قبل إتمام أي طلب — ما يُعتمد عليه هو ما يظهر في صفحة الطلب لا في الاقتراح.",
+          "Suggestions may be inaccurate. Check the item name, price, and availability before completing any order — what counts is what appears on the order page, not the suggestion.",
+        ),
+        t(
+          "المنتجات الصحّية والدوائية: ما يُعرض منتجات مرتبطة بما ذكرته، وليس تشخيصًا ولا وصفة ولا جرعة. لا تستخدم المنصّة بديلًا عن الطبيب أو الصيدلي، وفي أي حالة طارئة توجّه للطوارئ فورًا.",
+          "Health and pharmacy products: what is shown are items related to what you mentioned — not a diagnosis, prescription, or dosage. Do not use the platform as a substitute for a doctor or pharmacist, and in any emergency go to emergency services immediately.",
+        ),
+        t(
+          "الصيدلية المعروضة منتجاتها هي المسؤولة قانونًا عن صرف الدواء وصلاحيته وملاءمته لحالتك، ولا تُدرَج أي صيدلية في هذا المسار إلا بعد إقرارها بذلك. محلك وسيط عرض وطلب لا صارف دواء.",
+          "The pharmacy whose products are listed is legally responsible for dispensing, validity, and suitability, and no pharmacy is included in this path without acknowledging that. Mahalak is a listing and ordering intermediary, not a dispenser.",
+        ),
+        t(
+          "نحتفظ بنصّ استعلامك لتحسين النتائج وقياس الطلب غير الملبّى، حسب ما هو موضّح في سياسة الخصوصية.",
+          "We retain your query text to improve results and measure unmet demand, as detailed in the Privacy Policy.",
+        ),
+      ],
+    },
+    {
       icon: Edit,
       color: "from-pink-500 to-pink-600",
       title: t("تعديل الشروط", "Terms Modification"),
@@ -131,7 +158,7 @@ export default function TermsPage() {
             </h1>
             <p className="text-lg text-gray-600 flex items-center justify-center gap-2">
               <Clock className="w-4 h-4" />
-              {t("آخر تحديث: يونيو 2026", "Last updated: June 2026")}
+              {t("آخر تحديث: أغسطس 2026", "Last updated: August 2026")}
             </p>
           </div>
 

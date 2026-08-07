@@ -701,6 +701,15 @@ export async function updateOrderStatus(
   return { success: true, data: updatedData }
 }
 
+// مصادر السلة المعروفة. أي قيمة أخرى (أو غيابها) تصير "web" — لا نخزّن نصًّا يرسله العميل كما هو
+// في مستند الطلب، ولو كان حقل قياس: مستندات الطلبات تُعرَض في لوحات الأدمن والبائع.
+const ORDER_SOURCES = new Set(["web", "ai_search", "pos"])
+
+function normalizeOrderSource(value: unknown): string {
+  const v = typeof value === "string" ? value.trim() : ""
+  return ORDER_SOURCES.has(v) ? v : "web"
+}
+
 export async function createOrder(orderData: {
   customer_id: string
   store_id: string
@@ -719,6 +728,8 @@ export async function createOrder(orderData: {
   driver_id?: string
   driver_name?: string
   idempotency_key?: string
+  /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
+  source?: string
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
@@ -838,6 +849,9 @@ export async function createOrder(orderData: {
         total: Number(verifiedTotal),
         delivery_address: orderData.delivery_address,
         status: "pending",
+        // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
+        // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
+        source: normalizeOrderSource(orderData.source),
         created_at: now,
         updated_at: now,
         // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للبائع/السائق عند التسليم (مثل الطلب متعدد المتاجر)
@@ -973,6 +987,8 @@ export async function createDispatchOrder(orderData: {
   delivery_notes?: string
   landmark?: string
   idempotency_key?: string
+  /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
+  source?: string
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   if (!(await requireOwner(orderData.customer_id))) {
@@ -1090,6 +1106,9 @@ export async function createDispatchOrder(orderData: {
         free_shipping: storeInfo?.free_shipping === true,
         free_shipping_cap: Number(storeInfo?.free_shipping_cap) || 0,
         status: "pending",
+        // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
+        // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
+        source: normalizeOrderSource(orderData.source),
         pending_expires_at_ms: Date.now() + PENDING_TIMEOUT_MS, // مهلة تأكيد التاجر — يُصعَّد بعدها
         created_at: now,
         updated_at: now,
@@ -1532,6 +1551,8 @@ export async function createMultiStoreOrder(orderData: {
   driver_commission: number
   pickup_stops: PickupStop[]
   idempotency_key?: string
+  /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
+  source?: string
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
   if (!(await requireOwner(orderData.customer_id))) {
@@ -1701,6 +1722,9 @@ export async function createMultiStoreOrder(orderData: {
         subtotal: Number(subtotal),
         total: Number(total),
         status: "pending",
+        // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
+        // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
+        source: normalizeOrderSource(orderData.source),
         payment_status: "cod",
         // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للسائق عند الاستلام
         delivery_code: String(Math.floor(1000 + Math.random() * 9000)),
@@ -1845,6 +1869,8 @@ export async function createMultiStoreDispatchOrder(orderData: {
   landmark?: string
   pickup_stops: PickupStop[]
   idempotency_key?: string
+  /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
+  source?: string
 }) {
   if (!(await requireOwner(orderData.customer_id))) return { success: false, error: "Unauthorized" }
   if (!(await checkRateLimit("create_dispatch_order:" + orderData.customer_id, 15, 60_000))) {
@@ -1966,6 +1992,9 @@ export async function createMultiStoreDispatchOrder(orderData: {
         subtotal: Number(subtotal),
         total: Number(total),
         status: "pending",
+        // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
+        // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
+        source: normalizeOrderSource(orderData.source),
         payment_status: "cod",
         delivery_code: String(Math.floor(1000 + Math.random() * 9000)), // إثبات تسليم — دائمًا
         timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],

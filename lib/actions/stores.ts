@@ -10,6 +10,8 @@ import { isKycKey } from "../storage/kyc-key"
 import { serializeData } from "../firebase/firestore-helpers"
 import { logError } from "../logger"
 import { checkRateLimit } from "../utils/rate-limit"
+import { matchesSearch, normalizeArabic, searchTokens } from "../utils/arabic"
+import { hasValidConsent, isPharmacyCategory, PHARMACY_CONSENT_VERSION, type PharmacyConsent } from "../ai/pharmacy-consent"
 
 export type StoreRecord = {
   seller_id: string
@@ -513,18 +515,88 @@ export async function updateStore(
   return { success: true, data: store }
 }
 
+// ==================== إقرار الصيدلية لمسار الأعراض ====================
+// حقل موافقة مستقلّ عن `updateStore`: قائمة السماح هناك حقول عرض يعدّلها التاجر كما يشاء، وهذا
+// **إثبات التزام** يُكتب بختم زمني ونسخة نصّ ولا يُقبل من حمولة عامّة مع بقية الحقول.
+
+export async function getPharmacyConsent(): Promise<{
+  success: boolean
+  consent?: PharmacyConsent | null
+  currentVersion?: number
+  error?: string
+}> {
+  const uid = await getCurrentUid()
+  if (!uid) return { success: false, error: "سجّل الدخول أولًا" }
+  try {
+    const snap = await getAdminDb().collection("users").doc(uid).get()
+    const raw = (snap.data() as { store?: { pharmacy_ai_consent?: unknown } } | undefined)?.store?.pharmacy_ai_consent
+    return {
+      success: true,
+      consent: hasValidConsent(raw) ? (raw as PharmacyConsent) : null,
+      currentVersion: PHARMACY_CONSENT_VERSION,
+    }
+  } catch (error) {
+    logError("[stores] getPharmacyConsent", error)
+    return { success: false, error: "تعذّر تحميل حالة الإقرار" }
+  }
+}
+
+/**
+ * يوقّع الإقرار أو يسحبه. الهوية من الجلسة، والنسخة من الخادم لا من العميل.
+ *
+ * أخذ رقم النسخة من الحمولة كان سيسمح للتاجر بتسجيل موافقة على نسخة لم يرها (أو نسخة مستقبلية)،
+ * فيسقط الإثبات كلّه. القيمة المخزَّنة هنا هي دائمًا نصّ اليوم.
+ */
+export async function setPharmacyConsent(accept: boolean): Promise<{ success: boolean; error?: string }> {
+  const uid = await getCurrentUid()
+  if (!uid) return { success: false, error: "سجّل الدخول أولًا" }
+  try {
+    const ref = getAdminDb().collection("users").doc(uid)
+    const snap = await ref.get()
+    const data = snap.data() as { role?: string; store?: { category?: string } } | undefined
+    if (!snap.exists || data?.role !== "seller" || !data?.store) {
+      return { success: false, error: "ليس لديك متجر" }
+    }
+    // فئة المتجر تُفحَص سيرفر-سايد. الفحص في `app/seller/settings` حراسةُ عرض لا إذن — والأكشن
+    // نقطة نهاية عامة تُستدعى بلا واجهة. وبنود الإقرار نفسها تبدأ بـ«أُقرّ بأن الصيدلية مرخَّصة»،
+    // فتوقيعُ بقّالٍ عليها ليس مخالفة إجرائية بل إسقاطٌ للأساس القانوني الذي بُني عليه المسار كلّه.
+    // (يُفحَص عند القراءة أيضًا — انظر `readConsentingPharmacyIds` — لأن الفئة تتغيّر بعد التوقيع.)
+    if (accept && !isPharmacyCategory(data.store.category, normalizeArabic)) {
+      return { success: false, error: "هذا الإقرار للصيدليات فقط" }
+    }
+    const value: PharmacyConsent | null = accept
+      ? { version: PHARMACY_CONSENT_VERSION, accepted_at: new Date().toISOString(), accepted_by: uid }
+      : null
+    await ref.update({
+      "store.pharmacy_ai_consent": value,
+      "store.updated_at": new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    revalidateTag("stores", "max")
+    return { success: true }
+  } catch (error) {
+    logError("[stores] setPharmacyConsent", error)
+    return { success: false, error: "تعذّر حفظ الإقرار" }
+  }
+}
+
+// بحث المتاجر بنفس تطبيع بحث المنتجات. `toLowerCase()` وحدها لا تفعل شيئًا للعربية، فكانت
+// «صيدليه» لا تجد «صيدلية» و«عطاره» لا تجد «عطارة» — وهي الصيغ التي يكتبها العميل فعلًا.
+// الفئة داخل نصّ البحث لأن أسماء المتاجر الحقيقية لا تحمل نوعها («فاتحة خير» متجر منظفات)،
+// ومطابقة كل الكلمات (لا أيّها) تُبقي الاستعلام الأطول مضيِّقًا لا موسِّعًا.
 export async function searchStores(query: string) {
   const stores = await getStores()
-  const q = query.trim().toLowerCase()
+  const tokens = searchTokens(query)
 
-  if (!q) {
+  if (!tokens.length) {
     return stores
   }
 
   return stores.filter((store) => {
-    const name = typeof store.name === "string" ? store.name.toLowerCase() : ""
-    const description = typeof store.description === "string" ? store.description.toLowerCase() : ""
-    return name.includes(q) || description.includes(q)
+    const haystack = [store.name, store.description, store.category]
+      .filter((part): part is string => typeof part === "string" && part.length > 0)
+      .join(" ")
+    return matchesSearch(haystack, tokens)
   })
 }
 

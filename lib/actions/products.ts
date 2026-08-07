@@ -13,6 +13,7 @@ import { cleanUndefined, serializeData, chunkArray } from "../firebase/firestore
 import { storeCategorySubcategories } from "../mock-data"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
 import { findBestDiscount as findBestDiscountShared, getActiveOffersForStores } from "../utils/offer-discount"
+import { catalogQueryKey, searchCatalog, type CatalogProduct } from "../search/catalog-index"
 
 type ProductRecord = {
   id?: string
@@ -790,30 +791,25 @@ export async function getStoreTopSellers(storeId: string): Promise<string[]> {
   )()
 }
 
-async function _searchProductsImpl(normalizedQuery: string) {
+async function _searchProductsImpl(query: string) {
   const products = await getProducts()
-
-  if (!normalizedQuery) {
-    return products
-  }
-
-  return products.filter((product: ProductRecord) => {
-    const name = (product.name || "").toLowerCase()
-    const description = (product.description || "").toLowerCase()
-    const storeName = (product.stores?.name || "").toLowerCase()
-    return name.includes(normalizedQuery) || description.includes(normalizedQuery) || storeName.includes(normalizedQuery)
-  })
+  return searchCatalog(products as CatalogProduct[], query)
 }
 
-// Search reuses cached getProducts() and additionally caches each normalized
-// query result for 60 seconds. This is still in-memory filtering and not
-// full-text search; move to Algolia/Typesense (or indexed search fields) at scale.
+// البحث يعيد استخدام `getProducts()` المحفوظة، ويحفظ إضافةً نتيجة كل استعلام 60 ثانية.
+// الترتيب والمطابقة من [lib/search/catalog-index.ts] فوق محرّك [lib/search/engine.ts] — لا
+// `includes` خام: 90.6% من أسماء الكتالوج لاتينية بالكامل بينما العميل يكتب عربي، والوصف فارغ
+// في 91% من المستندات، فالمطابقة النصّية الخام كانت تُرجع صفرًا لاستعلامات مشروعة.
+//
+// المفتاح مشتقّ من نفس تطبيع المحرّك (`catalogQueryKey`) لا من `trim().toLowerCase()`: التطبيع
+// الخام لا يمسّ العربية إطلاقًا، فكان «الشاي» و«شاي» يحجزان مدخلتَي كاش لنتيجة واحدة بعينها.
+// ما زال فلترة في الذاكرة لا بحثًا نصّيًا كاملًا؛ عند الحجم انتقل إلى فهرس مخصَّص.
 export async function searchProducts(query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
+  const key = catalogQueryKey(query)
 
   return unstable_cache(
-    () => _searchProductsImpl(normalizedQuery),
-    ["products-search", normalizedQuery || "all"],
+    () => _searchProductsImpl(query),
+    ["products-search", key || "all"],
     { revalidate: 60, tags: ["products"] },
   )()
 }

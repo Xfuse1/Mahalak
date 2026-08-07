@@ -15,6 +15,8 @@ import type { PickupStop } from "./orders"
 import { logError } from "../logger"
 import { normalizeEgyptPhone, getEgyptPhoneLookupCandidates } from "../utils/phone"
 import { readDispatchSettings, computeDeliveryFee, splitDeliveryFee } from "../delivery/fee"
+import { readAiSearchSettings, AI_SEARCH_MODES, type AiSearchMode, type AiSearchSettings } from "../ai/search-settings"
+import { cairoNow } from "../utils/offer-active"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { sendPushToOwner } from "../server-push"
 
@@ -918,6 +920,193 @@ export async function updateDispatchSettings(input: {
   } catch (error) {
     logError("[admin] updateDispatchSettings", error)
     return { success: false, error: "تعذّر حفظ إعدادات التوزيع" }
+  }
+}
+
+// ==================== البحث الذكي: قياس الطلب غير الملبّى ====================
+// أثمن مخرج في الميزة: ما بحث عنه العملاء **ولم يجدوه**. ليس تقريرَ استخدام بل قائمة مشتريات
+// للتجّار — «50 عميلًا طلبوا هذا الصنف الشهر الماضي ولا أحد يبيعه».
+
+export type AiDemandRow = { term: string; count: number }
+export type AiSearchInsights = {
+  /** أيام النافذة المحسوبة (يشملها التقرير). */
+  days: number
+  searches: number
+  /** بحثٌ لم يجد أي مكوّن — أوضح مؤشّر على فجوة الكتالوج. */
+  emptySearches: number
+  addToCart: number
+  /** نسبة «بحث ذكي ⇒ إضافة للسلة» — مقياس النجاح الذي حدّده المالك. */
+  conversionPct: number
+  fromCache: number
+  modelCallsToday: number
+  /** استعلامات صحّية: عددها فقط — نصّها غير مخزَّن أصلًا. */
+  healthSearches: number
+  unmet: AiDemandRow[]
+  topQueries: AiDemandRow[]
+  /** بلغ السجلّ حدّ القراءة ⇒ الأرقام لنافذة أحدث من المطلوبة. تُعلَن ولا تُخفى. */
+  truncated: boolean
+}
+
+// حدّ القراءة. سجلّ أكبر من ذلك يعني أن الأرقام جزئية — وهو ما يُعلنه `truncated` بدل أن يُقدَّم
+// رقمٌ ناقص على أنه كامل.
+const AI_LOG_SCAN_LIMIT = 3000
+
+function topRows(counter: Map<string, number>, limit: number): AiDemandRow[] {
+  return [...counter.entries()]
+    .map(([term, count]) => ({ term, count }))
+    .sort((a, b) => b.count - a.count || a.term.localeCompare(b.term, "ar"))
+    .slice(0, limit)
+}
+
+export async function getAiSearchInsights(days = 30): Promise<{
+  success: boolean
+  insights?: AiSearchInsights
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const window = Math.min(365, Math.max(1, Math.floor(days) || 30))
+  try {
+    const db = getAdminDb()
+    const since = new Date(Date.now() - window * 86_400_000).toISOString()
+    // نفس مفتاح اليوم الذي يكتب به `reserveModelCall` (توقيت القاهرة). بـUTC كانت اللوحة تقرأ
+    // مستند يومٍ آخر لثلاث ساعات كل ليلة فتعرض «0 نداء» بينما العدّاد يعمل.
+    const today = cairoNow().date
+
+    const [logSnap, usageSnap] = await Promise.all([
+      // `created_at` نصّ ISO فيُرتَّب معجميًّا كما يُرتَّب زمنيًّا — استعلام حقل واحد يخدمه الفهرس
+      // التلقائي بلا فهرس مركّب.
+      db.collection("ai_search_logs").where("created_at", ">=", since).orderBy("created_at", "desc").limit(AI_LOG_SCAN_LIMIT).get(),
+      db.collection("ai_search_usage").doc(today).get(),
+    ])
+
+    const unmet = new Map<string, number>()
+    const queries = new Map<string, number>()
+    let searches = 0
+    let emptySearches = 0
+    let addToCart = 0
+    let fromCache = 0
+    let healthSearches = 0
+
+    for (const doc of logSnap.docs) {
+      const d = doc.data() as {
+        event?: string
+        intent?: string
+        query_normalized?: string | null
+        unmatched?: string[]
+        unmatched_count?: number
+        matched_count?: number
+        from_cache?: boolean
+        redacted?: boolean
+      }
+      if (d.event === "add_to_cart") {
+        addToCart++
+        continue
+      }
+      searches++
+      if (d.from_cache) fromCache++
+      if (d.redacted || d.intent === "symptom") healthSearches++
+      if (Number(d.matched_count || 0) === 0) emptySearches++
+
+      const q = typeof d.query_normalized === "string" ? d.query_normalized.trim() : ""
+      if (q) queries.set(q, (queries.get(q) ?? 0) + 1)
+      for (const term of Array.isArray(d.unmatched) ? d.unmatched : []) {
+        const t = String(term).trim()
+        if (t) unmet.set(t, (unmet.get(t) ?? 0) + 1)
+      }
+    }
+
+    return {
+      success: true,
+      insights: {
+        days: window,
+        searches,
+        emptySearches,
+        addToCart,
+        conversionPct: searches > 0 ? Math.round((addToCart / searches) * 1000) / 10 : 0,
+        fromCache,
+        modelCallsToday: Number((usageSnap.data() as { calls?: number } | undefined)?.calls || 0),
+        healthSearches,
+        unmet: topRows(unmet, 50),
+        topQueries: topRows(queries, 25),
+        truncated: logSnap.size >= AI_LOG_SCAN_LIMIT,
+      },
+    }
+  } catch (error) {
+    logError("[admin] getAiSearchInsights", error)
+    return { success: false, error: "تعذّر تحميل تقرير البحث الذكي" }
+  }
+}
+
+// ==================== البحث الذكي: الإعدادات (settings/aiSearch) ====================
+// القراءة لأي أدمن (إعداد غير حسّاس، والعرض بلا قراءة يعني بطاقة فارغة)، والكتابة لـ superAdmin
+// وحده — قرار المالك. `canEdit` تُرجَع مع القراءة كي تُعطِّل الواجهة الحقول بدل أن يكتشف الأدمن
+// المنع بعد أن يملأ النموذج ويضغط حفظ.
+
+export async function getAiSearchSettings(): Promise<{
+  success: boolean
+  settings?: AiSearchSettings
+  canEdit?: boolean
+  error?: string
+}> {
+  const admin = await ensureAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+  try {
+    return { success: true, settings: await readAiSearchSettings(), canEdit: !!(await ensureSuperAdmin()) }
+  } catch (error) {
+    logError("[admin] getAiSearchSettings", error)
+    return { success: false, error: "تعذّر تحميل إعدادات البحث الذكي" }
+  }
+}
+
+export async function updateAiSearchSettings(input: {
+  enabled?: boolean
+  mode?: string
+  daily_call_cap?: number
+  per_user_daily_cap?: number
+  cache_ttl_hours?: number
+  max_concepts?: number
+  otc_enabled?: boolean
+}): Promise<{ success: boolean; error?: string }> {
+  const admin = await ensureSuperAdmin()
+  if (!admin) return { success: false, error: "ليس لديك صلاحية" }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  // نفس نمط updateDispatchSettings: الحقل يُكتب فقط إن كان صالحًا، وأول قيمة غير صالحة تُفشِل
+  // الحفظ كلّه بلا كتابة جزئية (إعدادات نصفها محفوظ ونصفها لا أسوأ من رفض صريح).
+  const putNum = (key: string, v: unknown, min: number, max: number): string | null => {
+    if (v === undefined) return null
+    const n = Number(v)
+    if (!Number.isFinite(n) || n < min || n > max) return key
+    patch[key] = Math.round(n)
+    return null
+  }
+  if (input.enabled !== undefined) patch.enabled = input.enabled === true
+  if (input.otc_enabled !== undefined) patch.otc_enabled = input.otc_enabled === true
+  if (input.mode !== undefined) {
+    if (!AI_SEARCH_MODES.includes(input.mode as AiSearchMode)) return { success: false, error: "قيمة غير صحيحة" }
+    patch.mode = input.mode
+  }
+  const bad =
+    // السقف 0 = بلا سقف (مقصود ومكتوب في الواجهة)، والحدّ الأعلى يحمي من خطأ كتابي يفتح الفاتورة.
+    putNum("daily_call_cap", input.daily_call_cap, 0, 1_000_000) ||
+    putNum("per_user_daily_cap", input.per_user_daily_cap, 0, 10_000) ||
+    putNum("cache_ttl_hours", input.cache_ttl_hours, 0, 720) ||
+    putNum("max_concepts", input.max_concepts, 1, 50)
+  if (bad) return { success: false, error: "قيمة غير صحيحة" }
+
+  try {
+    await getAdminDb().collection("settings").doc("aiSearch").set(patch, { merge: true })
+    // إبطال كاش الإعدادات فورًا. ليس تحسين استجابة: `otc_enabled` **مفتاح إيقاف سلامة** — من يطفئه
+    // بعد بلاغ عن نتيجة خطِرة لا يجوز أن تستمرّ النتائج دقيقةً كاملة بعد أن يرى «تم الحفظ».
+    // `revalidatePath` وحدها لا تكفي: مدخلات الكاش تُكتب أثناء طلبات العملاء لا أثناء رسم صفحة الأدمن.
+    revalidateTag("ai-search-settings", "max")
+    revalidatePath("/admin/commission-settings")
+    return { success: true }
+  } catch (error) {
+    logError("[admin] updateAiSearchSettings", error)
+    return { success: false, error: "تعذّر حفظ إعدادات البحث الذكي" }
   }
 }
 

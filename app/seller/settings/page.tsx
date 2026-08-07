@@ -14,6 +14,7 @@ import { Label } from "../../../components/ui/label"
 import { Textarea } from "../../../components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { getStoreByUserId, updateStore, createStore, uploadStoreImage, getCategoryNameById, type Store, type StoreCreateInput } from "../../../lib/actions/stores"
+import { PharmacyConsentCard } from "../../../components/store/pharmacy-consent-card"
 import { logError } from "../../../lib/logger"
 import Image from "next/image"
 import { Upload, Phone, MapPin, Loader2, CheckCircle, Truck, Trash2 } from "lucide-react"
@@ -22,6 +23,8 @@ import { requestSellerAccountDeletion } from "../../../lib/actions/account-delet
 import dynamic from "next/dynamic"
 import { useToast } from "@/components/ui/toast"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
+import { normalizeArabic } from "@/lib/utils/arabic"
+import { isPharmacyCategory } from "@/lib/ai/pharmacy-consent"
 import { imgSrc } from "@/lib/storage/public-url"
 
 function PhoneVerificationLoading() {
@@ -149,6 +152,11 @@ export default function SettingsPage() {
     free_shipping: false,
     free_shipping_cap: 0,
   })
+
+  // الصيدلية تُعرَف بفئة متجرها. المطابقة على الجذر بعد التطبيع لا على النصّ الخام: الفئة المخزَّنة
+  // على الإنتاج «صيداليات» بهجاء يخالف «صيدليات»، ومقارنة نصّية مباشرة كانت تُخفي البطاقة عن
+  // صيدلية حقيقية — وهي البطاقة التي بدونها لا تظهر في مسار الأعراض إطلاقًا.
+  const isPharmacy = isPharmacyCategory(formData.category, normalizeArabic)
 
   useEffect(() => {
     // انتظر انتهاء تحميل المصادقة قبل أي تحويل — وإلا يُطرد البائع لحظة التحميل (user=null)
@@ -705,6 +713,14 @@ export default function SettingsPage() {
               </Button>
             </div>
           </form>
+
+          {/* إقرار مسار الأعراض — للصيدليات وحدها. خارج النموذج عمدًا: له زرّه وفعله المستقلّان،
+              ودمجه في «حفظ التغييرات» كان يجعل الصيدلية توقّع التزامًا وهي تعدّل مواعيد العمل. */}
+          {isPharmacy && (
+            <div className="mb-6">
+              <PharmacyConsentCard />
+            </div>
+          )}
 
           {/* حذف حساب التاجر — مدخل داخل التطبيق (التاجر لا يرى صفحة /account أصلًا) */}
           <Card className="border border-destructive/30 rounded-2xl overflow-hidden mb-10">
