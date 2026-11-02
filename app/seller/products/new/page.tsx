@@ -1,5 +1,8 @@
 "use client"
 
+import { FoodDetailsFields } from "@/components/food-details-fields"
+import type { FoodDetails } from "@/lib/ai/food-details"
+
 import type React from "react"
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -204,6 +207,7 @@ export default function NewProductPage() {
 
   // === Reservation Feature ===
   const [isReservationEnabled, setIsReservationEnabled] = useState(false)
+  const [foodDetails, setFoodDetails] = useState<FoodDetails | null>(null)
 
   const productActionErrorMessages: Record<string, { ar: string; en: string }> = {
     UNAUTHORIZED_STORE_PRODUCT_CREATE: {
@@ -397,6 +401,7 @@ export default function NewProductPage() {
         image_url: imageUrl,
         store_id: store.id,
         reservation_enabled: isReservationEnabled,
+        food_details: foodDetails,
       }
 
       const result = await createProduct(productData, user.id)
@@ -1164,6 +1169,7 @@ export default function NewProductPage() {
                 )}
 
                 {/* ===== GROCERY-SPECIFIC FIELDS ===== */}
+                {(storeType === "grocery" || storeType === "general") && <FoodDetailsFields value={foodDetails} onChange={setFoodDetails} />}
                 {storeType === "grocery" && (
                   <div className="space-y-4 border-2 border-orange-200 rounded-2xl p-5 bg-orange-50/50">
                     <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2">

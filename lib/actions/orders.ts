@@ -13,6 +13,7 @@ import { createNotification, sendReviewRequestNotification } from "../notificati
 import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
 import { sendPushToOwner } from "../server-push"
 import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings, splitDeliveryFee } from "../delivery/fee"
+import { validateShoppingTotal } from "../ai/order-constraints"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { checkRateLimit } from "../utils/rate-limit"
 import { PENDING_TIMEOUT_MS } from "../delivery/dispatch-timeout"
@@ -730,6 +731,8 @@ export async function createOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  max_total?: number
+  expected_total?: number
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
@@ -840,6 +843,7 @@ export async function createOrder(orderData: {
       // العميل يدفع ship.delivery_price؛ التاجر يتحمّل ship.merchant_absorbed؛ أجرة السائق ship.driver_fee ثابتة.
       const ship = splitDeliveryFee(serverDeliveryPrice, storeInfo?.free_shipping === true, Number(storeInfo?.free_shipping_cap) || 0)
       const verifiedTotal = verifiedSubtotal + ship.delivery_price
+      validateShoppingTotal(verifiedTotal, orderData)
 
       const orderRef = db.collection("orders").doc()
 
@@ -989,6 +993,8 @@ export async function createDispatchOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  max_total?: number
+  expected_total?: number
   items: { product_id: string; quantity: number; price: number }[]
 }) {
   if (!(await requireOwner(orderData.customer_id))) {
@@ -1090,6 +1096,7 @@ export async function createDispatchOrder(orderData: {
       // شحن مجاني: يقسّم رسم العدّاد (deliveryFee) بين العميل والتاجر حسب إعداد المتجر.
       const ship = splitDeliveryFee(deliveryFee, storeInfo?.free_shipping === true, Number(storeInfo?.free_shipping_cap) || 0)
       const verifiedTotal = verifiedSubtotal + ship.delivery_price
+      validateShoppingTotal(verifiedTotal, orderData)
 
       const orderRef = db.collection("orders").doc()
       const orderPayload: Record<string, unknown> = {
@@ -1553,6 +1560,8 @@ export async function createMultiStoreOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  max_total?: number
+  expected_total?: number
 }) {
   // التحقق سيرفر-سايد: العميل ينشئ طلبًا باسمه فقط
   if (!(await requireOwner(orderData.customer_id))) {
@@ -1684,6 +1693,7 @@ export async function createMultiStoreOrder(orderData: {
       // Calculate subtotal from verified stops (رسوم التوصيل مُشتقّة من السائق)
       const subtotal = verifiedStops.reduce((sum, stop) => sum + stop.subtotal, 0)
       const total = subtotal + serverDeliveryPrice
+      validateShoppingTotal(total, orderData)
 
       // Prepare pickup stops with default status
       const stops: PickupStop[] = verifiedStops.map((stop) => {
@@ -1871,6 +1881,8 @@ export async function createMultiStoreDispatchOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  max_total?: number
+  expected_total?: number
 }) {
   if (!(await requireOwner(orderData.customer_id))) return { success: false, error: "Unauthorized" }
   if (!(await checkRateLimit("create_dispatch_order:" + orderData.customer_id, 15, 60_000))) {
@@ -1971,6 +1983,7 @@ export async function createMultiStoreDispatchOrder(orderData: {
       }
       const deliveryFee = computeDeliveryFee(totalKm, settings)
       const total = subtotal + deliveryFee
+      validateShoppingTotal(total, orderData)
       const storeIds = Array.from(new Set(verifiedStops.map((s) => s.store_id).filter(Boolean)))
 
       const orderRef = db.collection("orders").doc()

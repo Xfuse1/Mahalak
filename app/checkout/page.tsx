@@ -19,6 +19,7 @@ import Image from "next/image"
 import { User, Phone, MapPin, FileText, Navigation, Loader2, Banknote } from "lucide-react"
 import type { CheckoutItem } from "@/lib/types/checkout"
 import { Spinner } from "@/components/ui/spinner"
+import { AI_CHECKOUT_KEY, parseAiCheckoutDraft, type AiCheckoutDraft } from "@/lib/ai/checkout-draft"
 
 export default function CheckoutPage() {
   const { t, language } = useLanguage()
@@ -29,14 +30,17 @@ export default function CheckoutPage() {
   
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
+  const isAiMode = searchParams.get("mode") === "ai"
+  const [aiDraft, setAiDraft] = useState<AiCheckoutDraft | null>(null)
   
   const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
   
   // Get items based on mode
-  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
+  const items: CheckoutItem[] = isAiMode ? aiDraft?.items ?? [] : isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
   
   // Calculate total with discounts
   const total = items.reduce((sum, item) => {
+    if (isAiMode && item.unit_price !== undefined) return sum + item.unit_price * item.quantity
     const discountedPrice = item.discount_percentage && item.discount_percentage > 0
       ? item.price - (item.price * item.discount_percentage / 100)
       : item.price
@@ -48,7 +52,7 @@ export default function CheckoutPage() {
   // إعادة تحقّق أسعار العربة من الخادم عند الدخول للدفع — حتى يطابق الإجمالي المعروض ما سيُحاسَب فعلًا
   // (العربة تحفظ لقطة سعر/خصم قد تكون تقادمت بعد انتهاء عرض أو تعديل البائع للسعر).
   useEffect(() => {
-    if (isBuyNowMode || didSyncRef.current || cartItems.length === 0) return
+    if (isBuyNowMode || isAiMode || didSyncRef.current || cartItems.length === 0) return
     didSyncRef.current = true
     ;(async () => {
       try {
@@ -63,7 +67,7 @@ export default function CheckoutPage() {
         // تجاهل — الخادم يعيد اشتقاق الإجمالي الفعلي عند إنشاء الطلب على أي حال
       }
     })()
-  }, [isBuyNowMode, cartItems, syncPrices])
+  }, [isBuyNowMode, isAiMode, cartItems, syncPrices])
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -80,6 +84,16 @@ export default function CheckoutPage() {
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [locationError, setLocationError] = useState("")
   const [attempted, setAttempted] = useState(false)
+
+  useEffect(() => {
+    if (!isAiMode) return
+    try {
+      const draft = parseAiCheckoutDraft(JSON.parse(sessionStorage.getItem(AI_CHECKOUT_KEY) || "null"))
+      if (!draft) { router.replace("/search/ai"); return }
+      setAiDraft(draft)
+      if (draft.location) setFormData((prev) => ({ ...prev, latitude: String(draft.location!.lat), longitude: String(draft.location!.lng) }))
+    } catch { router.replace("/search/ai") }
+  }, [isAiMode, router])
 
   // Load buy now item from sessionStorage
   useEffect(() => {
@@ -110,10 +124,10 @@ export default function CheckoutPage() {
 
   // Redirect if cart is empty (only in cart mode)
   useEffect(() => {
-    if (!authLoading && !isBuyNowMode && cartItems.length === 0) {
+    if (!authLoading && !isBuyNowMode && !isAiMode && cartItems.length === 0) {
       router.push("/cart")
     }
-  }, [cartItems, authLoading, router, isBuyNowMode])
+  }, [cartItems, authLoading, router, isBuyNowMode, isAiMode])
 
   // Redirect if not logged in
   useEffect(() => {
@@ -218,11 +232,11 @@ export default function CheckoutPage() {
     sessionStorage.setItem("checkoutData", JSON.stringify(formData))
     
     // Pass mode to delivery page
-    const deliveryUrl = isBuyNowMode ? "/checkout/delivery?mode=buynow" : "/checkout/delivery"
+    const deliveryUrl = isAiMode ? "/checkout/delivery?mode=ai" : isBuyNowMode ? "/checkout/delivery?mode=buynow" : "/checkout/delivery"
     router.push(deliveryUrl)
   }
 
-  if (authLoading || (isBuyNowMode && !buyNowItem)) {
+  if (authLoading || (isBuyNowMode && !buyNowItem) || (isAiMode && !aiDraft)) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -266,6 +280,7 @@ export default function CheckoutPage() {
           )}
 
           {/* Order Summary */}
+          {isAiMode && aiDraft && <div className="mb-5 rounded-xl border border-accent/40 bg-accent/5 p-4 text-sm"><p className="font-bold">{aiDraft.title} · طلب مستقل</p><p>الإجمالي شامل التوصيل: {aiDraft.quotedTotal.toFixed(2)} ج{aiDraft.budget !== null ? ` · الميزانية: ${aiDraft.budget.toFixed(2)} ج` : ""}</p><p>السلة الحالية محفوظة. راجع العنوان والبيانات، ثم أكّد الطلب في الخطوة التالية.</p></div>}
           <Card className="mb-6 border-0 shadow-lg rounded-2xl overflow-hidden">
             <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
               <CardTitle className="text-lg flex items-center gap-3">

@@ -27,6 +27,15 @@ import { isOtcEligible } from "../ai/otc"
 import { hasValidConsent, isPharmacyCategory } from "../ai/pharmacy-consent"
 import { AI_SEARCH_ERROR, type AiSearchErrorCode } from "../ai/search-errors"
 import { getProducts } from "./products"
+import { getStores } from "./stores"
+import { getDrivers } from "./delivery"
+import { readDispatchSettings, splitDeliveryFee, computeDeliveryFee, computeDeliveryFeeFromCoords, type DispatchSettings } from "../delivery/fee"
+import { storeDistanceKm } from "../utils/geo"
+import { isMealRequest, shoppingRequest, validLocation, type ShoppingPreferences, type ShoppingRequest } from "../ai/shopping-request"
+import { planMeals, foodConceptAllows, type MealProduct } from "../ai/meal-planner"
+import { findBestDiscount, getActiveOffersForStores } from "../utils/offer-discount"
+import type { AiCheckoutDraft } from "../ai/checkout-draft"
+import { validateShoppingTotal } from "../ai/order-constraints"
 
 export type AiProduct = {
   id: string
@@ -47,9 +56,19 @@ export type AiMatch = {
   product: AiProduct | null
   /** المنتج لم يطابق المفهوم مطابقةً تامّة (مرادف/صوتي/جزئي) ⇒ تعرضه الواجهة موسومًا «بديل». */
   is_alternative: boolean
+  quantity?: number
 }
 
 export type AiBasket = {
+  id?: string
+  title?: string
+  meal_type?: "ready" | "cook"
+  people?: number
+  delivery_fee?: number | null
+  total?: number | null
+  distance_km?: number
+  note?: string
+  recipe_steps?: string[]
   kind: "multi" | "single"
   store_ids: string[]
   store_names: string[]
@@ -75,6 +94,12 @@ export type AiSearchSuccess = {
   notice?: string
   /** غير فارغة في نتائج الأعراض فقط: زرّ «اسأل صيدلي» يظهر فور الترشيح (قرار مالك). */
   pharmacies?: AiPharmacyContact[]
+  shopping?: {
+    request: ShoppingRequest
+    messages: string[]
+    needs: "people" | "location" | "driver" | null
+    drivers: { id: string; name: string; price: number }[]
+  }
 }
 
 export type AiSearchFailure = { success: false; error: string; code: AiSearchErrorCode }
@@ -95,6 +120,7 @@ const MAX_QUERY_LEN = 300
 // (استعلام كل ثلاث ثوانٍ لدقيقة كاملة) ويكسر أي حلقة آلية.
 const BURST_LIMIT = 20
 const BURST_WINDOW_MS = 60_000
+const DIETARY_RESTRICTION = /حساسيه|حساسية|من غير|بدون|بلا |سكر|ضغط|حامل|رضيع|اطفال|دايت|رجيم/
 
 // عدد المرشّحين لكل مفهوم. يخدم ثلاثة مستهلكين: اختيار الأرخص، وتغطية «أفضل متجر»، وسلة المتجر
 // الواحد بعد الفلترة — وكلها تعمل على نفس القائمة، فضيقها يُفقر الثلاثة معًا.
@@ -113,7 +139,28 @@ function roundMoney(value: number): number {
 function effectiveUnitPrice(price: unknown, discountPercentage: unknown): number {
   const base = Math.max(0, Number(price) || 0)
   const pct = Math.min(100, Math.max(0, Number(discountPercentage) || 0))
-  return roundMoney(base - (base * pct) / 100)
+  // Order creation rounds discounted units, but preserves undiscounted source prices.
+  return pct > 0 ? roundMoney(base - (base * pct) / 100) : base
+}
+
+// Same fee helpers and single/multi policy as order creation; unknown coordinates are never zero.
+function shoppingDeliveryFee(stores: Array<{ latitude?: number | null; longitude?: number | null; free_shipping?: boolean; free_shipping_cap?: number | null }>, request: ShoppingRequest, settings: DispatchSettings, driverPrice?: number): number | null {
+  if (!request.location || !stores.length) return null
+  if (stores.some((store) => !validLocation({ lat: store.latitude, lng: store.longitude }))) return null
+  const distances = stores.map((store) => storeDistanceKm(request.location, store))
+  if (distances.some((distance) => distance === null || !Number.isFinite(distance) || distance > request.radiusKm)) return null
+  let fee: number
+  if (settings.enabled) {
+    if (stores.length === 1) {
+      const value = computeDeliveryFeeFromCoords({ lat: stores[0].latitude, lng: stores[0].longitude }, request.location, settings)
+      if (value === null) return null
+      fee = value
+    } else fee = computeDeliveryFee(distances.reduce<number>((sum, value) => sum + (value ?? 0), 0), settings)
+  } else {
+    if (driverPrice === undefined || !Number.isFinite(driverPrice) || driverPrice < 0) return null
+    fee = driverPrice
+  }
+  return stores.length === 1 ? splitDeliveryFee(fee, stores[0].free_shipping === true, Number(stores[0].free_shipping_cap) || 0).delivery_price : fee
 }
 
 function toAiProduct(product: CatalogProduct & Record<string, unknown>): AiProduct {
@@ -122,7 +169,7 @@ function toAiProduct(product: CatalogProduct & Record<string, unknown>): AiProdu
   return {
     id: product.id,
     name: typeof product.name === "string" ? product.name : "",
-    price: roundMoney(price),
+    price,
     unit_price: effectiveUnitPrice(price, pct),
     discount_percentage: pct,
     image_url: typeof product.image_url === "string" ? product.image_url : null,
@@ -135,7 +182,7 @@ function toAiProduct(product: CatalogProduct & Record<string, unknown>): AiProdu
 function cacheKeyOf(query: string): string {
   // مشتقّ من نفس تطبيع المحرّك: «الشاي» و«شاي» استعلام واحد فعليًّا، فيشتركان في مدخلة واحدة.
   // والتجزئة لأن مُعرّف مستند Firestore لا يقبل "/" ومحدود الطول، لا لإخفاء شيء.
-  return createHash("sha1").update(catalogQueryKey(query) || "-").digest("hex")
+  return createHash("sha1").update("intent-v2:" + (catalogQueryKey(query) || "-")).digest("hex")
 }
 
 /**
@@ -241,13 +288,14 @@ async function logQuery(entry: {
   matched: number
   unmatched: string[]
   cached: boolean
+  privateQuery?: boolean
 }): Promise<void> {
   try {
     // الشكوى الصحّية لا يُخزَّن نصّها ولا مفاهيمها — العدّ فقط.
     //
     // ما يُسجَّل هنا مربوط بمعرّف حساب حقيقي، ونصُّ «حاسس بكذا» بيانٌ صحّي عن شخص بعينه لا سجلّ
     // تسوّق. والغرض المعلَن (قياس الطلب غير الملبّى) يتحقّق بالعدّ وحده، فلا مقابل للاحتفاظ به.
-    const isHealth = entry.intent === "symptom"
+    const isHealth = entry.intent === "symptom" || entry.privateQuery === true
     await getAdminDb().collection(LOG_COLLECTION).add({
       // **لا هوية على الصفّ الصحّي.** حجب النصّ وحده لم يكن كافيًا: صفٌّ يحمل `user_id` وطابعًا
       // زمنيًّا بدقّة الملّي و`intent: "symptom"` هو حدثٌ صحّي منسوب لشخص بعينه، وأي أدمن يرشّح
@@ -449,7 +497,7 @@ function pharmacyContacts(baskets: AiBasket[], products: readonly CatalogProduct
   return out
 }
 
-export async function aiSearch(input: { query: string }): Promise<AiSearchSuccess | AiSearchFailure> {
+export async function aiSearch(input: { query: string; preferences?: ShoppingPreferences }): Promise<AiSearchSuccess | AiSearchFailure> {
   const query = String(input?.query || "").trim().slice(0, MAX_QUERY_LEN)
   if (!query) return { success: false, error: "اكتب ما تريده أولًا", code: AI_SEARCH_ERROR.NO_INTENT }
 
@@ -499,22 +547,27 @@ export async function aiSearch(input: { query: string }): Promise<AiSearchSucces
     const cached = intent !== null
 
     if (!intent) {
-      if (!isGeminiEnabled() && !isOpenAICompatEnabled()) {
+      if (!isGeminiEnabled() && !isOpenAICompatEnabled() && !isMealRequest(query)) {
         return { success: false, error: "البحث الذكي غير متاح حاليًا", code: AI_SEARCH_ERROR.DISABLED }
       }
-      if (!(await reserveModelCall(settings.daily_call_cap))) {
+      if ((isGeminiEnabled() || isOpenAICompatEnabled()) && !(await reserveModelCall(settings.daily_call_cap))) {
         return { success: false, error: "البحث الذكي مشغول اليوم. جرّب بعدين.", code: AI_SEARCH_ERROR.QUOTA }
       }
       // نفس سلسلة السقوط المستخدَمة في الاستيراد: Gemini ثم المزوّد المتوافق مع OpenAI.
       intent = await geminiIntent(query, settings.max_concepts)
-      if (!intent) intent = await intentOpenAICompat(query, settings.max_concepts)
+      if (!intent && isOpenAICompatEnabled()) {
+        // Each provider attempt consumes the platform model-call allowance.
+        if (isGeminiEnabled() && !(await reserveModelCall(settings.daily_call_cap))) return { success: false, error: "البحث الذكي مشغول اليوم. جرّب بعدين.", code: AI_SEARCH_ERROR.QUOTA }
+        intent = await intentOpenAICompat(query, settings.max_concepts)
+      }
+      if (!intent && isMealRequest(query)) intent = { intent: "recipe", title: "اختيارات من الموجود عندنا", items: [{ name: "وجبة", concepts: ["وجبة"] }] }
       // الشكوى الصحّية **لا تُحفَظ في الكاش إطلاقًا**.
       //
       // ليست دقّةً زائدة: مستند الكاش يخزّن نصّ الاستعلام الخام وقائمة مفاهيمه، وسياسة الخصوصية
       // تقول حرفيًّا إن الاستعلامات الصحّية «لا نحتفظ بنصّها ولا بتفاصيلها إطلاقًا». وعدٌ في سياسة
       // يخالفه الكود أسوأ من عدم الوعد. الثمن: نداء موديل لكل شكوى صحّية — وهو ثمن مقبول لأن
       // البديل تخزين بيان صحّي وعدَتْ سياستُنا بألّا نخزّنه.
-      if (intent && intent.intent !== "symptom") {
+      if (intent && intent.intent !== "symptom" && !DIETARY_RESTRICTION.test(normalizeArabic(query))) {
         await writeCache(key, query, intent, settings.cache_ttl_hours)
       }
     }
@@ -531,6 +584,62 @@ export async function aiSearch(input: { query: string }): Promise<AiSearchSucces
         error: "البحث عن منتجات الأعراض لسه مقفول. دوّر بالاسم مباشرةً أو اسأل الصيدلية.",
         code: AI_SEARCH_ERROR.SYMPTOM_LOCKED,
       }
+    }
+
+    if (!isSymptom && (intent.intent === "recipe" || isMealRequest(query))) {
+      const request = shoppingRequest(query, input.preferences, intent.request)
+      const dispatch = await readDispatchSettings()
+      const drivers = dispatch.enabled ? [] : (await getDrivers()).filter((d) => d.is_available && Number.isFinite(d.price) && d.price >= 0)
+        .map((d) => ({ id: d.id, name: d.name, price: d.price }))
+      const selectedDriver = drivers.find((d) => d.id === request.driverId)
+      const needs = !request.people ? "people" : !request.location ? "location" : !dispatch.enabled && !selectedDriver ? "driver" : null
+      const messages: string[] = []
+      if (needs === "people") messages.push("الأكل كام فرد إجماليًا، شامل أصحاب البيت؟")
+      if (needs === "location") messages.push("حدّد عنوان التوصيل على الخريطة أو استخدم موقعك عشان نختار القريب ونحسب التوصيل.")
+      if (needs === "driver") messages.push("اختار سائق التوصيل عشان نحسب الإجمالي داخل الميزانية.")
+      const baskets: AiBasket[] = []
+      const hasDietaryRestriction = DIETARY_RESTRICTION.test(normalizeArabic(query))
+      if (hasDietaryRestriction) messages.push("طلبك فيه شرط غذائي محتاج تفاصيل مؤكدة عن مكونات المنتجات. مش هنعتبر أي وجبة مناسبة للشرط ده من الاسم وحده؛ راجع المحتويات مع المتجر أو ابحث عن الصنف المحدد.")
+      if (!needs && !hasDietaryRestriction) {
+        const [catalog, stores] = await Promise.all([getProducts(), getStores()])
+        const products: MealProduct[] = (catalog as unknown as Array<CatalogProduct & Record<string, unknown>>).map((p) => ({ ...toAiProduct(p),
+          description: typeof p.description === "string" ? p.description : "", category: typeof p.category === "string" ? p.category : "",
+          weight: p.weight, weight_unit: p.weight_unit, food_details: p.food_details }))
+        const options = planMeals(products, stores, request, settings.mode)
+        const quotes = new Map<string, Promise<number | null>>()
+        const priced = await Promise.all(options.map(async (option) => {
+          const key = option.store_ids.join(",")
+          if (!quotes.has(key)) quotes.set(key, (async () => {
+            const snaps = await Promise.all(option.store_ids.map((id) => getAdminDb().collection("users").doc(id).get()))
+            if (snaps.some((snap) => !snap.exists || snap.data()?.role !== "seller" || snap.data()?.disabled === true || snap.data()?.store?.is_approved === false)) return null
+            return shoppingDeliveryFee(snaps.map((s) => s.data()?.store || {}), request, dispatch, selectedDriver?.price)
+          })())
+          const fee = await quotes.get(key)!
+          if (fee === null) return null
+          const total = roundMoney(option.subtotal + fee)
+          if (request.budget !== null && total > request.budget) return null
+          return { id: option.id, title: option.title, kind: option.kind, meal_type: option.meal_type, people: option.people,
+            store_ids: option.store_ids, store_names: option.store_ids.map((id) => stores.find((s) => s.id === id)?.name || "متجر"),
+            groups: [{ name: option.title, matches: option.lines.map((line) => ({ concept: line.concept, product: toAiProduct(line.product as unknown as CatalogProduct & Record<string, unknown>), quantity: line.quantity, is_alternative: false })) }],
+            subtotal: option.subtotal, delivery_fee: fee, total, distance_km: option.distance_km, note: option.note, recipe_steps: option.recipe_steps,
+            matched: option.lines.length, total_concepts: option.lines.length } satisfies AiBasket
+        }))
+        const ordered = priced.filter((b): b is NonNullable<typeof b> => b !== null)
+          .sort((a, b) => a.total - b.total || a.distance_km - b.distance_km || a.id.localeCompare(b.id))
+        const distinct = new Set<string>()
+        const first: typeof ordered = [], variants: typeof ordered = []
+        for (const option of ordered) {
+          const key = `${option.meal_type}:${option.title}`
+          if (distinct.has(key)) variants.push(option)
+          else { distinct.add(key); first.push(option) }
+        }
+        baskets.push(...[...first, ...variants].slice(0, 10))
+        if (!baskets.length) messages.push("مفيش وجبة مكتملة ببيانات كميات واضحة تناسب طلبك دلوقتي. جرّب تزود المسافة أو الميزانية، أو تغيّر جاهز / طبخ.")
+        else if (baskets.length < 4) messages.push(`لقينا ${baskets.length} اختيارات مناسبة فعلًا؛ بنعرض الموجود من غير اختراع وجبات زيادة.`)
+      }
+      await logQuery({ uid, query, intent: "recipe", concepts: [], matched: baskets.length, unmatched: [], cached, privateQuery: hasDietaryRestriction })
+      return { success: true, intent: "recipe", title: "اختيارات من الموجود عندنا", mode: settings.mode, baskets, unmatched: [], cached,
+        shopping: { request, messages, needs, drivers } }
     }
 
     // ⑧ المفاهيم ⇒ منتجات حقيقية. الكتالوج يُقرأ مرّة واحدة لكل الاستعلام (getProducts محفوظة 60ث)
@@ -563,7 +672,8 @@ export async function aiSearch(input: { query: string }): Promise<AiSearchSucces
       for (const concept of item.concepts) {
         // الحدّ واسع عمدًا: سلة «المتجر الواحد» تفلتر هذه القائمة بالمتجر لاحقًا، فحدٌّ ضيّق كان
         // يعني أن متجرًا يبيع الصنف لكن ترتيبه التاسع عالميًّا يُحسب كأنه لا يبيعه ⇒ تغطية منقوصة.
-        const { items, tier } = matchConcept(products, concept, { limit: CONCEPT_CANDIDATES })
+        const eligible = products.filter((product) => foodConceptAllows(product.name || "", concept))
+        const { items, tier } = matchConcept(eligible, concept, { limit: CONCEPT_CANDIDATES })
         candidates.push({ concept, group: item.name, items, exact: tier === "exact" })
       }
     }
@@ -617,6 +727,62 @@ export async function aiSearch(input: { query: string }): Promise<AiSearchSucces
   } catch (error) {
     logError("[ai-search] aiSearch", error)
     return { success: false, error: "حصل خطأ. جرّب تاني.", code: AI_SEARCH_ERROR.SERVER }
+  }
+}
+
+/** Fresh read at selection time. Never trusts a browser's product price or cached stock. */
+export async function prepareAiBasket(input: {
+  items: { id: string; quantity: number }[]; title?: string; query?: string; preferences?: ShoppingPreferences; expectedTotal?: number
+}): Promise<{ success: true; draft: AiCheckoutDraft } | { success: false; error: string }> {
+  try {
+    const uid = await getCurrentUid()
+    if (!uid) return { success: false, error: "سجّل الدخول لإكمال طلبك" }
+    if (!(await readAiSearchSettings()).enabled) return { success: false, error: "البحث الذكي غير متاح حاليًا" }
+    if (!(await checkRateLimit(`ai_search_burst:${uid}`, BURST_LIMIT, BURST_WINDOW_MS))) return { success: false, error: "جرّب تاني بعد دقيقة" }
+    if (!Array.isArray(input?.items) || !input.items.length || input.items.length > 30) return { success: false, error: "اختيار غير صالح" }
+    const seen = new Set<string>()
+    for (const item of input.items) {
+      if (!item || typeof item.id !== "string" || !/^[\w-]{1,128}$/.test(item.id) || seen.has(item.id) || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 1000) return { success: false, error: "اختيار غير صالح" }
+      seen.add(item.id)
+    }
+    const db = getAdminDb()
+    const docs = await Promise.all(input.items.map((item) => db.collection("products").doc(item.id).get()))
+    const raw = docs.map((doc, i) => ({ ...(doc.data() || {}), id: input.items[i].id } as Record<string, unknown>))
+    if (docs.some((d) => !d.exists)) return { success: false, error: "صنف من الاختيار لم يعد متاحًا؛ حدّث النتائج" }
+    const ids = [...new Set(raw.map((p) => typeof p.store_id === "string" ? p.store_id : ""))]
+    if (ids.some((id) => !/^[\w-]{1,128}$/.test(id))) return { success: false, error: "المتجر غير متاح" }
+    const storeDocs = await Promise.all(ids.map((id) => db.collection("users").doc(id).get()))
+    if (storeDocs.some((s) => !s.exists || s.data()?.disabled === true || s.data()?.store?.is_approved === false || s.data()?.role !== "seller")) return { success: false, error: "متجر من الاختيار لم يعد متاحًا" }
+    const offers = await getActiveOffersForStores(ids)
+    const items = raw.map((p, i) => {
+      const store = storeDocs[ids.indexOf(String(p.store_id))].data()
+      const pct = findBestDiscount({ id: String(p.id), store_id: String(p.store_id), category: typeof p.category === "string" ? p.category : undefined }, offers).discount_percentage
+      const product = toAiProduct({ ...p, id: String(p.id), discount_percentage: pct, stores: { name: String(store?.store?.name || store?.full_name || "متجر") } })
+      return { ...product, quantity: input.items[i].quantity, source: "ai_search" }
+    })
+    if (items.some((p) => !Number.isFinite(p.price) || p.price <= 0 || !Number.isFinite(p.stock) || p.quantity > p.stock)) return { success: false, error: "المخزون أو السعر اتغيّر؛ حدّث الاقتراحات قبل الإضافة" }
+    const request = shoppingRequest("", input.preferences)
+    if (!request.location || storeDocs.some((s) => {
+      const distance = storeDistanceKm(request.location, s.data()?.store || {})
+      return distance === null || !Number.isFinite(distance) || distance > request.radiusKm
+    })) return { success: false, error: "عنوان أو موقع متجر اتغيّر؛ حدّث الاقتراحات" }
+    const dispatch = await readDispatchSettings()
+    let driverPrice: number | undefined
+    if (!dispatch.enabled) {
+      const driver = (await getDrivers()).find((d) => d.id === request.driverId && d.is_available && Number.isFinite(d.price) && d.price >= 0)
+      if (!driver) return { success: false, error: "اختار سائق توصيل متاح" }
+      driverPrice = driver.price
+    }
+    const fee = shoppingDeliveryFee(storeDocs.map((s) => s.data()?.store || {}), request, dispatch, driverPrice)
+    if (fee === null) return { success: false, error: "تعذّر حساب التوصيل؛ حدّث الاقتراحات" }
+    const total = roundMoney(items.reduce((sum, p) => sum + p.unit_price * p.quantity, 0) + fee)
+    try { validateShoppingTotal(total, { max_total: request.budget ?? undefined, expected_total: input.expectedTotal }) }
+    catch { return { success: false, error: "الإجمالي اتغيّر أو تجاوز الميزانية؛ حدّث الاقتراحات وراجع الاختيار" } }
+    return { success: true, draft: { items, title: String(input.title || "اختيار البحث الذكي").slice(0, 100), query: String(input.query || "").slice(0, MAX_QUERY_LEN), budget: request.budget,
+      quotedTotal: total, location: request.location, driverId: request.driverId, deliveryFee: fee, radiusKm: request.radiusKm, shippingMode: dispatch.enabled ? "dispatch" : "driver" } }
+  } catch (error) {
+    logError("[ai-search] prepareAiBasket", error)
+    return { success: false, error: "تعذّر تجهيز الاختيار؛ جرّب تاني" }
   }
 }
 

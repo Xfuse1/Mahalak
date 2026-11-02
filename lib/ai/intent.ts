@@ -5,6 +5,8 @@
 // (أسماء أصناف عامّة) فقط، ثم يبحث عنها محرّكُنا في المنتجات الحقيقية ويسعّرها السيرفر من مستنداتها.
 // لهذا لا يوجد سطح هلوسة أصلًا: أسوأ ما يفعله الموديل هو اقتراح مكوّن غير موجود، فيظهر «غير متوفر».
 
+import type { ShoppingPreferences } from "./shopping-request"
+
 export const INTENT_KINDS = ["recipe", "symptom", "product", "generic"] as const
 export type IntentKind = (typeof INTENT_KINDS)[number]
 
@@ -19,6 +21,7 @@ export type SearchIntent = {
   intent: IntentKind
   title: string
   items: IntentItem[]
+  request?: ShoppingPreferences
 }
 
 // حدود الشكل. ليست تجميلًا: الرد يُعرض في واجهة ويُخزَّن في Firestore، ونصّ بلا حدّ من موديل
@@ -37,7 +40,7 @@ export function buildIntentPrompt(query: string, maxConcepts: number): string {
   return `أنت طبقة فهم نيّة لمتجر إلكتروني مصري. المستخدم كتب استعلامًا بالعامية المصرية.
 
 أرجع JSON فقط، بلا أي نص خارجه، بالشكل:
-{"intent":"recipe|symptom|product|generic","title":"عنوان عربي قصير","items":[{"name":"اسم الطبق أو المجموعة","concepts":["صنف","صنف"]}]}
+{"intent":"recipe|symptom|product|generic","title":"عنوان عربي قصير","items":[{"name":"اسم الطبق أو المجموعة","concepts":["صنف","صنف"]}],"request":{"people":null,"budget":null,"foodMode":"both|ready|cook","protein":"any|animal|chicken|meat|fish|egg|vegetarian"}}
 
 القواعد:
 - "concepts" أسماء **أصناف تُباع في متجر مصري** بالعامية الشائعة (مثال: «عدس بجبة» لا «عدسيات»)، بلا كميات وبلا خطوات تحضير وبلا علامات تجارية أجنبية إن وُجد المكافئ المحلي.
@@ -45,6 +48,9 @@ export function buildIntentPrompt(query: string, maxConcepts: number): string {
 - "recipe" لطلب أكلة أو وجبة، "symptom" لشكوى صحية، "product" لطلب صنف أو غرض محدّد، "generic" لغير ذلك.
 - لو الاستعلام شكوى صحية: أرجع أصنافًا مرتبطة فقط. **ممنوع تمامًا** ذكر جرعة أو مدّة أو نصيحة علاجية أو تشخيص.
 - "title" وصف عربي قصير لما فهمته، بلا مقدّمات.
+- "request" ينقل قيود المستخدم فقط: عدد الأشخاص الإجمالي وميزانية بالجنيه تشمل التوصيل، بلا تخمين لأي قيمة ناقصة. افهم الأرقام المكتوبة بالحروف أيضًا.
+- "ready" لأكل المطاعم الجاهز، "cook" لمكونات الطبخ، "both" لو لم يحدد. "animal" لأي بروتين حيواني، و"vegetarian" للنباتي.
+- عناوين الوصفات ليست وعدًا بتوفرها؛ التطبيق يتحقق من منتجات الموقع وكمياتها قبل العرض.
 
 الاستعلام: ${String(query).slice(0, 300)}`
 }
@@ -110,7 +116,17 @@ export function parseIntent(raw: unknown, maxConcepts: number): SearchIntent | n
   }
 
   if (!items.length) return null
-  return { intent: kind, title: title || items[0].name, items }
+  const result: SearchIntent = { intent: kind, title: title || items[0].name, items }
+  if (obj.request && typeof obj.request === "object" && !Array.isArray(obj.request)) {
+    const r = obj.request as Record<string, unknown>
+    const request: ShoppingPreferences = {}
+    if (typeof r.people === "number" && Number.isInteger(r.people) && r.people > 0 && r.people <= 50) request.people = r.people
+    if (typeof r.budget === "number" && Number.isFinite(r.budget) && r.budget > 0 && r.budget <= 100000) request.budget = r.budget
+    if (r.foodMode === "ready" || r.foodMode === "cook" || r.foodMode === "both") request.foodMode = r.foodMode
+    if (["any", "animal", "chicken", "meat", "fish", "egg", "vegetarian"].includes(String(r.protein))) request.protein = r.protein as ShoppingPreferences["protein"]
+    result.request = request
+  }
+  return result
 }
 
 // كلمات تُصدَّر بها الجملة الطالبة في العامية المصرية. وجودها إشارة نيّة لا إشارة صنف: مَن يكتب
