@@ -1,5 +1,8 @@
 "use client"
 
+import { FoodDetailsFields } from "@/components/food-details-fields"
+import { parseFoodDetails, type FoodDetails } from "@/lib/ai/food-details"
+
 import React from "react"
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -60,6 +63,7 @@ type EditableProduct = {
   barcode?: string
   expiry_date?: string | null
   reservation_enabled?: boolean
+  food_details?: FoodDetails | null
 }
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -81,6 +85,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false)
   const [storeType, setStoreType] = useState<StoreType>("general")
   const [isReservationEnabled, setIsReservationEnabled] = useState(false)
+  const [foodDetails, setFoodDetails] = useState<FoodDetails | null>(null)
   const [barcode, setBarcode] = useState("")
   const [expiryDate, setExpiryDate] = useState("") // YYYY-MM-DD
   const [showScanner, setShowScanner] = useState(false)
@@ -174,6 +179,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setProduct(productData)
       setImagePreview(productData.image_url ?? null)
       setIsReservationEnabled(productData.reservation_enabled ?? false)
+      setFoodDetails(parseFoodDetails(productData.food_details))
       setBarcode(productData.barcode || "")
       setExpiryDate(String(productData.expiry_date || "").slice(0, 10)) // YYYY-MM-DD لحقل type=date
       
@@ -308,6 +314,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         expiry_date: expiryDate || null,
         image_url: imageUrl,
         reservation_enabled: isReservationEnabled,
+        food_details: foodDetails,
       }, user?.id)
 
       if (!result.success) {
@@ -530,6 +537,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   </div>
 
                   {/* Pre-Reservation Toggle */}
+                  {(storeType === "grocery" || storeType === "general") && <FoodDetailsFields value={foodDetails} onChange={setFoodDetails} />}
                   <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-primary/20 bg-primary/5">
                     <div className="flex-1">
                       <label className="flex items-center gap-3 cursor-pointer">

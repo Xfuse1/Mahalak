@@ -6,7 +6,7 @@
 // تُفلتَر وتُرتَّب. حشرهما معًا كان يعني لوحة فلترة وترتيبًا لا معنى لهما فوق مكوّنات وصفة.
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { AlertTriangle, Check, Info, Package, Phone, ShoppingCart, Sparkles, Store as StoreIcon } from "lucide-react"
@@ -22,7 +22,10 @@ import { useToast } from "@/components/ui/toast"
 import { imgSrc } from "@/lib/storage/public-url"
 import { logError } from "@/lib/logger"
 import { useCartStore, type CartBulkInput } from "@/lib/stores/cart-store"
-import { aiSearch, logAiSearchAddToCart, type AiBasket, type AiMatch, type AiSearchSuccess } from "@/lib/actions/ai-search"
+import { aiSearch, prepareAiBasket, logAiSearchAddToCart, type AiBasket, type AiMatch, type AiSearchSuccess } from "@/lib/actions/ai-search"
+import { ShoppingControls, MealCard } from "@/components/ai-shopping-results"
+import { isMealRequest, type ShoppingPreferences } from "@/lib/ai/shopping-request"
+import { AI_CHECKOUT_KEY } from "@/lib/ai/checkout-draft"
 import { AI_SEARCH_ERROR } from "@/lib/ai/search-errors"
 
 const money = (value: number) => `${Number(value || 0).toFixed(2)} ج`
@@ -110,7 +113,7 @@ function BasketView({ basket, onAddAll, onAddOne }: { basket: AiBasket; onAddAll
           <p className="text-xs text-muted-foreground">
             رسوم التوصيل تُحسب عند الدفع حسب موقعك{basket.store_ids.length > 1 ? " — سائق واحد يمرّ على المتاجر" : ""}.
           </p>
-          <Button type="button" onClick={() => onAddAll(basket)} disabled={basket.matched === 0} className="gap-2 rounded-xl">
+          <Button type="button" onClick={() => onAddAll(basket)} disabled={basket.matched === 0 || basket.matched !== basket.total_concepts} className="gap-2 rounded-xl">
             <ShoppingCart className="h-4 w-4" /> أضف السلة كلها
           </Button>
         </div>
@@ -122,6 +125,11 @@ function BasketView({ basket, onAddAll, onAddOne }: { basket: AiBasket; onAddAll
 function AiResults() {
   const searchParams = useSearchParams()
   const query = (searchParams.get("q") || "").trim()
+  return <AiSearchContent key={query} query={query} />
+}
+
+function AiSearchContent({ query }: { query: string }) {
+  const router = useRouter()
   const toast = useToast()
   const addItems = useCartStore((s) => s.addItems)
 
@@ -130,6 +138,9 @@ function AiResults() {
   const [activeBasket, setActiveBasket] = useState(0)
 
   const [pending, setPending] = useState(false)
+  const [preferences, setPreferences] = useState<ShoppingPreferences>({})
+  const [choosing, setChoosing] = useState(false)
+  const [shoppingActive, setShoppingActive] = useState(false)
   // نفس نمط [app/search/page.tsx]: العمل غير المتزامن في `useCallback` يستدعيه التأثير، لا داخله.
   // ضبطُ الحالة متزامنًا داخل effect يُطلق رسمةً متتالية (وقاعدة react-hooks تمنعه)، والمعرّف
   // المتزايد يمنع نتيجة استعلام قديم من أن تعلو نتيجة أحدث حين يبدّل المستخدم طلبه بسرعة.
@@ -144,10 +155,11 @@ function AiResults() {
     // «مكونات كشري» بينما السطر أسفله يقول «طلبك: منظف سيراميك».
     setResult(null)
     try {
-      const res = await aiSearch({ query })
+      const res = await aiSearch({ query, preferences })
       if (requestId !== requestIdRef.current) return
       if (res.success) {
         setResult(res)
+        if (res.shopping) setShoppingActive(true)
         setActiveBasket(0)
       } else {
         setResult(null)
@@ -160,10 +172,12 @@ function AiResults() {
     } finally {
       if (requestId === requestIdRef.current) setPending(false)
     }
-  }, [query])
+  }, [query, preferences])
 
   useEffect(() => {
     run()
+    const requestId = requestIdRef.current
+    return () => { requestIdRef.current = requestId + 1 }
   }, [run])
 
   const toCartInput = useCallback((match: AiMatch): CartBulkInput | null => {
@@ -180,7 +194,7 @@ function AiResults() {
       store_name: p.store_name,
       stock: p.stock,
       discount_percentage: p.discount_percentage,
-      quantity: 1,
+      quantity: match.quantity ?? 1,
       source: "ai_search",
     }
   }, [])
@@ -235,6 +249,32 @@ function AiResults() {
     [addItems, report, toCartInput, track],
   )
 
+  const chooseMeal = async (chosen: AiBasket, checkout: boolean) => {
+    if (choosing || !result?.shopping || chosen.total == null) return
+    setChoosing(true)
+    try {
+      const lines = chosen.groups.flatMap((g) => g.matches)
+      const res = await prepareAiBasket({ title: chosen.title, query, items: lines.flatMap((m) => m.product ? [{ id: m.product.id, quantity: m.quantity ?? 1 }] : []),
+        preferences: { ...result.shopping.request, people: result.shopping.request.people ?? undefined, budget: result.shopping.request.budget ?? undefined, driverId: result.shopping.request.driverId ?? undefined }, expectedTotal: chosen.total })
+      if (!res.success) { toast.error(res.error); return }
+      if (checkout) {
+        sessionStorage.setItem(AI_CHECKOUT_KEY, JSON.stringify(res.draft))
+        router.push("/checkout?mode=ai")
+      } else {
+        // Confirm the whole addition fits the existing cart before any mutation.
+        const existing = useCartStore.getState().items
+        if (res.draft.items.some((p) => (existing.find((i) => i.id === p.id)?.quantity ?? 0) + p.quantity > (p.stock ?? 0))) {
+          toast.error("السلة الحالية مع الاختيار هتتجاوز المخزون؛ تقدر تطلب الاختيار لوحده"); return
+        }
+        const out = addItems(res.draft.items.map((p) => ({ ...p, stock: p.stock ?? 0 })))
+        useCartStore.getState().syncPrices(Object.fromEntries(res.draft.items.map((p) => [p.id, { price: p.price, discount_percentage: p.discount_percentage ?? 0 }])))
+        report(res.draft.items.length - out.rejected.length, out)
+        track(res.draft.items.map((p) => p.id), true, chosen.kind)
+      }
+    } catch (error) { logError("[search/ai] choose", error); toast.error("تعذّر تجهيز الاختيار؛ جرّب تاني") }
+    finally { setChoosing(false) }
+  }
+
   // «جارٍ التحميل» حالة مشتقّة لا مخزَّنة: وجود استعلام بلا نتيجة ولا خطأ.
   const loading = !!query && pending
   const baskets = result?.baskets ?? []
@@ -264,6 +304,8 @@ function AiResults() {
             <SearchBar initialValue={query} initialMode="ai" placeholder="اكتب اللي محتاجه بالبلدي…" />
           </div>
 
+          {(isMealRequest(query) || shoppingActive) && <ShoppingControls query={query} result={result} pending={pending} onApply={setPreferences} />}
+
           {loading ? (
             <div className="flex flex-col items-center gap-3 py-16">
               <Spinner size="lg" label="بنجهّز سلتك…" className="flex-col" />
@@ -285,6 +327,12 @@ function AiResults() {
             </Card>
           ) : !query ? (
             <EmptyState icon={Sparkles} title="اكتب اللي محتاجه" description="مثال: «عايز أعمل كشري لخمس أفراد» أو «محتاج حاجة تنضف السيراميك»" />
+          ) : result?.shopping ? (
+            <div className="space-y-4">
+              {result.shopping.messages.map((message) => <p key={message} className="rounded-xl border border-accent/40 bg-accent/5 p-4 text-sm">{message}</p>)}
+              {!!result.baskets.length && <p className="text-sm text-muted-foreground">الإجمالي يشمل التوصيل للعنوان المحدد. بنراجع السعر والمخزون قبل الإضافة، وتأكيد الطلب بيتم في الخطوة الأخيرة.</p>}
+              <div className="grid gap-4 lg:grid-cols-2">{result.baskets.map((option) => <MealCard key={option.id} basket={option} busy={choosing || pending} onChoose={chooseMeal} />)}</div>
+            </div>
           ) : !basket ? (
             <EmptyState icon={Package} title="مفيش نتائج" description="جرّب صياغة تانية أو استخدم البحث العادي." />
           ) : (

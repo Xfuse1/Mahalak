@@ -7,7 +7,7 @@ import { logError } from "@/lib/logger"
 import { buildColumnMapPrompt, parseColumnMap, type ColumnMap } from "./column-map"
 import { buildIntentPrompt, parseIntent, type SearchIntent } from "./intent"
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash"
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite"
 
 function getGeminiKey(): string | null {
   return process.env.GEMINI_API_KEY || null

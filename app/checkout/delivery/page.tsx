@@ -17,6 +17,7 @@ import type { PickupStop } from "@/lib/actions/orders"
 import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/delivery"
 import type { CheckoutItem } from "@/lib/types/checkout"
 import { useToast } from "@/components/ui/toast"
+import { AI_CHECKOUT_KEY, parseAiCheckoutDraft, type AiCheckoutDraft } from "@/lib/ai/checkout-draft"
 
 type CheckoutData = {
   fullName: string
@@ -40,12 +41,15 @@ export default function DeliveryPage() {
 
   // Check if this is "Buy Now" mode (single product) or cart mode
   const isBuyNowMode = searchParams.get("mode") === "buynow"
+  const isAiMode = searchParams.get("mode") === "ai"
+  const [aiDraft, setAiDraft] = useState<AiCheckoutDraft | null>(null)
 
   const [buyNowItem, setBuyNowItem] = useState<CheckoutItem | null>(null)
 
   // Get items based on mode
-  const items: CheckoutItem[] = isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
+  const items: CheckoutItem[] = isAiMode ? aiDraft?.items ?? [] : isBuyNowMode && buyNowItem ? [buyNowItem] : cartItems
   const total = items.reduce((sum, item) => {
+    if (isAiMode && item.unit_price !== undefined) return sum + item.unit_price * item.quantity
     const discountedPrice = item.discount_percentage && item.discount_percentage > 0
       ? item.price - (item.price * item.discount_percentage / 100)
       : item.price
@@ -63,6 +67,15 @@ export default function DeliveryPage() {
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [loadingDrivers, setLoadingDrivers] = useState(true)
   const [driverCommission, setDriverCommission] = useState<number>(0)
+  useEffect(() => {
+    if (!isAiMode) return
+    try {
+      const draft = parseAiCheckoutDraft(JSON.parse(sessionStorage.getItem(AI_CHECKOUT_KEY) || "null"))
+      if (!draft) { router.replace("/search/ai"); return }
+      setAiDraft(draft)
+      if (draft.driverId) setSelectedDriver(draft.driverId)
+    } catch { router.replace("/search/ai") }
+  }, [isAiMode, router])
   // المرحلة 1 — تسعيرة التوزيع (خلف flag). null = لم تُجلب بعد؛ enabled=false = التوزيع مطفّي.
   const [dispatchQuote, setDispatchQuote] = useState<
     | { enabled: true; fee: number; driver_fee?: number; free_shipping?: boolean; distance_km: number | null; base_fare: number; per_km_rate: number }
@@ -121,17 +134,17 @@ export default function DeliveryPage() {
       setCheckoutData(JSON.parse(stored))
     } else {
       // No checkout data, redirect back
-      const checkoutUrl = isBuyNowMode ? "/checkout?mode=buynow" : "/checkout"
+      const checkoutUrl = isAiMode ? "/checkout?mode=ai" : isBuyNowMode ? "/checkout?mode=buynow" : "/checkout"
       router.push(checkoutUrl)
     }
-  }, [router, isBuyNowMode])
+  }, [router, isBuyNowMode, isAiMode])
 
   // Redirect if cart is empty (only in cart mode)
   useEffect(() => {
-    if (!authLoading && !isBuyNowMode && cartItems.length === 0) {
+    if (!authLoading && !isBuyNowMode && !isAiMode && cartItems.length === 0) {
       router.push("/cart")
     }
-  }, [cartItems, authLoading, router, isBuyNowMode])
+  }, [cartItems, authLoading, router, isBuyNowMode, isAiMode])
 
   // Redirect if not logged in
   useEffect(() => {
@@ -173,7 +186,7 @@ export default function DeliveryPage() {
   // شحن مجاني: التاجر يتحمّل التوصيل ⇒ نصيب العميل = 0 (الخادم يحسبه؛ التسعيرة ترجّع نصيب العميل مباشرةً).
   const freeShipping = isDispatch && dispatchQuote?.enabled === true && dispatchQuote.free_shipping === true
   // رسوم التوصيل: في التوزيع = رسوم العدّاد (بعد الشحن المجاني)؛ وإلا سعر السائق المختار (الخادم يعيد اشتقاق كليهما).
-  const deliveryPrice = isDispatch ? meterFee : (selectedDriverData?.price ?? 0)
+  const deliveryPrice = isDispatch ? meterFee : isAiMode && aiDraft?.shippingMode === "driver" && selectedDriver === aiDraft.driverId ? aiDraft.deliveryFee : (selectedDriverData?.price ?? 0)
   const grandTotal = total + deliveryPrice
 
   // مفتاح idempotency ثابت طوال جلسة الدفع — يمنع طلبًا مكررًا عند الضغط المزدوج/إعادة المحاولة
@@ -185,6 +198,10 @@ export default function DeliveryPage() {
 
   const handleConfirmOrder = async () => {
     if (!checkoutData || !user) return
+    if (isAiMode && (!aiDraft || !dispatchQuote)) { toast.error("استنى حساب التوصيل الأول"); return }
+    if (isAiMode && aiDraft && ((aiDraft.budget !== null && Math.round(grandTotal * 100) > Math.round(aiDraft.budget * 100)) || Math.round(grandTotal * 100) !== Math.round(aiDraft.quotedTotal * 100))) {
+      toast.error("الإجمالي اتغيّر؛ ارجع للبحث الذكي وحدّث الاختيار قبل التأكيد"); return
+    }
     // في وضع التوزيع لا نطلب اختيار سائق (يُعيَّن تلقائيًا)؛ غير ذلك نطلب سائقًا صالحًا.
     if (!isDispatch) {
       if (!selectedDriver) {
@@ -224,6 +241,7 @@ export default function DeliveryPage() {
       // مصدر الطلب = مصدر أصنافه إن اتّفقت. سلة مختلطة (بحث ذكي + تصفّح عادي) تُنسَب للعادي:
       // نسبةُ طلبٍ نصفُه من البحث الذكي إليه كاملًا تضخّم مقياس التحويل الذي بُني الحقل لأجله.
       const orderSource = items.length && items.every((i) => i.source === "ai_search") ? "ai_search" : "web"
+      const shoppingConstraints = isAiMode && aiDraft ? { max_total: aiDraft.budget ?? undefined, expected_total: aiDraft.quotedTotal } : {}
       // نبني العنوان من الأجزاء غير الفارغة فقط (الشارع/المدينة اختياريان الآن) ونُضمّن العلامة
       // المميزة كي تظهر لكل من يسلّم الطلب — بدل نص فارغ مثل "، " عند ترك الحقول فارغة.
       const addressParts = [checkoutData.street, checkoutData.city, checkoutData.state]
@@ -254,6 +272,7 @@ export default function DeliveryPage() {
           landmark: checkoutData.landmark,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          ...shoppingConstraints,
           items: dispItems.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price })),
         })
         if (!result.success) {
@@ -301,6 +320,7 @@ export default function DeliveryPage() {
           pickup_stops: dispatchStops,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          ...shoppingConstraints,
         })
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
@@ -359,6 +379,7 @@ export default function DeliveryPage() {
           pickup_stops: pickupStops,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          ...shoppingConstraints,
         })
 
         if (!result.success) {
@@ -393,6 +414,7 @@ export default function DeliveryPage() {
           delivery_price: deliveryPrice,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          ...shoppingConstraints,
           items: storeItems.map((item) => {
             const discountedPrice = item.discount_percentage && item.discount_percentage > 0
               ? item.price - (item.price * item.discount_percentage / 100)
@@ -413,7 +435,9 @@ export default function DeliveryPage() {
       }
 
       // Clear data based on mode
-      if (isBuyNowMode) {
+      if (isAiMode) {
+        sessionStorage.removeItem(AI_CHECKOUT_KEY)
+      } else if (isBuyNowMode) {
         sessionStorage.removeItem("buyNowItem")
       } else {
         clearCart()
@@ -422,14 +446,15 @@ export default function DeliveryPage() {
 
       toast.success(t("تم تأكيد طلبك بنجاح!", "Your order has been confirmed successfully!"))
       router.push("/")
-    } catch {
-      toast.error(t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ""
+      toast.error(isAiMode && /SHOPPING_/.test(code) ? "السعر أو التوصيل اتغيّر؛ حدّث اختيار البحث الذكي وراجع الإجمالي" : t("حدث خطأ أثناء إنشاء الطلب", "An error occurred while creating the order"))
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (authLoading || !checkoutData || (isBuyNowMode && !buyNowItem)) {
+  if (authLoading || !checkoutData || (isBuyNowMode && !buyNowItem) || (isAiMode && !aiDraft)) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <Header />
@@ -459,6 +484,7 @@ export default function DeliveryPage() {
           </div>
 
           {/* Header Section */}
+          {isAiMode && aiDraft && <div className="mb-5 rounded-xl border border-accent/40 bg-accent/5 p-4 text-sm"><p className="font-bold">{aiDraft.title} · طلب مستقل من البحث الذكي</p><p>الإجمالي المختار: {aiDraft.quotedTotal.toFixed(2)} ج{aiDraft.budget !== null ? ` · أقصى ميزانية: ${aiDraft.budget.toFixed(2)} ج` : ""}</p><p>أي تغيير في السعر أو التوصيل يحتاج مراجعة الاختيار قبل التأكيد.</p><a className="mt-2 inline-block text-info underline" href={`/search/ai?q=${encodeURIComponent(aiDraft.query)}`}>ارجع للبحث الذكي</a></div>}
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary mb-4 shadow-lg shadow-primary/30">
               <Truck className="w-8 h-8 text-white" />

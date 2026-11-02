@@ -14,6 +14,7 @@ import { storeCategorySubcategories } from "../mock-data"
 import { calculateProfitPerUnit } from "../utils/product-pricing"
 import { findBestDiscount as findBestDiscountShared, getActiveOffersForStores } from "../utils/offer-discount"
 import { catalogQueryKey, searchCatalog, type CatalogProduct } from "../search/catalog-index"
+import { parseFoodDetails, type FoodDetails } from "../ai/food-details"
 
 type ProductRecord = {
   id?: string
@@ -423,6 +424,7 @@ export async function createProduct(formData: {
   expiry_date?: string | null
   simulator_section?: string | null
   reservation_enabled?: boolean
+  food_details?: FoodDetails | null
 }, callerUserId?: string) {
   try {
     const db = getAdminDb()
@@ -435,6 +437,8 @@ export async function createProduct(formData: {
         error: PRODUCT_ERROR_CODES.UNAUTHORIZED_STORE_PRODUCT_CREATE,
       }
     }
+    const foodDetails = formData.food_details == null ? null : parseFoodDetails(formData.food_details)
+    if (formData.food_details != null && !foodDetails) return { success: false, error: "بيانات حجم العبوة أو حصص الوجبة غير صحيحة" }
 
     // التحقق من صحة السعر والكمية على السيرفر
     if (!Number.isFinite(formData.price) || formData.price <= 0) {
@@ -479,6 +483,7 @@ export async function createProduct(formData: {
       expiry_date: formData.expiry_date || null,
       simulator_section: formData.simulator_section || null,
       reservation_enabled: formData.reservation_enabled || false,
+      ...(foodDetails ? { food_details: foodDetails } : {}),
       rating: 0,
       rating_count: 0,
       created_at: now,
@@ -510,6 +515,7 @@ export async function updateProduct(
     barcode?: string
     expiry_date?: string | null
     reservation_enabled?: boolean
+    food_details?: FoodDetails | null
   }>,
   callerUserId?: string,
 ) {
@@ -526,6 +532,8 @@ export async function updateProduct(
   if (!uid || existingProduct?.store_id !== uid) {
     return { success: false, error: PRODUCT_ERROR_CODES.UNAUTHORIZED_PRODUCT_ACCESS }
   }
+  const foodDetails = formData.food_details == null ? null : parseFoodDetails(formData.food_details)
+  if (formData.food_details != null && !foodDetails) return { success: false, error: "بيانات حجم العبوة أو حصص الوجبة غير صحيحة" }
 
   if (formData.price !== undefined && (!Number.isFinite(formData.price) || formData.price <= 0)) {
     return { success: false, error: PRODUCT_ERROR_CODES.PRICE_MUST_BE_POSITIVE }
@@ -577,6 +585,7 @@ export async function updateProduct(
   for (const key of ALLOWED_FIELDS) {
     if (formData[key] !== undefined) sanitized[key] = formData[key]
   }
+  if (formData.food_details !== undefined) sanitized.food_details = foodDetails
 
   const updateData = cleanUndefined({
     ...sanitized,

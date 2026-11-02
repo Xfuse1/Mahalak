@@ -10,6 +10,8 @@ export type CheckoutItem = {
   quantity: number
   stock?: number
   discount_percentage?: number
+  /** Rounded server unit price for an AI checkout; the order server always recalculates it. */
+  unit_price?: number
   /** من أين أُضيف الصنف («ai_search»). للقياس فقط — لا يمسّ سعرًا ولا كمية. */
   source?: string
 }
