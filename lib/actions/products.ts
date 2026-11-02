@@ -639,9 +639,24 @@ export async function deleteProduct(id: string, callerUserId?: string) {
 }
 
 export async function getProductsByStoreId(storeId: string) {
-  const db = getAdminDb()
+  if (typeof storeId !== "string" || !storeId) return serializeData([])
   // هل المستدعي هو مالك المتجر؟ غير المالك لا يجب أن يرى تكلفة/ربح المنتج.
   const isOwner = await requireOwner(storeId)
+  if (isOwner) return _getProductsByStoreIdImpl(storeId, true)
+
+  // النسخة العامة (بلا تكلفة/ربح) واحدة لكل الزوار فتُخزَّن 60 ثانية — نفس نافذة getProducts ووسمها
+  // (إنشاء/تعديل/حذف منتج ومزامنة الاستيراد تُبطلها). بدون الكاش كانت كل زيارة لصفحة متجر تقرأ كل
+  // منتجاته وعروضه من Firestore من جديد: أبطأ للزائر، وقراءات بعدد الأصناف على قاعدة بالخطة المجانية.
+  // المالك يبقى بلا كاش: يرى حقولًا لا يراها غيره، ويحتاج أثر تعديله فورًا.
+  return unstable_cache(
+    () => _getProductsByStoreIdImpl(storeId, false),
+    ["store-products-public", storeId],
+    { revalidate: 60, tags: ["products", `store-products-${storeId}`] },
+  )()
+}
+
+async function _getProductsByStoreIdImpl(storeId: string, isOwner: boolean) {
+  const db = getAdminDb()
 
   // متجر محظور صراحةً (is_approved === false): نخفي منتجاته عن العامة (mirror getStores) لكن المالك
   // يظل يرى/يدير منتجاته. المتاجر بلا الحقل (قيد المراجعة/قديمة) تبقى ظاهرة.

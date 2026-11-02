@@ -18,6 +18,16 @@ import { getDrivers, getDriverCommission, type Driver } from "@/lib/actions/deli
 import type { CheckoutItem } from "@/lib/types/checkout"
 import { useToast } from "@/components/ui/toast"
 import { AI_CHECKOUT_KEY, parseAiCheckoutDraft, type AiCheckoutDraft } from "@/lib/ai/checkout-draft"
+import { getAttributionForOrder } from "@/lib/analytics/attribution"
+import { trackPurchase } from "@/lib/analytics/meta-events"
+import { authHrefWithNext } from "@/lib/utils/safe-next"
+
+// معرّف الطلب وإجماليه كما أعادهما السيرفر — لحدث Purchase (القيمة الحقيقية لا رقم الواجهة)
+function placedOrder(data: unknown): { id: string; total: number } | null {
+  if (!data || typeof data !== "object") return null
+  const d = data as { id?: unknown; total?: unknown }
+  return typeof d.id === "string" && d.id ? { id: d.id, total: Number(d.total) } : null
+}
 
 type CheckoutData = {
   fullName: string
@@ -149,7 +159,7 @@ export default function DeliveryPage() {
   // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/auth")
+      router.push(authHrefWithNext())
     }
   }, [user, authLoading, router])
 
@@ -242,6 +252,9 @@ export default function DeliveryPage() {
       // نسبةُ طلبٍ نصفُه من البحث الذكي إليه كاملًا تضخّم مقياس التحويل الذي بُني الحقل لأجله.
       const orderSource = items.length && items.every((i) => i.source === "ai_search") ? "ai_search" : "web"
       const shoppingConstraints = isAiMode && aiDraft ? { max_total: aiDraft.budget ?? undefined, expected_total: aiDraft.quotedTotal } : {}
+      // مصدر الزيارة (إعلان/رابط) إن وُجد خلال 30 يومًا — السيرفر يعقّمه ويعيد حساب القناة
+      const attribution = getAttributionForOrder() ?? undefined
+      let placed: { id: string; total: number } | null = null
       // نبني العنوان من الأجزاء غير الفارغة فقط (الشارع/المدينة اختياريان الآن) ونُضمّن العلامة
       // المميزة كي تظهر لكل من يسلّم الطلب — بدل نص فارغ مثل "، " عند ترك الحقول فارغة.
       const addressParts = [checkoutData.street, checkoutData.city, checkoutData.state]
@@ -272,12 +285,14 @@ export default function DeliveryPage() {
           landmark: checkoutData.landmark,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          attribution,
           ...shoppingConstraints,
           items: dispItems.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price })),
         })
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
         }
+        placed = placedOrder((result as { data?: unknown }).data)
       } else if (isDispatch) {
         // طلب توزيع متعدد المتاجر (بلا سائق، رسوم عدّاد = مجموع مسافات المتاجر). محطة لكل متجر.
         const dispatchStops: PickupStop[] = storeIds.map((storeId) => {
@@ -320,11 +335,13 @@ export default function DeliveryPage() {
           pickup_stops: dispatchStops,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          attribution,
           ...shoppingConstraints,
         })
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
         }
+        placed = placedOrder((result as { data?: unknown }).data)
       } else if (storeIds.length > 1) {
         // Multi-store order: create one order with pickup stops
         const pickupStops: PickupStop[] = storeIds.map((storeId) => {
@@ -379,12 +396,14 @@ export default function DeliveryPage() {
           pickup_stops: pickupStops,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          attribution,
           ...shoppingConstraints,
         })
 
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
         }
+        placed = placedOrder((result as { data?: unknown }).data)
       } else {
         // Single store order: use legacy createOrder
         const [storeId] = storeIds
@@ -414,6 +433,7 @@ export default function DeliveryPage() {
           delivery_price: deliveryPrice,
           idempotency_key: idempotencyKey,
           source: orderSource,
+          attribution,
           ...shoppingConstraints,
           items: storeItems.map((item) => {
             const discountedPrice = item.discount_percentage && item.discount_percentage > 0
@@ -432,7 +452,11 @@ export default function DeliveryPage() {
         if (!result.success) {
           throw new Error(result.error || "Failed to create order")
         }
+        placed = placedOrder((result as { data?: unknown }).data)
       }
+
+      // Purchase بعد نجاح السيرفر فقط. eventID = معرّف الطلب فلا يُعدّ مرتين لو أُعيد الإطلاق.
+      if (placed) trackPurchase(placed.id, items, Number.isFinite(placed.total) && placed.total > 0 ? placed.total : grandTotal)
 
       // Clear data based on mode
       if (isAiMode) {

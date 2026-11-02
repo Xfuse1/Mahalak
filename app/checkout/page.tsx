@@ -20,6 +20,8 @@ import { User, Phone, MapPin, FileText, Navigation, Loader2, Banknote } from "lu
 import type { CheckoutItem } from "@/lib/types/checkout"
 import { Spinner } from "@/components/ui/spinner"
 import { AI_CHECKOUT_KEY, parseAiCheckoutDraft, type AiCheckoutDraft } from "@/lib/ai/checkout-draft"
+import { trackInitiateCheckout } from "@/lib/analytics/meta-events"
+import { authHrefWithNext } from "@/lib/utils/safe-next"
 
 export default function CheckoutPage() {
   const { t, language } = useLanguage()
@@ -129,12 +131,24 @@ export default function CheckoutPage() {
     }
   }, [cartItems, authLoading, router, isBuyNowMode, isAiMode])
 
-  // Redirect if not logged in
+  // Redirect if not logged in — ويرجع لنفس صفحة الدفع (بنفس الوضع) بعد الدخول
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/auth")
+      router.push(authHrefWithNext())
     }
   }, [user, authLoading, router])
+
+  // InitiateCheckout مرة واحدة حين تظهر الصفحة فعلًا لمستخدم داخل بأصنافه — نقطة واحدة لكل الأوضاع
+  // (سلة / اشتري الآن / بحث ذكي) بدل الإطلاق من كل زرّ يقود إلى هنا.
+  const checkoutTrackedRef = useRef(false)
+  useEffect(() => {
+    if (checkoutTrackedRef.current || authLoading || !user) return
+    // نفس اختيار الأصناف أعلاه (items) لكن من مصادره المستقرة — items مصفوفة جديدة كل رسمة
+    const checkoutItems = isAiMode ? aiDraft?.items ?? [] : isBuyNowMode ? (buyNowItem ? [buyNowItem] : []) : cartItems
+    if (checkoutItems.length === 0) return
+    checkoutTrackedRef.current = true
+    trackInitiateCheckout(checkoutItems)
+  }, [authLoading, user, isAiMode, aiDraft, isBuyNowMode, buyNowItem, cartItems])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target

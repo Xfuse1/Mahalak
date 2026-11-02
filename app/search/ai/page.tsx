@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/toast"
 import { imgSrc } from "@/lib/storage/public-url"
 import { logError } from "@/lib/logger"
 import { useCartStore, type CartBulkInput } from "@/lib/stores/cart-store"
+import { trackAddToCart } from "@/lib/analytics/meta-events"
 import { aiSearch, prepareAiBasket, logAiSearchAddToCart, type AiBasket, type AiMatch, type AiSearchSuccess } from "@/lib/actions/ai-search"
 import { ShoppingControls, MealCard } from "@/components/ai-shopping-results"
 import { isMealRequest, type ShoppingPreferences } from "@/lib/ai/shopping-request"
@@ -230,7 +231,10 @@ function AiSearchContent({ query }: { query: string }) {
       const out = addItems([item])
       const added = out.rejected.length ? 0 : 1
       report(added, out)
-      if (added) track([item.id], false)
+      if (added) {
+        track([item.id], false)
+        trackAddToCart([item])
+      }
     },
     [addItems, report, toCartInput, track],
   )
@@ -245,6 +249,7 @@ function AiSearchContent({ query }: { query: string }) {
       const out = addItems(items)
       report(items.length - out.rejected.length, out)
       track(items.filter((i) => !out.rejected.includes(i.id)).map((i) => i.id), true, basket.kind)
+      trackAddToCart(items.filter((i) => !out.rejected.includes(i.id)))
     },
     [addItems, report, toCartInput, track],
   )
@@ -270,6 +275,7 @@ function AiSearchContent({ query }: { query: string }) {
         useCartStore.getState().syncPrices(Object.fromEntries(res.draft.items.map((p) => [p.id, { price: p.price, discount_percentage: p.discount_percentage ?? 0 }])))
         report(res.draft.items.length - out.rejected.length, out)
         track(res.draft.items.map((p) => p.id), true, chosen.kind)
+        trackAddToCart(res.draft.items.filter((p) => !out.rejected.includes(p.id)))
       }
     } catch (error) { logError("[search/ai] choose", error); toast.error("تعذّر تجهيز الاختيار؛ جرّب تاني") }
     finally { setChoosing(false) }

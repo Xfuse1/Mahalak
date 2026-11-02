@@ -2,7 +2,7 @@
 
 import type React from "react"
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "../../components/header"
 import { Footer } from "../../components/footer"
@@ -12,6 +12,15 @@ import { useAuth } from "../../lib/auth-context"
 import { useLanguage } from "../../lib/language-context"
 import { getUserByPhone } from "../../lib/actions/profile"
 import { normalizeEgyptPhone } from "../../lib/utils/phone"
+import { readNextParam } from "../../lib/utils/safe-next"
+
+// رابط «أنشئ حساب» يحمل ?next= كي يرجع العميل الجديد لنفس الصفحة بعد التسجيل. يُقرأ من العنوان في
+// المتصفح فقط (useSyncExternalStore: قيمة السيرفر ثابتة فلا اختلاف ترطيب، ولا setState داخل effect).
+const noopSubscribe = () => () => {}
+function registerHrefSnapshot() {
+  const next = readNextParam()
+  return next ? `/auth/register?next=${encodeURIComponent(next)}` : "/auth/register"
+}
 
 export default function AuthPage() {
   const router = useRouter()
@@ -22,12 +31,13 @@ export default function AuthPage() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const registerHref = useSyncExternalStore(noopSubscribe, registerHrefSnapshot, () => "/auth/register")
   const [error, setError] = useState("")
   const errorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (user && !isLoggingIn) {
-      router.push(user.role === "seller" ? "/seller/dashboard" : "/")
+      router.push(user.role === "seller" ? "/seller/dashboard" : readNextParam() || "/")
     }
   }, [user, router, isLoggingIn])
 
@@ -62,7 +72,8 @@ export default function AuthPage() {
 
       const success = await login(email, password, "customer")
       if (success) {
-        router.push("/")
+        // يرجع للصفحة اللي جه منها (منتج / سلة / دفع) بدل الرئيسية
+        router.push(readNextParam() || "/")
       }
     } catch (loginError: any) {
       if (loginError.message === "Invalid login credentials") {
@@ -84,7 +95,7 @@ export default function AuthPage() {
 
     try {
       const role = await signInWithGoogle()
-      router.push(role === "seller" ? "/seller/dashboard" : "/")
+      router.push(role === "seller" ? "/seller/dashboard" : readNextParam() || "/")
     } catch (googleError: any) {
       if (googleError?.message === "Google sign-in cancelled") {
         return
@@ -127,7 +138,7 @@ export default function AuthPage() {
                   showPassword={showPassword}
                   setShowPassword={setShowPassword}
                   t={t}
-                  registerHref="/auth/register"
+                  registerHref={registerHref}
                 />
 
                 <div className="mt-5 rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">

@@ -12,6 +12,7 @@ import { clearPhoneAuth, getOTPStatus, sendPhoneOTP, verifyPhoneOTP } from "@/li
 import { useAuth } from "@/lib/auth-context"
 import { retrievePendingRegistration } from "@/lib/actions/profile"
 import { normalizeEgyptPhone } from "@/lib/utils/phone"
+import { safeNextPath } from "@/lib/utils/safe-next"
 
 const OTP_FLOW = "register" as const
 
@@ -24,7 +25,8 @@ export default function VerifyPhonePage() {
 
   const phoneParam = searchParams.get("phone") || ""
   const role = (searchParams.get("role") || "customer") as "customer" | "seller"
-  const returnUrl = searchParams.get("returnUrl") || (role === "seller" ? "/seller/dashboard" : "/")
+  // returnUrl من عنوان الصفحة = مدخل أي رابط؛ مسار داخلي فقط وإلا الافتراضي (كان يُمرَّر خامًا لـ router.push)
+  const returnUrl = safeNextPath(searchParams.get("returnUrl")) || (role === "seller" ? "/seller/dashboard" : "/")
   const roleEntryPath = role === "seller" ? "/auth/seller/register" : "/auth/register"
   const normalizedPhone = useMemo(() => normalizeEgyptPhone(phoneParam), [phoneParam])
 

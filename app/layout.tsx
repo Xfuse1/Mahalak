@@ -7,6 +7,10 @@ import { I18nProvider } from "../lib/i18n-provider"
 import { LanguageProvider } from "../lib/language-context"
 import { LayoutClientComponents } from "../components/layout-client-components"
 import { LocationProvider } from "../lib/location/user-location"
+import Script from "next/script"
+import { AnalyticsScripts, metaPixelSnippet } from "../components/analytics-scripts"
+
+const META_PIXEL = metaPixelSnippet()
 
 // VIS-01: تحميل خط Cairo فعليًا عبر next/font (self-hosted، محسّن، display:swap)
 // كان الخط مُعلَنًا في globals.css لكنه غير محمَّل إطلاقًا → كان التطبيق يعرض بخط النظام.
@@ -44,6 +48,9 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={cairo.variable}>
       <body className="antialiased">
+        {/* Meta Pixel لكل زائر من أول HTML (انظر components/analytics-scripts.tsx) */}
+        {META_PIXEL && <Script id="facebook-pixel" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: META_PIXEL }} />}
+        <AnalyticsScripts />
         <I18nProvider>
           <LanguageProvider>
             <AuthProvider>
