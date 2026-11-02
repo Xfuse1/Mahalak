@@ -445,6 +445,9 @@ export default function ProductClient({ id, initialProduct }: { id: string; init
                       discount_percentage: product.discount_percentage || 0,
                     }
                     sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowItem))
+                    // «اشتري الآن» يتخطّى السلة، لكنه إضافة شراء فعلية — بدون الحدث كان مستخدمو الزرّ
+                    // يختفون من مرحلة AddToCart في القمع (يقفزون من ViewContent إلى InitiateCheckout).
+                    trackAddToCart([{ id: product.id, price: product.price, discount_percentage: product.discount_percentage, quantity: 1 }])
                     router.push(user ? "/checkout?mode=buynow" : authHrefWithNext("/checkout?mode=buynow"))
                   }}
                   className="flex-1 bg-primary hover:bg-primary/90 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] h-14 text-lg"

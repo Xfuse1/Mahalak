@@ -3,7 +3,7 @@
 // الحمولة تُبنى هنا وحدها كي يتّفق الشكل بين كل نقاط الإطلاق (contents/value/currency)، وهو ما
 // يحتاجه ميتا لتحسين الإعلانات على الطلبات. البناء دوالّ نقية مختبَرة؛ الإطلاق عبر trackMetaEvent
 // التي تبتلع أي خطأ — القياس لا يكسر الواجهة أبدًا.
-import { trackMetaEvent } from "@/lib/utils"
+import { trackMetaCustomEvent, trackMetaEvent } from "@/lib/utils"
 
 export const META_CURRENCY = "EGP"
 
@@ -48,12 +48,18 @@ export function buildContentsPayload(items: MetaItem[]) {
 }
 
 /**
- * بحث. نصّ البحث نفسه لا يُرسل لميتا عمدًا: الموقع فيه صيدليات، واستعلام مثل اسم دواء أو عَرَض
- * بيانات صحية يكتبها العميل بنفسه. المعرّفات الأولى من النتائج تكفي ميتا لفهم النية.
+ * بحث: كلمة البحث (search_string) + معرّفات أول النتائج. إرسال الكلمة قرار المالك (2026-11-02) بعد
+ * التنبيه أن استعلامات الصيدليات (اسم دواء/عَرَض) بيانات صحية قد تُقيّد ميتا البكسل بسببها —
+ * راقب «جودة مجموعة البيانات» في Events Manager. مسار أعراض البحث الذكي لا يمرّ من هنا.
  */
-export function trackSearch(resultIds: string[]) {
+export function trackSearch(query: string, resultIds: string[]) {
   const ids = resultIds.filter((id) => typeof id === "string" && id).slice(0, 10)
-  trackMetaEvent("Search", { content_ids: ids, content_type: "product" })
+  const searchString = (query || "").trim().slice(0, 100)
+  trackMetaEvent("Search", {
+    ...(searchString ? { search_string: searchString } : {}),
+    content_ids: ids,
+    content_type: "product",
+  })
 }
 
 export function trackViewContent(product: MetaItem & { name?: string; category?: string }) {
@@ -62,6 +68,14 @@ export function trackViewContent(product: MetaItem & { name?: string; category?:
     content_name: product.name,
     content_category: product.category,
   })
+}
+
+/**
+ * زيارة صفحة متجر — حدث مخصّص لا ViewContent: ViewContent مخصّص لصفحة المنتج، وخلطهما كان يعدّ
+ * زيارات المتاجر ضمن مشاهدات المنتجات فتتلخبط أرقام القمع.
+ */
+export function trackViewStore(store: { id: string; name?: string }) {
+  trackMetaCustomEvent("ViewStore", { store_id: store.id, store_name: store.name })
 }
 
 export function trackAddToCart(items: MetaItem[]) {

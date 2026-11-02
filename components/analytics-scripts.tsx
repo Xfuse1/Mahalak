@@ -24,9 +24,10 @@ export function metaPixelSnippet(): string | null {
 }
 
 // Microsoft Clarity: تسجيلات الجلسات + خرائط الضغط + الضغطات الغاضبة/الميتة + أخطاء JS.
-const CLARITY_ID = /^[a-z0-9]{5,20}$/i.test(process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || "")
-  ? process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID
-  : null
+// الاسمان مقبولان (NEXT_PUBLIC_CLARITY_ID أقصر وهو ما يُتوقَّع غالبًا) كي لا يضيع الإعداد بخطأ اسم.
+// NEXT_PUBLIC_* تُضمَّن وقت البناء: إضافة القيمة على Vercel تحتاج نشرًا جديدًا لتظهر.
+const RAW_CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID || process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || ""
+const CLARITY_ID = /^[a-z0-9]{5,20}$/i.test(RAW_CLARITY_ID) ? RAW_CLARITY_ID : null
 
 // Sentry Loader Script (من إعدادات المشروع ← Client Keys ← Loader Script): سكربت صغير يحمّل
 // الـ SDK الكامل عند أول خطأ فقط — بلا حزمة npm ولا تعديل next.config.
