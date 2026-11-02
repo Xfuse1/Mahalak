@@ -189,12 +189,12 @@ export default function SearchResults({ query, initial }: { query: string; initi
     fetchData()
   }, [fetchData, hasInitial])
 
-  // Search مرة لكل استعلام بعد وصول نتائجه — المعرّفات فقط، لا نصّ البحث (انظر trackSearch)
+  // Search مرة لكل استعلام بعد وصول نتائجه — الكلمة + معرّفات أول النتائج (انظر trackSearch)
   const trackedQueryRef = useRef<string | null>(null)
   useEffect(() => {
     if (!hasQuery || loading || error || trackedQueryRef.current === query) return
     trackedQueryRef.current = query
-    trackSearch(products.slice(0, 10).map((p) => p.id))
+    trackSearch(query, products.slice(0, 10).map((p) => p.id))
   }, [hasQuery, loading, error, query, products])
 
 

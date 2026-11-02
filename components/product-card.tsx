@@ -122,6 +122,8 @@ function ProductCardComponent({ product, showActions = false, storePhone }: Prod
       toast.error(t("تعذّر بدء الطلب، حاول مرة أخرى", "Couldn't start the order, please try again"))
       return
     }
+    // يتخطّى السلة لكنه إضافة شراء فعلية — AddToCart كي لا يختفي من مرحلة السلة في القمع
+    trackAddToCart([{ id: product.id, price: product.price, discount_percentage: product.discount_percentage, quantity: 1 }])
     router.push(user ? "/checkout?mode=buynow" : authHrefWithNext("/checkout?mode=buynow"))
   }
 

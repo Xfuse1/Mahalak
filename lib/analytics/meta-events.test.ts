@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import { buildContentsPayload, metaUnitPrice, trackPurchase, trackSearch, trackAddToCart } from "./meta-events"
+import { buildContentsPayload, metaUnitPrice, trackPurchase, trackSearch, trackAddToCart, trackViewStore } from "./meta-events"
 
 describe("buildContentsPayload — حمولة contents/value الموحّدة", () => {
   it("يحسب السعر بعد الخصم والكمية والإجمالي بمنزلتين", () => {
@@ -56,10 +56,23 @@ describe("الإطلاق عبر fbq", () => {
     expect(fbq.mock.calls[0][2]).toMatchObject({ value: 100 })
   })
 
-  it("Search لا يرسل نصّ البحث — معرّفات النتائج فقط", () => {
-    trackSearch(["p1", "p2"])
-    const params = fbq.mock.calls[0][2]
-    expect(params).toEqual({ content_ids: ["p1", "p2"], content_type: "product" })
+  it("Search يرسل كلمة البحث مقصوصة + معرّفات أول النتائج (قرار المالك)", () => {
+    trackSearch("  بنادول  ", ["p1", "p2"])
+    expect(fbq).toHaveBeenCalledWith("track", "Search", { search_string: "بنادول", content_ids: ["p1", "p2"], content_type: "product" })
+    fbq.mockReset()
+    trackSearch("x".repeat(300), [])
+    expect(fbq.mock.calls[0][2].search_string).toHaveLength(100)
+  })
+
+  it("Search بكلمة فارغة لا يرسل search_string فارغًا", () => {
+    trackSearch("   ", ["p1"])
+    expect(fbq.mock.calls[0][2]).toEqual({ content_ids: ["p1"], content_type: "product" })
+  })
+
+  it("زيارة المتجر حدث مخصّص ViewStore لا ViewContent", () => {
+    trackViewStore({ id: "s1", name: "متجر" })
+    expect(fbq).toHaveBeenCalledWith("trackCustom", "ViewStore", { store_id: "s1", store_name: "متجر" })
+    expect(fbq.mock.calls.some((c) => c[1] === "ViewContent")).toBe(false)
   })
 
   it("AddToCart بلا أصناف لا يُطلق", () => {

@@ -34,6 +34,7 @@ import { getStore } from "../../../lib/actions/stores"
 import { getProductsByStoreId, getStoreTopSellers } from "../../../lib/actions/products"
 import { trackMetaEvent } from "../../../lib/utils"
 import { authHrefWithNext } from "../../../lib/utils/safe-next"
+import { trackViewStore } from "../../../lib/analytics/meta-events"
 import { activeStoreOffers, toStoreProducts, type Offer, type Product, type Store, type StoreInitialData } from "./store-data"
 import { getUserStoreReview, upsertStoreReview } from "../../../lib/actions/storeReviews"
 import { getStoreOffers } from "../../../lib/actions/offers"
@@ -152,17 +153,11 @@ export default function StoreClient({ id, initial }: { id: string; initial?: Sto
     if (!store) return
     // PageView لا يُطلق هنا: البكسل يسجّله تلقائيًا عند التحميل وعند كل تنقّل داخلي (pushState)،
     // وإطلاقه يدويًا كان يعدّ زيارة المتجر مرتين.
-    try {
-      trackMetaEvent("ViewContent", {
-        content_type: "store",
-        storeId: store.id,
-        storeName: store.name,
-      })
-    } catch (e) {
-      // ignore tracking errors
-    }
+    // ViewStore مخصّص لا ViewContent: ViewContent لصفحة المنتج وحدها، وخلطهما كان يعدّ زيارات
+    // المتاجر ضمن مشاهدات المنتجات.
+    trackViewStore({ id: store.id, name: store.name })
     // نعتمد على معرّف المتجر الثابت بدل كائن store كاملًا — كان تغيّر مرجعه (مثلًا بعد تقييم)
-    // يعيد إطلاق ViewContent فيضخّم عدّادات Meta Pixel.
+    // يعيد إطلاق الحدث فيضخّم عدّادات Meta Pixel.
   }, [store?.id])
 
   // حالة الحظر تُقرأ لهذا المشاهد وحده — خارج أي دالة مخزَّنة بالكاش (مفاتيحها بلا هوية مشاهد)
