@@ -12,6 +12,8 @@ import { useToast } from "@/components/ui/toast"
 import { imgSrc } from "@/lib/storage/public-url"
 import { toWhatsAppDigits } from "@/lib/utils/phone"
 import { trackMetaEvent } from "@/lib/utils"
+import { trackAddToCart } from "@/lib/analytics/meta-events"
+import { authHrefWithNext } from "@/lib/utils/safe-next"
 import { createContactInquiry } from "@/lib/actions/orders"
 import { memo } from "react"
 
@@ -99,8 +101,10 @@ function ProductCardComponent({ product, showActions = false, storePhone }: Prod
     const before = useCartStore.getState().items.find((i) => i.id === product.id)?.quantity ?? 0
     addItem(cartPayload())
     const after = useCartStore.getState().items.find((i) => i.id === product.id)?.quantity ?? 0
-    if (after > before) toast.success(t("أُضيف إلى السلة", "Added to cart"))
-    else toast.warning(t("لا يمكن إضافة كمية أكبر من المتاح", "You reached the available stock"))
+    if (after > before) {
+      toast.success(t("أُضيف إلى السلة", "Added to cart"))
+      trackAddToCart([{ id: product.id, price: product.price, discount_percentage: product.discount_percentage, quantity: after - before }])
+    } else toast.warning(t("لا يمكن إضافة كمية أكبر من المتاح", "You reached the available stock"))
   }
 
   const handleOrderDelivery = (e: React.MouseEvent) => {
@@ -109,18 +113,16 @@ function ProductCardComponent({ product, showActions = false, storePhone }: Prod
       toast.warning(t("هذا المنتج غير متوفر حالياً", "This product is out of stock"))
       return
     }
-    if (!user) {
-      router.push("/auth")
-      return
-    }
-    // نفس مسار «اشتري الآن» في صفحة المنتج: صنف واحد منفصل عن السلة ثم الدفع مباشرة
+    // نفس مسار «اشتري الآن» في صفحة المنتج: صنف واحد منفصل عن السلة ثم الدفع مباشرة.
+    // يُحفظ قبل فحص الدخول: الزائر غير المسجَّل يدخل ثم يصل للدفع مباشرة بنفس الصنف (كان يرجع
+    // للرئيسية فيفقد ما اختاره). InitiateCheckout يُطلق من صفحة الدفع نفسها لا هنا.
     try {
       sessionStorage.setItem("buyNowItem", JSON.stringify({ ...cartPayload(), quantity: 1 }))
     } catch {
       toast.error(t("تعذّر بدء الطلب، حاول مرة أخرى", "Couldn't start the order, please try again"))
       return
     }
-    router.push("/checkout?mode=buynow")
+    router.push(user ? "/checkout?mode=buynow" : authHrefWithNext("/checkout?mode=buynow"))
   }
 
   // تتبّع التواصل: بكسل Meta + سجلّ استفسار للتاجر. السجلّ للمسجَّلين فقط (يتطلّب هوية جلسة)

@@ -26,6 +26,7 @@ import {
   type AdminOrderSummary,
   type AdminOrderDetail,
 } from "@/lib/actions/admin"
+import { CHANNEL_LABEL, type AttributionChannel } from "@/lib/analytics/attribution"
 import {
   ClipboardList,
   Search,
@@ -39,6 +40,7 @@ import {
   Loader2,
   XCircle,
   Layers,
+  Megaphone,
 } from "lucide-react"
 
 type Filter = "all" | "pending" | "confirmed" | "on_the_way" | "delivered" | "cancelled"
@@ -58,6 +60,9 @@ const STATUS_LABEL: Record<string, string> = {
   driver_changed: "تم تغيير السائق",
 }
 const statusLabel = (s: string) => STATUS_LABEL[s] || s
+// مصدر الطلب: الإعلانات المدفوعة بلون مميّز كي تُرى من أول نظرة في القائمة
+const channelLabel = (c: string) => CHANNEL_LABEL[c as AttributionChannel] || c
+const isPaidChannel = (c: string) => c === "meta_ads" || c === "google_ads" || c === "paid"
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -295,6 +300,14 @@ export default function AdminOrdersPage() {
                           <Layers className="h-3 w-3" /> متعدد المتاجر
                         </span>
                       )}
+                      {o.channel && (
+                        <span
+                          title={o.utm_campaign ? `الحملة: ${o.utm_campaign}` : undefined}
+                          className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${isPaidChannel(o.channel) ? "bg-info/15 text-info" : "bg-muted text-muted-foreground"}`}
+                        >
+                          <Megaphone className="h-3 w-3" /> {channelLabel(o.channel)}
+                        </span>
+                      )}
                       <span className="text-sm font-extrabold text-primary ms-auto">{money(o.total)}</span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
@@ -448,6 +461,31 @@ export default function AdminOrdersPage() {
                   )}
                   {detail.landmark && <p className="text-muted-foreground">علامة مميزة: {detail.landmark}</p>}
                   {detail.delivery_notes && <p className="text-muted-foreground">ملاحظات: {detail.delivery_notes}</p>}
+                </div>
+              )}
+
+              {/* مصدر الطلب (إعلان / رابط حملة / موقع خارجي) */}
+              {detail.attribution && (
+                <div className="rounded-lg bg-muted/40 p-3 space-y-1">
+                  <p className="font-bold text-foreground flex items-center gap-1">
+                    <Megaphone className="h-4 w-4" /> مصدر الطلب: {channelLabel(detail.attribution.channel || "")}
+                  </p>
+                  {detail.attribution.utm_campaign && <p className="text-muted-foreground">الحملة: {detail.attribution.utm_campaign}</p>}
+                  {detail.attribution.utm_content && <p className="text-muted-foreground">الإعلان: {detail.attribution.utm_content}</p>}
+                  {(detail.attribution.utm_source || detail.attribution.utm_medium) && (
+                    <p className="text-muted-foreground" dir="ltr">
+                      {[detail.attribution.utm_source, detail.attribution.utm_medium].filter(Boolean).join(" / ")}
+                    </p>
+                  )}
+                  {detail.attribution.referrer_host && <p className="text-muted-foreground">جاء من: <span dir="ltr">{detail.attribution.referrer_host}</span></p>}
+                  {detail.attribution.landing_path && <p className="text-muted-foreground">أول صفحة: <span dir="ltr">{detail.attribution.landing_path}</span></p>}
+                  {detail.attribution.touched_at && <p className="text-muted-foreground">وقت الدخول: {fmtDate(detail.attribution.touched_at)}</p>}
+                  {detail.attribution.first_channel && detail.attribution.first_channel !== detail.attribution.channel && (
+                    <p className="text-muted-foreground">
+                      أول مرة جه من: {channelLabel(detail.attribution.first_channel)}
+                      {detail.attribution.first_utm_campaign ? ` (${detail.attribution.first_utm_campaign})` : ""}
+                    </p>
+                  )}
                 </div>
               )}
 

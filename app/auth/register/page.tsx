@@ -17,6 +17,8 @@ import { useAuth } from "../../../lib/auth-context"
 import { useLanguage } from "../../../lib/language-context"
 import { getUserByPhone, storePendingRegistration } from "../../../lib/actions/profile"
 import { normalizeEgyptPhone } from "../../../lib/utils/phone"
+import { readNextParam } from "../../../lib/utils/safe-next"
+import { InAppBrowserNotice } from "../../../components/auth/in-app-browser-notice"
 
 export default function CustomerRegisterPage() {
   const router = useRouter()
@@ -66,7 +68,7 @@ export default function CustomerRegisterPage() {
 
   useEffect(() => {
     if (user) {
-      router.push(user.role === "seller" ? "/seller/dashboard" : "/")
+      router.push(user.role === "seller" ? "/seller/dashboard" : readNextParam() || "/")
     }
   }, [user, router])
 
@@ -82,7 +84,7 @@ export default function CustomerRegisterPage() {
 
     try {
       const role = await signInWithGoogle()
-      router.push(role === "seller" ? "/seller/dashboard" : "/")
+      router.push(role === "seller" ? "/seller/dashboard" : readNextParam() || "/")
     } catch (googleError: any) {
       if (googleError?.message === "Google sign-in cancelled") {
         return
@@ -181,7 +183,8 @@ export default function CustomerRegisterPage() {
       sessionStorage.setItem("pendingRegistrationToken", storeResult.token)
       // كلمة المرور تبقى في العميل فقط (لا تُخزَّن على الخادم)
       if (password) sessionStorage.setItem("pendingRegistrationPassword", password)
-      router.push(`/auth/verify-phone?phone=${encodeURIComponent(phone)}&role=customer&returnUrl=/`)
+      // بعد التحقق يرجع للصفحة اللي بدأ منها (منتج / سلة / دفع) بدل الرئيسية
+      router.push(`/auth/verify-phone?phone=${encodeURIComponent(phone)}&role=customer&returnUrl=${encodeURIComponent(readNextParam() || "/")}`)
     } finally {
       setIsLoading(false)
     }
@@ -420,16 +423,18 @@ export default function CustomerRegisterPage() {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleGoogleSignIn}
-                  disabled={isLoading || isGoogleLoading}
-                  className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
-                >
-                  <Chrome className="h-5 w-5" />
-                  {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
-                </Button>
+                <InAppBrowserNotice>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGoogleSignIn}
+                    disabled={isLoading || isGoogleLoading}
+                    className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
+                  >
+                    <Chrome className="h-5 w-5" />
+                    {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
+                  </Button>
+                </InAppBrowserNotice>
 
                 <p className="mt-6 text-center text-sm text-slate-500">
                   {t("لديك حساب بالفعل؟", "Already have an account?")}{" "}

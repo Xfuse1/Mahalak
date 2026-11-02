@@ -5,8 +5,10 @@ import { ToastProvider } from "./ui/toast"
 import { ConfirmProvider } from "./ui/confirm-dialog"
 import { PWARegister } from "./pwa-register"
 
-const TrackingConsent = dynamic(
-  () => import("./tracking-consent"),
+// وسوم البكسل/Clarity/Sentry نفسها في components/analytics-scripts.tsx (سيرفر، root layout)؛
+// هنا التقاط مصدر الزيارة فقط. بانر موافقة الكوكيز أُزيل (قرار المالك 2026-11-02).
+const AnalyticsClient = dynamic(
+  () => import("./analytics-client"),
   { ssr: false }
 )
 const GlobalContactTracker = dynamic(
@@ -23,7 +25,7 @@ export function LayoutClientComponents({ children }: { children?: React.ReactNod
     <ToastProvider>
       <ConfirmProvider>
         <PWARegister />
-        <TrackingConsent />
+        <AnalyticsClient />
         <GlobalContactTracker />
         <ScrollToTop />
         {children}

@@ -22,6 +22,7 @@ import { finalizePhoneVerification } from "./actions/profile"
 import { getFirebaseAuth, getFirestoreClient } from "./firebase/client"
 import { normalizeEgyptPhone } from "./utils/phone"
 import { clearBlockedStoresCache } from "./hooks/use-blocked-stores"
+import { trackCompleteRegistration } from "./analytics/meta-events"
 
 interface User {
   id: string
@@ -281,6 +282,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: credential.user.displayName || credential.user.email?.split("@")[0] || "",
           role: "customer",
         })
+        // أول دخول بجوجل = حساب جديد (الدخول اللاحق لا يمرّ من هنا لأن الملف موجود)
+        trackCompleteRegistration("google", "customer")
       }
 
       await loadUserProfile(credential.user)
@@ -428,6 +431,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Manually trigger profile load to ensure state is updated immediately
       await loadUserProfile(credential.user)
+      // الحساب أُنشئ فعلًا (Firebase + ملف السيرفر) — نقطة واحدة لكل مسارات التسجيل بالإيميل
+      trackCompleteRegistration("email", role)
       return true
     } catch (error: any) {
       const code = error?.code as string | undefined

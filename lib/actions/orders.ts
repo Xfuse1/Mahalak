@@ -14,6 +14,7 @@ import { applyOfferDiscount, findBestDiscount, getActiveOffersForStores } from "
 import { sendPushToOwner } from "../server-push"
 import { computeDeliveryFee, computeDeliveryFeeFromCoords, readDispatchSettings, splitDeliveryFee } from "../delivery/fee"
 import { validateShoppingTotal } from "../ai/order-constraints"
+import { sanitizeAttribution, type OrderAttribution } from "../analytics/attribution"
 import { notifyDriversOfOffer } from "../delivery/driver-push"
 import { checkRateLimit } from "../utils/rate-limit"
 import { PENDING_TIMEOUT_MS } from "../delivery/dispatch-timeout"
@@ -711,6 +712,19 @@ function normalizeOrderSource(value: unknown): string {
   return ORDER_SOURCES.has(v) ? v : "web"
 }
 
+// مصدر الزيارة (إعلان ميتا / رابط حملة / موقع خارجي) — حقل قياس بحت لا يمسّ مبلغًا ولا حالة ولا
+// صلاحية. يأتي من مدخل عام، فيُعقَّم بقائمة سماح وتُعاد حساب القناة هنا (lib/analytics/attribution.ts)؛
+// غيابه أو فساده = لا حقل إطلاقًا، والطلب يمضي كما هو. لا يُقرأ في أي منطق طلب بعد الكتابة.
+function attributionField(value: unknown): { attribution?: OrderAttribution } {
+  // يُستدعى أثناء بناء مستند الطلب داخل المعاملة: حقل قياس لا يجوز أن يُفشل طلبًا مهما كان المدخل
+  try {
+    const attribution = sanitizeAttribution(value)
+    return attribution ? { attribution } : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function createOrder(orderData: {
   customer_id: string
   store_id: string
@@ -731,6 +745,8 @@ export async function createOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  /** مصدر الزيارة كما التقطه المتصفح (lib/analytics/attribution.ts). مدخل غير موثوق — يُعقَّم قبل الكتابة. */
+  attribution?: unknown
   max_total?: number
   expected_total?: number
   items: { product_id: string; quantity: number; price: number }[]
@@ -856,6 +872,7 @@ export async function createOrder(orderData: {
         // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
         // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
         source: normalizeOrderSource(orderData.source),
+        ...attributionField(orderData.attribution),
         created_at: now,
         updated_at: now,
         // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للبائع/السائق عند التسليم (مثل الطلب متعدد المتاجر)
@@ -993,6 +1010,8 @@ export async function createDispatchOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  /** مصدر الزيارة كما التقطه المتصفح (lib/analytics/attribution.ts). مدخل غير موثوق — يُعقَّم قبل الكتابة. */
+  attribution?: unknown
   max_total?: number
   expected_total?: number
   items: { product_id: string; quantity: number; price: number }[]
@@ -1116,6 +1135,7 @@ export async function createDispatchOrder(orderData: {
         // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
         // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
         source: normalizeOrderSource(orderData.source),
+        ...attributionField(orderData.attribution),
         pending_expires_at_ms: Date.now() + PENDING_TIMEOUT_MS, // مهلة تأكيد التاجر — يُصعَّد بعدها
         created_at: now,
         updated_at: now,
@@ -1560,6 +1580,8 @@ export async function createMultiStoreOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  /** مصدر الزيارة كما التقطه المتصفح (lib/analytics/attribution.ts). مدخل غير موثوق — يُعقَّم قبل الكتابة. */
+  attribution?: unknown
   max_total?: number
   expected_total?: number
 }) {
@@ -1735,6 +1757,7 @@ export async function createMultiStoreOrder(orderData: {
         // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
         // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
         source: normalizeOrderSource(orderData.source),
+        ...attributionField(orderData.attribution),
         payment_status: "cod",
         // UX-05: كود تأكيد تسليم (إثبات) — يعرضه العميل للسائق عند الاستلام
         delivery_code: String(Math.floor(1000 + Math.random() * 9000)),
@@ -1881,6 +1904,8 @@ export async function createMultiStoreDispatchOrder(orderData: {
   idempotency_key?: string
   /** من أين جاءت السلة. للقياس والتعويض فقط — لا يدخل أي حساب. */
   source?: string
+  /** مصدر الزيارة كما التقطه المتصفح (lib/analytics/attribution.ts). مدخل غير موثوق — يُعقَّم قبل الكتابة. */
+  attribution?: unknown
   max_total?: number
   expected_total?: number
 }) {
@@ -2008,6 +2033,7 @@ export async function createMultiStoreDispatchOrder(orderData: {
         // مصدر السلة: قائمة سماح صريحة، لا نصّ حرّ من العميل. حقل عرض/قياس بحت لا يمسّ مبلغًا
         // ولا حالة — لكنه يُكتب من مدخل عام، فيُقيَّد كما يُقيَّد أي مدخل عام.
         source: normalizeOrderSource(orderData.source),
+        ...attributionField(orderData.attribution),
         payment_status: "cod",
         delivery_code: String(Math.floor(1000 + Math.random() * 9000)), // إثبات تسليم — دائمًا
         timeline: [{ status: "ordered", timestamp: now } as TimelineEntry],

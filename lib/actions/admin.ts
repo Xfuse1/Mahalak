@@ -1356,6 +1356,9 @@ export type AdminOrderSummary = {
   store_name: string
   driver_name: string
   items_count: number
+  /** قناة مصدر الزيارة (lib/analytics/attribution.ts) — غائبة للطلبات القديمة أو المباشرة. */
+  channel?: string
+  utm_campaign?: string
 }
 
 // عنصر ضمن تفاصيل الطلب
@@ -1396,6 +1399,38 @@ export type AdminOrderDetail = {
   driver_phone?: string
   items: AdminOrderItem[]
   pickup_stops?: PickupStop[]
+  /** مصدر الزيارة كما كُتب مُعقَّمًا عند إنشاء الطلب — بلا fbc/fbp (معرّفات تقنية لا تفيد القراءة). */
+  attribution?: AdminOrderAttribution
+}
+
+export type AdminOrderAttribution = {
+  channel?: string
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
+  utm_content?: string
+  landing_path?: string
+  referrer_host?: string
+  touched_at?: string
+  has_click_id?: boolean
+  first_channel?: string
+  first_utm_campaign?: string
+  first_touched_at?: string
+}
+
+// حقل attribution يُكتب مُعقَّمًا، لكن المستند قد تعدّله أدوات أخرى — نقرأ النصوص فقط ولا نمرّر الكائن خامًا
+function readAttribution(raw: unknown): AdminOrderAttribution | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const a = raw as Record<string, unknown>
+  const str = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 200) : undefined)
+  const out: AdminOrderAttribution = {
+    channel: str(a.channel), utm_source: str(a.utm_source), utm_medium: str(a.utm_medium),
+    utm_campaign: str(a.utm_campaign), utm_content: str(a.utm_content), landing_path: str(a.landing_path),
+    referrer_host: str(a.referrer_host), touched_at: str(a.touched_at),
+    has_click_id: Boolean(str(a.fbclid) || str(a.gclid)),
+    first_channel: str(a.first_channel), first_utm_campaign: str(a.first_utm_campaign), first_touched_at: str(a.first_touched_at),
+  }
+  return out.channel ? out : undefined
 }
 
 // طلب استفسار تواصل (WhatsApp/Call) — نستبعده من قوائم الطلبات (mirror isInquiryOrder في orders.ts)
@@ -1515,6 +1550,8 @@ export async function getAdminOrders(
         store_name: isMulti ? "متعدد المتاجر" : String(storeUser?.store?.name || ""),
         driver_name: String(o.driver_name || ""),
         items_count: itemsCountMap.get(o.id) || 0,
+        channel: readAttribution(o.attribution)?.channel,
+        utm_campaign: readAttribution(o.attribution)?.utm_campaign,
       }
     })
 
@@ -1594,6 +1631,7 @@ export async function getAdminOrderDetail(
       driver_name: String(data.driver_name || driver?.name || ""),
       driver_phone: driver?.phone ? String(driver.phone) : undefined,
       items,
+      attribution: readAttribution(data.attribution),
       // pickup_stops لا تحتوي كود التسليم (هو حقل top-level) — آمن إدراجها للطلب متعدد المتاجر.
       // نطبّع كل محطة كي تكون items دائمًا مصفوفة (محطات قديمة/تالفة قد تفتقدها → تعطّل الواجهة).
       pickup_stops: isMulti

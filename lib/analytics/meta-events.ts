@@ -1,0 +1,95 @@
+// أحداث Meta Pixel القياسية لرحلة الزبون (بحث ← منتج ← سلة ← بدء طلب ← طلب ← حساب).
+//
+// الحمولة تُبنى هنا وحدها كي يتّفق الشكل بين كل نقاط الإطلاق (contents/value/currency)، وهو ما
+// يحتاجه ميتا لتحسين الإعلانات على الطلبات. البناء دوالّ نقية مختبَرة؛ الإطلاق عبر trackMetaEvent
+// التي تبتلع أي خطأ — القياس لا يكسر الواجهة أبدًا.
+import { trackMetaEvent } from "@/lib/utils"
+
+export const META_CURRENCY = "EGP"
+
+export type MetaItem = {
+  id: string
+  price: number
+  quantity?: number
+  discount_percentage?: number
+  /** سعر وحدة نهائي مقرَّب من السيرفر (سلة البحث الذكي) — يُفضَّل على price/discount إن وُجد. */
+  unit_price?: number
+}
+
+function money(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function quantityOf(item: MetaItem): number {
+  const n = Math.floor(Number(item.quantity ?? 1))
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+/** سعر الوحدة بعد الخصم — نفس صيغة السلة وصفحة الدفع. */
+export function metaUnitPrice(item: MetaItem): number {
+  if (typeof item.unit_price === "number" && Number.isFinite(item.unit_price)) return money(item.unit_price)
+  const price = Number(item.price) || 0
+  const discount = Number(item.discount_percentage) || 0
+  return money(discount > 0 ? price - (price * discount) / 100 : price)
+}
+
+export function buildContentsPayload(items: MetaItem[]) {
+  const contents = items
+    .filter((item) => item && typeof item.id === "string" && item.id)
+    .map((item) => ({ id: item.id, quantity: quantityOf(item), item_price: metaUnitPrice(item) }))
+  return {
+    content_ids: contents.map((c) => c.id),
+    contents,
+    content_type: "product" as const,
+    num_items: contents.reduce((sum, c) => sum + c.quantity, 0),
+    value: money(contents.reduce((sum, c) => sum + c.item_price * c.quantity, 0)),
+    currency: META_CURRENCY,
+  }
+}
+
+/**
+ * بحث. نصّ البحث نفسه لا يُرسل لميتا عمدًا: الموقع فيه صيدليات، واستعلام مثل اسم دواء أو عَرَض
+ * بيانات صحية يكتبها العميل بنفسه. المعرّفات الأولى من النتائج تكفي ميتا لفهم النية.
+ */
+export function trackSearch(resultIds: string[]) {
+  const ids = resultIds.filter((id) => typeof id === "string" && id).slice(0, 10)
+  trackMetaEvent("Search", { content_ids: ids, content_type: "product" })
+}
+
+export function trackViewContent(product: MetaItem & { name?: string; category?: string }) {
+  trackMetaEvent("ViewContent", {
+    ...buildContentsPayload([{ ...product, quantity: 1 }]),
+    content_name: product.name,
+    content_category: product.category,
+  })
+}
+
+export function trackAddToCart(items: MetaItem[]) {
+  const payload = buildContentsPayload(items)
+  if (payload.content_ids.length === 0) return
+  trackMetaEvent("AddToCart", payload)
+}
+
+export function trackInitiateCheckout(items: MetaItem[]) {
+  const payload = buildContentsPayload(items)
+  if (payload.content_ids.length === 0) return
+  trackMetaEvent("InitiateCheckout", payload)
+}
+
+/**
+ * طلب مؤكَّد. eventID = معرّف الطلب: يمنع ميتا من عدّ الطلب مرتين لو أُطلق الحدث مرة ثانية
+ * (إعادة محاولة بعد انقطاع)، ويصلح لاحقًا لمطابقة نفس الحدث من Conversions API سيرفر-سايد.
+ * القيمة = إجمالي السيرفر (شامل التوصيل) متى وصل، وإلا مجموع الأصناف + التوصيل المعروض.
+ */
+export function trackPurchase(orderId: string, items: MetaItem[], value: number) {
+  const payload = buildContentsPayload(items)
+  trackMetaEvent(
+    "Purchase",
+    { ...payload, value: money(Number.isFinite(value) && value > 0 ? value : payload.value), order_id: orderId },
+    orderId ? { eventID: `order-${orderId}` } : undefined,
+  )
+}
+
+export function trackCompleteRegistration(method: "email" | "google", role: string) {
+  trackMetaEvent("CompleteRegistration", { content_name: role, status: true, registration_method: method })
+}

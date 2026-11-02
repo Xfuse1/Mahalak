@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import { authHrefWithNext } from "@/lib/utils/safe-next"
 
 export default function CartPage() {
   const { t } = useLanguage()
@@ -44,7 +45,8 @@ export default function CartPage() {
 
   const handleCheckout = () => {
     if (!user) {
-      router.push("/auth")
+      // بعد الدخول يكمل للدفع مباشرة بدل الرجوع للرئيسية (السلة محفوظة في المتصفح)
+      router.push(authHrefWithNext("/checkout"))
       return
     }
     router.push("/checkout")

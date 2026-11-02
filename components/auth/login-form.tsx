@@ -7,6 +7,7 @@ import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { Button } from "../ui/button"
 import { EyeOpenIcon, EyeOffIcon } from "../ui/icons"
+import { InAppBrowserNotice } from "./in-app-browser-notice"
 
 interface LoginFormProps {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
@@ -98,16 +99,18 @@ export function LoginForm({
         </div>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onGoogleSignIn}
-        disabled={isLoading || isGoogleLoading}
-        className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
-      >
-        {isGoogleLoading ? <Loader2 className="size-5 animate-spin" /> : <Chrome className="h-5 w-5" />}
-        {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
-      </Button>
+      <InAppBrowserNotice>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onGoogleSignIn}
+          disabled={isLoading || isGoogleLoading}
+          className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-14 sm:text-base"
+        >
+          {isGoogleLoading ? <Loader2 className="size-5 animate-spin" /> : <Chrome className="h-5 w-5" />}
+          {isGoogleLoading ? t("جاري المتابعة...", "Continuing...") : t("التسجيل بواسطة Google", "Continue with Google")}
+        </Button>
+      </InAppBrowserNotice>
 
       <p className="text-center text-sm text-slate-500">
         {t("لا تمتلك حسابًا؟", "Don't have an account?")}{" "}
